@@ -10,5 +10,6 @@ Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 - [X] Basic kubernetes/client-go library integration
 - [X] TUI library selection
 - [ ] Interface Mock-up
+- [ ] Interface navigation graph
 - [ ] Determine MVP feature set
 - [ ] Implement MVP features
