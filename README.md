@@ -1,10 +1,14 @@
 # Kube Commander
 
-## MVP
+## TUI
 
-We are attempting to achieve MVP state with this features:
+Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 
-- [ ] Interactive list of namespaces
-- [ ] Interactive list of pods inside namespace
-- [ ] Ability to get description of selected pod
-- [ ] Ability to view logs of certain container in pod
+## TODO
+
+- [X] Configuration architecture
+- [X] Basic kubernetes/client-go library integration
+- [X] TUI library selection
+- [ ] Interface Mock-up
+- [ ] Determine MVP feature set
+- [ ] Implement MVP features
