@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-type PkgConfig struct {
+type Pkg struct {
 	PersistentFlags FlagsDeclaration
 	LocalFlags      FlagsDeclaration
 	Struct          interface{}
@@ -19,14 +19,14 @@ type FlagsDeclaration map[string]struct {
 	Env   string
 }
 
-var pkgs []*PkgConfig
+var pkgs []*Pkg
 var cmds []*cobra.Command
 
 type flagSet struct {
 	*flag.FlagSet
 }
 
-func AddPkg(pkg ...*PkgConfig) {
+func AddPkg(pkg ...*Pkg) {
 	pkgs = append(pkgs, pkg...)
 }
 
@@ -106,7 +106,7 @@ func (fs *flagSet) bool(key string, def bool, usage string, envKey string) error
 	return viper.BindEnv(key, envKey)
 }
 
-func (pkg *PkgConfig) applyFlags() error {
+func (pkg *Pkg) applyFlags() error {
 	if pkg.Struct == nil {
 		return nil
 	}

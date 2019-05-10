@@ -22,7 +22,7 @@ var config = &struct {
 
 func init() {
 	home := strings.TrimRight(os.Getenv("HOME"), "/")
-	cfg.AddPkg(&cfg.PkgConfig{
+	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{
 			"kube-config":    {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
