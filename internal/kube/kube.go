@@ -5,7 +5,8 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/rest"
+	cmd "k8s.io/client-go/tools/clientcmd"
 	"os"
 	"strings"
 )
@@ -30,8 +31,16 @@ func init() {
 	})
 }
 
+func getClientConfig() (*rest.Config, error) {
+	return cmd.
+		NewNonInteractiveDeferredLoadingClientConfig(
+			&cmd.ClientConfigLoadingRules{ExplicitPath: config.Path},
+			&cmd.ConfigOverrides{CurrentContext: config.Context},
+		).ClientConfig()
+}
+
 func GetClient() (*KubeClient, error) {
-	c, err := clientcmd.BuildConfigFromFlags("", config.Path)
+	c, err := getClientConfig()
 	if err != nil {
 		return nil, err
 	}
