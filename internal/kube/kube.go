@@ -15,9 +15,8 @@ type KubeClient struct {
 }
 
 var config = &struct {
-	Path      string `mapstructure:"kube-config"`
-	Context   string `mapstructure:"kube-context"`
-	Namespace string `mapstructure:"kube-namespace"`
+	Path    string `mapstructure:"kube-config"`
+	Context string `mapstructure:"kube-context"`
 }{}
 
 func init() {
@@ -25,9 +24,8 @@ func init() {
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{
-			"kube-config":    {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
-			"kube-context":   {"", "Kubernetes context to use", "KUBECONTEXT"},
-			"kube-namespace": {"", "Kubernetes namespace to use", "KUBENAMESPACE"},
+			"kube-config":  {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
+			"kube-context": {"", "Kubernetes context to use", "KUBECONTEXT"},
 		},
 	})
 }
