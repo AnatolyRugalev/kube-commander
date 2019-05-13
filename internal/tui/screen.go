@@ -6,7 +6,8 @@ import (
 
 type Screen struct {
 	*ui.Grid
-	focus Focusable
+	focus      Focusable
+	focusStack []Focusable
 }
 
 func NewScreen() *Screen {
@@ -34,9 +35,24 @@ func (s *Screen) SetPanes(left *MenuList, right interface{}) {
 func (s *Screen) Focus(focusable Focusable) {
 	if s.focus != nil {
 		s.focus.OnFocusOut()
+		s.focusStack = append([]Focusable{s.focus}, s.focusStack...)
 	}
 	s.focus = focusable
 	s.focus.OnFocusIn()
+}
+
+func (s *Screen) FocusOnParent() bool {
+	if len(s.focusStack) == 0 {
+		return false
+	}
+	if s.focus != nil {
+		s.focus.OnFocusOut()
+	}
+	parent := s.focusStack[0]
+	s.focus = parent
+	s.focus.OnFocusIn()
+	s.focusStack = s.focusStack[1:]
+	return true
 }
 
 func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
@@ -48,6 +64,8 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		s.SetRect(0, 0, payload.Width, payload.Height)
 		ui.Clear()
 		return true, false
+	case "<Escape>":
+		return s.FocusOnParent(), false
 	default:
 		if s.focus != nil {
 			return s.focus.OnEvent(event), false

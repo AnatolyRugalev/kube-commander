@@ -3,33 +3,27 @@ package tui
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
+	ui "github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	"time"
 )
 
 type PodsTable struct {
-	*widgets.Table
+	*ListTable
 	Namespace string
-}
-
-func (pt *PodsTable) OnEvent(event *termui.Event) bool {
-	return false
 }
 
 func (pt *PodsTable) OnFocusIn() {
 	_ = pt.Reload()
-}
-
-func (pt *PodsTable) OnFocusOut() {
-
+	pt.ListTable.OnFocusIn()
 }
 
 func NewPodsTable(namespace string) *PodsTable {
-	pt := &PodsTable{widgets.NewTable(), namespace}
+	pt := &PodsTable{NewListTable(), namespace}
 	pt.Title = "Pods"
 	pt.RowSeparator = false
+	pt.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
+	pt.RowStyle = ui.NewStyle(ui.ColorWhite)
 	pt.resetRows()
 	return pt
 }

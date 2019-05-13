@@ -31,10 +31,10 @@ func Start() {
 	nsTable := NewNamespacesTable()
 
 	menuList := NewMenuList(map[string]Focusable{
-		"Pods":       podTable,
 		"Namespaces": nsTable,
+		"Pods":       podTable,
 	})
-	menuList.OnUpdate(func(item Focusable) {
+	menuList.OnCursorChange(func(item Focusable) {
 		if loadable, ok := item.(Loadable); ok {
 			// TODO: preloader component
 			// TODO: asynchronous loading
@@ -51,6 +51,9 @@ func Start() {
 			}
 		}
 		screen.SetPanes(menuList, item)
+	})
+	menuList.OnActivate(func(focusable Focusable) {
+		screen.Focus(focusable)
 	})
 	screen.SetPanes(menuList, nil)
 	screen.Focus(menuList)

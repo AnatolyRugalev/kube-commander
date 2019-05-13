@@ -2,45 +2,36 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
+	ui "github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type NamespacesTable struct {
-	*widgets.Table
-}
-
-func (pt *NamespacesTable) OnEvent(event *termui.Event) bool {
-	return false
-}
-
-func (pt *NamespacesTable) OnFocusIn() {
-}
-
-func (pt *NamespacesTable) OnFocusOut() {
+	*ListTable
 }
 
 func NewNamespacesTable() *NamespacesTable {
-	nt := &NamespacesTable{widgets.NewTable()}
+	nt := &NamespacesTable{NewListTable()}
 	nt.Title = "Namespaces"
 	nt.RowSeparator = false
+	nt.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
+	nt.RowStyle = ui.NewStyle(ui.ColorWhite)
 	nt.resetRows()
 	return nt
 }
 
-func (pt *NamespacesTable) resetRows() {
-	pt.Rows = [][]string{
-		pt.getTitleRow(),
+func (nt *NamespacesTable) resetRows() {
+	nt.Rows = [][]string{
+		nt.getTitleRow(),
 	}
 }
 
-func (pt *NamespacesTable) getTitleRow() []string {
+func (nt *NamespacesTable) getTitleRow() []string {
 	return []string{"NAME", "STATUS", "AGE"}
 }
 
-func (pt *NamespacesTable) newRow(ns v1.Namespace) []string {
+func (nt *NamespacesTable) newRow(ns v1.Namespace) []string {
 	return []string{
 		ns.Name,
 		string(ns.Status.Phase),
@@ -48,7 +39,12 @@ func (pt *NamespacesTable) newRow(ns v1.Namespace) []string {
 	}
 }
 
-func (pt *NamespacesTable) Reload() error {
+func (nt *NamespacesTable) OnFocusIn() {
+	_ = nt.Reload()
+	nt.ListTable.OnFocusIn()
+}
+
+func (nt *NamespacesTable) Reload() error {
 	client, err := kube.GetClient()
 	if err != nil {
 		return err
@@ -57,9 +53,9 @@ func (pt *NamespacesTable) Reload() error {
 	if err != nil {
 		return err
 	}
-	pt.resetRows()
+	nt.resetRows()
 	for _, ns := range namespaces.Items {
-		pt.Rows = append(pt.Rows, pt.newRow(ns))
+		nt.Rows = append(nt.Rows, nt.newRow(ns))
 	}
 	return nil
 }
