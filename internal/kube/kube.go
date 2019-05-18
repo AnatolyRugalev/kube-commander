@@ -44,11 +44,11 @@ func GetClient() (*KubeClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	clientset, err := kubernetes.NewForConfig(c)
+	clientSet, err := kubernetes.NewForConfig(c)
 	if err != nil {
 		return nil, err
 	}
-	return &KubeClient{clientset}, nil
+	return &KubeClient{clientSet}, nil
 }
 
 func (k *KubeClient) GetPods(namespace string) (*v1.PodList, error) {

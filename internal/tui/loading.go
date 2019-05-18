@@ -1,5 +1,5 @@
 package tui
 
 type Loadable interface {
-	Reload() error
+	Reload(chan<- error)
 }

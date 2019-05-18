@@ -2,11 +2,10 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
+	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
 	"github.com/spf13/cobra"
 	"log"
-
-	ui "github.com/gizak/termui/v3"
 )
 
 func init() {
@@ -42,15 +41,21 @@ func Start() {
 			preloader.Text = "Loading..."
 			screen.SetPanes(menuList, preloader)
 			ui.Render(screen)
-			err := loadable.Reload()
-			if err != nil {
-				preloader.Text = err.Error()
-				screen.SetPanes(menuList, preloader)
-				ui.Render(screen)
-				return
-			}
+			loaded := make(chan error)
+			loadable.Reload(loaded)
+			go func() {
+				err := <-loaded
+				if err != nil {
+					preloader.Text = err.Error()
+					screen.SetPanes(menuList, preloader)
+					ui.Render(screen)
+				} else {
+					screen.SetPanes(menuList, item)
+				}
+			}()
+		} else {
+			screen.SetPanes(menuList, item)
 		}
-		screen.SetPanes(menuList, item)
 	})
 	menuList.OnActivate(func(focusable Focusable) {
 		screen.Focus(focusable)

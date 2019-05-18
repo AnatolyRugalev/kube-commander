@@ -40,22 +40,23 @@ func (nt *NamespacesTable) newRow(ns v1.Namespace) []string {
 }
 
 func (nt *NamespacesTable) OnFocusIn() {
-	_ = nt.Reload()
 	nt.ListTable.OnFocusIn()
 }
 
-func (nt *NamespacesTable) Reload() error {
+func (nt *NamespacesTable) Reload(errChan chan<- error) {
 	client, err := kube.GetClient()
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 	namespaces, err := client.CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 	nt.resetRows()
 	for _, ns := range namespaces.Items {
 		nt.Rows = append(nt.Rows, nt.newRow(ns))
 	}
-	return nil
+	close(errChan)
 }

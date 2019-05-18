@@ -14,7 +14,6 @@ type PodsTable struct {
 }
 
 func (pt *PodsTable) OnFocusIn() {
-	_ = pt.Reload()
 	pt.ListTable.OnFocusIn()
 }
 
@@ -63,18 +62,20 @@ func Age(startTime time.Time) string {
 	return time.Since(startTime).Round(time.Second).String()
 }
 
-func (pt *PodsTable) Reload() error {
+func (pt *PodsTable) Reload(errChan chan<- error) {
 	client, err := kube.GetClient()
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 	pods, err := client.GetPods(pt.Namespace)
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 	pt.resetRows()
 	for _, pod := range pods.Items {
 		pt.Rows = append(pt.Rows, pt.newRow(pod))
 	}
-	return nil
+	close(errChan)
 }
