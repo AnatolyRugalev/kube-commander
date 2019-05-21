@@ -6,7 +6,7 @@ Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 
 ## Installation
 
-The only installation way for today is through `go get`:
+The only way to install kube-commander today is through `go get`:
 
 ```bash
 go get -u github.com/AnatolyRugalev/kube-commander/cmd/kube-commander
