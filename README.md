@@ -42,6 +42,9 @@ Have fun!
     - [ ] StatefulSet
     - [ ] PV
     - [ ] PVC
+- [ ] Logs following
+    - [ ] Single pod logs
+    - [ ] Multiple pods logs merge?
 - [ ] Resource deletion with confirmation
 - [ ] Resource editing with external $EDITOR
 - [ ] Screen refresh: hotkey + auto-refresh
