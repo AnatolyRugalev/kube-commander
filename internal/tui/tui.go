@@ -26,33 +26,11 @@ func Start() {
 
 	screen.Init()
 
-	menuList := NewMenuList(screen)
+	menuList := NewMenuList()
 	screen.SetMenu(menuList)
-	menuList.OnCursorChange(func(item Pane) {
-		if loadable, ok := item.(Loadable); ok {
-			preloader := NewPreloader()
-			screen.SetRightPane(preloader)
-			ui.Render(screen)
-			go func() {
-				err := loadable.Reload()
-				if err != nil {
-					preloader.Text = err.Error()
-					screen.SetRightPane(preloader)
-				} else {
-					screen.SetRightPane(item)
-				}
-				ui.Render(screen)
-			}()
-		} else {
-			screen.SetRightPane(item)
-		}
-	})
-	menuList.OnActivate(func(focusable Pane) {
-		screen.Focus(focusable)
-	})
 	screen.Focus(menuList)
-	screen.SetRightPane(NewWelcomeScreen())
-	ui.Render(screen)
+	screen.ReplaceRightPane(NewWelcomeScreen())
+	screen.Render()
 
 	uiEvents := ui.PollEvents()
 	for {
@@ -63,7 +41,7 @@ func Start() {
 				return
 			}
 			if redraw {
-				ui.Render(screen)
+				screen.Render()
 			}
 		}
 	}

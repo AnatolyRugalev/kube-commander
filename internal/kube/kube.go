@@ -2,8 +2,6 @@ package kube
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	cmd "k8s.io/client-go/tools/clientcmd"
@@ -49,8 +47,4 @@ func GetClient() (*KubeClient, error) {
 		return nil, err
 	}
 	return &KubeClient{clientSet}, nil
-}
-
-func (k *KubeClient) GetPods(namespace string) (*v1.PodList, error) {
-	return k.CoreV1().Pods(namespace).List(metav1.ListOptions{})
 }

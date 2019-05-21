@@ -5,6 +5,8 @@ import (
 	"github.com/gizak/termui/v3/widgets"
 )
 
+// TODO: implement table scrolling
+
 type ListTable struct {
 	*widgets.Table
 	RowStyle         ui.Style

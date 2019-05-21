@@ -5,16 +5,12 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	ui "github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
-	"time"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PodsTable struct {
 	*ListTable
 	Namespace string
-}
-
-func (pt *PodsTable) OnFocusIn() {
-	pt.ListTable.OnFocusIn()
 }
 
 func NewPodsTable(namespace string) *PodsTable {
@@ -57,17 +53,12 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 	}
 }
 
-func Age(startTime time.Time) string {
-	// TODO: humanize
-	return time.Since(startTime).Round(time.Second).String()
-}
-
 func (pt *PodsTable) Reload() error {
 	client, err := kube.GetClient()
 	if err != nil {
 		return err
 	}
-	pods, err := client.GetPods(pt.Namespace)
+	pods, err := client.CoreV1().Pods(pt.Namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}

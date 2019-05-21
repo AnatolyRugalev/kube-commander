@@ -39,18 +39,11 @@ func (nt *NamespacesTable) newRow(ns v1.Namespace) []string {
 	}
 }
 
-func (nt *NamespacesTable) OnFocusIn() {
-	nt.ListTable.OnFocusIn()
-}
-
 func (nt *NamespacesTable) OnEvent(event *ui.Event) bool {
 	switch event.ID {
 	case "<Enter>":
 		namespace := nt.Rows[nt.SelectedRow+1][0]
-		pods := NewPodsTable(namespace)
-		_ = pods.Reload()
-		screen.AddRightPane(pods)
-		screen.Focus(pods)
+		screen.LoadRightPane(NewPodsTable(namespace))
 		return true
 	}
 	return nt.ListTable.OnEvent(event)

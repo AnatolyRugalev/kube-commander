@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
-	_ "github.com/AnatolyRugalev/kube-commander/internal/commands"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui"
 	_ "github.com/AnatolyRugalev/kube-commander/internal/tui"
 	"github.com/spf13/cobra"
 	"os"
@@ -16,6 +16,9 @@ var rootCmd = &cobra.Command{
 	List pods, scale deployments and more!`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return cfg.Apply()
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		tui.Start()
 	},
 }
 

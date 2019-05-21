@@ -7,11 +7,8 @@ import (
 
 type MenuList struct {
 	*widgets.List
-	screen         *Screen
-	items          []menuItemFunc
-	selectedItem   Pane
-	onCursorChange func(focusable Pane)
-	onActivate     func(focusable Pane)
+	items        []menuItemFunc
+	selectedItem Pane
 }
 
 type menuItemFunc func() Pane
@@ -30,10 +27,9 @@ var items = []menuItem{
 	}},
 }
 
-func NewMenuList(screen *Screen) *MenuList {
+func NewMenuList() *MenuList {
 	ml := &MenuList{
-		List:   widgets.NewList(),
-		screen: screen,
+		List: widgets.NewList(),
 	}
 	ml.Title = "Cluster"
 	ml.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
@@ -44,14 +40,6 @@ func NewMenuList(screen *Screen) *MenuList {
 	}
 	ml.SelectedRow = 0
 	return ml
-}
-
-func (ml *MenuList) OnCursorChange(onCursorChange func(focusable Pane)) {
-	ml.onCursorChange = onCursorChange
-}
-
-func (ml *MenuList) OnActivate(onActivate func(focusable Pane)) {
-	ml.onActivate = onActivate
 }
 
 func (ml *MenuList) OnEvent(event *ui.Event) bool {
@@ -77,24 +65,22 @@ func (ml *MenuList) OnEvent(event *ui.Event) bool {
 
 func (ml *MenuList) CursorDown() {
 	ml.SelectedRow += 1
-	ml.onCursor()
+	ml.onCursorMove()
 }
 
 func (ml *MenuList) CursorUp() {
 	ml.SelectedRow -= 1
-	ml.onCursor()
+	ml.onCursorMove()
 }
 
-func (ml *MenuList) onCursor() {
-	if ml.onCursorChange != nil {
-		ml.selectedItem = ml.items[ml.SelectedRow]()
-		ml.onCursorChange(ml.selectedItem)
-	}
+func (ml *MenuList) onCursorMove() {
+	ml.selectedItem = ml.items[ml.SelectedRow]()
+	screen.ReplaceRightPane(ml.selectedItem)
 }
 
 func (ml *MenuList) activateCurrent() {
-	if ml.onActivate != nil && ml.selectedItem != nil {
-		ml.onActivate(ml.selectedItem)
+	if ml.selectedItem != nil {
+		screen.Focus(ml.selectedItem)
 	}
 }
 
