@@ -6,8 +6,10 @@ import (
 
 type Screen struct {
 	*ui.Grid
-	focus      Focusable
-	focusStack []Focusable
+	menu           *MenuList
+	rightPaneStack []Pane
+	focusStack     []Pane
+	focus          Pane
 }
 
 func NewScreen() *Screen {
@@ -17,39 +19,66 @@ func NewScreen() *Screen {
 	return s
 }
 
+func (s *Screen) Draw(buf *ui.Buffer) {
+	s.setGrid()
+	s.Grid.Draw(buf)
+}
+
 func (s *Screen) Init() {
 	termWidth, termHeight := ui.TerminalDimensions()
 	s.SetRect(0, 0, termWidth, termHeight)
 }
 
-func (s *Screen) SetPanes(left *MenuList, right interface{}) {
+func (s *Screen) SetMenu(menu *MenuList) {
+	s.menu = menu
+}
+
+func (s *Screen) setGrid() {
 	s.Items = []*ui.GridItem{}
+	var right interface{}
+	if len(s.rightPaneStack) > 0 {
+		right = s.rightPaneStack[0]
+	}
 	s.Set(
 		ui.NewRow(1.0,
-			ui.NewCol(0.1, left),
+			ui.NewCol(0.1, s.menu),
 			ui.NewCol(0.9, right),
 		),
 	)
 }
 
-func (s *Screen) Focus(focusable Focusable) {
+func (s *Screen) AddRightPane(pane Pane) {
+	s.rightPaneStack = append([]Pane{pane}, s.rightPaneStack...)
+}
+
+func (s *Screen) SetRightPane(pane Pane) {
+	s.rightPaneStack = []Pane{pane}
+}
+
+func (s *Screen) Focus(focusable Pane) {
 	if s.focus != nil {
 		s.focus.OnFocusOut()
-		s.focusStack = append([]Focusable{s.focus}, s.focusStack...)
+		s.focusStack = append([]Pane{s.focus}, s.focusStack...)
 	}
 	s.focus = focusable
 	s.focus.OnFocusIn()
 }
 
-func (s *Screen) FocusOnParent() bool {
+func (s *Screen) PopFocus() bool {
 	if len(s.focusStack) == 0 {
 		return false
 	}
 	if s.focus != nil {
 		s.focus.OnFocusOut()
 	}
-	parent := s.focusStack[0]
-	s.focus = parent
+	var next Pane
+	if len(s.rightPaneStack) > 1 {
+		next = s.rightPaneStack[1]
+		s.rightPaneStack = s.rightPaneStack[1:]
+	} else {
+		next = s.focusStack[0]
+	}
+	s.focus = next
 	s.focus.OnFocusIn()
 	s.focusStack = s.focusStack[1:]
 	return true
@@ -65,12 +94,11 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		ui.Clear()
 		return true, false
 	case "<Escape>":
-		return s.FocusOnParent(), false
+		return s.PopFocus(), false
 	default:
 		if s.focus != nil {
 			return s.focus.OnEvent(event), false
-		} else {
-			return false, false
 		}
+		return false, false
 	}
 }

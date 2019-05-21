@@ -62,20 +62,18 @@ func Age(startTime time.Time) string {
 	return time.Since(startTime).Round(time.Second).String()
 }
 
-func (pt *PodsTable) Reload(errChan chan<- error) {
+func (pt *PodsTable) Reload() error {
 	client, err := kube.GetClient()
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	pods, err := client.GetPods(pt.Namespace)
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	pt.resetRows()
 	for _, pod := range pods.Items {
 		pt.Rows = append(pt.Rows, pt.newRow(pod))
 	}
-	close(errChan)
+	return nil
 }

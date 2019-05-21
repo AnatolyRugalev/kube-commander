@@ -7,31 +7,50 @@ import (
 
 type MenuList struct {
 	*widgets.List
-	items          []Focusable
-	onCursorChange func(focusable Focusable)
-	onActivate     func(focusable Focusable)
+	screen         *Screen
+	items          []menuItemFunc
+	selectedItem   Pane
+	onCursorChange func(focusable Pane)
+	onActivate     func(focusable Pane)
 }
 
-func NewMenuList(items map[string]Focusable) *MenuList {
+type menuItemFunc func() Pane
+
+type menuItem struct {
+	name     string
+	itemFunc menuItemFunc
+}
+
+var items = []menuItem{
+	{"Namespaces", func() Pane {
+		return NewNamespacesTable()
+	}},
+	{"Nodes", func() Pane {
+		return NewNodesTable()
+	}},
+}
+
+func NewMenuList(screen *Screen) *MenuList {
 	ml := &MenuList{
-		List: widgets.NewList(),
+		List:   widgets.NewList(),
+		screen: screen,
 	}
 	ml.Title = "Cluster"
 	ml.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
 	ml.WrapText = false
-	for row, item := range items {
-		ml.Rows = append(ml.Rows, row)
-		ml.items = append(ml.items, item)
+	for _, item := range items {
+		ml.Rows = append(ml.Rows, item.name)
+		ml.items = append(ml.items, item.itemFunc)
 	}
 	ml.SelectedRow = 0
 	return ml
 }
 
-func (ml *MenuList) OnCursorChange(onCursorChange func(focusable Focusable)) {
+func (ml *MenuList) OnCursorChange(onCursorChange func(focusable Pane)) {
 	ml.onCursorChange = onCursorChange
 }
 
-func (ml *MenuList) OnActivate(onActivate func(focusable Focusable)) {
+func (ml *MenuList) OnActivate(onActivate func(focusable Pane)) {
 	ml.onActivate = onActivate
 }
 
@@ -49,7 +68,7 @@ func (ml *MenuList) OnEvent(event *ui.Event) bool {
 		}
 		ml.CursorUp()
 		return true
-	case "<Right>":
+	case "<Right>", "<Enter>":
 		ml.activateCurrent()
 		return true
 	}
@@ -68,13 +87,14 @@ func (ml *MenuList) CursorUp() {
 
 func (ml *MenuList) onCursor() {
 	if ml.onCursorChange != nil {
-		ml.onCursorChange(ml.items[ml.SelectedRow])
+		ml.selectedItem = ml.items[ml.SelectedRow]()
+		ml.onCursorChange(ml.selectedItem)
 	}
 }
 
 func (ml *MenuList) activateCurrent() {
-	if ml.onActivate != nil {
-		ml.onActivate(ml.items[ml.SelectedRow])
+	if ml.onActivate != nil && ml.selectedItem != nil {
+		ml.onActivate(ml.selectedItem)
 	}
 }
 

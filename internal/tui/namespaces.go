@@ -43,20 +43,31 @@ func (nt *NamespacesTable) OnFocusIn() {
 	nt.ListTable.OnFocusIn()
 }
 
-func (nt *NamespacesTable) Reload(errChan chan<- error) {
+func (nt *NamespacesTable) OnEvent(event *ui.Event) bool {
+	switch event.ID {
+	case "<Enter>":
+		namespace := nt.Rows[nt.SelectedRow+1][0]
+		pods := NewPodsTable(namespace)
+		_ = pods.Reload()
+		screen.AddRightPane(pods)
+		screen.Focus(pods)
+		return true
+	}
+	return nt.ListTable.OnEvent(event)
+}
+
+func (nt *NamespacesTable) Reload() error {
 	client, err := kube.GetClient()
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	namespaces, err := client.CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	nt.resetRows()
 	for _, ns := range namespaces.Items {
 		nt.Rows = append(nt.Rows, nt.newRow(ns))
 	}
-	close(errChan)
+	return nil
 }

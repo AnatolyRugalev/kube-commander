@@ -3,7 +3,6 @@ package tui
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	ui "github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
 	"github.com/spf13/cobra"
 	"log"
 )
@@ -17,51 +16,42 @@ func init() {
 	})
 }
 
+var screen = NewScreen()
+
 func Start() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 
-	screen := NewScreen()
 	screen.Init()
 
-	podTable := NewPodsTable("kube-system")
-	nsTable := NewNamespacesTable()
-
-	menuList := NewMenuList(map[string]Focusable{
-		"Namespaces": nsTable,
-		"Pods":       podTable,
-	})
-	menuList.OnCursorChange(func(item Focusable) {
+	menuList := NewMenuList(screen)
+	screen.SetMenu(menuList)
+	menuList.OnCursorChange(func(item Pane) {
 		if loadable, ok := item.(Loadable); ok {
-			// TODO: preloader component
-			// TODO: asynchronous loading
-			preloader := widgets.NewParagraph()
-			preloader.Text = "Loading..."
-			screen.SetPanes(menuList, preloader)
+			preloader := NewPreloader()
+			screen.SetRightPane(preloader)
 			ui.Render(screen)
-			loaded := make(chan error)
-			loadable.Reload(loaded)
 			go func() {
-				err := <-loaded
+				err := loadable.Reload()
 				if err != nil {
 					preloader.Text = err.Error()
-					screen.SetPanes(menuList, preloader)
-					ui.Render(screen)
+					screen.SetRightPane(preloader)
 				} else {
-					screen.SetPanes(menuList, item)
+					screen.SetRightPane(item)
 				}
+				ui.Render(screen)
 			}()
 		} else {
-			screen.SetPanes(menuList, item)
+			screen.SetRightPane(item)
 		}
 	})
-	menuList.OnActivate(func(focusable Focusable) {
+	menuList.OnActivate(func(focusable Pane) {
 		screen.Focus(focusable)
 	})
-	screen.SetPanes(menuList, nil)
 	screen.Focus(menuList)
+	screen.SetRightPane(NewWelcomeScreen())
 	ui.Render(screen)
 
 	uiEvents := ui.PollEvents()
