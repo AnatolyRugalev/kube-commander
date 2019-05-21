@@ -33,6 +33,7 @@ Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 - [ ] Resource editing with external $EDITOR
 - [ ] Screen refresh: hotkey + auto-refresh
 - [ ] Shortcuts bottom bar (eg. Midnight Commander)
+- [ ] Copy to clipboard
 - [ ] Charts
     - [ ] Node capacity
     - [ ] metrics-server based charts
