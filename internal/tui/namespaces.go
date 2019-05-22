@@ -12,13 +12,20 @@ type NamespacesTable struct {
 }
 
 func NewNamespacesTable() *NamespacesTable {
-	nt := &NamespacesTable{NewListTable()}
+	nt := &NamespacesTable{
+		ListTable: NewSelectableListTable(onNamespaceSelect),
+	}
 	nt.Title = "Namespaces"
 	nt.RowSeparator = false
 	nt.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
 	nt.RowStyle = ui.NewStyle(ui.ColorWhite)
 	nt.resetRows()
 	return nt
+}
+
+func onNamespaceSelect(row []string) bool {
+	screen.LoadRightPane(NewPodsTable(row[0]))
+	return true
 }
 
 func (nt *NamespacesTable) resetRows() {
@@ -37,16 +44,6 @@ func (nt *NamespacesTable) newRow(ns v1.Namespace) []string {
 		string(ns.Status.Phase),
 		Age(ns.CreationTimestamp.Time),
 	}
-}
-
-func (nt *NamespacesTable) OnEvent(event *ui.Event) bool {
-	switch event.ID {
-	case "<Enter>":
-		namespace := nt.Rows[nt.SelectedRow+1][0]
-		screen.LoadRightPane(NewPodsTable(namespace))
-		return true
-	}
-	return nt.ListTable.OnEvent(event)
 }
 
 func (nt *NamespacesTable) Reload() error {

@@ -7,18 +7,29 @@ import (
 
 // TODO: implement table scrolling
 
+type listTableSelector func(row []string) bool
+
 type ListTable struct {
 	*widgets.Table
 	RowStyle         ui.Style
 	HeaderRowsCount  int
 	SelectedRowStyle ui.Style
 	SelectedRow      int
+	OnSelect         listTableSelector
 }
 
 func NewListTable() *ListTable {
 	return &ListTable{
 		HeaderRowsCount: 1,
 		Table:           widgets.NewTable(),
+	}
+}
+
+func NewSelectableListTable(onSelect listTableSelector) *ListTable {
+	return &ListTable{
+		HeaderRowsCount: 1,
+		Table:           widgets.NewTable(),
+		OnSelect:        onSelect,
 	}
 }
 
@@ -47,6 +58,12 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		lt.CursorUp()
 		return true
+	case "<Enter>":
+		row := lt.Rows[lt.SelectedRow+1]
+		if lt.OnSelect != nil {
+			return lt.OnSelect(row)
+		}
+		return false
 	}
 	return false
 }
