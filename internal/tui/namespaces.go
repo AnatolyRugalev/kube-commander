@@ -16,6 +16,7 @@ func NewNamespacesTable() *NamespacesTable {
 	}
 	nt.Title = "Namespaces"
 	nt.resetRows()
+	screen.Block.Size()
 	return nt
 }
 

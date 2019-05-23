@@ -43,10 +43,12 @@ func (s *Screen) setGrid() {
 	if len(s.rightPaneStack) > 0 {
 		right = s.rightPaneStack[0]
 	}
+
+	menuRatio := 15.0 / float64(s.Rectangle.Max.X)
 	s.Set(
 		ui.NewRow(1.0,
-			ui.NewCol(0.1, s.menu),
-			ui.NewCol(0.9, right),
+			ui.NewCol(menuRatio, s.menu),
+			ui.NewCol(1-menuRatio, right),
 		),
 	)
 }

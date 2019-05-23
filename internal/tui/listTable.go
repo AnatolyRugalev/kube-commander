@@ -3,6 +3,7 @@ package tui
 import (
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
+	"unicode/utf8"
 )
 
 // TODO: implement table scrolling
@@ -31,6 +32,29 @@ func NewListTable() *ListTable {
 	lt.SelectedRowStyle = theme["listItemSelected"].inactive
 	lt.RowSeparator = false
 	lt.FillRow = true
+	lt.ColumnResizer = func() {
+		if len(lt.Rows) == 0 {
+			lt.ColumnWidths = []int{}
+			return
+		}
+		colCount := len(lt.Rows[0])
+		var widths []int
+		for i := range lt.Rows[0] {
+			var width = 1
+			if i == colCount-1 {
+				// Last column
+				width = 999
+			} else {
+				for _, row := range lt.Rows {
+					if utf8.RuneCountInString(row[i]) > width {
+						width = len(row[i])
+					}
+				}
+			}
+			widths = append(widths, width+1)
+		}
+		lt.ColumnWidths = widths
+	}
 	return lt
 }
 

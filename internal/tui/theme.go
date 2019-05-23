@@ -11,23 +11,23 @@ type themeMap struct {
 
 var theme = map[string]themeMap{
 	"grid": {
-		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
-		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear),
+		active:   ui.NewStyle(ui.Color(231), ui.ColorClear),
 	},
 	"title": {
-		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
-		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear),
+		active:   ui.NewStyle(ui.Color(231), ui.ColorClear),
 	},
 	"listItem": {
-		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
-		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear),
+		active:   ui.NewStyle(ui.Color(231), ui.ColorClear),
 	},
 	"listItemSelected": {
-		inactive: ui.NewStyle(ui.ColorClear, ui.Color(240)),
-		active:   ui.NewStyle(ui.ColorBlack, ui.ColorCyan),
+		inactive: ui.NewStyle(ui.Color(249), ui.Color(240)),
+		active:   ui.NewStyle(ui.Color(237), ui.Color(51)),
 	},
 	"listHeader": {
-		inactive: ui.NewStyle(ui.Color(240), ui.ColorClear, ui.ModifierBold),
-		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear, ui.ModifierBold),
+		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear, ui.ModifierBold),
+		active:   ui.NewStyle(ui.Color(231), ui.ColorClear, ui.ModifierBold),
 	},
 }
