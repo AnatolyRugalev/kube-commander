@@ -4,11 +4,30 @@ import ui "github.com/gizak/termui/v3"
 
 // Colors reference: http://www.lihaoyi.com/post/Ansi/RainbowBackground256.png
 
-var theme = map[string]ui.Style{
-	"default":            ui.NewStyle(ui.ColorClear, ui.ColorClear),
-	"title":              ui.NewStyle(ui.ColorBlack, ui.ColorClear),
-	"header":             ui.NewStyle(ui.ColorBlack, ui.ColorClear, ui.ModifierBold),
-	"selectedInFocus":    ui.NewStyle(ui.ColorBlack, ui.ColorCyan),
-	"selectedOutOfFocus": ui.NewStyle(ui.ColorBlack, ui.ColorWhite),
-	"focus":              ui.NewStyle(ui.ColorCyan, ui.ColorClear),
+type themeMap struct {
+	active   ui.Style
+	inactive ui.Style
+}
+
+var theme = map[string]themeMap{
+	"grid": {
+		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
+		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+	},
+	"title": {
+		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
+		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+	},
+	"listItem": {
+		inactive: ui.NewStyle(ui.ColorClear, ui.ColorClear),
+		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear),
+	},
+	"listItemSelected": {
+		inactive: ui.NewStyle(ui.ColorClear, ui.Color(240)),
+		active:   ui.NewStyle(ui.ColorBlack, ui.ColorCyan),
+	},
+	"listHeader": {
+		inactive: ui.NewStyle(ui.Color(240), ui.ColorClear, ui.ModifierBold),
+		active:   ui.NewStyle(ui.ColorBlack, ui.ColorClear, ui.ModifierBold),
+	},
 }

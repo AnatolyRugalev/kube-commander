@@ -32,9 +32,10 @@ func NewMenuList() *MenuList {
 		List: widgets.NewList(),
 	}
 	ml.Title = "Cluster"
-	ml.BorderStyle = theme["default"]
-	ml.TitleStyle = theme["title"]
-	ml.SelectedRowStyle = theme["selectedOutOfFocus"]
+	ml.TitleStyle = theme["title"].inactive
+	ml.BorderStyle = theme["grid"].inactive
+	ml.TextStyle = theme["listItem"].inactive
+	ml.SelectedRowStyle = theme["listItemSelected"].inactive
 	ml.WrapText = false
 	for _, item := range items {
 		ml.Rows = append(ml.Rows, item.name)
@@ -87,11 +88,15 @@ func (ml *MenuList) activateCurrent() {
 }
 
 func (ml *MenuList) OnFocusIn() {
-	ml.BorderStyle = theme["focus"]
-	ml.SelectedRowStyle = theme["selectedInFocus"]
+	ml.TitleStyle = theme["title"].active
+	ml.BorderStyle = theme["grid"].active
+	ml.TextStyle = theme["listItem"].active
+	ml.SelectedRowStyle = theme["listItemSelected"].active
 }
 
 func (ml *MenuList) OnFocusOut() {
-	ml.BorderStyle = theme["default"]
-	ml.SelectedRowStyle = theme["selectedOutOfFocus"]
+	ml.TitleStyle = theme["title"].inactive
+	ml.BorderStyle = theme["grid"].inactive
+	ml.TextStyle = theme["listItem"].inactive
+	ml.SelectedRowStyle = theme["listItemSelected"].inactive
 }

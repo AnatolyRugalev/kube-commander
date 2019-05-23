@@ -24,11 +24,11 @@ func NewListTable() *ListTable {
 		HeaderRowsCount: 1,
 		Table:           widgets.NewTable(),
 	}
-	lt.BorderStyle = theme["default"]
-	lt.TitleStyle = theme["title"]
-	lt.RowStyle = theme["default"]
-	lt.HeaderStyle = theme["header"]
-	lt.SelectedRowStyle = theme["selectedOutOfFocus"]
+	lt.BorderStyle = theme["grid"].inactive
+	lt.TitleStyle = theme["title"].inactive
+	lt.RowStyle = theme["listItem"].inactive
+	lt.HeaderStyle = theme["listHeader"].inactive
+	lt.SelectedRowStyle = theme["listItemSelected"].inactive
 	lt.RowSeparator = false
 	lt.FillRow = true
 	return lt
@@ -85,11 +85,17 @@ func (lt *ListTable) CursorUp() {
 }
 
 func (lt *ListTable) OnFocusIn() {
-	lt.BorderStyle = theme["focus"]
-	lt.SelectedRowStyle = theme["selectedInFocus"]
+	lt.BorderStyle = theme["grid"].active
+	lt.TitleStyle = theme["title"].active
+	lt.RowStyle = theme["listItem"].active
+	lt.HeaderStyle = theme["listHeader"].active
+	lt.SelectedRowStyle = theme["listItemSelected"].active
 }
 
 func (lt *ListTable) OnFocusOut() {
-	lt.BorderStyle = theme["default"]
-	lt.SelectedRowStyle = theme["selectedOutOfFocus"]
+	lt.BorderStyle = theme["grid"].inactive
+	lt.TitleStyle = theme["title"].inactive
+	lt.RowStyle = theme["listItem"].inactive
+	lt.HeaderStyle = theme["listHeader"].inactive
+	lt.SelectedRowStyle = theme["listItemSelected"].inactive
 }
