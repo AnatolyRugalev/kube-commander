@@ -1,5 +1,7 @@
 # Kube Commander
 
+![Kube Commander](docs/screenshot.png)
+
 ## TUI
 
 Kube Commander UI is based on [termui](https://github.com/gizak/termui).
