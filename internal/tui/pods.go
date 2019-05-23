@@ -14,7 +14,7 @@ type PodsTable struct {
 
 func NewPodsTable(namespace string) *PodsTable {
 	pt := &PodsTable{NewListTable(), namespace}
-	pt.Title = "Pods"
+	pt.Title = "Pods <" + namespace + ">"
 	pt.resetRows()
 	return pt
 }
