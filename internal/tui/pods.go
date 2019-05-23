@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	ui "github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -16,9 +15,6 @@ type PodsTable struct {
 func NewPodsTable(namespace string) *PodsTable {
 	pt := &PodsTable{NewListTable(), namespace}
 	pt.Title = "Pods"
-	pt.RowSeparator = false
-	pt.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
-	pt.RowStyle = ui.NewStyle(ui.ColorWhite)
 	pt.resetRows()
 	return pt
 }

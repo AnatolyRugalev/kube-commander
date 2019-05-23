@@ -32,7 +32,9 @@ func NewMenuList() *MenuList {
 		List: widgets.NewList(),
 	}
 	ml.Title = "Cluster"
-	ml.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
+	ml.BorderStyle = theme["default"]
+	ml.TitleStyle = theme["title"]
+	ml.SelectedRowStyle = theme["selectedOutOfFocus"]
 	ml.WrapText = false
 	for _, item := range items {
 		ml.Rows = append(ml.Rows, item.name)
@@ -85,9 +87,11 @@ func (ml *MenuList) activateCurrent() {
 }
 
 func (ml *MenuList) OnFocusIn() {
-	ml.BorderStyle = ui.NewStyle(ui.ColorYellow)
+	ml.BorderStyle = theme["focus"]
+	ml.SelectedRowStyle = theme["selectedInFocus"]
 }
 
 func (ml *MenuList) OnFocusOut() {
-	ml.BorderStyle = ui.NewStyle(ui.ColorWhite)
+	ml.BorderStyle = theme["default"]
+	ml.SelectedRowStyle = theme["selectedOutOfFocus"]
 }

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	ui "github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
@@ -15,9 +14,6 @@ type NodesTable struct {
 func NewNodesTable() *NodesTable {
 	nt := &NodesTable{NewListTable()}
 	nt.Title = "Nodes"
-	nt.RowSeparator = false
-	nt.SelectedRowStyle = ui.NewStyle(ui.ColorYellow)
-	nt.RowStyle = ui.NewStyle(ui.ColorWhite)
 	nt.resetRows()
 	return nt
 }

@@ -13,24 +13,31 @@ type ListTable struct {
 	*widgets.Table
 	RowStyle         ui.Style
 	HeaderRowsCount  int
+	HeaderStyle      ui.Style
 	SelectedRowStyle ui.Style
 	SelectedRow      int
 	OnSelect         listTableSelector
 }
 
 func NewListTable() *ListTable {
-	return &ListTable{
+	lt := &ListTable{
 		HeaderRowsCount: 1,
 		Table:           widgets.NewTable(),
 	}
+	lt.BorderStyle = theme["default"]
+	lt.TitleStyle = theme["title"]
+	lt.RowStyle = theme["default"]
+	lt.HeaderStyle = theme["header"]
+	lt.SelectedRowStyle = theme["selectedOutOfFocus"]
+	lt.RowSeparator = false
+	lt.FillRow = true
+	return lt
 }
 
 func NewSelectableListTable(onSelect listTableSelector) *ListTable {
-	return &ListTable{
-		HeaderRowsCount: 1,
-		Table:           widgets.NewTable(),
-		OnSelect:        onSelect,
-	}
+	lt := NewListTable()
+	lt.OnSelect = onSelect
+	return lt
 }
 
 func (lt *ListTable) Draw(buf *ui.Buffer) {
@@ -41,6 +48,7 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 			lt.Table.RowStyles[i] = lt.RowStyle
 		}
 	}
+	lt.Table.RowStyles[0] = lt.HeaderStyle
 	lt.Table.Draw(buf)
 }
 
@@ -77,9 +85,11 @@ func (lt *ListTable) CursorUp() {
 }
 
 func (lt *ListTable) OnFocusIn() {
-	lt.BorderStyle = ui.NewStyle(ui.ColorYellow)
+	lt.BorderStyle = theme["focus"]
+	lt.SelectedRowStyle = theme["selectedInFocus"]
 }
 
 func (lt *ListTable) OnFocusOut() {
-	lt.BorderStyle = ui.NewStyle(ui.ColorWhite)
+	lt.BorderStyle = theme["default"]
+	lt.SelectedRowStyle = theme["selectedOutOfFocus"]
 }
