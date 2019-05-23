@@ -23,8 +23,8 @@ Have fun!
 - [X] Basic kubernetes/client-go library integration
 - [X] TUI library selection
 - [X] Basic navigation implementation
-- [ ] Determine initial release feature set
-- [ ] Colorization and theming
+- [X] Determine initial release feature set
+- [X] Basic colorization and theming
 - [ ] Implement features
 
 ## Feature Set
@@ -53,6 +53,7 @@ Have fun!
 - [ ] Charts
     - [ ] Node capacity
     - [ ] metrics-server based charts
+- [ ] Mouse support
 
 ## Current questions
 
