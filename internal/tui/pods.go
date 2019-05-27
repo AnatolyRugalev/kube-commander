@@ -3,12 +3,22 @@ package tui
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PodsTable struct {
 	Namespace string
+}
+
+func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
+	switch event.ID {
+	case "l":
+		screen.LoadRightPane(NewPodLogs(pt.Namespace, item[0]))
+		return true
+	}
+	return false
 }
 
 func NewPodsTable(namespace string) *ListTable {

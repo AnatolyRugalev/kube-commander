@@ -99,6 +99,10 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		return false
 	}
+	if e, ok := lt.extension.(ListExtensionEventable); ok {
+		row := lt.Rows[lt.SelectedRow+1]
+		return e.OnEvent(event, row)
+	}
 	return false
 }
 

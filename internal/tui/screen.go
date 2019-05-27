@@ -59,22 +59,28 @@ func (s *Screen) setGrid() {
 
 func (s *Screen) Focus(focusable Pane) {
 	if s.focus != nil {
-		s.focus.OnFocusOut()
+		if f, ok := s.focus.(Focusable); ok {
+			f.OnFocusOut()
+		}
 		s.focusStack = append([]Pane{s.focus}, s.focusStack...)
 	}
 	s.focus = focusable
-	s.focus.OnFocusIn()
+	if f, ok := s.focus.(Focusable); ok {
+		f.OnFocusIn()
+	}
 }
 
 func (s *Screen) popFocus() bool {
 	if len(s.focusStack) == 0 {
 		return false
 	}
-	if s.focus != nil {
-		s.focus.OnFocusOut()
+	if f, ok := s.focus.(Focusable); ok {
+		f.OnFocusOut()
 	}
 	s.focus = s.focusStack[0]
-	s.focus.OnFocusIn()
+	if f, ok := s.focus.(Focusable); ok {
+		f.OnFocusIn()
+	}
 	s.focusStack = s.focusStack[1:]
 	return true
 }

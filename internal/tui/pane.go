@@ -2,15 +2,27 @@ package tui
 
 import ui "github.com/gizak/termui/v3"
 
-type Pane interface {
+type Eventable interface {
 	OnEvent(event *ui.Event) bool
+}
+
+type Focusable interface {
 	OnFocusIn()
 	OnFocusOut()
+}
+
+type Pane interface {
+	Eventable
 }
 
 type ListExtension interface {
 	getTitleRow() []string
 	loadData() ([][]string, error)
+}
+
+type ListExtensionEventable interface {
+	ListExtension
+	OnEvent(event *ui.Event, item []string) bool
 }
 
 type ListExtensionSelectable interface {
