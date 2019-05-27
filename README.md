@@ -49,7 +49,9 @@ Have fun!
     - [ ] Multiple pods logs merge?
 - [X] Resource deletion with confirmation
 - [ ] Resource editing with external $EDITOR
-- [ ] Screen refresh: hotkey + auto-refresh
+- [ ] Screen refresh
+    - [X] Hotkey
+    - [ ] Auto-refresh 
 - [ ] Shortcuts bottom bar (eg. Midnight Commander)
 - [ ] Copy to clipboard
 - [ ] Charts
