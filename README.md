@@ -58,6 +58,7 @@ Have fun!
     - [ ] Node capacity
     - [ ] metrics-server based charts
 - [ ] Mouse support
+- [ ] Animated preloader
 
 ## Current questions
 
