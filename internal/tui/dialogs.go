@@ -17,22 +17,26 @@ const (
 )
 
 const (
-	buttonWidth        = 10
-	buttonHeight       = 4
-	buttonMargingRight = 3
+	buttonWidth       = 10
+	buttonHeight      = 4
+	buttonMarginRight = 3
 )
+
+type btnFunc func() error
 
 // Button represents text button
 type Button struct {
 	*widgets.Paragraph
+	onClick btnFunc
 }
 
 // NewButton returns button with specified text
-func NewButton(text string) Button {
-	b := Button{}
-	p := widgets.NewParagraph()
-	p.Text = text
-	b.Paragraph = p
+func NewButton(text string, onClick btnFunc) *Button {
+	b := &Button{
+		Paragraph: widgets.NewParagraph(),
+	}
+	b.Text = text
+	b.onClick = onClick
 	return b
 }
 
@@ -43,7 +47,7 @@ func (b *Button) setRect(x1, y1, x2, y2 int) {
 // Dialog represents modal dialog window
 type Dialog struct {
 	*widgets.Paragraph
-	Buttons             []Button
+	Buttons             []*Button
 	buttonStyle         ui.Style
 	selectedButtonStyle ui.Style
 	selectedButton      int
@@ -62,13 +66,13 @@ func (dlg *Dialog) Draw(buf *ui.Buffer) {
 	}
 }
 
-func (dlg *Dialog) addButton(b Button) {
+func (dlg *Dialog) addButton(b *Button) {
 	dlg.Buttons = append(dlg.Buttons, b)
 }
 
 func (dlg *Dialog) setButtonsRect(x1, y1, x2, y2 int) {
 	var bx1, by1, bx2, by2, left, buttonsWidth int
-	buttonsWidth = (buttonWidth + buttonMargingRight) * len(dlg.Buttons)
+	buttonsWidth = (buttonWidth + buttonMarginRight) * len(dlg.Buttons)
 	left = x1 + (x2-x1)/2 - buttonsWidth/2 - 1
 
 	for i := 0; i < len(dlg.Buttons); i++ {
@@ -77,7 +81,7 @@ func (dlg *Dialog) setButtonsRect(x1, y1, x2, y2 int) {
 		bx2 = bx1 + buttonWidth
 		by2 = y2 - 1
 		dlg.Buttons[i].setRect(bx1, by1, bx2, by2)
-		left += buttonWidth + buttonMargingRight
+		left += buttonWidth + buttonMarginRight
 	}
 
 }
@@ -109,7 +113,7 @@ func (dlg *Dialog) setRect() {
 	dlg.setButtonsRect(x1, y1, x2, y2)
 }
 
-func newDialog(title, text string, buttons ...string) *Dialog {
+func newDialog(title, text string, buttons ...*Button) *Dialog {
 	p := widgets.NewParagraph()
 	p.Title = title
 	p.Text = text
@@ -124,10 +128,10 @@ func newDialog(title, text string, buttons ...string) *Dialog {
 	newDlg.selectedButtonStyle = theme["button"].active
 
 	if len(buttons) == 0 {
-		newDlg.addButton(NewButton(ButtonOk))
+		newDlg.addButton(NewButton(ButtonOk, nil))
 	} else {
-		for _, txtButton := range buttons {
-			newDlg.addButton(NewButton(txtButton))
+		for _, button := range buttons {
+			newDlg.addButton(button)
 		}
 	}
 
@@ -136,8 +140,8 @@ func newDialog(title, text string, buttons ...string) *Dialog {
 	return newDlg
 }
 
-func (dlg Dialog) dialogResult() string {
-	return dlg.Buttons[dlg.selectedButton].Paragraph.Text
+func (dlg Dialog) currentButton() *Button {
+	return dlg.Buttons[dlg.selectedButton]
 }
 
 func (dlg *Dialog) nextButton() {
@@ -152,41 +156,49 @@ func (dlg *Dialog) prevButton() {
 	}
 }
 
-func (Dialog) OnEvent(event *termui.Event) bool {
+func (dlg *Dialog) OnEvent(event *termui.Event) bool {
+	switch event.ID {
+	case "<Right>":
+		dlg.nextButton()
+		return true
+	case "<Left>":
+		dlg.prevButton()
+		return true
+	case "<Enter>":
+		btn := dlg.currentButton()
+		screen.popFocus()
+		screen.removePopup()
+		if btn.onClick != nil {
+			err := btn.onClick()
+			if err != nil {
+				ShowErrorDialog(err, nil)
+			} else {
+				screen.reloadCurrentRightPane()
+			}
+		}
+		return true
+	case "<Escape>":
+		screen.removePopup()
+		screen.popFocus()
+		return true
+	}
 	return false
 }
 
 func (dlg *Dialog) OnFocusIn() {
-	ui.Render(dlg)
 }
 
 func (Dialog) OnFocusOut() {
-	screen.Render()
 }
 
-// ShowDialog shows modal dialog and waits for button pressed
-func ShowDialog(title, text string, buttons ...string) string {
-	dlg := newDialog(title, text, buttons...)
-
+func ShowConfirmDialog(text string, onOk btnFunc) {
+	dlg := newDialog("Are you sure?", text, NewButton(ButtonOk, onOk), NewButton(ButtonCancel, nil))
 	screen.Focus(dlg)
-	defer screen.popFocus()
+	screen.setPopup(dlg)
+}
 
-	uiEvents := ui.PollEvents()
-
-	for {
-		e := <-uiEvents
-		switch e.ID {
-		case "<Right>":
-			dlg.nextButton()
-			ui.Render(dlg)
-		case "<Left>":
-			dlg.prevButton()
-			ui.Render(dlg)
-		case "<Enter>":
-			return dlg.dialogResult()
-		case "<Escape>":
-			return ""
-		}
-	}
-
+func ShowErrorDialog(err error, onClick btnFunc) {
+	dlg := newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
+	screen.Focus(dlg)
+	screen.setPopup(dlg)
 }

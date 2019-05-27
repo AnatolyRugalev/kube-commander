@@ -90,16 +90,14 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		return false
 	case "<Delete>":
-		if s, ok := lt.extension.(ListExtensionDeletable); ok {
+		if d, ok := lt.extension.(ListExtensionDeletable); ok {
 			row := lt.Rows[lt.SelectedRow+1]
-			return s.OnDelete(row)
+			ShowConfirmDialog(d.DeleteDialogText(row), func() error {
+				return d.OnDelete(row)
+			})
+			return true
 		}
 		return false
-	case "<Delete>":
-		nodeName := lt.Rows[lt.SelectedRow+1][0]
-		res := ShowDialog("Delete", "Are you sure want to delete "+nodeName+"?", ButtonYes, ButtonNo)
-		ShowDialog("Delete", "He-hey, you sad "+res)
-		return true
 	}
 	return false
 }
@@ -126,6 +124,10 @@ func (lt *ListTable) Reload() error {
 	}
 	for _, row := range data {
 		lt.Rows = append(lt.Rows, row)
+	}
+	// If deleting last row
+	if lt.SelectedRow >= len(lt.Rows)-1 {
+		lt.SelectedRow = len(lt.Rows) - 2
 	}
 	return nil
 }

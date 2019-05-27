@@ -58,6 +58,25 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 	}
 }
 
+func (pt *PodsTable) OnDelete(item []string) error {
+	name := item[0]
+	client, err := kube.GetClient()
+	if err != nil {
+		return err
+	}
+
+	err = client.CoreV1().Pods(pt.Namespace).Delete(name, metav1.NewDeleteOptions(0))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (pt *PodsTable) DeleteDialogText(item []string) string {
+	return "Are you sure you want to delete pod " + item[0] + "?"
+}
+
 func (pt *PodsTable) Delete(name string) error {
 	client, err := kube.GetClient()
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 
 type Screen struct {
 	*ui.Grid
+	popup          ui.Drawable
 	menu           *MenuList
 	rightPaneStack []Pane
 	focusStack     []Pane
@@ -21,6 +22,9 @@ func NewScreen() *Screen {
 
 func (s *Screen) Render() {
 	ui.Render(s)
+	if s.popup != nil {
+		ui.Render(s.popup)
+	}
 }
 
 func (s *Screen) Draw(buf *ui.Buffer) {
@@ -100,6 +104,11 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		ui.Clear()
 		return true, false
 	case "<Escape>":
+		if s.popup != nil {
+			s.popFocus()
+			s.removePopup()
+			return true, false
+		}
 		if s.focus == s.menu {
 			return false, false
 		}
@@ -155,11 +164,21 @@ func (s *Screen) reloadCurrentRightPane() {
 	go func() {
 		err := pane.Reload()
 		if err != nil {
-			ShowDialog("Error", err.Error(), ButtonOk)
-		} else {
-			// Remove preloader overlay
-			s.popRightPane()
+			ShowErrorDialog(err, func() error {
+				s.popFocus()
+				s.popRightPane()
+				return nil
+			})
 		}
+		s.popRightPane()
 		s.Render()
 	}()
+}
+
+func (s *Screen) setPopup(p ui.Drawable) {
+	s.popup = p
+}
+
+func (s *Screen) removePopup() {
+	s.popup = nil
 }

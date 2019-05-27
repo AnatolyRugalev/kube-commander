@@ -19,6 +19,7 @@ type ListExtensionSelectable interface {
 }
 
 type ListExtensionDeletable interface {
-	ListExtensionSelectable
-	OnDelete(item []string) bool
+	ListExtension
+	OnDelete(item []string) error
+	DeleteDialogText(item []string) string
 }
