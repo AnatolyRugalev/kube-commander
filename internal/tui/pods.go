@@ -64,3 +64,17 @@ func (pt *PodsTable) Reload() error {
 	}
 	return nil
 }
+
+func (pt *PodsTable) Delete(name string) error {
+	client, err := kube.GetClient()
+	if err != nil {
+		return err
+	}
+
+	err = client.CoreV1().Pods(pt.Namespace).Delete(name, metav1.NewDeleteOptions(0))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

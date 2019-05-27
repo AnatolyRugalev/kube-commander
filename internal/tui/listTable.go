@@ -96,6 +96,11 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 			return lt.OnSelect(row)
 		}
 		return false
+	case "<Delete>":
+		nodeName := lt.Rows[lt.SelectedRow+1][0]
+		res := ShowDialog("Delete", "Are you sure want to delete "+nodeName+"?", ButtonYes, ButtonNo)
+		ShowDialog("Delete", "He-hey, you sad "+res)
+		return true
 	}
 	return false
 }

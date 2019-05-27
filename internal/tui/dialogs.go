@@ -14,7 +14,9 @@ const (
 	ButtonCancel = "Cancel"
 	ButtonYes    = "Yes"
 	ButtonNo     = "No"
+)
 
+const (
 	buttonWidth        = 10
 	buttonHeight       = 4
 	buttonMargingRight = 3
@@ -154,10 +156,12 @@ func (Dialog) OnEvent(event *termui.Event) bool {
 	return false
 }
 
-func (Dialog) OnFocusIn() {
+func (dlg *Dialog) OnFocusIn() {
+	ui.Render(dlg)
 }
 
 func (Dialog) OnFocusOut() {
+	screen.Render()
 }
 
 // ShowDialog shows modal dialog and waits for button pressed
@@ -165,7 +169,6 @@ func ShowDialog(title, text string, buttons ...string) string {
 	dlg := newDialog(title, text, buttons...)
 
 	screen.Focus(dlg)
-	ui.Render(dlg)
 	defer screen.popFocus()
 
 	uiEvents := ui.PollEvents()
