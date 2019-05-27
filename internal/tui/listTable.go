@@ -10,7 +10,7 @@ import (
 
 type ListTable struct {
 	*widgets.Table
-	extension        ListExtension
+	handler          ListTableHandler
 	RowStyle         ui.Style
 	HeaderRowsCount  int
 	HeaderStyle      ui.Style
@@ -18,11 +18,32 @@ type ListTable struct {
 	SelectedRow      int
 }
 
-func NewListTable(extension ListExtension) *ListTable {
+type ListTableHandler interface {
+	getTitleRow() []string
+	loadData() ([][]string, error)
+}
+
+type ListTableEventable interface {
+	ListTableHandler
+	OnEvent(event *ui.Event, item []string) bool
+}
+
+type ListTableSelectable interface {
+	ListTableHandler
+	OnSelect(item []string) bool
+}
+
+type ListTableDeletable interface {
+	ListTableHandler
+	OnDelete(item []string) error
+	DeleteDialogText(item []string) string
+}
+
+func NewListTable(extension ListTableHandler) *ListTable {
 	lt := &ListTable{
 		HeaderRowsCount: 1,
 		Table:           widgets.NewTable(),
-		extension:       extension,
+		handler:         extension,
 	}
 	lt.BorderStyle = theme["grid"].inactive
 	lt.TitleStyle = theme["title"].inactive
@@ -85,13 +106,13 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		lt.CursorUp()
 		return true
 	case "<Enter>":
-		if s, ok := lt.extension.(ListExtensionSelectable); ok {
+		if s, ok := lt.handler.(ListTableSelectable); ok {
 			row := lt.Rows[lt.SelectedRow+1]
 			return s.OnSelect(row)
 		}
 		return false
 	case "<Delete>":
-		if d, ok := lt.extension.(ListExtensionDeletable); ok {
+		if d, ok := lt.handler.(ListTableDeletable); ok {
 			row := lt.Rows[lt.SelectedRow+1]
 			ShowConfirmDialog(d.DeleteDialogText(row), func() error {
 				return d.OnDelete(row)
@@ -100,7 +121,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		return false
 	}
-	if e, ok := lt.extension.(ListExtensionEventable); ok {
+	if e, ok := lt.handler.(ListTableEventable); ok {
 		row := lt.Rows[lt.SelectedRow+1]
 		return e.OnEvent(event, row)
 	}
@@ -117,13 +138,13 @@ func (lt *ListTable) CursorUp() {
 
 func (lt *ListTable) resetRows() {
 	lt.Rows = [][]string{
-		lt.extension.getTitleRow(),
+		lt.handler.getTitleRow(),
 	}
 }
 
 func (lt *ListTable) Reload() error {
 	lt.resetRows()
-	data, err := lt.extension.loadData()
+	data, err := lt.handler.loadData()
 	if err != nil {
 		return err
 	}
