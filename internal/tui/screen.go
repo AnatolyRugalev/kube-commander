@@ -192,12 +192,18 @@ func (s *Screen) reloadCurrentRightPane() {
 	}
 	s.rightPaneStackM.Unlock()
 
-	preloader := NewPreloader()
 	// Add preloader overlay
-	s.appendRightPane(preloader)
+	// TODO: fix edge-cases
+	done := make(chan struct{})
+	preloader := NewPreloader(s.Rectangle, done)
+	s.setPopup(preloader)
+	s.Focus(preloader)
 	s.Render()
 	go func() {
 		err := pane.Reload()
+		s.popFocus()
+		s.removePopup()
+		close(done)
 		if err != nil {
 			ShowErrorDialog(err, func() error {
 				s.popFocus()
@@ -205,7 +211,6 @@ func (s *Screen) reloadCurrentRightPane() {
 				return nil
 			})
 		}
-		s.popRightPane()
 		s.Render()
 	}()
 }

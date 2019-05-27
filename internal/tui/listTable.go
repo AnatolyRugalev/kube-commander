@@ -54,6 +54,7 @@ func NewListTable(extension ListExtension) *ListTable {
 		}
 		lt.ColumnWidths = widths
 	}
+	lt.resetRows()
 	return lt
 }
 
