@@ -192,7 +192,7 @@ func (Dialog) OnFocusOut() {
 }
 
 func ShowConfirmDialog(text string, onOk btnFunc) {
-	dlg := newDialog("Are you sure?", text, NewButton(ButtonOk, onOk), NewButton(ButtonCancel, nil))
+	dlg := newDialog("Are you sure?", text, NewButton(ButtonCancel, nil), NewButton(ButtonOk, onOk))
 	screen.Focus(dlg)
 	screen.setPopup(dlg)
 }

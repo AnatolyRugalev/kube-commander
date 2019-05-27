@@ -9,6 +9,25 @@ import (
 type NamespacesTable struct {
 }
 
+func (nt *NamespacesTable) OnDelete(item []string) error {
+	name := item[0]
+	client, err := kube.GetClient()
+	if err != nil {
+		return err
+	}
+
+	err = client.CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (nt *NamespacesTable) DeleteDialogText(item []string) string {
+	return "Are you sure you want to delete an ENTIRE NAMESPACE " + item[0] + "?"
+}
+
 func NewNamespacesTable() *ListTable {
 	lt := NewListTable(&NamespacesTable{})
 	lt.Title = "Namespaces"

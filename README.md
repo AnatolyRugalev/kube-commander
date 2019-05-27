@@ -47,7 +47,7 @@ Have fun!
 - [ ] Logs following
     - [ ] Single pod logs
     - [ ] Multiple pods logs merge?
-- [ ] Resource deletion with confirmation
+- [X] Resource deletion with confirmation
 - [ ] Resource editing with external $EDITOR
 - [ ] Screen refresh: hotkey + auto-refresh
 - [ ] Shortcuts bottom bar (eg. Midnight Commander)
