@@ -155,7 +155,7 @@ func (s *Screen) reloadCurrentRightPane() {
 	go func() {
 		err := pane.Reload()
 		if err != nil {
-			preloader.Text = err.Error()
+			ShowDialog("Error", err.Error(), ButtonOk)
 		} else {
 			// Remove preloader overlay
 			s.popRightPane()

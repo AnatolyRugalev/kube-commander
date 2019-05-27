@@ -30,4 +30,12 @@ var theme = map[string]themeMap{
 		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear, ui.ModifierBold),
 		active:   ui.NewStyle(ui.Color(231), ui.ColorClear, ui.ModifierBold),
 	},
+	"dialog": {
+		inactive: ui.NewStyle(ui.Color(249), ui.ColorClear),
+		active:   ui.NewStyle(ui.Color(231), ui.ColorClear),
+	},
+	"button": {
+		inactive: ui.NewStyle(ui.Color(237), ui.ColorClear),
+		active:   ui.NewStyle(ui.Color(51), ui.ColorClear, ui.ModifierBold),
+	},
 }
