@@ -53,7 +53,6 @@ func (s *Screen) SetMenu(menu *MenuList) {
 
 func (s *Screen) setGrid() {
 	s.rightPaneStackM.Lock()
-	defer s.rightPaneStackM.Unlock()
 	s.Items = []*ui.GridItem{}
 	var right interface{}
 	if len(s.rightPaneStack) > 0 {
@@ -67,11 +66,11 @@ func (s *Screen) setGrid() {
 			ui.NewCol(1-menuRatio, right),
 		),
 	)
+	s.rightPaneStackM.Unlock()
 }
 
 func (s *Screen) Focus(focusable Pane) {
 	s.focusM.Lock()
-	defer s.focusM.Unlock()
 	if s.focus != nil {
 		if f, ok := s.focus.(Focusable); ok {
 			f.OnFocusOut()
@@ -82,6 +81,7 @@ func (s *Screen) Focus(focusable Pane) {
 	if f, ok := s.focus.(Focusable); ok {
 		f.OnFocusIn()
 	}
+	s.focusM.Unlock()
 }
 
 func (s *Screen) popFocus() bool {
@@ -155,18 +155,18 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 
 func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Lock()
-	defer s.rightPaneStackM.Unlock()
 	s.rightPaneStack = []Pane{pane}
+	s.rightPaneStackM.Unlock()
 }
 
 func (s *Screen) appendRightPane(pane Pane) {
 	s.rightPaneStackM.Lock()
-	defer s.rightPaneStackM.Unlock()
 	refocus := s.focus == s.rightPaneStack[0]
 	s.rightPaneStack = append([]Pane{pane}, s.rightPaneStack...)
 	if refocus {
 		s.Focus(s.rightPaneStack[0])
 	}
+	s.rightPaneStackM.Unlock()
 }
 
 func (s *Screen) LoadRightPane(pane Pane) {
@@ -212,12 +212,12 @@ func (s *Screen) reloadCurrentRightPane() {
 
 func (s *Screen) setPopup(p ui.Drawable) {
 	s.popupM.Lock()
-	defer s.popupM.Unlock()
 	s.popup = p
+	s.popupM.Unlock()
 }
 
 func (s *Screen) removePopup() {
 	s.popupM.Lock()
-	defer s.popupM.Unlock()
 	s.popup = nil
+	s.popupM.Unlock()
 }
