@@ -109,6 +109,9 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		} else {
 			return s.popFocus(), false
 		}
+	case "<F5>", "<C-r>":
+		s.reloadCurrentRightPane()
+		return false, false
 	default:
 		if s.focus != nil {
 			return s.focus.OnEvent(event), false

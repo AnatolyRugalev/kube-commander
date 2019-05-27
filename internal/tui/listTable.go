@@ -8,22 +8,21 @@ import (
 
 // TODO: implement table scrolling
 
-type listTableSelector func(row []string) bool
-
 type ListTable struct {
 	*widgets.Table
+	extension        ListExtension
 	RowStyle         ui.Style
 	HeaderRowsCount  int
 	HeaderStyle      ui.Style
 	SelectedRowStyle ui.Style
 	SelectedRow      int
-	OnSelect         listTableSelector
 }
 
-func NewListTable() *ListTable {
+func NewListTable(extension ListExtension) *ListTable {
 	lt := &ListTable{
 		HeaderRowsCount: 1,
 		Table:           widgets.NewTable(),
+		extension:       extension,
 	}
 	lt.BorderStyle = theme["grid"].inactive
 	lt.TitleStyle = theme["title"].inactive
@@ -58,12 +57,6 @@ func NewListTable() *ListTable {
 	return lt
 }
 
-func NewSelectableListTable(onSelect listTableSelector) *ListTable {
-	lt := NewListTable()
-	lt.OnSelect = onSelect
-	return lt
-}
-
 func (lt *ListTable) Draw(buf *ui.Buffer) {
 	for i := range lt.Table.Rows {
 		if i == lt.SelectedRow+lt.HeaderRowsCount {
@@ -91,9 +84,15 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		lt.CursorUp()
 		return true
 	case "<Enter>":
-		row := lt.Rows[lt.SelectedRow+1]
-		if lt.OnSelect != nil {
-			return lt.OnSelect(row)
+		if s, ok := lt.extension.(ListExtensionSelectable); ok {
+			row := lt.Rows[lt.SelectedRow+1]
+			return s.OnSelect(row)
+		}
+		return false
+	case "<Delete>":
+		if s, ok := lt.extension.(ListExtensionDeletable); ok {
+			row := lt.Rows[lt.SelectedRow+1]
+			return s.OnDelete(row)
 		}
 		return false
 	case "<Delete>":
@@ -111,6 +110,24 @@ func (lt *ListTable) CursorDown() {
 
 func (lt *ListTable) CursorUp() {
 	lt.SelectedRow -= 1
+}
+
+func (lt *ListTable) resetRows() {
+	lt.Rows = [][]string{
+		lt.extension.getTitleRow(),
+	}
+}
+
+func (lt *ListTable) Reload() error {
+	lt.resetRows()
+	data, err := lt.extension.loadData()
+	if err != nil {
+		return err
+	}
+	for _, row := range data {
+		lt.Rows = append(lt.Rows, row)
+	}
+	return nil
 }
 
 func (lt *ListTable) OnFocusIn() {

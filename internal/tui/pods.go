@@ -8,25 +8,35 @@ import (
 )
 
 type PodsTable struct {
-	*ListTable
 	Namespace string
 }
 
-func NewPodsTable(namespace string) *PodsTable {
-	pt := &PodsTable{NewListTable(), namespace}
-	pt.Title = "Pods <" + namespace + ">"
-	pt.resetRows()
-	return pt
-}
-
-func (pt *PodsTable) resetRows() {
-	pt.Rows = [][]string{
-		pt.getTitleRow(),
-	}
+func NewPodsTable(namespace string) *ListTable {
+	lt := NewListTable(&PodsTable{
+		Namespace: namespace,
+	})
+	lt.Title = "Pods <" + namespace + ">"
+	return lt
 }
 
 func (pt *PodsTable) getTitleRow() []string {
 	return []string{"NAME", "READY", "STATUS", "RESTARTS", "AGE"}
+}
+
+func (pt *PodsTable) loadData() ([][]string, error) {
+	client, err := kube.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	pods, err := client.CoreV1().Pods(pt.Namespace).List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var rows [][]string
+	for _, pod := range pods.Items {
+		rows = append(rows, pt.newRow(pod))
+	}
+	return rows, nil
 }
 
 func (pt *PodsTable) newRow(pod v1.Pod) []string {
@@ -39,7 +49,6 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 			ready++
 		}
 	}
-
 	return []string{
 		pod.Name,
 		fmt.Sprintf("%d/%d", total, ready),
@@ -47,22 +56,6 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 		fmt.Sprintf("%d", restarts),
 		Age(pod.CreationTimestamp.Time),
 	}
-}
-
-func (pt *PodsTable) Reload() error {
-	client, err := kube.GetClient()
-	if err != nil {
-		return err
-	}
-	pods, err := client.CoreV1().Pods(pt.Namespace).List(metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	pt.resetRows()
-	for _, pod := range pods.Items {
-		pt.Rows = append(pt.Rows, pt.newRow(pod))
-	}
-	return nil
 }
 
 func (pt *PodsTable) Delete(name string) error {

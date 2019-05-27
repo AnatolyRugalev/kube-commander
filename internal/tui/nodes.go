@@ -8,24 +8,32 @@ import (
 )
 
 type NodesTable struct {
-	*ListTable
 }
 
-func NewNodesTable() *NodesTable {
-	nt := &NodesTable{NewListTable()}
-	nt.Title = "Nodes"
-	nt.resetRows()
-	return nt
-}
-
-func (nt *NodesTable) resetRows() {
-	nt.Rows = [][]string{
-		nt.getTitleRow(),
-	}
+func NewNodesTable() *ListTable {
+	lt := NewListTable(&NodesTable{})
+	lt.Title = "Nodes"
+	return lt
 }
 
 func (nt *NodesTable) getTitleRow() []string {
 	return []string{"NAME", "STATUS", "ROLES", "AGE", "VERSION"}
+}
+
+func (nt *NodesTable) loadData() ([][]string, error) {
+	client, err := kube.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	namespaces, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var rows [][]string
+	for _, ns := range namespaces.Items {
+		rows = append(rows, nt.newRow(ns))
+	}
+	return rows, nil
 }
 
 func (nt *NodesTable) newRow(n v1.Node) []string {
@@ -53,24 +61,4 @@ func (nt *NodesTable) newRow(n v1.Node) []string {
 		Age(n.CreationTimestamp.Time),
 		n.Status.NodeInfo.KubeletVersion,
 	}
-}
-
-func (nt *NodesTable) OnFocusIn() {
-	nt.ListTable.OnFocusIn()
-}
-
-func (nt *NodesTable) Reload() error {
-	client, err := kube.GetClient()
-	if err != nil {
-		return err
-	}
-	namespaces, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	nt.resetRows()
-	for _, ns := range namespaces.Items {
-		nt.Rows = append(nt.Rows, nt.newRow(ns))
-	}
-	return nil
 }
