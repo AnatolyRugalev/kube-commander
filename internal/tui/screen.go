@@ -2,20 +2,30 @@ package tui
 
 import (
 	ui "github.com/gizak/termui/v3"
+	"sync"
 )
 
 type Screen struct {
 	*ui.Grid
-	popup          ui.Drawable
-	menu           *MenuList
-	rightPaneStack []Pane
-	focusStack     []Pane
-	focus          Pane
+	menu *MenuList
+
+	popupM *sync.Mutex
+	popup  ui.Drawable
+
+	rightPaneStackM *sync.Mutex
+	rightPaneStack  []Pane
+
+	focusM     *sync.Mutex
+	focusStack []Pane
+	focus      Pane
 }
 
 func NewScreen() *Screen {
 	s := &Screen{
-		Grid: ui.NewGrid(),
+		Grid:            ui.NewGrid(),
+		popupM:          &sync.Mutex{},
+		rightPaneStackM: &sync.Mutex{},
+		focusM:          &sync.Mutex{},
 	}
 	return s
 }
@@ -42,6 +52,8 @@ func (s *Screen) SetMenu(menu *MenuList) {
 }
 
 func (s *Screen) setGrid() {
+	s.rightPaneStackM.Lock()
+	defer s.rightPaneStackM.Unlock()
 	s.Items = []*ui.GridItem{}
 	var right interface{}
 	if len(s.rightPaneStack) > 0 {
@@ -58,6 +70,8 @@ func (s *Screen) setGrid() {
 }
 
 func (s *Screen) Focus(focusable Pane) {
+	s.focusM.Lock()
+	defer s.focusM.Unlock()
 	if s.focus != nil {
 		if f, ok := s.focus.(Focusable); ok {
 			f.OnFocusOut()
@@ -71,6 +85,8 @@ func (s *Screen) Focus(focusable Pane) {
 }
 
 func (s *Screen) popFocus() bool {
+	s.focusM.Lock()
+	defer s.focusM.Unlock()
 	if len(s.focusStack) == 0 {
 		return false
 	}
@@ -86,6 +102,8 @@ func (s *Screen) popFocus() bool {
 }
 
 func (s *Screen) popRightPane() Pane {
+	s.rightPaneStackM.Lock()
+	defer s.rightPaneStackM.Unlock()
 	if len(s.rightPaneStack) == 0 {
 		return nil
 	}
@@ -136,10 +154,14 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 }
 
 func (s *Screen) setRightPane(pane Pane) {
+	s.rightPaneStackM.Lock()
+	defer s.rightPaneStackM.Unlock()
 	s.rightPaneStack = []Pane{pane}
 }
 
 func (s *Screen) appendRightPane(pane Pane) {
+	s.rightPaneStackM.Lock()
+	defer s.rightPaneStackM.Unlock()
 	refocus := s.focus == s.rightPaneStack[0]
 	s.rightPaneStack = append([]Pane{pane}, s.rightPaneStack...)
 	if refocus {
@@ -162,7 +184,14 @@ func (s *Screen) ReplaceRightPane(pane Pane) {
 }
 
 func (s *Screen) reloadCurrentRightPane() {
-	pane := s.rightPaneStack[0].(Loadable)
+	s.rightPaneStackM.Lock()
+	pane, ok := s.rightPaneStack[0].(Loadable)
+	if !ok {
+		s.rightPaneStackM.Unlock()
+		return
+	}
+	s.rightPaneStackM.Unlock()
+
 	preloader := NewPreloader()
 	// Add preloader overlay
 	s.appendRightPane(preloader)
@@ -182,9 +211,13 @@ func (s *Screen) reloadCurrentRightPane() {
 }
 
 func (s *Screen) setPopup(p ui.Drawable) {
+	s.popupM.Lock()
+	defer s.popupM.Unlock()
 	s.popup = p
 }
 
 func (s *Screen) removePopup() {
+	s.popupM.Lock()
+	defer s.popupM.Unlock()
 	s.popup = nil
 }
