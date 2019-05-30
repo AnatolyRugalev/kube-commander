@@ -149,7 +149,7 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		return false, false
 	case "<MouseLeft>":
 		m := event.Payload.(ui.Mouse)
-		if s.activatePane(m.X, m.Y) {
+		if s.foundAndClick(m.X, m.Y) {
 			return s.focus.OnEvent(event), false
 		}
 		return false, false
@@ -167,8 +167,11 @@ func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Unlock()
 }
 
-func (s *Screen) activatePane(x, y int) bool {
+func (s *Screen) foundAndClick(x, y int) bool {
 	rect := image.Rect(x, y, x+1, y+1)
+	if rect.In(screen.focus.Bounds()) {
+		return true
+	}
 	if rect.In(s.menu.Bounds()) {
 		s.popFocus()
 		s.Focus(s.menu)

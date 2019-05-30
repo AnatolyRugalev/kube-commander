@@ -1,8 +1,9 @@
 package tui
 
 import (
-	ui "github.com/gizak/termui/v3"
 	"image"
+
+	ui "github.com/gizak/termui/v3"
 )
 
 type Eventable interface {
@@ -16,7 +17,7 @@ type Focusable interface {
 
 type Pane interface {
 	Eventable
-	In(s image.Rectangle) bool
+	In(image.Rectangle) bool
 	Bounds() image.Rectangle
 }
 
