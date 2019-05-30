@@ -31,6 +31,19 @@ func NewScreen() *Screen {
 	return s
 }
 
+func (s *Screen) Reinit() {
+	ui.Init()
+	s.Render()
+}
+
+func (s *Screen) Clear() {
+	ui.Clear()
+}
+
+func (s *Screen) Close() {
+	ui.Close()
+}
+
 func (s *Screen) Render() {
 	ui.Render(s)
 	if s.popup != nil {
