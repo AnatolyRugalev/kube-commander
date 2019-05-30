@@ -26,6 +26,16 @@ func (nt *NodesTable) OnEvent(event *termui.Event, item []string) bool {
 		cmd.Run()
 		screen.Reinit()
 		return true
+	case "e":
+		// TODO: refactor
+		cmd := exec.Command("/bin/bash", "-c", "kubectl edit node "+item[0]+"")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		screen.Close()
+		cmd.Run()
+		screen.Reinit()
+		return true
 	}
 	return false
 }
