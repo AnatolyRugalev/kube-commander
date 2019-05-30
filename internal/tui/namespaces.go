@@ -3,11 +3,24 @@ package tui
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
+	"github.com/gizak/termui/v3"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type NamespacesTable struct {
+}
+
+func (nt *NamespacesTable) OnEvent(event *termui.Event, item []string) bool {
+	switch event.ID {
+	case "d":
+		screen.SwitchToCommand(kube.Viewer(kube.Describe("namespace", item[0])))
+		return true
+	case "e":
+		screen.SwitchToCommand(kube.Edit("namespace", item[0]))
+		return true
+	}
+	return false
 }
 
 func (nt *NamespacesTable) OnDelete(item []string) bool {

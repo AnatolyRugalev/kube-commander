@@ -6,8 +6,6 @@ import (
 	"github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -17,24 +15,10 @@ type NodesTable struct {
 func (nt *NodesTable) OnEvent(event *termui.Event, item []string) bool {
 	switch event.ID {
 	case "d":
-		// TODO: refactor
-		cmd := exec.Command("/bin/bash", "-c", "kubectl describe node "+item[0]+" | less")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		screen.Close()
-		cmd.Run()
-		screen.Reinit()
+		screen.SwitchToCommand(kube.Viewer(kube.Describe("node", item[0])))
 		return true
 	case "e":
-		// TODO: refactor
-		cmd := exec.Command("/bin/bash", "-c", "kubectl edit node "+item[0]+"")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		screen.Close()
-		cmd.Run()
-		screen.Reinit()
+		screen.SwitchToCommand(kube.Edit("node", item[0]))
 		return true
 	}
 	return false

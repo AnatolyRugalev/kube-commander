@@ -18,6 +18,12 @@ func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
 	case "l":
 		screen.LoadRightPane(NewPodLogs(pt.Namespace, item[0]))
 		return true
+	case "d":
+		screen.SwitchToCommand(kube.Viewer(kube.DescribeNs(pt.Namespace, "pod", item[0])))
+		return true
+	case "e":
+		screen.SwitchToCommand(kube.EditNs(pt.Namespace, "pod", item[0]))
+		return true
 	}
 	return false
 }

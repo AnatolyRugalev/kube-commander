@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"fmt"
+	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	ui "github.com/gizak/termui/v3"
+	"github.com/pkg/errors"
+	"log"
 	"sync"
 )
 
@@ -31,17 +35,25 @@ func NewScreen() *Screen {
 	return s
 }
 
-func (s *Screen) Reinit() {
-	ui.Init()
-	s.Render()
+func (s *Screen) SwitchToCommand(command string) {
+	s.Switch(func() error {
+		return cmd.Shell(command)
+	}, func(err error) {
+		ShowErrorDialog(errors.Wrap(err, fmt.Sprintf("error executing command %s", command)), nil)
+	})
 }
 
-func (s *Screen) Clear() {
-	ui.Clear()
-}
-
-func (s *Screen) Close() {
+func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 	ui.Close()
+	err := switchFunc()
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	s.Init()
+	s.Render()
+	if err != nil {
+		onError(err)
+	}
 }
 
 func (s *Screen) Render() {
