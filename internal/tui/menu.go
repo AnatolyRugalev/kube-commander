@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
 )
@@ -32,10 +33,10 @@ func NewMenuList() *MenuList {
 		List: widgets.NewList(),
 	}
 	ml.Title = "Cluster"
-	ml.TitleStyle = theme["title"].inactive
-	ml.BorderStyle = theme["grid"].inactive
-	ml.TextStyle = theme["listItem"].inactive
-	ml.SelectedRowStyle = theme["listItemSelected"].inactive
+	ml.TitleStyle = theme.Theme["title"].Inactive
+	ml.BorderStyle = theme.Theme["grid"].Inactive
+	ml.TextStyle = theme.Theme["listItem"].Inactive
+	ml.SelectedRowStyle = theme.Theme["listItemSelected"].Inactive
 	ml.WrapText = false
 	for _, item := range items {
 		ml.Rows = append(ml.Rows, item.name)
@@ -88,15 +89,15 @@ func (ml *MenuList) activateCurrent() {
 }
 
 func (ml *MenuList) OnFocusIn() {
-	ml.TitleStyle = theme["title"].active
-	ml.BorderStyle = theme["grid"].active
-	ml.TextStyle = theme["listItem"].active
-	ml.SelectedRowStyle = theme["listItemSelected"].active
+	ml.TitleStyle = theme.Theme["title"].Active
+	ml.BorderStyle = theme.Theme["grid"].Active
+	ml.TextStyle = theme.Theme["listItem"].Active
+	ml.SelectedRowStyle = theme.Theme["listItemSelected"].Active
 }
 
 func (ml *MenuList) OnFocusOut() {
-	ml.TitleStyle = theme["title"].inactive
-	ml.BorderStyle = theme["grid"].inactive
-	ml.TextStyle = theme["listItem"].inactive
-	ml.SelectedRowStyle = theme["listItemSelected"].inactive
+	ml.TitleStyle = theme.Theme["title"].Inactive
+	ml.BorderStyle = theme.Theme["grid"].Inactive
+	ml.TextStyle = theme.Theme["listItem"].Inactive
+	ml.SelectedRowStyle = theme.Theme["listItemSelected"].Inactive
 }

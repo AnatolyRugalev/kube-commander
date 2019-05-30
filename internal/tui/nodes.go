@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
@@ -10,17 +11,17 @@ import (
 type NodesTable struct {
 }
 
-func NewNodesTable() *ListTable {
-	lt := NewListTable(&NodesTable{})
+func NewNodesTable() *widgets.ListTable {
+	lt := widgets.NewListTable(&NodesTable{})
 	lt.Title = "Nodes"
 	return lt
 }
 
-func (nt *NodesTable) getTitleRow() []string {
+func (nt *NodesTable) GetHeaderRow() []string {
 	return []string{"NAME", "STATUS", "ROLES", "AGE", "VERSION"}
 }
 
-func (nt *NodesTable) loadData() ([][]string, error) {
+func (nt *NodesTable) LoadData() ([][]string, error) {
 	client, err := kube.GetClient()
 	if err != nil {
 		return nil, err

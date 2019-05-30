@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	"github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,19 +22,19 @@ func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
 	return false
 }
 
-func NewPodsTable(namespace string) *ListTable {
-	lt := NewListTable(&PodsTable{
+func NewPodsTable(namespace string) *widgets.ListTable {
+	lt := widgets.NewListTable(&PodsTable{
 		Namespace: namespace,
 	})
 	lt.Title = "Pods <" + namespace + ">"
 	return lt
 }
 
-func (pt *PodsTable) getTitleRow() []string {
+func (pt *PodsTable) GetHeaderRow() []string {
 	return []string{"NAME", "READY", "STATUS", "RESTARTS", "AGE"}
 }
 
-func (pt *PodsTable) loadData() ([][]string, error) {
+func (pt *PodsTable) LoadData() ([][]string, error) {
 	client, err := kube.GetClient()
 	if err != nil {
 		return nil, err
