@@ -12,18 +12,17 @@ type NamespacesTable struct {
 
 func (nt *NamespacesTable) OnDelete(item []string) bool {
 	name := item[0]
-	client, err := kube.GetClient()
-	if err != nil {
-		ShowErrorDialog(err, nil)
-		return true
-	}
-
-	err = client.CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
-	if err != nil {
-		ShowErrorDialog(err, nil)
-		return true
-	}
-
+	ShowConfirmDialog("Are you sure you want to delete an ENTIRE NAMESPACE "+name+"?", func() error {
+		client, err := kube.GetClient()
+		if err != nil {
+			return err
+		}
+		err = client.CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	return true
 }
 

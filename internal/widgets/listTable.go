@@ -4,6 +4,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	ui "github.com/gizak/termui/v3"
 	"image"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -25,6 +26,8 @@ type ListTable struct {
 	handler     ListTableHandler
 	RowStyle    ui.Style
 	HeaderStyle ui.Style
+
+	reloadMx *sync.Mutex
 }
 
 type ListTableHandler interface {
@@ -58,6 +61,8 @@ func NewListTable(handler ListTableHandler) *ListTable {
 		HeaderStyle:      theme.Theme["listHeader"].Inactive,
 		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
 		FillRow:          true,
+
+		reloadMx: &sync.Mutex{},
 	}
 	lt.BorderStyle = theme.Theme["grid"].Inactive
 	lt.TitleStyle = theme.Theme["title"].Inactive
@@ -212,7 +217,7 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	switch event.ID {
 	case "<Down>":
-		if lt.SelectedRow >= len(lt.Rows)-2 {
+		if lt.SelectedRow >= len(lt.Rows)-1 {
 			return false
 		}
 		lt.CursorDown()
@@ -225,19 +230,19 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		return true
 	case "<Enter>":
 		if s, ok := lt.handler.(ListTableSelectable); ok {
-			row := lt.Rows[lt.SelectedRow+1]
+			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
 		}
 		return false
 	case "<Delete>":
 		if d, ok := lt.handler.(ListTableDeletable); ok {
-			row := lt.Rows[lt.SelectedRow+1]
+			row := lt.Rows[lt.SelectedRow]
 			return d.OnDelete(row)
 		}
 		return false
 	}
 	if e, ok := lt.handler.(ListTableEventable); ok {
-		row := lt.Rows[lt.SelectedRow+1]
+		row := lt.Rows[lt.SelectedRow]
 		return e.OnEvent(event, row)
 	}
 	return false
@@ -252,6 +257,9 @@ func (lt *ListTable) CursorUp() {
 }
 
 func (lt *ListTable) Reload() error {
+	lt.reloadMx.Lock()
+	defer lt.reloadMx.Unlock()
+	lt.Rows = [][]string{}
 	data, err := lt.handler.LoadData()
 	if err != nil {
 		return err
@@ -259,9 +267,10 @@ func (lt *ListTable) Reload() error {
 	for _, row := range data {
 		lt.Rows = append(lt.Rows, row)
 	}
-	// If deleting last row
-	if lt.SelectedRow >= len(lt.Rows)-1 {
-		lt.SelectedRow = len(lt.Rows) - 2
+	if len(lt.Rows) == 0 {
+		lt.SelectedRow = 0
+	} else if lt.SelectedRow >= len(lt.Rows) {
+		lt.SelectedRow = len(lt.Rows) - 1
 	}
 	return nil
 }
