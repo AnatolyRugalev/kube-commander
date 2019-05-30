@@ -27,6 +27,7 @@ Have fun!
 - [X] Basic navigation implementation
 - [X] Determine initial release feature set
 - [X] Basic colorization and theming
+- [X] Find a way to execute external processes to edit, describe etc.
 - [ ] Implement features
 
 ## Feature Set
