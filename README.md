@@ -42,7 +42,7 @@ Have fun!
     - [ ] ReplicaSet
     - [ ] Deployment
     - [ ] StatefulSet
-    - [ ] PV
+    - [X] PV
     - [ ] PVC
 - [ ] Logs following
     - [ ] Single pod logs

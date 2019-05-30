@@ -26,6 +26,9 @@ var items = []menuItem{
 	{"Nodes", func() Pane {
 		return NewNodesTable()
 	}},
+	{"PVs", func() Pane {
+		return NewPVsTable()
+	}},
 }
 
 func NewMenuList() *MenuList {

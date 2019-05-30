@@ -217,16 +217,16 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	switch event.ID {
 	case "<Down>":
-		if lt.SelectedRow >= len(lt.Rows)-1 {
-			return false
-		}
-		lt.CursorDown()
+		lt.Down()
 		return true
 	case "<Up>":
-		if lt.SelectedRow <= 0 {
-			return false
-		}
-		lt.CursorUp()
+		lt.Up()
+		return true
+	case "<PageDown>":
+		lt.PageDown()
+		return true
+	case "<PageUp>":
+		lt.PageUp()
 		return true
 	case "<Enter>":
 		if s, ok := lt.handler.(ListTableSelectable); ok {
@@ -248,12 +248,30 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	return false
 }
 
-func (lt *ListTable) CursorDown() {
-	lt.SelectedRow += 1
+func (lt *ListTable) Scroll(amount int) {
+	sel := lt.SelectedRow + amount
+	if sel > len(lt.Rows)-1 {
+		sel = len(lt.Rows) - 1
+	} else if sel < 0 {
+		sel = 0
+	}
+	lt.SelectedRow = sel
 }
 
-func (lt *ListTable) CursorUp() {
-	lt.SelectedRow -= 1
+func (lt *ListTable) Up() {
+	lt.Scroll(-1)
+}
+
+func (lt *ListTable) Down() {
+	lt.Scroll(1)
+}
+
+func (lt *ListTable) PageUp() {
+	lt.Scroll(-1 * (lt.Inner.Dy() - 1))
+}
+
+func (lt *ListTable) PageDown() {
+	lt.Scroll(lt.Inner.Dy() - 1)
 }
 
 func (lt *ListTable) Reload() error {
