@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
-	"github.com/gizak/termui/v3"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
@@ -13,16 +12,12 @@ import (
 type PVsTable struct {
 }
 
-func (pt *PVsTable) OnEvent(event *termui.Event, item []string) bool {
-	switch event.ID {
-	case "d":
-		screen.SwitchToCommand(kube.Viewer(kube.Describe("pv", item[0])))
-		return true
-	case "e":
-		screen.SwitchToCommand(kube.Edit("pv", item[0]))
-		return true
-	}
-	return false
+func (pt *PVsTable) TypeName() string {
+	return "pv"
+}
+
+func (pt *PVsTable) Name(item []string) string {
+	return item[0]
 }
 
 func (pt *PVsTable) OnDelete(item []string) bool {
@@ -42,7 +37,7 @@ func (pt *PVsTable) OnDelete(item []string) bool {
 }
 
 func NewPVsTable() *widgets.ListTable {
-	lt := widgets.NewListTable(&PVsTable{})
+	lt := widgets.NewListTable(screen, &PVsTable{})
 	lt.Title = "Persistent Volumes"
 	return lt
 }

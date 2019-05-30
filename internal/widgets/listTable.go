@@ -23,9 +23,10 @@ type ListTable struct {
 	// ColumnResizer is called on each Draw. Can be used for custom column sizing.
 	ColumnResizer func()
 
-	handler     ListTableHandler
-	RowStyle    ui.Style
-	HeaderStyle ui.Style
+	listHandler   ListTableHandler
+	screenHandler ScreenHandler
+	RowStyle      ui.Style
+	HeaderStyle   ui.Style
 
 	reloadMx *sync.Mutex
 }
@@ -50,13 +51,30 @@ type ListTableDeletable interface {
 	OnDelete(item []string) bool
 }
 
-func NewListTable(handler ListTableHandler) *ListTable {
+type ListTableResource interface {
+	ListTableHandler
+	TypeName() string
+	Name(item []string) string
+}
+
+type ListTableResourceNamespace interface {
+	ListTableResource
+	Namespace() string
+}
+
+type ScreenHandler interface {
+	Edit(resType string, name string, namespace string)
+	Describe(resType string, name string, namespace string)
+}
+
+func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *ListTable {
 	lt := &ListTable{
 		Block:            ui.NewBlock(),
 		RowSeparator:     false,
 		RowStyles:        make(map[int]ui.Style),
 		ColumnResizer:    func() {},
-		handler:          handler,
+		screenHandler:    screenHandler,
+		listHandler:      listHandler,
 		RowStyle:         theme.Theme["listItem"].Inactive,
 		HeaderStyle:      theme.Theme["listHeader"].Inactive,
 		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
@@ -67,7 +85,7 @@ func NewListTable(handler ListTableHandler) *ListTable {
 	lt.BorderStyle = theme.Theme["grid"].Inactive
 	lt.TitleStyle = theme.Theme["title"].Inactive
 	lt.ColumnResizer = func() {
-		rows := append([][]string{lt.handler.GetHeaderRow()}, lt.Rows...)
+		rows := append([][]string{lt.listHandler.GetHeaderRow()}, lt.Rows...)
 		colCount := len(rows[0])
 		var widths []int
 		for i := range rows[0] {
@@ -103,7 +121,7 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 
 	columnWidths := lt.ColumnWidths
 	if len(columnWidths) == 0 {
-		columnCount := len(lt.handler.GetHeaderRow())
+		columnCount := len(lt.listHandler.GetHeaderRow())
 		columnWidth := lt.Inner.Dx() / columnCount
 		for i := 0; i < columnCount; i++ {
 			columnWidths = append(columnWidths, columnWidth)
@@ -119,7 +137,7 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 	}
 
 	// draw header
-	yCoordinate := lt.drawRow(buf, columnWidths, lt.handler.GetHeaderRow(), lt.HeaderStyle, lt.Inner.Min.Y)
+	yCoordinate := lt.drawRow(buf, columnWidths, lt.listHandler.GetHeaderRow(), lt.HeaderStyle, lt.Inner.Min.Y)
 
 	// draw rows
 	for i := lt.topRow; i < len(lt.Rows) && yCoordinate < lt.Inner.Max.Y; i++ {
@@ -215,6 +233,13 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 }
 
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
+	if len(lt.Rows) == 0 {
+		return false
+	}
+	namespace := ""
+	if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
+		namespace = res.Namespace()
+	}
 	switch event.ID {
 	case "<Down>":
 		lt.Down()
@@ -229,19 +254,33 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		lt.PageUp()
 		return true
 	case "<Enter>":
-		if s, ok := lt.handler.(ListTableSelectable); ok && len(lt.Rows) > 0 {
+		if s, ok := lt.listHandler.(ListTableSelectable); ok {
 			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
 		}
 		return false
 	case "<Delete>":
-		if d, ok := lt.handler.(ListTableDeletable); ok && len(lt.Rows) > 0 {
+		if d, ok := lt.listHandler.(ListTableDeletable); ok {
 			row := lt.Rows[lt.SelectedRow]
 			return d.OnDelete(row)
 		}
 		return false
+	case "e":
+		if res, ok := lt.listHandler.(ListTableResource); ok {
+			name := res.Name(lt.Rows[lt.SelectedRow])
+			lt.screenHandler.Edit(res.TypeName(), name, namespace)
+			return true
+		}
+		return false
+	case "d":
+		if res, ok := lt.listHandler.(ListTableResource); ok {
+			name := res.Name(lt.Rows[lt.SelectedRow])
+			lt.screenHandler.Describe(res.TypeName(), name, namespace)
+			return true
+		}
+		return false
 	}
-	if e, ok := lt.handler.(ListTableEventable); ok && len(lt.Rows) > 0 {
+	if e, ok := lt.listHandler.(ListTableEventable); ok {
 		row := lt.Rows[lt.SelectedRow]
 		return e.OnEvent(event, row)
 	}
@@ -278,7 +317,7 @@ func (lt *ListTable) Reload() error {
 	lt.reloadMx.Lock()
 	defer lt.reloadMx.Unlock()
 	lt.Rows = [][]string{}
-	data, err := lt.handler.LoadData()
+	data, err := lt.listHandler.LoadData()
 	if err != nil {
 		return err
 	}

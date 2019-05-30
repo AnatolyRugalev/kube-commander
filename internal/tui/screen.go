@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	ui "github.com/gizak/termui/v3"
 	"github.com/pkg/errors"
@@ -258,4 +259,20 @@ func (s *Screen) removePopup() {
 	s.popupM.Lock()
 	s.popup = nil
 	s.popupM.Unlock()
+}
+
+func (s *Screen) Edit(resType string, name string, namespace string) {
+	if namespace == "" {
+		screen.SwitchToCommand(kube.Edit(resType, name))
+	} else {
+		screen.SwitchToCommand(kube.EditNs(namespace, resType, name))
+	}
+}
+
+func (s *Screen) Describe(resType string, name string, namespace string) {
+	if namespace == "" {
+		screen.SwitchToCommand(kube.Viewer(kube.Describe(resType, name)))
+	} else {
+		screen.SwitchToCommand(kube.Viewer(kube.DescribeNs(namespace, resType, name)))
+	}
 }

@@ -3,7 +3,6 @@ package tui
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
-	"github.com/gizak/termui/v3"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
@@ -12,20 +11,16 @@ import (
 type NodesTable struct {
 }
 
-func (nt *NodesTable) OnEvent(event *termui.Event, item []string) bool {
-	switch event.ID {
-	case "d":
-		screen.SwitchToCommand(kube.Viewer(kube.Describe("node", item[0])))
-		return true
-	case "e":
-		screen.SwitchToCommand(kube.Edit("node", item[0]))
-		return true
-	}
-	return false
+func (nt *NodesTable) TypeName() string {
+	return "node"
+}
+
+func (nt *NodesTable) Name(item []string) string {
+	return item[0]
 }
 
 func NewNodesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(&NodesTable{})
+	lt := widgets.NewListTable(screen, &NodesTable{})
 	lt.Title = "Nodes"
 	return lt
 }

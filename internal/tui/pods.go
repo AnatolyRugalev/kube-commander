@@ -10,27 +10,33 @@ import (
 )
 
 type PodsTable struct {
-	Namespace string
+	namespace string
+}
+
+func (pt *PodsTable) TypeName() string {
+	return "pod"
+}
+
+func (pt *PodsTable) Name(item []string) string {
+	return item[0]
+}
+
+func (pt *PodsTable) Namespace() string {
+	return pt.namespace
 }
 
 func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
 	switch event.ID {
 	case "l":
-		screen.LoadRightPane(NewPodLogs(pt.Namespace, item[0]))
-		return true
-	case "d":
-		screen.SwitchToCommand(kube.Viewer(kube.DescribeNs(pt.Namespace, "pod", item[0])))
-		return true
-	case "e":
-		screen.SwitchToCommand(kube.EditNs(pt.Namespace, "pod", item[0]))
+		screen.LoadRightPane(NewPodLogs(pt.namespace, item[0]))
 		return true
 	}
 	return false
 }
 
 func NewPodsTable(namespace string) *widgets.ListTable {
-	lt := widgets.NewListTable(&PodsTable{
-		Namespace: namespace,
+	lt := widgets.NewListTable(screen, &PodsTable{
+		namespace: namespace,
 	})
 	lt.Title = "Pods <" + namespace + ">"
 	return lt
@@ -45,7 +51,7 @@ func (pt *PodsTable) LoadData() ([][]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	pods, err := client.CoreV1().Pods(pt.Namespace).List(metav1.ListOptions{})
+	pods, err := client.CoreV1().Pods(pt.namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +89,7 @@ func (pt *PodsTable) OnDelete(item []string) bool {
 			return err
 		}
 
-		err = client.CoreV1().Pods(pt.Namespace).Delete(name, metav1.NewDeleteOptions(0))
+		err = client.CoreV1().Pods(pt.namespace).Delete(name, metav1.NewDeleteOptions(0))
 		if err != nil {
 			return err
 		}
