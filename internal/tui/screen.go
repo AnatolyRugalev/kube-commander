@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	ui "github.com/gizak/termui/v3"
 	"sync"
 )
@@ -127,29 +128,34 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		s.SetRect(0, 0, payload.Width, payload.Height)
 		ui.Clear()
 		return true, false
-	case "<Escape>":
-		if s.popup != nil {
-			s.popFocus()
-			s.removePopup()
-			return true, false
-		}
-		if s.focus == s.menu {
-			return false, false
-		}
-		if len(s.rightPaneStack) > 1 {
-			s.popRightPane()
-			return true, false
-		} else {
-			return s.popFocus(), false
-		}
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
-	default:
-		if s.focus != nil {
-			return s.focus.OnEvent(event), false
-		}
-		return false, false
+	}
+	var focusReaction bool
+	if s.focus != nil {
+		focusReaction = s.focus.OnEvent(event)
+	}
+	if !focusReaction && event.ID == "<Escape>" {
+		return s.escape(), false
+	}
+	return focusReaction, false
+}
+
+func (s *Screen) escape() bool {
+	if s.popup != nil {
+		s.popFocus()
+		s.removePopup()
+		return true
+	}
+	if s.focus == s.menu {
+		return false
+	}
+	if len(s.rightPaneStack) > 1 {
+		s.popRightPane()
+		return true
+	} else {
+		return s.popFocus()
 	}
 }
 
@@ -193,26 +199,28 @@ func (s *Screen) reloadCurrentRightPane() {
 	s.rightPaneStackM.Unlock()
 
 	// Add preloader overlay
-	// TODO: fix edge-cases
-	done := make(chan struct{})
-	preloader := NewPreloader(s.Rectangle, done)
+	preloader := widgets.NewPreloader(s.Rectangle, func() error {
+		return pane.Reload()
+	}, func() {
+		s.popFocus()
+		s.removePopup()
+		s.Render()
+	}, func(err error) {
+		ShowErrorDialog(err, func() error {
+			s.popFocus()
+			s.popRightPane()
+			return nil
+		})
+		s.Render()
+	}, func() {
+		s.removePopup()
+		s.popRightPane()
+		s.Render()
+	})
 	s.setPopup(preloader)
 	s.Focus(preloader)
 	s.Render()
-	go func() {
-		err := pane.Reload()
-		s.popFocus()
-		s.removePopup()
-		close(done)
-		if err != nil {
-			ShowErrorDialog(err, func() error {
-				s.popFocus()
-				s.popRightPane()
-				return nil
-			})
-		}
-		s.Render()
-	}()
+	preloader.Run()
 }
 
 func (s *Screen) setPopup(p ui.Drawable) {

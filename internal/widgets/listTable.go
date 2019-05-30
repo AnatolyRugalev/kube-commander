@@ -229,19 +229,19 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		lt.PageUp()
 		return true
 	case "<Enter>":
-		if s, ok := lt.handler.(ListTableSelectable); ok {
+		if s, ok := lt.handler.(ListTableSelectable); ok && len(lt.Rows) > 0 {
 			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
 		}
 		return false
 	case "<Delete>":
-		if d, ok := lt.handler.(ListTableDeletable); ok {
+		if d, ok := lt.handler.(ListTableDeletable); ok && len(lt.Rows) > 0 {
 			row := lt.Rows[lt.SelectedRow]
 			return d.OnDelete(row)
 		}
 		return false
 	}
-	if e, ok := lt.handler.(ListTableEventable); ok {
+	if e, ok := lt.handler.(ListTableEventable); ok && len(lt.Rows) > 0 {
 		row := lt.Rows[lt.SelectedRow]
 		return e.OnEvent(event, row)
 	}
