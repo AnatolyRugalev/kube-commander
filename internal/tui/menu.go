@@ -62,6 +62,12 @@ func (ml *MenuList) OnEvent(event *ui.Event) bool {
 	case "<Right>", "<Enter>":
 		ml.activateCurrent()
 		return true
+	case "<MouseLeft>":
+		m := event.Payload.(ui.Mouse)
+		if ml.activateItem(m.Y - 1) {
+			return true
+		}
+		return false
 	}
 	return false
 }
@@ -85,6 +91,16 @@ func (ml *MenuList) activateCurrent() {
 	if ml.selectedItem != nil {
 		screen.Focus(ml.selectedItem)
 	}
+}
+
+func (ml *MenuList) activateItem(yCoord int) bool {
+	if yCoord >= len(ml.Rows)-1 || ml.SelectedRow <= 0 {
+		return false
+	}
+	ml.SelectedRow = yCoord
+	ml.onCursorMove()
+	ml.activateCurrent()
+	return true
 }
 
 func (ml *MenuList) OnFocusIn() {

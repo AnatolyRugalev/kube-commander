@@ -1,8 +1,10 @@
 package tui
 
 import (
-	ui "github.com/gizak/termui/v3"
+	"image"
 	"sync"
+
+	ui "github.com/gizak/termui/v3"
 )
 
 type Screen struct {
@@ -145,6 +147,12 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
+	case "<MouseLeft>":
+		m := event.Payload.(ui.Mouse)
+		if s.activatePane(m.X, m.Y) {
+			return s.focus.OnEvent(event), false
+		}
+		return false, false
 	default:
 		if s.focus != nil {
 			return s.focus.OnEvent(event), false
@@ -157,6 +165,23 @@ func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Lock()
 	s.rightPaneStack = []Pane{pane}
 	s.rightPaneStackM.Unlock()
+}
+
+func (s *Screen) activatePane(x, y int) bool {
+	rect := image.Rect(x, y, x+1, y+1)
+	if rect.In(s.menu.Bounds()) {
+		s.popFocus()
+		s.Focus(s.menu)
+		return true
+	}
+	for _, item := range s.rightPaneStack {
+		if rect.In(item.Bounds()) {
+			s.popFocus()
+			s.Focus(item)
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Screen) appendRightPane(pane Pane) {

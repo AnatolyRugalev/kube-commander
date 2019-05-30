@@ -1,9 +1,10 @@
 package tui
 
 import (
+	"unicode/utf8"
+
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
-	"unicode/utf8"
 )
 
 // TODO: implement table scrolling
@@ -99,7 +100,12 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 			return true
 		}
 		return false
+	case "<MouseLeft>":
+		m := event.Payload.(ui.Mouse)
+		lt.setCursor(m.Y - lt.HeaderRowsCount - 1)
+		return true
 	}
+
 	if e, ok := lt.extension.(ListExtensionEventable); ok {
 		row := lt.Rows[lt.SelectedRow+1]
 		return e.OnEvent(event, row)
@@ -113,6 +119,12 @@ func (lt *ListTable) CursorDown() {
 
 func (lt *ListTable) CursorUp() {
 	lt.SelectedRow -= 1
+}
+
+func (lt *ListTable) setCursor(idx int) {
+	if idx >= 0 && idx <= len(lt.Rows) {
+		lt.SelectedRow = idx
+	}
 }
 
 func (lt *ListTable) resetRows() {
