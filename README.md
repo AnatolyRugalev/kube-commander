@@ -36,6 +36,7 @@ Have fun!
 - [X] List pods of namespace
 - [ ] List workloads of namespace (2nd level menu?)
 - [X] List nodes
+- [X] List PVs
 - [ ] Basic resources view screen
     - [ ] Pod
     - [ ] Namespace
@@ -43,7 +44,7 @@ Have fun!
     - [ ] ReplicaSet
     - [ ] Deployment
     - [ ] StatefulSet
-    - [X] PV
+    - [ ] PV
     - [ ] PVC
 - [ ] Logs following
     - [ ] Single pod logs
