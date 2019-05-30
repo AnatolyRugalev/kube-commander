@@ -62,7 +62,7 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 	}
 	return []string{
 		pod.Name,
-		fmt.Sprintf("%d/%d", total, ready),
+		fmt.Sprintf("%d/%d", ready, total),
 		string(pod.Status.Phase),
 		fmt.Sprintf("%d", restarts),
 		Age(pod.CreationTimestamp.Time),
