@@ -28,11 +28,6 @@ func (st *StorageClassesTable) GetHeaderRow() []string {
 	return []string{"NAME", "DEFAULT", "PROVISIONER", "AGE"}
 }
 
-func (st *StorageClassesTable) OnSelect(item []string) bool {
-	screen.LoadRightPane(NewPodsTable(item[0]))
-	return true
-}
-
 func (st *StorageClassesTable) OnDelete(item []string) bool {
 	name := item[0]
 	ShowConfirmDialog("Are you sure you want to delete STORAGE CLASS "+name+"?", func() error {
