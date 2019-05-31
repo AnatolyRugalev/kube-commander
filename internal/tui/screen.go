@@ -16,7 +16,7 @@ import (
 
 type Screen struct {
 	*ui.Grid
-	menu *MenuList
+	menu *widgets.ListTable
 
 	popupM *sync.Mutex
 	popup  ui.Drawable
@@ -30,6 +30,8 @@ type Screen struct {
 
 	clickMux      *sync.Mutex
 	lastLeftClick time.Time
+
+	handleEvents bool
 }
 
 func NewScreen() *Screen {
@@ -53,15 +55,18 @@ func (s *Screen) SwitchToCommand(command string) {
 
 func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 	ui.Close()
-	err := switchFunc()
-	if err := ui.Init(); err != nil {
-		log.Fatalf("failed to initialize termui: %v", err)
-	}
-	s.Init()
-	s.Render()
-	if err != nil {
-		onError(err)
-	}
+	s.handleEvents = false
+	go func() {
+		err := switchFunc()
+		if err := ui.Init(); err != nil {
+			log.Fatalf("failed to initialize termui: %v", err)
+		}
+		s.Init()
+		s.Render()
+		if err != nil {
+			onError(err)
+		}
+	}()
 }
 
 func (s *Screen) Render() {
@@ -79,9 +84,10 @@ func (s *Screen) Draw(buf *ui.Buffer) {
 func (s *Screen) Init() {
 	termWidth, termHeight := ui.TerminalDimensions()
 	s.SetRect(0, 0, termWidth, termHeight)
+	s.handleEvents = true
 }
 
-func (s *Screen) SetMenu(menu *MenuList) {
+func (s *Screen) SetMenu(menu *widgets.ListTable) {
 	s.menu = menu
 }
 
@@ -152,7 +158,7 @@ func (s *Screen) popRightPane() Pane {
 	return next
 }
 
-func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
+func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 	switch event.ID {
 	case "q", "<C-c>":
 		return false, true
@@ -225,19 +231,18 @@ func (s *Screen) locateAndFocus(x, y int) bool {
 		return true
 	}
 	if s.popup == nil {
-
 		if rect.In(s.menu.Bounds()) {
+			//
 			s.popFocus()
 			s.Focus(s.menu)
 			return true
 		}
 
+		s.rightPaneStackM.Lock()
+		defer s.rightPaneStackM.Unlock()
 		if len(s.rightPaneStack) == 0 {
 			return false
 		}
-		s.rightPaneStackM.Lock()
-		defer s.rightPaneStackM.Unlock()
-
 		rightPaneCurrent := s.rightPaneStack[len(s.rightPaneStack)-1]
 		if rect.In(rightPaneCurrent.Bounds()) {
 			s.popFocus()
@@ -331,5 +336,24 @@ func (s *Screen) Describe(resType string, name string, namespace string) {
 		screen.SwitchToCommand(kube.Viewer(kube.Describe(resType, name)))
 	} else {
 		screen.SwitchToCommand(kube.Viewer(kube.DescribeNs(namespace, resType, name)))
+	}
+}
+
+func (s *Screen) Run() {
+	uiEvents := ui.PollEvents()
+	for {
+		select {
+		case e := <-uiEvents:
+			if !s.handleEvents {
+				continue
+			}
+			redraw, exit := s.onEvent(&e)
+			if exit {
+				return
+			}
+			if redraw {
+				s.Render()
+			}
+		}
 	}
 }

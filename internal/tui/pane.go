@@ -20,3 +20,8 @@ type Pane interface {
 	In(image.Rectangle) bool
 	Bounds() image.Rectangle
 }
+
+type PaneWithButtons interface {
+	Pane
+	GetButtons() map[string]string
+}

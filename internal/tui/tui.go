@@ -33,18 +33,5 @@ func Start() {
 	screen.Focus(namespaces)
 	screen.ReplaceRightPane(namespaces)
 	screen.Render()
-
-	uiEvents := ui.PollEvents()
-	for {
-		select {
-		case e := <-uiEvents:
-			redraw, exit := screen.OnEvent(&e)
-			if exit {
-				return
-			}
-			if redraw {
-				screen.Render()
-			}
-		}
-	}
+	screen.Run()
 }
