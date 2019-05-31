@@ -93,7 +93,7 @@ func (s *Screen) setGrid() {
 		right = s.rightPaneStack[0]
 	}
 
-	menuRatio := 15.0 / float64(s.Rectangle.Max.X)
+	menuRatio := 17.0 / float64(s.Rectangle.Max.X)
 	s.Set(
 		ui.NewRow(1.0,
 			ui.NewCol(menuRatio, s.menu),
