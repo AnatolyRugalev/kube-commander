@@ -26,6 +26,9 @@ var items = []menuItem{
 	{"Nodes", func() Pane {
 		return NewNodesTable()
 	}},
+	{"Storage Classes", func() Pane {
+		return NewStorageClassesTable()
+	}},
 	{"PVs", func() Pane {
 		return NewPVsTable()
 	}},
