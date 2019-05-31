@@ -27,6 +27,7 @@ Have fun!
 - [X] Basic navigation implementation
 - [X] Determine initial release feature set
 - [X] Basic colorization and theming
+- [X] Figure out how to execute external processes to edit, describe etc.
 - [ ] Implement features
 
 ## Feature Set
@@ -35,20 +36,13 @@ Have fun!
 - [X] List pods of namespace
 - [ ] List workloads of namespace (2nd level menu?)
 - [X] List nodes
-- [ ] Basic resources view screen
-    - [ ] Pod
-    - [ ] Namespace
-    - [ ] Node
-    - [ ] ReplicaSet
-    - [ ] Deployment
-    - [ ] StatefulSet
-    - [ ] PV
-    - [ ] PVC
+- [X] List PVs
+- [X] Describe resources
 - [ ] Logs following
     - [ ] Single pod logs
     - [ ] Multiple pods logs merge?
 - [X] Resource deletion with confirmation
-- [ ] Resource editing with external $EDITOR
+- [X] Resource editing with external $EDITOR
 - [ ] Screen refresh
     - [X] Hotkey
     - [ ] Auto-refresh 

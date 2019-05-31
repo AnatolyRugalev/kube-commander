@@ -27,7 +27,7 @@ func (pl *PodLogs) Reload() error {
 		return err
 	}
 	// TODO: enhance logs preview
-	tail := int64(5)
+	tail := int64(pl.Inner.Dy())
 	// TODO: select container when multiple containers in pod
 	logs := client.CoreV1().Pods(pl.namespace).GetLogs(pl.podName, &corev1.PodLogOptions{
 		Follow:    false,

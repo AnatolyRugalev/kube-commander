@@ -28,8 +28,10 @@ func Start() {
 
 	menuList := NewMenuList()
 	screen.SetMenu(menuList)
+	namespaces := NewNamespacesTable()
 	screen.Focus(menuList)
-	screen.ReplaceRightPane(NewWelcomeScreen())
+	screen.Focus(namespaces)
+	screen.ReplaceRightPane(namespaces)
 	screen.Render()
 
 	uiEvents := ui.PollEvents()

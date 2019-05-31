@@ -4,6 +4,8 @@ import (
 	"image"
 	"strings"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
+
 	"github.com/gizak/termui/v3"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
@@ -118,15 +120,15 @@ func newDialog(title, text string, buttons ...*Button) *Dialog {
 	p := widgets.NewParagraph()
 	p.Title = title
 	p.Text = text
-	p.BorderStyle = theme["dialog"].active
-	p.TitleStyle = theme["dialog"].active
-	p.TextStyle = theme["dialog"].active
+	p.BorderStyle = theme.Theme["dialog"].Active
+	p.TitleStyle = theme.Theme["dialog"].Active
+	p.TextStyle = theme.Theme["dialog"].Active
 	p.PaddingLeft = 1
 	p.PaddingRight = 1
 
 	newDlg := &Dialog{Paragraph: p}
-	newDlg.buttonStyle = theme["button"].inactive
-	newDlg.selectedButtonStyle = theme["button"].active
+	newDlg.buttonStyle = theme.Theme["button"].Inactive
+	newDlg.selectedButtonStyle = theme.Theme["button"].Active
 
 	if len(buttons) == 0 {
 		newDlg.addButton(NewButton(ButtonOk, nil))
