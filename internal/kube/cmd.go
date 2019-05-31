@@ -20,6 +20,13 @@ func EditNs(namespace string, resType string, resName string) string {
 	return kubectlNs(namespace, fmt.Sprintf("edit %s %s", resType, resName))
 }
 
+func Exec(namespace string, pod string, container string, command string) string {
+	if container != "" {
+		container = "-c " + container
+	}
+	return kubectlNs(namespace, fmt.Sprintf("exec -ti%s %s %s", container, pod, command))
+}
+
 func Viewer(command string) string {
 	return fmt.Sprintf("%s | less", command)
 }

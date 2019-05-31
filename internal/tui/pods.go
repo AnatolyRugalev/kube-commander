@@ -31,6 +31,9 @@ func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
 	case "l":
 		screen.LoadRightPane(NewPodLogs(pt.namespace, item[0]))
 		return true
+	case "x":
+		screen.SwitchToCommand(kube.Exec(pt.namespace, item[0], "", "/bin/sh -- -c '/bin/bash || /bin/sh'"))
+		return true
 	}
 	return false
 }
