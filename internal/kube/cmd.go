@@ -2,6 +2,7 @@ package kube
 
 import (
 	"fmt"
+	"strings"
 )
 
 func Describe(resType string, resName string) string {
@@ -25,6 +26,20 @@ func Exec(namespace string, pod string, container string, command string) string
 		container = "-c " + container
 	}
 	return kubectlNs(namespace, fmt.Sprintf("exec -ti%s %s %s", container, pod, command))
+}
+
+func Logs(namespace string, pod string, container string, tail int, follow bool) string {
+	var flags []string
+	if container != "" {
+		flags = append(flags, "-c "+container)
+	}
+	if tail > 0 {
+		flags = append(flags, fmt.Sprintf("--tail=%d", tail))
+	}
+	if follow {
+		flags = append(flags, "--follow")
+	}
+	return kubectlNs(namespace, fmt.Sprintf("logs %s %s", strings.Join(flags, " "), pod))
 }
 
 func Viewer(command string) string {

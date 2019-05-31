@@ -39,7 +39,7 @@ Have fun!
 - [X] List PVs
 - [X] Describe resources
 - [ ] Logs following
-    - [ ] Single pod logs
+    - [X] Single pod logs
     - [ ] Multiple pods logs merge?
 - [X] Resource deletion with confirmation
 - [X] Resource editing with external $EDITOR

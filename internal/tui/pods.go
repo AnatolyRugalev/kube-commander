@@ -29,7 +29,13 @@ func (pt *PodsTable) Namespace() string {
 func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
 	switch event.ID {
 	case "l":
-		screen.LoadRightPane(NewPodLogs(pt.namespace, item[0]))
+		var cmd string
+		if item[2] == "Running" {
+			cmd = kube.Logs(pt.namespace, item[0], "", 1000, true)
+		} else {
+			cmd = kube.Viewer(kube.Logs(pt.namespace, item[0], "", 1000, false))
+		}
+		screen.SwitchToCommand(cmd)
 		return true
 	case "x":
 		screen.SwitchToCommand(kube.Exec(pt.namespace, item[0], "", "/bin/sh -- -c '/bin/bash || /bin/sh'"))
