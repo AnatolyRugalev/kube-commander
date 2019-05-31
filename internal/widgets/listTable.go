@@ -1,11 +1,16 @@
 package widgets
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/theme"
-	ui "github.com/gizak/termui/v3"
 	"image"
 	"sync"
 	"unicode/utf8"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
+	ui "github.com/gizak/termui/v3"
+)
+
+const (
+	eventMouseLeftDouble = "<MouseLeftDouble>"
 )
 
 type ListTable struct {
@@ -241,10 +246,10 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		namespace = res.Namespace()
 	}
 	switch event.ID {
-	case "<Down>":
+	case "<Down>", "<MouseWheelDown>":
 		lt.Down()
 		return true
-	case "<Up>":
+	case "<Up>", "<MouseWheelUp>":
 		lt.Up()
 		return true
 	case "<PageDown>":
@@ -253,7 +258,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<PageUp>":
 		lt.PageUp()
 		return true
-	case "<Enter>":
+	case "<Enter>", eventMouseLeftDouble:
 		if s, ok := lt.listHandler.(ListTableSelectable); ok {
 			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
@@ -279,6 +284,10 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 			return true
 		}
 		return false
+	case "<MouseLeft>":
+		m := event.Payload.(ui.Mouse)
+		lt.setCursor(m.Y - 2 + lt.topRow)
+		return true
 	}
 	if e, ok := lt.listHandler.(ListTableEventable); ok {
 		row := lt.Rows[lt.SelectedRow]
@@ -289,12 +298,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 
 func (lt *ListTable) Scroll(amount int) {
 	sel := lt.SelectedRow + amount
-	if sel > len(lt.Rows)-1 {
-		sel = len(lt.Rows) - 1
-	} else if sel < 0 {
-		sel = 0
-	}
-	lt.SelectedRow = sel
+	lt.setCursor(sel)
 }
 
 func (lt *ListTable) Up() {
@@ -311,6 +315,12 @@ func (lt *ListTable) PageUp() {
 
 func (lt *ListTable) PageDown() {
 	lt.Scroll(lt.Inner.Dy() - 1)
+}
+
+func (lt *ListTable) setCursor(idx int) {
+	if idx >= 0 && idx < len(lt.Rows) {
+		lt.SelectedRow = idx
+	}
 }
 
 func (lt *ListTable) Reload() error {

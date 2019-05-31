@@ -165,18 +165,9 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		s.reloadCurrentRightPane()
 		return false, false
 	case "<MouseLeft>":
-		s.clickMux.Lock()
-		if time.Since(s.lastLeftClick) <= time.Millisecond*doubleClickSensitive {
-			event.ID = eventMouseLeftDouble
-		}
-		s.lastLeftClick = time.Now()
-		s.clickMux.Unlock()
-		m := event.Payload.(ui.Mouse)
-		if s.foundAndClick(m.X, m.Y) {
-			return s.focus.OnEvent(event), false
-		}
-		return false, false
+		return s.mouseLeftEvent(event)
 	}
+
 	var focusReaction bool
 	if s.focus != nil {
 		focusReaction = s.focus.OnEvent(event)
@@ -186,6 +177,25 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 	}
 	return focusReaction, false
 }
+
+func (s *Screen) mouseLeftEvent(event *ui.Event) (bool, bool) {
+	var doubleClick *ui.Event
+	s.clickMux.Lock()
+	if time.Since(s.lastLeftClick) <= time.Millisecond*doubleClickSensitive {
+		doubleClick = cloneEvent(event, eventMouseLeftDouble)
+	}
+	s.lastLeftClick = time.Now()
+	s.clickMux.Unlock()
+	m := event.Payload.(ui.Mouse)
+	if s.locateAndFocus(m.X, m.Y) {
+		if doubleClick != nil {
+			return s.focus.OnEvent(doubleClick), false
+		}
+		return s.focus.OnEvent(event), false
+	}
+	return false, false
+}
+
 func (s *Screen) escape() bool {
 	if s.popup != nil {
 		s.popFocus()
@@ -209,7 +219,7 @@ func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Unlock()
 }
 
-func (s *Screen) foundAndClick(x, y int) bool {
+func (s *Screen) locateAndFocus(x, y int) bool {
 	rect := image.Rect(x, y, x+1, y+1)
 	if rect.In(screen.focus.Bounds()) {
 		return true

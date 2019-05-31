@@ -190,7 +190,11 @@ func (dlg *Dialog) OnEvent(event *termui.Event) bool {
 		return true
 	case "<MouseLeft>":
 		m := event.Payload.(ui.Mouse)
-		return dlg.foundAndClick(m.X, m.Y)
+		if dlg.locateAndFocus(m.X, m.Y) {
+			dlg.onResult()
+			return true
+		}
+		return false
 	}
 
 	return false
@@ -202,12 +206,11 @@ func (dlg *Dialog) OnFocusIn() {
 func (Dialog) OnFocusOut() {
 }
 
-func (dlg *Dialog) foundAndClick(x, y int) bool {
+func (dlg *Dialog) locateAndFocus(x, y int) bool {
 	rect := image.Rect(x, y, x+1, y+1)
 	for i, btn := range dlg.Buttons {
 		if rect.In(btn.Bounds()) {
 			dlg.selectedButton = i
-			dlg.onResult()
 			return true
 		}
 	}

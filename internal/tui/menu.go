@@ -68,7 +68,7 @@ func (ml *MenuList) OnEvent(event *ui.Event) bool {
 		return true
 	case "<MouseLeft>":
 		m := event.Payload.(ui.Mouse)
-		if ml.foundAndClick(0, m.Y-1) {
+		if ml.locateAndFocus(0, m.Y-1) {
 			return true
 		}
 		return false
@@ -97,7 +97,7 @@ func (ml *MenuList) activateCurrent() {
 	}
 }
 
-func (ml *MenuList) foundAndClick(xCoord, yCoord int) bool {
+func (ml *MenuList) locateAndFocus(xCoord, yCoord int) bool {
 	if yCoord > len(ml.Rows)-1 {
 		yCoord = len(ml.Rows) - 1
 	}
