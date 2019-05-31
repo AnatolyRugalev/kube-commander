@@ -2,13 +2,16 @@ package tui
 
 import (
 	"fmt"
+	"image"
+	"log"
+	"sync"
+	"time"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	ui "github.com/gizak/termui/v3"
 	"github.com/pkg/errors"
-	"log"
-	"sync"
 )
 
 type Screen struct {
@@ -24,6 +27,9 @@ type Screen struct {
 	focusM     *sync.Mutex
 	focusStack []Pane
 	focus      Pane
+
+	clickMux      *sync.Mutex
+	lastLeftClick time.Time
 }
 
 func NewScreen() *Screen {
@@ -32,6 +38,7 @@ func NewScreen() *Screen {
 		popupM:          &sync.Mutex{},
 		rightPaneStackM: &sync.Mutex{},
 		focusM:          &sync.Mutex{},
+		clickMux:        &sync.Mutex{},
 	}
 	return s
 }
@@ -157,7 +164,10 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
+	case "<MouseLeft>":
+		return s.mouseLeftEvent(event)
 	}
+
 	var focusReaction bool
 	if s.focus != nil {
 		focusReaction = s.focus.OnEvent(event)
@@ -166,6 +176,24 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		return s.escape(), false
 	}
 	return focusReaction, false
+}
+
+func (s *Screen) mouseLeftEvent(event *ui.Event) (bool, bool) {
+	var doubleClick *ui.Event
+	s.clickMux.Lock()
+	if time.Since(s.lastLeftClick) <= time.Millisecond*doubleClickSensitive {
+		doubleClick = cloneEvent(event, eventMouseLeftDouble)
+	}
+	s.lastLeftClick = time.Now()
+	s.clickMux.Unlock()
+	m := event.Payload.(ui.Mouse)
+	if s.locateAndFocus(m.X, m.Y) {
+		if doubleClick != nil {
+			return s.focus.OnEvent(doubleClick), false
+		}
+		return s.focus.OnEvent(event), false
+	}
+	return false, false
 }
 
 func (s *Screen) escape() bool {
@@ -189,6 +217,35 @@ func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Lock()
 	s.rightPaneStack = []Pane{pane}
 	s.rightPaneStackM.Unlock()
+}
+
+func (s *Screen) locateAndFocus(x, y int) bool {
+	rect := image.Rect(x, y, x+1, y+1)
+	if rect.In(screen.focus.Bounds()) {
+		return true
+	}
+	if s.popup == nil {
+
+		if rect.In(s.menu.Bounds()) {
+			s.popFocus()
+			s.Focus(s.menu)
+			return true
+		}
+
+		if len(s.rightPaneStack) == 0 {
+			return false
+		}
+		s.rightPaneStackM.Lock()
+		defer s.rightPaneStackM.Unlock()
+
+		rightPaneCurrent := s.rightPaneStack[len(s.rightPaneStack)-1]
+		if rect.In(rightPaneCurrent.Bounds()) {
+			s.popFocus()
+			s.Focus(rightPaneCurrent)
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Screen) appendRightPane(pane Pane) {

@@ -1,8 +1,10 @@
 package tui
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/theme"
+	"image"
 	"strings"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 
 	"github.com/gizak/termui/v3"
 	ui "github.com/gizak/termui/v3"
@@ -157,6 +159,20 @@ func (dlg *Dialog) prevButton() {
 	}
 }
 
+func (dlg *Dialog) onResult() {
+	btn := dlg.currentButton()
+	screen.popFocus()
+	screen.removePopup()
+	if btn.onClick != nil {
+		err := btn.onClick()
+		if err != nil {
+			ShowErrorDialog(err, nil)
+		} else {
+			screen.reloadCurrentRightPane()
+		}
+	}
+}
+
 func (dlg *Dialog) OnEvent(event *termui.Event) bool {
 	switch event.ID {
 	case "<Right>":
@@ -166,23 +182,21 @@ func (dlg *Dialog) OnEvent(event *termui.Event) bool {
 		dlg.prevButton()
 		return true
 	case "<Enter>":
-		btn := dlg.currentButton()
-		screen.popFocus()
-		screen.removePopup()
-		if btn.onClick != nil {
-			err := btn.onClick()
-			if err != nil {
-				ShowErrorDialog(err, nil)
-			} else {
-				screen.reloadCurrentRightPane()
-			}
-		}
+		dlg.onResult()
 		return true
 	case "<Escape>":
 		screen.removePopup()
 		screen.popFocus()
 		return true
+	case "<MouseLeft>":
+		m := event.Payload.(ui.Mouse)
+		if dlg.locateAndFocus(m.X, m.Y) {
+			dlg.onResult()
+			return true
+		}
+		return false
 	}
+
 	return false
 }
 
@@ -190,6 +204,17 @@ func (dlg *Dialog) OnFocusIn() {
 }
 
 func (Dialog) OnFocusOut() {
+}
+
+func (dlg *Dialog) locateAndFocus(x, y int) bool {
+	rect := image.Rect(x, y, x+1, y+1)
+	for i, btn := range dlg.Buttons {
+		if rect.In(btn.Bounds()) {
+			dlg.selectedButton = i
+			return true
+		}
+	}
+	return false
 }
 
 func ShowConfirmDialog(text string, onOk btnFunc) {
@@ -200,6 +225,12 @@ func ShowConfirmDialog(text string, onOk btnFunc) {
 
 func ShowErrorDialog(err error, onClick btnFunc) {
 	dlg := newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
+	screen.Focus(dlg)
+	screen.setPopup(dlg)
+}
+
+func ShowMessageDialog(text string) {
+	dlg := newDialog("Message", text)
 	screen.Focus(dlg)
 	screen.setPopup(dlg)
 }
