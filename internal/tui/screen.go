@@ -3,6 +3,7 @@ package tui
 import (
 	"image"
 	"sync"
+	"time"
 
 	ui "github.com/gizak/termui/v3"
 )
@@ -20,6 +21,9 @@ type Screen struct {
 	focusM     *sync.Mutex
 	focusStack []Pane
 	focus      Pane
+
+	clickMux      *sync.Mutex
+	lastLeftClick time.Time
 }
 
 func NewScreen() *Screen {
@@ -28,6 +32,7 @@ func NewScreen() *Screen {
 		popupM:          &sync.Mutex{},
 		rightPaneStackM: &sync.Mutex{},
 		focusM:          &sync.Mutex{},
+		clickMux:        &sync.Mutex{},
 	}
 	return s
 }
@@ -148,6 +153,12 @@ func (s *Screen) OnEvent(event *ui.Event) (bool, bool) {
 		s.reloadCurrentRightPane()
 		return false, false
 	case "<MouseLeft>":
+		s.clickMux.Lock()
+		if time.Since(s.lastLeftClick) <= time.Millisecond*doubleClickSensitive {
+			event.ID = eventMouseLeftDouble
+		}
+		s.lastLeftClick = time.Now()
+		s.clickMux.Unlock()
 		m := event.Payload.(ui.Mouse)
 		if s.foundAndClick(m.X, m.Y) {
 			return s.focus.OnEvent(event), false
@@ -172,15 +183,24 @@ func (s *Screen) foundAndClick(x, y int) bool {
 	if rect.In(screen.focus.Bounds()) {
 		return true
 	}
-	if rect.In(s.menu.Bounds()) {
-		s.popFocus()
-		s.Focus(s.menu)
-		return true
-	}
-	for _, item := range s.rightPaneStack {
-		if rect.In(item.Bounds()) {
+	if s.popup == nil {
+
+		if rect.In(s.menu.Bounds()) {
 			s.popFocus()
-			s.Focus(item)
+			s.Focus(s.menu)
+			return true
+		}
+
+		if len(s.rightPaneStack) == 0 {
+			return false
+		}
+		s.rightPaneStackM.Lock()
+		defer s.rightPaneStackM.Unlock()
+
+		rightPaneCurrent := s.rightPaneStack[len(s.rightPaneStack)-1]
+		if rect.In(rightPaneCurrent.Bounds()) {
+			s.popFocus()
+			s.Focus(rightPaneCurrent)
 			return true
 		}
 	}

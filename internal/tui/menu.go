@@ -102,7 +102,6 @@ func (ml *MenuList) foundAndClick(xCoord, yCoord int) bool {
 	}
 	ml.SelectedRow = yCoord
 	ml.onCursorMove()
-	ml.activateCurrent()
 	return true
 }
 

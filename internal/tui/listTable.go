@@ -85,7 +85,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		lt.CursorUp()
 		return true
-	case "<Enter>":
+	case "<Enter>", eventMouseLeftDouble:
 		if s, ok := lt.extension.(ListExtensionSelectable); ok {
 			row := lt.Rows[lt.SelectedRow+1]
 			return s.OnSelect(row)
