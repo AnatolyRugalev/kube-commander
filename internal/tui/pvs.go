@@ -23,15 +23,7 @@ func (pt *PVsTable) Name(item []string) string {
 func (pt *PVsTable) OnDelete(item []string) bool {
 	name := item[0]
 	ShowConfirmDialog("Are you sure you want to delete a PERSISTENT VOLUME "+name+" WITH ITS DATA?", func() error {
-		client, err := kube.GetClient()
-		if err != nil {
-			return err
-		}
-		err = client.CoreV1().PersistentVolumes().Delete(name, metav1.NewDeleteOptions(0))
-		if err != nil {
-			return err
-		}
-		return nil
+		return kube.GetClient().CoreV1().PersistentVolumes().Delete(name, metav1.NewDeleteOptions(0))
 	})
 	return true
 }
@@ -47,11 +39,7 @@ func (pt *PVsTable) GetHeaderRow() []string {
 }
 
 func (pt *PVsTable) LoadData() ([][]string, error) {
-	client, err := kube.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	pvs, err := client.CoreV1().PersistentVolumes().List(metav1.ListOptions{})
+	pvs, err := kube.GetClient().CoreV1().PersistentVolumes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

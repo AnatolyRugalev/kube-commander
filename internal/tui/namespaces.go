@@ -21,15 +21,7 @@ func (nt *NamespacesTable) Name(item []string) string {
 func (nt *NamespacesTable) OnDelete(item []string) bool {
 	name := item[0]
 	ShowConfirmDialog("Are you sure you want to delete an ENTIRE NAMESPACE "+name+"?", func() error {
-		client, err := kube.GetClient()
-		if err != nil {
-			return err
-		}
-		err = client.CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
-		if err != nil {
-			return err
-		}
-		return nil
+		return kube.GetClient().CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
 	})
 	return true
 }
@@ -50,11 +42,7 @@ func (nt *NamespacesTable) OnSelect(item []string) bool {
 }
 
 func (nt *NamespacesTable) LoadData() ([][]string, error) {
-	client, err := kube.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	namespaces, err := client.CoreV1().Namespaces().List(metav1.ListOptions{})
+	namespaces, err := kube.GetClient().CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

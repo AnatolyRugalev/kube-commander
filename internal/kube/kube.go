@@ -18,6 +18,8 @@ var config = &struct {
 	Context string `mapstructure:"kube-context"`
 }{}
 
+var client *KubeClient
+
 func init() {
 	home := strings.TrimRight(os.Getenv("HOME"), "/")
 	cfg.AddPkg(&cfg.Pkg{
@@ -26,25 +28,37 @@ func init() {
 			"kube-config":  {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
 			"kube-context": {"", "Kubernetes context to use", "KUBECONTEXT"},
 		},
+		Validate: initClient,
 	})
 }
 
 func getClientConfig() (*rest.Config, error) {
-	return cmd.
+	clientConfig := cmd.
 		NewNonInteractiveDeferredLoadingClientConfig(
 			&cmd.ClientConfigLoadingRules{ExplicitPath: config.Path},
 			&cmd.ConfigOverrides{CurrentContext: config.Context},
-		).ClientConfig()
-}
-
-func GetClient() (*KubeClient, error) {
-	c, err := getClientConfig()
+		)
+	raw, err := clientConfig.RawConfig()
 	if err != nil {
 		return nil, err
+	}
+	config.Context = raw.CurrentContext
+	return clientConfig.ClientConfig()
+}
+
+func GetClient() *KubeClient {
+	return client
+}
+
+func initClient() error {
+	c, err := getClientConfig()
+	if err != nil {
+		return err
 	}
 	clientSet, err := kubernetes.NewForConfig(c)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &KubeClient{clientSet}, nil
+	client = &KubeClient{clientSet}
+	return nil
 }

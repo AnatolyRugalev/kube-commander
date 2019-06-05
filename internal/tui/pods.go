@@ -57,11 +57,7 @@ func (pt *PodsTable) GetHeaderRow() []string {
 }
 
 func (pt *PodsTable) LoadData() ([][]string, error) {
-	client, err := kube.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	pods, err := client.CoreV1().Pods(pt.namespace).List(metav1.ListOptions{})
+	pods, err := kube.GetClient().CoreV1().Pods(pt.namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -94,16 +90,7 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 func (pt *PodsTable) OnDelete(item []string) bool {
 	name := item[0]
 	ShowConfirmDialog("Are you sure you want to delete pod "+name+"?", func() error {
-		client, err := kube.GetClient()
-		if err != nil {
-			return err
-		}
-
-		err = client.CoreV1().Pods(pt.namespace).Delete(name, metav1.NewDeleteOptions(0))
-		if err != nil {
-			return err
-		}
-		return nil
+		return kube.GetClient().CoreV1().Pods(pt.namespace).Delete(name, metav1.NewDeleteOptions(0))
 	})
 	return true
 }

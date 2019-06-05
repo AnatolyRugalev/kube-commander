@@ -11,6 +11,7 @@ type Pkg struct {
 	PersistentFlags FlagsDeclaration
 	LocalFlags      FlagsDeclaration
 	Struct          interface{}
+	Validate        func() error
 }
 
 type FlagsDeclaration map[string]struct {
@@ -54,6 +55,13 @@ func Apply() error {
 	for _, pkg := range pkgs {
 		if err := pkg.applyFlags(); err != nil {
 			return err
+		}
+	}
+	for _, pkg := range pkgs {
+		if pkg.Validate != nil {
+			if err := pkg.Validate(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
