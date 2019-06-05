@@ -62,10 +62,10 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 			log.Fatalf("failed to initialize termui: %v", err)
 		}
 		s.Init()
-		s.Render()
 		if err != nil {
 			onError(err)
 		}
+		s.Render()
 	}()
 }
 
