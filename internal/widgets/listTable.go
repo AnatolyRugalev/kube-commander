@@ -24,11 +24,13 @@ type ListTable struct {
 	topRow           int
 	SelectedRowStyle ui.Style
 	SelectedRow      int
+	DrawVerticalLine bool
 
 	// ColumnResizer is called on each Draw. Can be used for custom column sizing.
 	ColumnResizer func()
 
 	listHandler   ListTableHandler
+	header        ListTableHandlerWithHeader
 	screenHandler ScreenHandler
 	RowStyle      ui.Style
 	HeaderStyle   ui.Style
@@ -39,13 +41,26 @@ type ListTable struct {
 }
 
 type ListTableHandler interface {
-	GetHeaderRow() []string
 	LoadData() ([][]string, error)
+}
+
+type ListTableHandlerWithHeader interface {
+	GetHeaderRow() []string
+}
+
+type ListTableEventable interface {
+	ListTableHandler
+	OnEvent(event *ui.Event, item []string) bool
 }
 
 type ListTableSelectable interface {
 	ListTableHandler
 	OnSelect(item []string) bool
+}
+
+type ListTableCursorChangable interface {
+	ListTableHandler
+	OnCursorChange(item []string) bool
 }
 
 type ListTableDeletable interface {
@@ -101,16 +116,25 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, act
 		RowStyle:         theme.Theme["listItem"].Inactive,
 		HeaderStyle:      theme.Theme["listHeader"].Inactive,
 		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
+		DrawVerticalLine: true,
 		FillRow:          true,
 
 		actions: actions,
 
 		reloadMx: &sync.Mutex{},
 	}
+	lt.header, _ = listHandler.(ListTableHandlerWithHeader)
 	lt.BorderStyle = theme.Theme["grid"].Inactive
 	lt.TitleStyle = theme.Theme["title"].Inactive
 	lt.ColumnResizer = func() {
-		rows := append([][]string{lt.listHandler.GetHeaderRow()}, lt.Rows...)
+		rows := lt.Rows
+		if lt.header != nil {
+			rows = append(rows, lt.header.GetHeaderRow())
+		}
+		if len(rows) == 0 {
+			lt.ColumnWidths = []int{}
+			return
+		}
 		colCount := len(rows[0])
 		var widths []int
 		for i := range rows[0] {
@@ -154,7 +178,12 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 
 	columnWidths := lt.ColumnWidths
 	if len(columnWidths) == 0 {
-		columnCount := len(lt.listHandler.GetHeaderRow())
+		var columnCount int
+		if lt.header != nil {
+			columnCount = len(lt.header.GetHeaderRow())
+		} else {
+			columnCount = 1
+		}
 		columnWidth := lt.Inner.Dx() / columnCount
 		for i := 0; i < columnCount; i++ {
 			columnWidths = append(columnWidths, columnWidth)
@@ -169,8 +198,13 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 		lt.topRow = lt.SelectedRow
 	}
 
-	// draw header
-	yCoordinate := lt.drawRow(buf, columnWidths, lt.listHandler.GetHeaderRow(), lt.HeaderStyle, lt.Inner.Min.Y)
+	// draw header if needed
+	var yCoordinate int
+	if lt.header != nil {
+		yCoordinate = lt.drawRow(buf, columnWidths, lt.header.GetHeaderRow(), lt.HeaderStyle, lt.Inner.Min.Y)
+	} else {
+		yCoordinate = lt.Inner.Min.Y
+	}
 
 	// draw rows
 	for i := lt.topRow; i < len(lt.Rows) && yCoordinate < lt.Inner.Max.Y; i++ {
@@ -183,9 +217,13 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 
 	// draw UP_ARROW if needed
 	if lt.topRow > 0 {
+		yOffset := 0
+		if lt.header != nil {
+			yOffset = 1
+		}
 		buf.SetCell(
 			ui.NewCell(ui.UP_ARROW, ui.NewStyle(ui.ColorWhite)),
-			image.Pt(lt.Inner.Max.X-1, lt.Inner.Min.Y+1),
+			image.Pt(lt.Inner.Max.X-1, lt.Inner.Min.Y+yOffset),
 		)
 	}
 
@@ -240,21 +278,23 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 		colXCoordinate += columnWidths[j] + 1
 	}
 
-	// draw vertical separators
 	separatorStyle := lt.Block.BorderStyle
 
-	separatorXCoordinate := lt.Inner.Min.X
-	verticalCell := ui.NewCell(ui.VERTICAL_LINE, separatorStyle)
-	for i, width := range columnWidths {
-		if lt.FillRow && i < len(columnWidths)-1 {
-			verticalCell.Style.Bg = rowStyle.Bg
-		} else {
-			verticalCell.Style.Bg = lt.Block.BorderStyle.Bg
-		}
+	// draw vertical separators
+	if lt.DrawVerticalLine {
+		separatorXCoordinate := lt.Inner.Min.X
+		verticalCell := ui.NewCell(ui.VERTICAL_LINE, separatorStyle)
+		for i, width := range columnWidths {
+			if lt.FillRow && i < len(columnWidths)-1 {
+				verticalCell.Style.Bg = rowStyle.Bg
+			} else {
+				verticalCell.Style.Bg = lt.Block.BorderStyle.Bg
+			}
 
-		separatorXCoordinate += width
-		buf.SetCell(verticalCell, image.Pt(separatorXCoordinate, yCoordinate))
-		separatorXCoordinate++
+			separatorXCoordinate += width
+			buf.SetCell(verticalCell, image.Pt(separatorXCoordinate, yCoordinate))
+			separatorXCoordinate++
+		}
 	}
 
 	yCoordinate++
@@ -321,7 +361,11 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<MouseLeft>":
 		lt.actions.HideDropDown()
 		m := event.Payload.(ui.Mouse)
-		lt.setCursor(m.Y - 2 + lt.topRow)
+		yOffset := 1
+		if lt.header != nil {
+			yOffset++
+		}
+		lt.setCursor(m.Y - yOffset + lt.topRow)
 		return true
 	case "<MouseRight>":
 		m := event.Payload.(ui.Mouse)
@@ -356,7 +400,11 @@ func (lt *ListTable) PageDown() {
 
 func (lt *ListTable) setCursor(idx int) {
 	if idx >= 0 && idx < len(lt.Rows) {
+		changed := lt.SelectedRow != idx
 		lt.SelectedRow = idx
+		if c, ok := lt.listHandler.(ListTableCursorChangable); ok && changed {
+			c.OnCursorChange(lt.Rows[lt.SelectedRow])
+		}
 	}
 }
 

@@ -36,25 +36,13 @@ func (st *StorageClassesTable) GetHeaderRow() []string {
 func (st *StorageClassesTable) OnDelete(item []string) bool {
 	name := item[0]
 	ShowConfirmDialog("Are you sure you want to delete STORAGE CLASS "+name+"?", func() error {
-		client, err := kube.GetClient()
-		if err != nil {
-			return err
-		}
-		err = client.StorageV1().StorageClasses().Delete(name, metav1.NewDeleteOptions(0))
-		if err != nil {
-			return err
-		}
-		return nil
+		return kube.GetClient().StorageV1().StorageClasses().Delete(name, metav1.NewDeleteOptions(0))
 	})
 	return true
 }
 
 func (st *StorageClassesTable) LoadData() ([][]string, error) {
-	client, err := kube.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	storageClasses, err := client.StorageV1().StorageClasses().List(metav1.ListOptions{})
+	storageClasses, err := kube.GetClient().StorageV1().StorageClasses().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

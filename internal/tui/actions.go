@@ -139,6 +139,18 @@ func (a *ActionList) SetHotKeyPanelRect(r image.Rectangle) {
 }
 
 func (a *ActionList) Draw(buf *ui.Buffer) {
+	if a.bottomPanelVisible {
+		for i := range a.hotKeyPanel.hkeyName {
+			if a.Actions[i].Checked {
+				a.hotKeyPanel.hkeyName[i].TextStyle = a.checkedItemStyle
+			} else {
+				a.hotKeyPanel.hkeyName[i].TextStyle = a.hotKeyNameStyle
+			}
+			a.hotKeyPanel.hkey[i].Draw(buf)
+			a.hotKeyPanel.hkeyName[i].Draw(buf)
+		}
+	}
+
 	if a.dropDownVisible {
 		for i := range a.dropDownPanel.Rows {
 			if i == a.selectedRow {
@@ -150,18 +162,6 @@ func (a *ActionList) Draw(buf *ui.Buffer) {
 			}
 		}
 		a.dropDownPanel.Draw(buf)
-	}
-
-	if a.bottomPanelVisible {
-		for i := range a.hotKeyPanel.hkeyName {
-			if a.Actions[i].Checked {
-				a.hotKeyPanel.hkeyName[i].TextStyle = a.checkedItemStyle
-			} else {
-				a.hotKeyPanel.hkeyName[i].TextStyle = a.hotKeyNameStyle
-			}
-			a.hotKeyPanel.hkey[i].Draw(buf)
-			a.hotKeyPanel.hkeyName[i].Draw(buf)
-		}
 	}
 }
 

@@ -32,11 +32,7 @@ func (nt *NodesTable) GetHeaderRow() []string {
 }
 
 func (nt *NodesTable) LoadData() ([][]string, error) {
-	client, err := kube.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	namespaces, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
+	namespaces, err := kube.GetClient().CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
