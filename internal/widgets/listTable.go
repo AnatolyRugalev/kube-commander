@@ -152,17 +152,17 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, act
 		lt.ColumnWidths = widths
 	}
 
-	lt.initDefaultActions(screenHandler, listHandler)
+	lt.initDefaultActions()
 
 	return lt
 }
 
-func (lt *ListTable) initDefaultActions(screenHandler ScreenHandler, listHandler ListTableHandler) {
-	if rl, ok := listHandler.(ListTableResource); ok {
+func (lt *ListTable) initDefaultActions() {
+	if rl, ok := lt.listHandler.(ListTableResource); ok {
 		lt.actions.AddAction("Describe", "d", false, func(item []string) bool {
 			name := item[0]
 			namespace := ""
-			if res, ok := listHandler.(ListTableResourceNamespace); ok {
+			if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
 				namespace = res.Namespace()
 			}
 			lt.screenHandler.Describe(rl.TypeName(), name, namespace)
@@ -172,7 +172,7 @@ func (lt *ListTable) initDefaultActions(screenHandler ScreenHandler, listHandler
 		lt.actions.AddAction("Edit", "e", false, func(item []string) bool {
 			name := item[0]
 			namespace := ""
-			if rl, ok := listHandler.(ListTableResourceNamespace); ok {
+			if rl, ok := lt.listHandler.(ListTableResourceNamespace); ok {
 				namespace = rl.Namespace()
 			}
 			lt.screenHandler.Edit(rl.TypeName(), name, namespace)
@@ -180,7 +180,7 @@ func (lt *ListTable) initDefaultActions(screenHandler ScreenHandler, listHandler
 		})
 	}
 
-	if dl, ok := listHandler.(ListTableDeletable); ok {
+	if dl, ok := lt.listHandler.(ListTableDeletable); ok {
 		lt.actions.AddAction(strings.Repeat(string(ui.HORIZONTAL_LINE), 10), "", false, nil)
 		lt.actions.AddAction("Delete", "<Delete>", false, dl.OnDelete)
 	}
