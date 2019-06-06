@@ -36,7 +36,7 @@ func NewPodsTable(namespace string) *widgets.ListTable {
 	}
 	al := NewActionList(true)
 	al.AddAction("Exec", "x", false, pt.OnExec)
-	al.AddAction("Logs/Viewer", "l", false, pt.OnLogsViewer)
+	al.AddAction("Logs", "l", false, pt.OnLogsViewer)
 	lt := widgets.NewListTable(screen, pt, al)
 	lt.Title = "Pods <" + namespace + ">"
 	return lt

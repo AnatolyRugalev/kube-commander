@@ -118,7 +118,7 @@ func (a *ActionList) AddAction(name, hotKey string, checkable bool, onExec func(
 	}
 }
 
-func (a *ActionList) setDwopDownRect(x, y int) {
+func (a *ActionList) setDropDownRect(x, y int) {
 	_, termHeight := ui.TerminalDimensions()
 	y2 := y + len(a.dropDownPanel.Rows) + 2
 	// TODO: calc width
@@ -173,7 +173,7 @@ func (a *ActionList) ShowDropDown(x, y int) {
 	}
 	a.dropDownVisible = true
 	a.selectedRow = 0
-	a.setDwopDownRect(x, y)
+	a.setDropDownRect(x, y)
 }
 
 func (a *ActionList) HideDropDown() {

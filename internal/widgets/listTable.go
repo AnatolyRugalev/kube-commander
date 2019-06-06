@@ -182,7 +182,7 @@ func (lt *ListTable) initDefaultActions() {
 
 	if dl, ok := lt.listHandler.(ListTableDeletable); ok {
 		lt.actions.AddAction(strings.Repeat(string(ui.HORIZONTAL_LINE), 10), "", false, nil)
-		lt.actions.AddAction("Delete", "<Delete>", false, dl.OnDelete)
+		lt.actions.AddAction("Delete", "<Del>", false, dl.OnDelete)
 	}
 }
 
