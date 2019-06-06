@@ -42,7 +42,10 @@ func getClientConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	config.Context = raw.CurrentContext
+	if config.Context == "" {
+		// lock context if default context is being used
+		config.Context = raw.CurrentContext
+	}
 	return clientConfig.ClientConfig()
 }
 
