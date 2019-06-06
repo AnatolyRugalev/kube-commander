@@ -1,10 +1,11 @@
 package tui
 
 import (
+	"log"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	ui "github.com/gizak/termui/v3"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 func init() {
@@ -23,6 +24,8 @@ func Start() {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
+	mouseMoveEvents(true)
+	defer mouseMoveEvents(false)
 
 	screen.Init()
 

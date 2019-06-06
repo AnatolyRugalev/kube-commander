@@ -38,4 +38,16 @@ var Theme = map[string]themeMap{
 		Inactive: termui.NewStyle(termui.Color(237), termui.ColorClear),
 		Active:   termui.NewStyle(termui.Color(51), termui.ColorClear, termui.ModifierBold),
 	},
+	"checked": {
+		Inactive: termui.NewStyle(termui.Color(249), termui.Color(43)),
+		Active:   termui.NewStyle(termui.Color(237), termui.Color(43)),
+	},
+	"hotKey": {
+		Inactive: termui.NewStyle(termui.Color(254), termui.Color(239)),
+		Active:   termui.NewStyle(termui.Color(254), termui.Color(239)),
+	},
+	"hotKeyName": {
+		Inactive: termui.NewStyle(termui.Color(237), termui.Color(39)),
+		Active:   termui.NewStyle(termui.Color(237), termui.Color(39)),
+	},
 }

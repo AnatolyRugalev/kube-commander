@@ -32,7 +32,7 @@ var menuItems = []*menuItem{
 }
 
 func NewMenuList() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &MenuList{})
+	lt := widgets.NewListTable(screen, &MenuList{}, NewActionList(false))
 	lt.Title = "Cluster"
 	_ = lt.Reload()
 	return lt

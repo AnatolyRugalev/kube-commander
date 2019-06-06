@@ -27,7 +27,7 @@ func (nt *NamespacesTable) OnDelete(item []string) bool {
 }
 
 func NewNamespacesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &NamespacesTable{})
+	lt := widgets.NewListTable(screen, &NamespacesTable{}, NewActionList(true))
 	lt.Title = "Namespaces"
 	return lt
 }

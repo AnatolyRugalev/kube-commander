@@ -2,15 +2,12 @@ package widgets
 
 import (
 	"image"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	ui "github.com/gizak/termui/v3"
-)
-
-const (
-	eventMouseLeftDouble = "<MouseLeftDouble>"
 )
 
 type ListTable struct {
@@ -35,17 +32,9 @@ type ListTable struct {
 	RowStyle      ui.Style
 	HeaderStyle   ui.Style
 
-	reloadMx *sync.Mutex
-}
+	actions ActionList
 
-func (lt *ListTable) GetButtons() map[string]string {
-	return map[string]string{
-		"E":        "Edit",
-		"D":        "Describe",
-		"L":        "Logs",
-		"X":        "eXecute",
-		"<Delete>": "Delete",
-	}
+	reloadMx *sync.Mutex
 }
 
 type ListTableHandler interface {
@@ -92,7 +81,29 @@ type ScreenHandler interface {
 	Describe(resType string, name string, namespace string)
 }
 
-func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *ListTable {
+type DropDownPanel interface {
+	ShowDropDown(x, y int)
+	HideDropDown()
+	IsDropDownVisible() bool
+}
+
+type HotKeyPanel interface {
+	IsBottomPanelVisible() bool
+	SetHotKeyPanelRect(image.Rectangle)
+}
+
+type ActionList interface {
+	DropDownPanel
+	HotKeyPanel
+
+	Draw(buf *ui.Buffer)
+	OnEvent(event *ui.Event, context []string) bool
+	OnHotKeys(event *ui.Event, context []string) bool
+	AddAction(name, hotKey string, checkable bool, onExec func([]string) bool)
+}
+
+func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, actions ActionList) *ListTable {
+
 	lt := &ListTable{
 		Block:            ui.NewBlock(),
 		RowSeparator:     false,
@@ -105,6 +116,8 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *Li
 		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
 		DrawVerticalLine: true,
 		FillRow:          true,
+
+		actions: actions,
 
 		reloadMx: &sync.Mutex{},
 	}
@@ -138,7 +151,39 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *Li
 		}
 		lt.ColumnWidths = widths
 	}
+
+	lt.initDefaultActions()
+
 	return lt
+}
+
+func (lt *ListTable) initDefaultActions() {
+	if rl, ok := lt.listHandler.(ListTableResource); ok {
+		lt.actions.AddAction("Describe", "d", false, func(item []string) bool {
+			name := item[0]
+			namespace := ""
+			if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
+				namespace = res.Namespace()
+			}
+			lt.screenHandler.Describe(rl.TypeName(), name, namespace)
+			return true
+		})
+
+		lt.actions.AddAction("Edit", "e", false, func(item []string) bool {
+			name := item[0]
+			namespace := ""
+			if rl, ok := lt.listHandler.(ListTableResourceNamespace); ok {
+				namespace = rl.Namespace()
+			}
+			lt.screenHandler.Edit(rl.TypeName(), name, namespace)
+			return true
+		})
+	}
+
+	if dl, ok := lt.listHandler.(ListTableDeletable); ok {
+		lt.actions.AddAction(strings.Repeat(string(ui.HORIZONTAL_LINE), 10), "", false, nil)
+		lt.actions.AddAction("Delete", "<Delete>", false, dl.OnDelete)
+	}
 }
 
 func (lt *ListTable) Draw(buf *ui.Buffer) {
@@ -149,6 +194,13 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 			lt.RowStyles[i] = lt.RowStyle
 		}
 	}
+
+	if lt.actions.IsBottomPanelVisible() {
+		lt.Block.Inner.Max.Y -= 2
+		lt.Block.Max.Y -= 2
+		lt.actions.SetHotKeyPanelRect(lt.Block.Bounds())
+	}
+
 	lt.Block.Draw(buf)
 
 	lt.ColumnResizer()
@@ -211,6 +263,9 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 			image.Pt(lt.Inner.Max.X-1, lt.Inner.Max.Y-1),
 		)
 	}
+
+	// draw action list
+	lt.actions.Draw(buf)
 }
 
 func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, rowStyle ui.Style, yCoordinate int) int {
@@ -283,13 +338,13 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 }
 
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
+	if lt.actions.IsDropDownVisible() {
+		return lt.actions.OnEvent(event, lt.Rows[lt.SelectedRow])
+	}
 	if len(lt.Rows) == 0 {
 		return false
 	}
-	namespace := ""
-	if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
-		namespace = res.Namespace()
-	}
+
 	switch event.ID {
 	case "<Down>", "<MouseWheelDown>":
 		lt.Down()
@@ -303,33 +358,14 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<PageUp>":
 		lt.PageUp()
 		return true
-	case "<Enter>", eventMouseLeftDouble:
+	case "<Enter>", "<MouseLeftDouble>":
 		if s, ok := lt.listHandler.(ListTableSelectable); ok {
 			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
 		}
 		return false
-	case "<Delete>":
-		if d, ok := lt.listHandler.(ListTableDeletable); ok {
-			row := lt.Rows[lt.SelectedRow]
-			return d.OnDelete(row)
-		}
-		return false
-	case "e":
-		if res, ok := lt.listHandler.(ListTableResource); ok {
-			name := res.Name(lt.Rows[lt.SelectedRow])
-			lt.screenHandler.Edit(res.TypeName(), name, namespace)
-			return true
-		}
-		return false
-	case "d":
-		if res, ok := lt.listHandler.(ListTableResource); ok {
-			name := res.Name(lt.Rows[lt.SelectedRow])
-			lt.screenHandler.Describe(res.TypeName(), name, namespace)
-			return true
-		}
-		return false
 	case "<MouseLeft>":
+		lt.actions.HideDropDown()
 		m := event.Payload.(ui.Mouse)
 		yOffset := 1
 		if lt.header != nil {
@@ -337,12 +373,14 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		lt.setCursor(m.Y - yOffset + lt.topRow)
 		return true
+	case "<MouseRight>":
+		m := event.Payload.(ui.Mouse)
+		lt.setCursor(m.Y - 2 + lt.topRow)
+		lt.actions.ShowDropDown(m.X, m.Y)
+		return true
 	}
-	if e, ok := lt.listHandler.(ListTableEventable); ok {
-		row := lt.Rows[lt.SelectedRow]
-		return e.OnEvent(event, row)
-	}
-	return false
+
+	return lt.actions.OnHotKeys(event, lt.Rows[lt.SelectedRow])
 }
 
 func (lt *ListTable) Scroll(amount int) {

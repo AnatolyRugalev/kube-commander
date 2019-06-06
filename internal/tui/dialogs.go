@@ -86,17 +86,6 @@ func (dlg *Dialog) setButtonsRect(x1, y1, x2, y2 int) {
 		dlg.Buttons[i].setRect(bx1, by1, bx2, by2)
 		left += buttonWidth + buttonMarginRight
 	}
-
-}
-
-func maxLinesWidth(arr []string) int {
-	var maxValue int
-	for i := 0; i < len(arr); i++ {
-		if len(arr[i]) > maxValue {
-			maxValue = len(arr[i])
-		}
-	}
-	return maxValue
 }
 
 func (dlg *Dialog) setRect() {

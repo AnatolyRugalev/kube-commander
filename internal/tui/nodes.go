@@ -1,11 +1,12 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strings"
 )
 
 type NodesTable struct {
@@ -20,7 +21,7 @@ func (nt *NodesTable) Name(item []string) string {
 }
 
 func NewNodesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &NodesTable{})
+	lt := widgets.NewListTable(screen, &NodesTable{}, NewActionList(false))
 	lt.Title = "Nodes"
 	return lt
 }

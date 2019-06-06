@@ -54,6 +54,7 @@ func (s *Screen) SwitchToCommand(command string) {
 }
 
 func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
+	mouseMoveEvents(false)
 	ui.Close()
 	s.handleEvents = false
 	go func() {
@@ -62,6 +63,7 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 			log.Fatalf("failed to initialize termui: %v", err)
 		}
 		s.Init()
+		mouseMoveEvents(true)
 		if err != nil {
 			onError(err)
 		}

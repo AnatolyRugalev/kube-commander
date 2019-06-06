@@ -1,10 +1,11 @@
 package widgets
 
 import (
-	"github.com/gizak/termui/v3"
 	"image"
 	"sync"
 	"time"
+
+	"github.com/gizak/termui/v3"
 )
 
 type Preloader struct {

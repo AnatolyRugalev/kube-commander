@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"strings"
 )
 
 type PVsTable struct {
@@ -29,7 +30,7 @@ func (pt *PVsTable) OnDelete(item []string) bool {
 }
 
 func NewPVsTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &PVsTable{})
+	lt := widgets.NewListTable(screen, &PVsTable{}, NewActionList(true))
 	lt.Title = "Persistent Volumes"
 	return lt
 }

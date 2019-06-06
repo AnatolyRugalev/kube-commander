@@ -11,7 +11,7 @@ type StorageClassesTable struct {
 }
 
 func NewStorageClassesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &StorageClassesTable{})
+	lt := widgets.NewListTable(screen, &StorageClassesTable{}, NewActionList(true))
 	lt.Title = "Storage Classes"
 	return lt
 }
