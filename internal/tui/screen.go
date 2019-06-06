@@ -52,6 +52,7 @@ func (s *Screen) SwitchToCommand(command string) {
 }
 
 func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
+	mouseMoveEvents(false)
 	ui.Close()
 	err := switchFunc()
 	if err := ui.Init(); err != nil {
@@ -59,6 +60,7 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 	}
 	s.Init()
 	s.Render()
+	mouseMoveEvents(true)
 	if err != nil {
 		onError(err)
 	}

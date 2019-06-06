@@ -33,7 +33,7 @@ type ListTable struct {
 	RowStyle      ui.Style
 	HeaderStyle   ui.Style
 
-	actions *ActionList
+	actions ActionList
 
 	reloadMx *sync.Mutex
 }
@@ -41,11 +41,6 @@ type ListTable struct {
 type ListTableHandler interface {
 	GetHeaderRow() []string
 	LoadData() ([][]string, error)
-}
-
-type ListTableEventable interface {
-	ListTableHandler
-	OnEvent(event *ui.Event, item []string) bool
 }
 
 type ListTableSelectable interface {
@@ -74,13 +69,27 @@ type ScreenHandler interface {
 	Describe(resType string, name string, namespace string)
 }
 
-func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *ListTable {
-	al := NewActionList()
-	al.AddAction("Add", "<Ins>", nil)
-	al.AddAction("Refresh", "", nil)
-	al.AddAction("Delete", "<Del>", nil)
-	al.AddAction("--------", "-", nil)
-	al.AddAction("Close", "", nil)
+type DropDownPanel interface {
+	ShowDropDown(x, y int)
+	HideDropDown()
+	IsDropDownVisible() bool
+}
+
+type HotKeyPanel interface {
+	IsBottomPanelVisible() bool
+	SetHotKeyPanelRect(image.Rectangle)
+}
+
+type ActionList interface {
+	DropDownPanel
+	HotKeyPanel
+
+	Draw(buf *ui.Buffer)
+	OnEvent(event *ui.Event, context []string) bool
+	OnHotKeys(event *ui.Event, context []string) bool
+}
+
+func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, actions ActionList) *ListTable {
 
 	lt := &ListTable{
 		Block:            ui.NewBlock(),
@@ -94,7 +103,7 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *Li
 		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
 		FillRow:          true,
 
-		actions: al,
+		actions: actions,
 
 		reloadMx: &sync.Mutex{},
 	}
@@ -120,6 +129,7 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler) *Li
 		}
 		lt.ColumnWidths = widths
 	}
+
 	return lt
 }
 
@@ -131,6 +141,13 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 			lt.RowStyles[i] = lt.RowStyle
 		}
 	}
+
+	if lt.actions.IsBottomPanelVisible() {
+		lt.Block.Inner.Max.Y -= 2
+		lt.Block.Max.Y -= 2
+		lt.actions.SetHotKeyPanelRect(lt.Block.Bounds())
+	}
+
 	lt.Block.Draw(buf)
 
 	lt.ColumnResizer()
@@ -180,10 +197,8 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 		)
 	}
 
-	// draw context menu
-	if lt.actions.dropDownVisible {
-		lt.actions.Draw(buf)
-	}
+	// draw action list
+	lt.actions.Draw(buf)
 }
 
 func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, rowStyle ui.Style, yCoordinate int) int {
@@ -254,8 +269,8 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 }
 
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
-	if lt.actions.dropDownVisible {
-		return lt.actions.OnEvent(event)
+	if lt.actions.IsDropDownVisible() {
+		return lt.actions.OnEvent(event, lt.Rows[lt.SelectedRow])
 	}
 	if len(lt.Rows) == 0 {
 		return false
@@ -304,21 +319,18 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		}
 		return false
 	case "<MouseLeft>":
-		lt.actions.Hide()
+		lt.actions.HideDropDown()
 		m := event.Payload.(ui.Mouse)
 		lt.setCursor(m.Y - 2 + lt.topRow)
 		return true
 	case "<MouseRight>":
 		m := event.Payload.(ui.Mouse)
 		lt.setCursor(m.Y - 2 + lt.topRow)
-		lt.actions.Show(m.X, m.Y)
+		lt.actions.ShowDropDown(m.X, m.Y)
 		return true
 	}
-	if e, ok := lt.listHandler.(ListTableEventable); ok {
-		row := lt.Rows[lt.SelectedRow]
-		return e.OnEvent(event, row)
-	}
-	return false
+
+	return lt.actions.OnHotKeys(event, lt.Rows[lt.SelectedRow])
 }
 
 func (lt *ListTable) Scroll(amount int) {

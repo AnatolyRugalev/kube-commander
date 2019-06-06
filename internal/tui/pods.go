@@ -11,7 +11,8 @@ import (
 )
 
 type PodsTable struct {
-	namespace string
+	namespace   string
+	autoRefresh bool
 }
 
 func (pt *PodsTable) TypeName() string {
@@ -27,27 +28,20 @@ func (pt *PodsTable) Namespace() string {
 }
 
 func (pt *PodsTable) OnEvent(event *termui.Event, item []string) bool {
-	switch event.ID {
-	case "l":
-		var cmd string
-		if item[2] == "Running" {
-			cmd = kube.Logs(pt.namespace, item[0], "", 1000, true)
-		} else {
-			cmd = kube.Viewer(kube.Logs(pt.namespace, item[0], "", 1000, false))
-		}
-		screen.SwitchToCommand(cmd)
-		return true
-	case "x":
-		screen.SwitchToCommand(kube.Exec(pt.namespace, item[0], "", "/bin/sh -- -c '/bin/bash || /bin/sh'"))
-		return true
-	}
 	return false
 }
 
 func NewPodsTable(namespace string) *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &PodsTable{
+	pt := &PodsTable{
 		namespace: namespace,
-	})
+	}
+	al := NewActionList(true)
+	al.AddAction("Exec", "x", false, pt.OnExec)
+	al.AddAction("Logs/Viewer", "l", false, pt.OnLogsViewer)
+	al.AddAction("___________", "", false, nil)
+	al.AddAction("Delete", "<Delete>", false, pt.OnDelete)
+
+	lt := widgets.NewListTable(screen, pt, al)
 	lt.Title = "Pods <" + namespace + ">"
 	return lt
 }
@@ -89,6 +83,22 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 		fmt.Sprintf("%d", restarts),
 		Age(pod.CreationTimestamp.Time),
 	}
+}
+
+func (pt *PodsTable) OnExec(item []string) bool {
+	screen.SwitchToCommand(kube.Exec(pt.namespace, item[0], "", "/bin/sh -- -c '/bin/bash || /bin/sh'"))
+	return true
+}
+
+func (pt *PodsTable) OnLogsViewer(item []string) bool {
+	var cmd string
+	if item[2] == "Running" {
+		cmd = kube.Logs(pt.namespace, item[0], "", 1000, true)
+	} else {
+		cmd = kube.Viewer(kube.Logs(pt.namespace, item[0], "", 1000, false))
+	}
+	screen.SwitchToCommand(cmd)
+	return true
 }
 
 func (pt *PodsTable) OnDelete(item []string) bool {

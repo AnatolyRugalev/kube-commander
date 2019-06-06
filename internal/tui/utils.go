@@ -19,6 +19,16 @@ func Age(startTime time.Time) string {
 	return time.Since(startTime).Round(time.Second).String()
 }
 
+func maxLinesWidth(arr []string) int {
+	var maxValue int
+	for i := 0; i < len(arr); i++ {
+		if len(arr[i]) > maxValue {
+			maxValue = len(arr[i])
+		}
+	}
+	return maxValue
+}
+
 func mouseMoveEvents(enable bool) {
 	if enable {
 		fmt.Print(tiMouseMoveEnable)
