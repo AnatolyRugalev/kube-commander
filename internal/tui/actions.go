@@ -210,12 +210,16 @@ func (a *ActionList) OnEvent(event *termui.Event, context []string) bool {
 			return true
 		}
 		return false
-	case "<MouseLeft>", "<Enter>":
+	case "<MouseLeft>":
 		a.HideDropDown()
 		m := event.Payload.(ui.Mouse)
 		if a.locateAndFocus(m.X, m.Y) {
 			a.onExecute(context)
 		}
+		return true
+	case "<Enter>":
+		a.HideDropDown()
+		a.onExecute(context)
 		return true
 	}
 

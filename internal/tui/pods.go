@@ -11,8 +11,7 @@ import (
 )
 
 type PodsTable struct {
-	namespace   string
-	autoRefresh bool
+	namespace string
 }
 
 func (pt *PodsTable) TypeName() string {
@@ -38,9 +37,6 @@ func NewPodsTable(namespace string) *widgets.ListTable {
 	al := NewActionList(true)
 	al.AddAction("Exec", "x", false, pt.OnExec)
 	al.AddAction("Logs/Viewer", "l", false, pt.OnLogsViewer)
-	al.AddAction("___________", "", false, nil)
-	al.AddAction("Delete", "<Delete>", false, pt.OnDelete)
-
 	lt := widgets.NewListTable(screen, pt, al)
 	lt.Title = "Pods <" + namespace + ">"
 	return lt

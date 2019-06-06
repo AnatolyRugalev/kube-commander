@@ -2,15 +2,12 @@ package widgets
 
 import (
 	"image"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	ui "github.com/gizak/termui/v3"
-)
-
-const (
-	eventMouseLeftDouble = "<MouseLeftDouble>"
 )
 
 type ListTable struct {
@@ -102,6 +99,7 @@ type ActionList interface {
 	Draw(buf *ui.Buffer)
 	OnEvent(event *ui.Event, context []string) bool
 	OnHotKeys(event *ui.Event, context []string) bool
+	AddAction(name, hotKey string, checkable bool, onExec func([]string) bool)
 }
 
 func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, actions ActionList) *ListTable {
@@ -154,7 +152,38 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, act
 		lt.ColumnWidths = widths
 	}
 
+	lt.initDefaultActions(screenHandler, listHandler)
+
 	return lt
+}
+
+func (lt *ListTable) initDefaultActions(screenHandler ScreenHandler, listHandler ListTableHandler) {
+	if rl, ok := listHandler.(ListTableResource); ok {
+		lt.actions.AddAction("Describe", "d", false, func(item []string) bool {
+			name := item[0]
+			namespace := ""
+			if res, ok := listHandler.(ListTableResourceNamespace); ok {
+				namespace = res.Namespace()
+			}
+			lt.screenHandler.Describe(rl.TypeName(), name, namespace)
+			return true
+		})
+
+		lt.actions.AddAction("Edit", "e", false, func(item []string) bool {
+			name := item[0]
+			namespace := ""
+			if rl, ok := listHandler.(ListTableResourceNamespace); ok {
+				namespace = rl.Namespace()
+			}
+			lt.screenHandler.Edit(rl.TypeName(), name, namespace)
+			return true
+		})
+	}
+
+	if dl, ok := listHandler.(ListTableDeletable); ok {
+		lt.actions.AddAction(strings.Repeat(string(ui.HORIZONTAL_LINE), 10), "", false, nil)
+		lt.actions.AddAction("Delete", "<Delete>", false, dl.OnDelete)
+	}
 }
 
 func (lt *ListTable) Draw(buf *ui.Buffer) {
@@ -315,10 +344,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	if len(lt.Rows) == 0 {
 		return false
 	}
-	namespace := ""
-	if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
-		namespace = res.Namespace()
-	}
+
 	switch event.ID {
 	case "<Down>", "<MouseWheelDown>":
 		lt.Down()
@@ -332,30 +358,10 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<PageUp>":
 		lt.PageUp()
 		return true
-	case "<Enter>", eventMouseLeftDouble:
+	case "<Enter>", "<MouseLeftDouble>":
 		if s, ok := lt.listHandler.(ListTableSelectable); ok {
 			row := lt.Rows[lt.SelectedRow]
 			return s.OnSelect(row)
-		}
-		return false
-	case "<Delete>":
-		if d, ok := lt.listHandler.(ListTableDeletable); ok {
-			row := lt.Rows[lt.SelectedRow]
-			return d.OnDelete(row)
-		}
-		return false
-	case "e":
-		if res, ok := lt.listHandler.(ListTableResource); ok {
-			name := res.Name(lt.Rows[lt.SelectedRow])
-			lt.screenHandler.Edit(res.TypeName(), name, namespace)
-			return true
-		}
-		return false
-	case "d":
-		if res, ok := lt.listHandler.(ListTableResource); ok {
-			name := res.Name(lt.Rows[lt.SelectedRow])
-			lt.screenHandler.Describe(res.TypeName(), name, namespace)
-			return true
 		}
 		return false
 	case "<MouseLeft>":

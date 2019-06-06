@@ -21,8 +21,7 @@ func (nt *NodesTable) Name(item []string) string {
 }
 
 func NewNodesTable() *widgets.ListTable {
-	al := NewActionList(false)
-	lt := widgets.NewListTable(screen, &NodesTable{}, al)
+	lt := widgets.NewListTable(screen, &NodesTable{}, NewActionList(false))
 	lt.Title = "Nodes"
 	return lt
 }

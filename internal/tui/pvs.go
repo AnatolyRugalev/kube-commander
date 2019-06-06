@@ -30,11 +30,7 @@ func (pt *PVsTable) OnDelete(item []string) bool {
 }
 
 func NewPVsTable() *widgets.ListTable {
-	pt := &PVsTable{}
-	al := NewActionList(true)
-	al.AddAction("___________", "", false, nil)
-	al.AddAction("Delete", "<Delete>", false, pt.OnDelete)
-	lt := widgets.NewListTable(screen, pt, al)
+	lt := widgets.NewListTable(screen, &PVsTable{}, NewActionList(true))
 	lt.Title = "Persistent Volumes"
 	return lt
 }
