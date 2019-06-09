@@ -18,11 +18,11 @@ func (pt *PVCsTable) Namespace() string {
 }
 
 func (pt *PVCsTable) DeleteDescription(idx int, row widgets.ListRow) string {
-	return "Persistent Volume " + row[0]
+	return "Persistent Volume Claim " + row[0]
 }
 
 func (pt *PVCsTable) Delete(idx int, row widgets.ListRow) error {
-	return kube.GetClient().CoreV1().PersistentVolumes().Delete(row[0], metav1.NewDeleteOptions(0))
+	return kube.GetClient().CoreV1().PersistentVolumeClaims(pt.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
 func (pt *PVCsTable) GetActions() []*widgets.ListAction {
@@ -30,7 +30,7 @@ func (pt *PVCsTable) GetActions() []*widgets.ListAction {
 }
 
 func (pt *PVCsTable) TypeName() string {
-	return "pv"
+	return "persistentvolumeclaims"
 }
 
 func (pt *PVCsTable) Name(row widgets.ListRow) string {
@@ -41,7 +41,7 @@ func NewPVCsTable(namespace string) *widgets.DataTable {
 	lt := widgets.NewDataTable(&PVCsTable{
 		namespace: namespace,
 	}, screen)
-	lt.Title = "Persistent Volumes"
+	lt.Title = "Persistent Volume Claims"
 	return lt
 }
 

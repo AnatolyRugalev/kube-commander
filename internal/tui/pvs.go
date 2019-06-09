@@ -26,7 +26,7 @@ func (pt *PVsTable) GetActions() []*widgets.ListAction {
 }
 
 func (pt *PVsTable) TypeName() string {
-	return "pv"
+	return "persistentvolumes"
 }
 
 func (pt *PVsTable) Name(row widgets.ListRow) string {
