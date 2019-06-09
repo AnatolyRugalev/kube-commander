@@ -42,6 +42,12 @@ var menuItems = []*menuItem{
 	{"Daemon Sets", itemTypeNamespace, func(namespace string) Pane {
 		return NewDaemonSetsTable(namespace)
 	}},
+	{"Jobs", itemTypeNamespace, func(namespace string) Pane {
+		return NewJobsTable(namespace)
+	}},
+	{"Cron Jobs", itemTypeNamespace, func(namespace string) Pane {
+		return NewCronJobsTable(namespace)
+	}},
 	{"Pods", itemTypeNamespace, func(namespace string) Pane {
 		return NewPodsTable(namespace)
 	}},
