@@ -25,7 +25,7 @@ func Exec(namespace string, pod string, container string, command string) string
 	if container != "" {
 		container = "-c " + container
 	}
-	return kubectlNs(namespace, fmt.Sprintf("exec -ti%s %s %s", container, pod, command))
+	return kubectlNs(namespace, fmt.Sprintf("exec -ti %s %s %s", container, pod, command))
 }
 
 func Logs(namespace string, pod string, container string, tail int, follow bool) string {
