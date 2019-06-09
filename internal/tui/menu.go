@@ -36,6 +36,9 @@ var menuItems = []*menuItem{
 	{"Deployments", itemTypeNamespace, func(namespace string) Pane {
 		return NewDeploymentsTable(namespace)
 	}},
+	{"Stateful Sets", itemTypeNamespace, func(namespace string) Pane {
+		return NewStatefulSetsTable(namespace)
+	}},
 	{"Pods", itemTypeNamespace, func(namespace string) Pane {
 		return NewPodsTable(namespace)
 	}},
