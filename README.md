@@ -1,6 +1,6 @@
 # Kube Commander
 
-![Kube Commander](docs/screenshot.png)
+![Kube Commander](docs/demo.gif)
 
 ## TUI
 
