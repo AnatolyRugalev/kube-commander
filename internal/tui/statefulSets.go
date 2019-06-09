@@ -14,7 +14,7 @@ type StatefulSetsTable struct {
 }
 
 func (st *StatefulSetsTable) Delete(idx int, row widgets.ListRow) error {
-	return kube.GetClient().CoreV1().Pods(st.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
+	return kube.GetClient().AppsV1().StatefulSets(st.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
 func (st *StatefulSetsTable) DeleteDescription(idx int, row widgets.ListRow) string {
@@ -46,10 +46,6 @@ func NewStatefulSetsTable(namespace string) *widgets.DataTable {
 	return lt
 }
 
-func (st *StatefulSetsTable) GetHeaderRow() widgets.ListRow {
-	return widgets.ListRow{"NAME", "DESIRED", "CURRENT", "AGE"}
-}
-
 func (st *StatefulSetsTable) LoadData() ([]widgets.ListRow, error) {
 	sets, err := kube.GetClient().AppsV1().StatefulSets(st.namespace).List(metav1.ListOptions{})
 	if err != nil {
@@ -62,8 +58,11 @@ func (st *StatefulSetsTable) LoadData() ([]widgets.ListRow, error) {
 	return rows, nil
 }
 
-func (st *StatefulSetsTable) newRow(set v1.StatefulSet) []string {
+func (st *StatefulSetsTable) GetHeaderRow() widgets.ListRow {
+	return widgets.ListRow{"NAME", "DESIRED", "CURRENT", "AGE"}
+}
 
+func (st *StatefulSetsTable) newRow(set v1.StatefulSet) []string {
 	return widgets.ListRow{
 		set.Name,
 		fmt.Sprintf("%d", *set.Spec.Replicas),

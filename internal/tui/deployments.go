@@ -14,7 +14,7 @@ type DeploymentsTable struct {
 }
 
 func (dt *DeploymentsTable) Delete(idx int, row widgets.ListRow) error {
-	return kube.GetClient().CoreV1().Pods(dt.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
+	return kube.GetClient().AppsV1().Deployments(dt.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
 func (dt *DeploymentsTable) DeleteDescription(idx int, row widgets.ListRow) string {
