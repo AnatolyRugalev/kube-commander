@@ -11,15 +11,7 @@ type NamespacesTable struct {
 }
 
 func (nt *NamespacesTable) GetActions() []*widgets.ListAction {
-	return append(GetDefaultActions(nt), &widgets.ListAction{
-		Name:          "Switch to",
-		HotKey:        "s",
-		HotKeyDisplay: "S",
-		Func: func(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
-			screen.SetNamespace(row[0])
-			return true
-		},
-	})
+	return GetDefaultActions(nt)
 }
 
 func (nt *NamespacesTable) DeleteDescription(idx int, row widgets.ListRow) string {
