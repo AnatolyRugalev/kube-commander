@@ -51,6 +51,9 @@ var menuItems = []*menuItem{
 	{"Pods", itemTypeNamespace, func(namespace string) Pane {
 		return NewPodsTable(namespace)
 	}},
+	{"PVCs", itemTypeNamespace, func(namespace string) Pane {
+		return NewPVCsTable(namespace)
+	}},
 }
 
 type MenuList struct {
