@@ -154,9 +154,13 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 		}
 	}
 
+	offset := 1
+	if len(lt.header) == 0 {
+		offset = 0
+	}
 	// adjusts view into widget
-	if lt.selectedRow >= lt.Inner.Dy()+lt.topRow {
-		viewport := lt.Inner.Dy() - 2
+	if lt.selectedRow >= lt.Inner.Dy()+lt.topRow-offset {
+		viewport := lt.Inner.Dy() - 1 - offset
 		lt.topRow = lt.selectedRow - viewport
 	} else if lt.selectedRow < lt.topRow {
 		lt.topRow = lt.selectedRow
