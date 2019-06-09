@@ -10,51 +10,55 @@ import (
 type NamespacesTable struct {
 }
 
+func (nt *NamespacesTable) GetActions() []*widgets.ListAction {
+	return GetDefaultActions(nt)
+}
+
+func (nt *NamespacesTable) DeleteDescription(row widgets.ListRow) string {
+	return "namespace " + row[0]
+}
+
+func (nt *NamespacesTable) Delete(row widgets.ListRow) error {
+	return kube.GetClient().CoreV1().Namespaces().Delete(row[0], metav1.NewDeleteOptions(0))
+}
+
 func (nt *NamespacesTable) TypeName() string {
 	return "namespace"
 }
 
-func (nt *NamespacesTable) Name(item []string) string {
-	return item[0]
+func (nt *NamespacesTable) Name(row widgets.ListRow) string {
+	return row[0]
 }
 
-func (nt *NamespacesTable) OnDelete(item []string) bool {
-	name := item[0]
-	ShowConfirmDialog("Are you sure you want to delete an ENTIRE NAMESPACE "+name+"?", func() error {
-		return kube.GetClient().CoreV1().Namespaces().Delete(name, metav1.NewDeleteOptions(0))
-	})
-	return true
-}
-
-func NewNamespacesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &NamespacesTable{}, NewActionList(true))
+func NewNamespacesTable() *widgets.DataTable {
+	lt := widgets.NewDataTable(&NamespacesTable{}, screen)
 	lt.Title = "Namespaces"
 	return lt
 }
 
-func (nt *NamespacesTable) GetHeaderRow() []string {
-	return []string{"NAME", "STATUS", "AGE"}
+func (nt *NamespacesTable) GetHeaderRow() widgets.ListRow {
+	return widgets.ListRow{"NAME", "STATUS", "AGE"}
 }
 
-func (nt *NamespacesTable) OnSelect(item []string) bool {
-	screen.LoadRightPane(NewPodsTable(item[0]))
+func (nt *NamespacesTable) OnSelect(row widgets.ListRow) bool {
+	screen.LoadRightPane(NewPodsTable(row[0]))
 	return true
 }
 
-func (nt *NamespacesTable) LoadData() ([][]string, error) {
+func (nt *NamespacesTable) LoadData() ([]widgets.ListRow, error) {
 	namespaces, err := kube.GetClient().CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var rows [][]string
+	var rows []widgets.ListRow
 	for _, ns := range namespaces.Items {
 		rows = append(rows, nt.newRow(ns))
 	}
 	return rows, nil
 }
 
-func (nt *NamespacesTable) newRow(ns v1.Namespace) []string {
-	return []string{
+func (nt *NamespacesTable) newRow(ns v1.Namespace) widgets.ListRow {
+	return widgets.ListRow{
 		ns.Name,
 		string(ns.Status.Phase),
 		Age(ns.CreationTimestamp.Time),

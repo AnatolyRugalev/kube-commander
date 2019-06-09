@@ -10,8 +10,20 @@ import (
 type StorageClassesTable struct {
 }
 
-func NewStorageClassesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &StorageClassesTable{}, NewActionList(true))
+func (st *StorageClassesTable) DeleteDescription(row widgets.ListRow) string {
+	return "Storage Class " + row[0]
+}
+
+func (st *StorageClassesTable) Delete(row widgets.ListRow) error {
+	return kube.GetClient().StorageV1().StorageClasses().Delete(row[0], metav1.NewDeleteOptions(0))
+}
+
+func (st *StorageClassesTable) GetActions() []*widgets.ListAction {
+	return GetDefaultActions(st)
+}
+
+func NewStorageClassesTable() *widgets.DataTable {
+	lt := widgets.NewDataTable(&StorageClassesTable{}, screen)
 	lt.Title = "Storage Classes"
 	return lt
 }
@@ -20,40 +32,32 @@ func (st *StorageClassesTable) TypeName() string {
 	return "storageclass"
 }
 
-func (st *StorageClassesTable) Name(item []string) string {
-	return item[0]
+func (st *StorageClassesTable) Name(row widgets.ListRow) string {
+	return row[0]
 }
 
-func (st *StorageClassesTable) GetHeaderRow() []string {
-	return []string{"NAME", "DEFAULT", "PROVISIONER", "AGE"}
+func (st *StorageClassesTable) GetHeaderRow() widgets.ListRow {
+	return widgets.ListRow{"NAME", "DEFAULT", "PROVISIONER", "AGE"}
 }
 
-func (st *StorageClassesTable) OnDelete(item []string) bool {
-	name := item[0]
-	ShowConfirmDialog("Are you sure you want to delete STORAGE CLASS "+name+"?", func() error {
-		return kube.GetClient().StorageV1().StorageClasses().Delete(name, metav1.NewDeleteOptions(0))
-	})
-	return true
-}
-
-func (st *StorageClassesTable) LoadData() ([][]string, error) {
+func (st *StorageClassesTable) LoadData() ([]widgets.ListRow, error) {
 	storageClasses, err := kube.GetClient().StorageV1().StorageClasses().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var rows [][]string
+	var rows []widgets.ListRow
 	for _, sc := range storageClasses.Items {
 		rows = append(rows, st.newRow(sc))
 	}
 	return rows, nil
 }
 
-func (st *StorageClassesTable) newRow(sc storagev1.StorageClass) []string {
+func (st *StorageClassesTable) newRow(sc storagev1.StorageClass) widgets.ListRow {
 	def := "No"
 	if d, ok := sc.Annotations["storageclass.kubernetes.io/is-default-class"]; ok && d == "true" {
 		def = "Yes"
 	}
-	return []string{
+	return widgets.ListRow{
 		sc.Name,
 		def,
 		sc.Provisioner,

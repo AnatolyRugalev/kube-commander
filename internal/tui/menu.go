@@ -32,24 +32,20 @@ var menuItems = []*menuItem{
 }
 
 func NewMenuList() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &MenuList{}, NewActionList(false))
+	var rows []widgets.ListRow
+	for _, item := range menuItems {
+		rows = append(rows, widgets.ListRow{item.name})
+	}
+	lt := widgets.NewListTable(rows, &MenuList{}, nil)
 	lt.Title = "Cluster"
-	_ = lt.Reload()
+	lt.IsContext = true
 	return lt
 }
 
-func (ml *MenuList) LoadData() ([][]string, error) {
-	var items [][]string
-	for _, item := range menuItems {
-		items = append(items, []string{item.name})
-	}
-	return items, nil
-}
-
-func (ml *MenuList) OnCursorChange(item []string) bool {
+func (ml *MenuList) OnCursorChange(row widgets.ListRow) bool {
 	var menuItem *menuItem
 	for _, i := range menuItems {
-		if i.name == item[0] {
+		if i.name == row[0] {
 			menuItem = i
 			break
 		}
@@ -62,7 +58,7 @@ func (ml *MenuList) OnCursorChange(item []string) bool {
 	return true
 }
 
-func (ml *MenuList) OnSelect(item []string) bool {
+func (ml *MenuList) OnSelect(row widgets.ListRow) bool {
 	if ml.selectedItem != nil {
 		screen.Focus(ml.selectedItem)
 		return true

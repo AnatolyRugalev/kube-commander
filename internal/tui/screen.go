@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	ui "github.com/gizak/termui/v3"
 	"github.com/pkg/errors"
@@ -16,7 +15,8 @@ import (
 
 type Screen struct {
 	*ui.Grid
-	menu *widgets.ListTable
+	menu    *widgets.ListTable
+	hotkeys *widgets.HotKeysBar
 
 	popupM *sync.Mutex
 	popup  ui.Drawable
@@ -37,6 +37,7 @@ type Screen struct {
 func NewScreen() *Screen {
 	s := &Screen{
 		Grid:            ui.NewGrid(),
+		hotkeys:         widgets.NewHotKeysBar(),
 		popupM:          &sync.Mutex{},
 		rightPaneStackM: &sync.Mutex{},
 		focusM:          &sync.Mutex{},
@@ -67,11 +68,19 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 		if err != nil {
 			onError(err)
 		}
-		s.Render()
+		s.RenderAll()
 	}()
 }
 
 func (s *Screen) Render() {
+	if s.popup != nil {
+		ui.Render(s.popup)
+	} else {
+		ui.Render(s)
+	}
+}
+
+func (s *Screen) RenderAll() {
 	ui.Render(s)
 	if s.popup != nil {
 		ui.Render(s.popup)
@@ -102,10 +111,14 @@ func (s *Screen) setGrid() {
 	}
 
 	menuRatio := 17.0 / float64(s.Rectangle.Max.X)
+	hotkeysHeight := 1.0 / float64(s.Rectangle.Max.Y)
 	s.Set(
-		ui.NewRow(1.0,
+		ui.NewRow(1.0-hotkeysHeight,
 			ui.NewCol(menuRatio, s.menu),
 			ui.NewCol(1-menuRatio, right),
+		),
+		ui.NewRow(hotkeysHeight,
+			ui.NewCol(1.0, s.hotkeys),
 		),
 	)
 	s.rightPaneStackM.Unlock()
@@ -123,6 +136,7 @@ func (s *Screen) Focus(focusable Pane) {
 	if f, ok := s.focus.(Focusable); ok {
 		f.OnFocusIn()
 	}
+	s.updateHotkeys()
 	s.focusM.Unlock()
 }
 
@@ -140,6 +154,7 @@ func (s *Screen) popFocus() bool {
 		f.OnFocusIn()
 	}
 	s.focusStack = s.focusStack[1:]
+	s.updateHotkeys()
 	return true
 }
 
@@ -160,15 +175,24 @@ func (s *Screen) popRightPane() Pane {
 	return next
 }
 
+func (s *Screen) updateHotkeys() {
+	s.hotkeys.Clear()
+	s.hotkeys.SetHotKey(1, "Esc", "Back")
+	s.hotkeys.SetHotKey(10, "Q", "Quit")
+	if a, ok := s.focus.(widgets.HasHotKeys); ok {
+		for i, key := range a.GetHotKeys() {
+			s.hotkeys.SetHotKey(i+2, key.Key, key.Name)
+		}
+	}
+}
+
 func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 	switch event.ID {
-	case "q", "<C-c>":
-		return false, true
 	case "<Resize>":
 		payload := event.Payload.(ui.Resize)
 		s.SetRect(0, 0, payload.Width, payload.Height)
 		ui.Clear()
-		return true, false
+		return true, true
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
@@ -195,13 +219,14 @@ func (s *Screen) mouseLeftEvent(event *ui.Event) (bool, bool) {
 	s.lastLeftClick = time.Now()
 	s.clickMux.Unlock()
 	m := event.Payload.(ui.Mouse)
-	if s.locateAndFocus(m.X, m.Y) {
+	found, redraw := s.locateAndFocus(m.X, m.Y)
+	if found {
 		if doubleClick != nil {
 			return s.focus.OnEvent(doubleClick), false
 		}
 		return s.focus.OnEvent(event), false
 	}
-	return false, false
+	return redraw, false
 }
 
 func (s *Screen) escape() bool {
@@ -227,32 +252,40 @@ func (s *Screen) setRightPane(pane Pane) {
 	s.rightPaneStackM.Unlock()
 }
 
-func (s *Screen) locateAndFocus(x, y int) bool {
+func (s *Screen) locateAndFocus(x, y int) (bool, bool) {
 	rect := image.Rect(x, y, x+1, y+1)
 	if rect.In(screen.focus.Bounds()) {
-		return true
+		return true, true
 	}
-	if s.popup == nil {
+	if s.popup != nil {
+		popupRect := s.popup.GetRect()
+		if !rect.In(popupRect.Bounds()) {
+			s.popFocus()
+			s.removePopup()
+			return false, true
+		} else {
+			return true, true
+		}
+	} else {
 		if rect.In(s.menu.Bounds()) {
-			//
 			s.popFocus()
 			s.Focus(s.menu)
-			return true
+			return true, true
 		}
 
 		s.rightPaneStackM.Lock()
 		defer s.rightPaneStackM.Unlock()
 		if len(s.rightPaneStack) == 0 {
-			return false
+			return false, false
 		}
 		rightPaneCurrent := s.rightPaneStack[len(s.rightPaneStack)-1]
 		if rect.In(rightPaneCurrent.Bounds()) {
 			s.popFocus()
 			s.Focus(rightPaneCurrent)
-			return true
+			return true, true
 		}
 	}
-	return false
+	return false, false
 }
 
 func (s *Screen) appendRightPane(pane Pane) {
@@ -325,22 +358,6 @@ func (s *Screen) removePopup() {
 	s.popupM.Unlock()
 }
 
-func (s *Screen) Edit(resType string, name string, namespace string) {
-	if namespace == "" {
-		screen.SwitchToCommand(kube.Edit(resType, name))
-	} else {
-		screen.SwitchToCommand(kube.EditNs(namespace, resType, name))
-	}
-}
-
-func (s *Screen) Describe(resType string, name string, namespace string) {
-	if namespace == "" {
-		screen.SwitchToCommand(kube.Viewer(kube.Describe(resType, name)))
-	} else {
-		screen.SwitchToCommand(kube.Viewer(kube.DescribeNs(namespace, resType, name)))
-	}
-}
-
 func (s *Screen) Run() {
 	uiEvents := ui.PollEvents()
 	for {
@@ -349,11 +366,13 @@ func (s *Screen) Run() {
 			if !s.handleEvents {
 				continue
 			}
-			redraw, exit := s.onEvent(&e)
-			if exit {
+			if e.ID == "<C-c>" || e.ID == "q" {
 				return
 			}
-			if redraw {
+			redraw, redrawAll := s.onEvent(&e)
+			if redrawAll {
+				s.RenderAll()
+			} else if redraw {
 				s.Render()
 			}
 		}

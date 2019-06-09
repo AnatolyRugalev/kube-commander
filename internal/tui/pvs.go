@@ -13,45 +13,49 @@ import (
 type PVsTable struct {
 }
 
+func (pt *PVsTable) DeleteDescription(row widgets.ListRow) string {
+	return "Persistent Volume " + row[0]
+}
+
+func (pt *PVsTable) Delete(row widgets.ListRow) error {
+	return kube.GetClient().CoreV1().PersistentVolumes().Delete(row[0], metav1.NewDeleteOptions(0))
+}
+
+func (pt *PVsTable) GetActions() []*widgets.ListAction {
+	return GetDefaultActions(pt)
+}
+
 func (pt *PVsTable) TypeName() string {
 	return "pv"
 }
 
-func (pt *PVsTable) Name(item []string) string {
-	return item[0]
+func (pt *PVsTable) Name(row widgets.ListRow) string {
+	return row[0]
 }
 
-func (pt *PVsTable) OnDelete(item []string) bool {
-	name := item[0]
-	ShowConfirmDialog("Are you sure you want to delete a PERSISTENT VOLUME "+name+" WITH ITS DATA?", func() error {
-		return kube.GetClient().CoreV1().PersistentVolumes().Delete(name, metav1.NewDeleteOptions(0))
-	})
-	return true
-}
-
-func NewPVsTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &PVsTable{}, NewActionList(true))
+func NewPVsTable() *widgets.DataTable {
+	lt := widgets.NewDataTable(&PVsTable{}, screen)
 	lt.Title = "Persistent Volumes"
 	return lt
 }
 
-func (pt *PVsTable) GetHeaderRow() []string {
-	return []string{"NAME", "CAPACITY", "ACCESS MODES", "RECLAIM POLICY", "STATUS", "CLAIM", "STORAGECLASS", "REASON", "AGE"}
+func (pt *PVsTable) GetHeaderRow() widgets.ListRow {
+	return widgets.ListRow{"NAME", "CAPACITY", "ACCESS MODES", "RECLAIM POLICY", "STATUS", "CLAIM", "STORAGECLASS", "REASON", "AGE"}
 }
 
-func (pt *PVsTable) LoadData() ([][]string, error) {
+func (pt *PVsTable) LoadData() ([]widgets.ListRow, error) {
 	pvs, err := kube.GetClient().CoreV1().PersistentVolumes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var rows [][]string
+	var rows []widgets.ListRow
 	for _, pv := range pvs.Items {
 		rows = append(rows, pt.newRow(pv))
 	}
 	return rows, nil
 }
 
-func (pt *PVsTable) newRow(pv v1.PersistentVolume) []string {
+func (pt *PVsTable) newRow(pv v1.PersistentVolume) widgets.ListRow {
 	var accessModes []string
 	for _, mode := range pv.Spec.AccessModes {
 		switch mode {
@@ -68,7 +72,7 @@ func (pt *PVsTable) newRow(pv v1.PersistentVolume) []string {
 		claim = fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
 	}
 	capacity := pv.Spec.Capacity["storage"]
-	return []string{
+	return widgets.ListRow{
 		pv.Name,
 		capacity.String(),
 		strings.Join(accessModes, ","),

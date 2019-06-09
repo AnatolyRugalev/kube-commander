@@ -35,6 +35,6 @@ func Start() {
 	screen.Focus(menuList)
 	screen.Focus(namespaces)
 	screen.ReplaceRightPane(namespaces)
-	screen.Render()
+	screen.RenderAll()
 	screen.Run()
 }

@@ -16,33 +16,37 @@ func (nt *NodesTable) TypeName() string {
 	return "node"
 }
 
-func (nt *NodesTable) Name(item []string) string {
-	return item[0]
+func (nt *NodesTable) Name(row widgets.ListRow) string {
+	return row[0]
 }
 
-func NewNodesTable() *widgets.ListTable {
-	lt := widgets.NewListTable(screen, &NodesTable{}, NewActionList(false))
+func (nt *NodesTable) GetActions() []*widgets.ListAction {
+	return GetDefaultActions(nt)
+}
+
+func NewNodesTable() *widgets.DataTable {
+	lt := widgets.NewDataTable(&NodesTable{}, screen)
 	lt.Title = "Nodes"
 	return lt
 }
 
-func (nt *NodesTable) GetHeaderRow() []string {
-	return []string{"NAME", "STATUS", "ROLES", "AGE", "VERSION"}
+func (nt *NodesTable) GetHeaderRow() widgets.ListRow {
+	return widgets.ListRow{"NAME", "STATUS", "ROLES", "AGE", "VERSION"}
 }
 
-func (nt *NodesTable) LoadData() ([][]string, error) {
+func (nt *NodesTable) LoadData() ([]widgets.ListRow, error) {
 	namespaces, err := kube.GetClient().CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var rows [][]string
+	var rows []widgets.ListRow
 	for _, ns := range namespaces.Items {
 		rows = append(rows, nt.newRow(ns))
 	}
 	return rows, nil
 }
 
-func (nt *NodesTable) newRow(n v1.Node) []string {
+func (nt *NodesTable) newRow(n v1.Node) widgets.ListRow {
 	var roles []string
 	for l := range n.Labels {
 		if strings.HasPrefix(l, "node-role.kubernetes.io/") {
@@ -60,7 +64,7 @@ func (nt *NodesTable) newRow(n v1.Node) []string {
 		}
 	}
 
-	return []string{
+	return widgets.ListRow{
 		n.Name,
 		strings.Join(conditions, ","),
 		strings.Join(roles, ","),

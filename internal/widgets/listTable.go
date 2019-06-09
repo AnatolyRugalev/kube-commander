@@ -2,135 +2,105 @@ package widgets
 
 import (
 	"image"
-	"strings"
-	"sync"
 	"unicode/utf8"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	ui "github.com/gizak/termui/v3"
 )
 
+type ListRow []string
+
 type ListTable struct {
 	*ui.Block
-	Rows             [][]string
-	ColumnWidths     []int
-	RowSeparator     bool
-	TextAlignment    ui.Alignment
-	RowStyles        map[int]ui.Style
-	FillRow          bool
-	topRow           int
-	SelectedRowStyle ui.Style
-	SelectedRow      int
-	DrawVerticalLine bool
+	rows         []ListRow
+	header       ListRow
+	columnWidths []int
+	topRow       int
+	selectedRow  int
 
 	// ColumnResizer is called on each Draw. Can be used for custom column sizing.
 	ColumnResizer func()
 
-	listHandler   ListTableHandler
-	header        ListTableHandlerWithHeader
+	eventHandler  ListTableHandler
 	screenHandler ScreenHandler
-	RowStyle      ui.Style
-	HeaderStyle   ui.Style
 
-	actions ActionList
+	RowStyles        map[int]ui.Style
+	RowStyle         ui.Style
+	SelectedRowStyle ui.Style
+	HeaderStyle      ui.Style
+	RowSeparator     bool
+	TextAlignment    ui.Alignment
+	FillRow          bool
+	DrawVerticalLine bool
 
-	reloadMx *sync.Mutex
+	IsContext bool
+}
+
+type ActionFunc func(handler ListTableHandler, row ListRow) bool
+
+type ListAction struct {
+	Name          string
+	HotKey        string
+	HotKeyDisplay string
+	Func          ActionFunc
 }
 
 type ListTableHandler interface {
-	LoadData() ([][]string, error)
+}
+
+type ScreenHandler interface {
+	ShowActionsContextMenu(listHandler ListTableHandler, actions []*ListAction, selectedRow ListRow, mouse ui.Mouse)
 }
 
 type ListTableHandlerWithHeader interface {
-	GetHeaderRow() []string
+	ListTableHandler
+	GetHeaderRow() ListRow
+}
+
+type ListTableHandlerWithActions interface {
+	ListTableHandler
+	GetActions() []*ListAction
 }
 
 type ListTableEventable interface {
 	ListTableHandler
-	OnEvent(event *ui.Event, item []string) bool
-}
-
-type ListTableSelectable interface {
-	ListTableHandler
-	OnSelect(item []string) bool
+	OnEvent(event *ui.Event, row ListRow) bool
 }
 
 type ListTableCursorChangable interface {
 	ListTableHandler
-	OnCursorChange(item []string) bool
+	OnCursorChange(row ListRow) bool
 }
 
-type ListTableDeletable interface {
+type ListTableSelectable interface {
 	ListTableHandler
-	OnDelete(item []string) bool
+	OnSelect(row ListRow) bool
 }
 
-type ListTableResource interface {
-	ListTableHandler
-	TypeName() string
-	Name(item []string) string
-}
-
-type ListTableResourceNamespace interface {
-	ListTableResource
-	Namespace() string
-}
-
-type ScreenHandler interface {
-	Edit(resType string, name string, namespace string)
-	Describe(resType string, name string, namespace string)
-}
-
-type DropDownPanel interface {
-	ShowDropDown(x, y int)
-	HideDropDown()
-	IsDropDownVisible() bool
-}
-
-type HotKeyPanel interface {
-	IsBottomPanelVisible() bool
-	SetHotKeyPanelRect(image.Rectangle)
-}
-
-type ActionList interface {
-	DropDownPanel
-	HotKeyPanel
-
-	Draw(buf *ui.Buffer)
-	OnEvent(event *ui.Event, context []string) bool
-	OnHotKeys(event *ui.Event, context []string) bool
-	AddAction(name, hotKey string, checkable bool, onExec func([]string) bool)
-}
-
-func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, actions ActionList) *ListTable {
-
+func NewListTable(rows []ListRow, handler ListTableHandler, screenHandler ScreenHandler) *ListTable {
 	lt := &ListTable{
-		Block:            ui.NewBlock(),
+		Block: ui.NewBlock(),
+
+		rows:          rows,
+		eventHandler:  handler,
+		screenHandler: screenHandler,
+
 		RowSeparator:     false,
 		RowStyles:        make(map[int]ui.Style),
 		ColumnResizer:    func() {},
-		screenHandler:    screenHandler,
-		listHandler:      listHandler,
-		RowStyle:         theme.Theme["listItem"].Inactive,
-		HeaderStyle:      theme.Theme["listHeader"].Inactive,
-		SelectedRowStyle: theme.Theme["listItemSelected"].Inactive,
 		DrawVerticalLine: true,
 		FillRow:          true,
-
-		actions: actions,
-
-		reloadMx: &sync.Mutex{},
 	}
-	lt.header, _ = listHandler.(ListTableHandlerWithHeader)
-	lt.BorderStyle = theme.Theme["grid"].Inactive
-	lt.TitleStyle = theme.Theme["title"].Inactive
+	if h, ok := handler.(ListTableHandlerWithHeader); ok {
+		lt.header = h.GetHeaderRow()
+	}
 	lt.ColumnResizer = func() {
-		rows := lt.Rows
-		if lt.header != nil {
-			rows = append(rows, lt.header.GetHeaderRow())
+		rows := lt.rows
+		if len(lt.header) > 0 {
+			rows = append(rows, lt.header)
 		}
 		if len(rows) == 0 {
-			lt.ColumnWidths = []int{}
+			lt.columnWidths = []int{}
 			return
 		}
 		colCount := len(rows[0])
@@ -149,67 +119,32 @@ func NewListTable(screenHandler ScreenHandler, listHandler ListTableHandler, act
 			}
 			widths = append(widths, width+1)
 		}
-		lt.ColumnWidths = widths
+		lt.columnWidths = widths
 	}
-
-	lt.initDefaultActions()
+	// Apply initial styles
+	lt.OnFocusOut()
 
 	return lt
 }
 
-func (lt *ListTable) initDefaultActions() {
-	if rl, ok := lt.listHandler.(ListTableResource); ok {
-		lt.actions.AddAction("Describe", "d", false, func(item []string) bool {
-			name := item[0]
-			namespace := ""
-			if res, ok := lt.listHandler.(ListTableResourceNamespace); ok {
-				namespace = res.Namespace()
-			}
-			lt.screenHandler.Describe(rl.TypeName(), name, namespace)
-			return true
-		})
-
-		lt.actions.AddAction("Edit", "e", false, func(item []string) bool {
-			name := item[0]
-			namespace := ""
-			if rl, ok := lt.listHandler.(ListTableResourceNamespace); ok {
-				namespace = rl.Namespace()
-			}
-			lt.screenHandler.Edit(rl.TypeName(), name, namespace)
-			return true
-		})
-	}
-
-	if dl, ok := lt.listHandler.(ListTableDeletable); ok {
-		lt.actions.AddAction(strings.Repeat(string(ui.HORIZONTAL_LINE), 10), "", false, nil)
-		lt.actions.AddAction("Delete", "<Delete>", false, dl.OnDelete)
-	}
-}
-
 func (lt *ListTable) Draw(buf *ui.Buffer) {
-	for i := range lt.Rows {
-		if i == lt.SelectedRow {
+	for i := range lt.rows {
+		if i == lt.selectedRow {
 			lt.RowStyles[i] = lt.SelectedRowStyle
 		} else {
 			lt.RowStyles[i] = lt.RowStyle
 		}
 	}
 
-	if lt.actions.IsBottomPanelVisible() {
-		lt.Block.Inner.Max.Y -= 2
-		lt.Block.Max.Y -= 2
-		lt.actions.SetHotKeyPanelRect(lt.Block.Bounds())
-	}
-
 	lt.Block.Draw(buf)
 
 	lt.ColumnResizer()
 
-	columnWidths := lt.ColumnWidths
+	columnWidths := lt.columnWidths
 	if len(columnWidths) == 0 {
 		var columnCount int
-		if lt.header != nil {
-			columnCount = len(lt.header.GetHeaderRow())
+		if len(lt.header) > 0 {
+			columnCount = len(lt.header)
 		} else {
 			columnCount = 1
 		}
@@ -220,28 +155,28 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 	}
 
 	// adjusts view into widget
-	if lt.SelectedRow >= lt.Inner.Dy()+lt.topRow-1 {
+	if lt.selectedRow >= lt.Inner.Dy()+lt.topRow {
 		viewport := lt.Inner.Dy() - 2
-		lt.topRow = lt.SelectedRow - viewport
-	} else if lt.SelectedRow < lt.topRow {
-		lt.topRow = lt.SelectedRow
+		lt.topRow = lt.selectedRow - viewport
+	} else if lt.selectedRow < lt.topRow {
+		lt.topRow = lt.selectedRow
 	}
 
 	// draw header if needed
 	var yCoordinate int
-	if lt.header != nil {
-		yCoordinate = lt.drawRow(buf, columnWidths, lt.header.GetHeaderRow(), lt.HeaderStyle, lt.Inner.Min.Y)
+	if len(lt.header) > 0 {
+		yCoordinate = lt.drawRow(buf, columnWidths, lt.header, lt.HeaderStyle, lt.Inner.Min.Y)
 	} else {
 		yCoordinate = lt.Inner.Min.Y
 	}
 
 	// draw rows
-	for i := lt.topRow; i < len(lt.Rows) && yCoordinate < lt.Inner.Max.Y; i++ {
+	for i := lt.topRow; i < len(lt.rows) && yCoordinate < lt.Inner.Max.Y; i++ {
 		rowStyle := lt.RowStyle
 		if style, ok := lt.RowStyles[i]; ok {
 			rowStyle = style
 		}
-		yCoordinate = lt.drawRow(buf, columnWidths, lt.Rows[i], rowStyle, yCoordinate)
+		yCoordinate = lt.drawRow(buf, columnWidths, lt.rows[i], rowStyle, yCoordinate)
 	}
 
 	// draw UP_ARROW if needed
@@ -257,15 +192,12 @@ func (lt *ListTable) Draw(buf *ui.Buffer) {
 	}
 
 	// draw DOWN_ARROW if needed
-	if len(lt.Rows) > int(lt.topRow)+lt.Inner.Dy() {
+	if len(lt.rows) > int(lt.topRow)+lt.Inner.Dy() {
 		buf.SetCell(
 			ui.NewCell(ui.DOWN_ARROW, ui.NewStyle(ui.ColorWhite)),
 			image.Pt(lt.Inner.Max.X-1, lt.Inner.Max.Y-1),
 		)
 	}
-
-	// draw action list
-	lt.actions.Draw(buf)
 }
 
 func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, rowStyle ui.Style, yCoordinate int) int {
@@ -338,11 +270,15 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 }
 
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
-	if lt.actions.IsDropDownVisible() {
-		return lt.actions.OnEvent(event, lt.Rows[lt.SelectedRow])
-	}
-	if len(lt.Rows) == 0 {
+	if len(lt.rows) == 0 {
 		return false
+	}
+
+	mouseSelectEvent := "<MouseLeftDouble>"
+	mouseChangeEvent := "<MouseLeft>"
+	if lt.IsContext {
+		mouseSelectEvent = "<MouseLeft>"
+		mouseChangeEvent = "<MouseRelease>"
 	}
 
 	switch event.ID {
@@ -358,33 +294,38 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<PageUp>":
 		lt.PageUp()
 		return true
-	case "<Enter>", "<MouseLeftDouble>":
-		if s, ok := lt.listHandler.(ListTableSelectable); ok {
-			row := lt.Rows[lt.SelectedRow]
-			return s.OnSelect(row)
+	case "<Enter>", mouseSelectEvent:
+		if s, ok := lt.eventHandler.(ListTableSelectable); ok {
+			return s.OnSelect(lt.SelectedRow())
 		}
 		return false
-	case "<MouseLeft>":
-		lt.actions.HideDropDown()
+	case mouseChangeEvent:
 		m := event.Payload.(ui.Mouse)
-		yOffset := 1
-		if lt.header != nil {
-			yOffset++
-		}
-		lt.setCursor(m.Y - yOffset + lt.topRow)
-		return true
+		return lt.setCursorViaMouse(m)
 	case "<MouseRight>":
-		m := event.Payload.(ui.Mouse)
-		lt.setCursor(m.Y - 2 + lt.topRow)
-		lt.actions.ShowDropDown(m.X, m.Y)
-		return true
+		if h, ok := lt.eventHandler.(ListTableHandlerWithActions); ok && lt.screenHandler != nil {
+			m := event.Payload.(ui.Mouse)
+			lt.setCursorViaMouse(m)
+			lt.screenHandler.ShowActionsContextMenu(lt.eventHandler, h.GetActions(), lt.SelectedRow(), m)
+			return true
+		}
+		return false
 	}
 
-	return lt.actions.OnHotKeys(event, lt.Rows[lt.SelectedRow])
+	if a, ok := lt.eventHandler.(ListTableHandlerWithActions); ok {
+		for _, action := range a.GetActions() {
+			if event.ID == action.HotKey {
+				action.Func(lt.eventHandler, lt.SelectedRow())
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (lt *ListTable) Scroll(amount int) {
-	sel := lt.SelectedRow + amount
+	sel := lt.selectedRow + amount
 	lt.setCursor(sel)
 }
 
@@ -404,33 +345,37 @@ func (lt *ListTable) PageDown() {
 	lt.Scroll(lt.Inner.Dy() - 1)
 }
 
-func (lt *ListTable) setCursor(idx int) {
-	if idx >= 0 && idx < len(lt.Rows) {
-		changed := lt.SelectedRow != idx
-		lt.SelectedRow = idx
-		if c, ok := lt.listHandler.(ListTableCursorChangable); ok && changed {
-			c.OnCursorChange(lt.Rows[lt.SelectedRow])
-		}
+func (lt *ListTable) SelectedRow() []string {
+	if len(lt.rows) == 0 {
+		return nil
 	}
+	return lt.rows[lt.selectedRow]
 }
 
-func (lt *ListTable) Reload() error {
-	lt.reloadMx.Lock()
-	defer lt.reloadMx.Unlock()
-	lt.Rows = [][]string{}
-	data, err := lt.listHandler.LoadData()
-	if err != nil {
-		return err
+func (lt *ListTable) setCursor(idx int) bool {
+	if idx >= 0 && idx < len(lt.rows) {
+		changed := lt.selectedRow != idx
+		lt.selectedRow = idx
+		if c, ok := lt.eventHandler.(ListTableCursorChangable); ok && changed {
+			c.OnCursorChange(lt.SelectedRow())
+			return true
+		}
+		return true
 	}
-	for _, row := range data {
-		lt.Rows = append(lt.Rows, row)
+	return false
+}
+
+func (lt *ListTable) setCursorViaMouse(mouse ui.Mouse) bool {
+	yOffset := 1
+	if len(lt.header) > 0 {
+		yOffset++
 	}
-	if len(lt.Rows) == 0 {
-		lt.SelectedRow = 0
-	} else if lt.SelectedRow >= len(lt.Rows) {
-		lt.SelectedRow = len(lt.Rows) - 1
+	relativeY := mouse.Y - lt.Rectangle.Min.Y
+	relativeX := mouse.X - lt.Rectangle.Min.X
+	if relativeX < 1 || relativeX > lt.Rectangle.Dx()-1 {
+		return false
 	}
-	return nil
+	return lt.setCursor(relativeY - yOffset + lt.topRow)
 }
 
 func (lt *ListTable) OnFocusIn() {
@@ -447,4 +392,17 @@ func (lt *ListTable) OnFocusOut() {
 	lt.RowStyle = theme.Theme["listItem"].Inactive
 	lt.HeaderStyle = theme.Theme["listHeader"].Inactive
 	lt.SelectedRowStyle = theme.Theme["listItemSelected"].Inactive
+}
+
+func (lt *ListTable) GetHotKeys() []*HotKey {
+	var keys []*HotKey
+	if a, ok := lt.eventHandler.(ListTableHandlerWithActions); ok {
+		for _, action := range a.GetActions() {
+			keys = append(keys, &HotKey{
+				Name: action.Name,
+				Key:  action.HotKeyDisplay,
+			})
+		}
+	}
+	return keys
 }
