@@ -38,7 +38,7 @@ func GetDefaultActions(handler widgets.ListTableHandler) []*widgets.ListAction {
 	return actions
 }
 
-func OnResourceDescribe(handler widgets.ListTableHandler, row widgets.ListRow) bool {
+func OnResourceDescribe(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	h, ok := handler.(widgets.DataTableResource)
 	if !ok {
 		return false
@@ -52,7 +52,7 @@ func OnResourceDescribe(handler widgets.ListTableHandler, row widgets.ListRow) b
 	return true
 }
 
-func OnResourceEdit(handler widgets.ListTableHandler, row widgets.ListRow) bool {
+func OnResourceEdit(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	h, ok := handler.(widgets.DataTableResource)
 	if !ok {
 		return false
@@ -66,14 +66,14 @@ func OnResourceEdit(handler widgets.ListTableHandler, row widgets.ListRow) bool 
 	return true
 }
 
-func OnResourceDelete(handler widgets.ListTableHandler, row widgets.ListRow) bool {
+func OnResourceDelete(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	h, ok := handler.(widgets.DataTableDeletable)
 	if !ok {
 		return false
 	}
-	text := fmt.Sprintf("Are you sure you want to delete %s?", h.DeleteDescription(row))
+	text := fmt.Sprintf("Are you sure you want to delete %s?", h.DeleteDescription(idx, row))
 	ShowConfirmDialog(text, func() error {
-		return h.Delete(row)
+		return h.Delete(idx, row)
 	})
 	return true
 }

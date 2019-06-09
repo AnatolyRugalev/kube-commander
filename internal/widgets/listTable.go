@@ -36,7 +36,7 @@ type ListTable struct {
 	IsContext bool
 }
 
-type ActionFunc func(handler ListTableHandler, row ListRow) bool
+type ActionFunc func(handler ListTableHandler, idx int, row ListRow) bool
 
 type ListAction struct {
 	Name          string
@@ -62,19 +62,14 @@ type ListTableHandlerWithActions interface {
 	GetActions() []*ListAction
 }
 
-type ListTableEventable interface {
-	ListTableHandler
-	OnEvent(event *ui.Event, row ListRow) bool
-}
-
 type ListTableCursorChangable interface {
 	ListTableHandler
-	OnCursorChange(row ListRow) bool
+	OnCursorChange(idx int, row ListRow) bool
 }
 
 type ListTableSelectable interface {
 	ListTableHandler
-	OnSelect(row ListRow) bool
+	OnSelect(idx int, row ListRow) bool
 }
 
 func NewListTable(rows []ListRow, handler ListTableHandler, screenHandler ScreenHandler) *ListTable {
@@ -125,6 +120,14 @@ func NewListTable(rows []ListRow, handler ListTableHandler, screenHandler Screen
 	lt.OnFocusOut()
 
 	return lt
+}
+
+func (lt *ListTable) Rows() []ListRow {
+	return lt.rows
+}
+
+func (lt *ListTable) SetRows(rows []ListRow) {
+	lt.rows = rows
 }
 
 func (lt *ListTable) Draw(buf *ui.Buffer) {
@@ -300,7 +303,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		return true
 	case "<Enter>", mouseSelectEvent:
 		if s, ok := lt.eventHandler.(ListTableSelectable); ok {
-			return s.OnSelect(lt.SelectedRow())
+			return s.OnSelect(lt.selectedRow, lt.SelectedRow())
 		}
 		return false
 	case mouseChangeEvent:
@@ -319,13 +322,17 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	if a, ok := lt.eventHandler.(ListTableHandlerWithActions); ok {
 		for _, action := range a.GetActions() {
 			if event.ID == action.HotKey {
-				action.Func(lt.eventHandler, lt.SelectedRow())
+				action.Func(lt.eventHandler, lt.selectedRow, lt.SelectedRow())
 				return true
 			}
 		}
 	}
 
 	return false
+}
+
+func (lt *ListTable) ScrollTo(sel int) {
+	lt.setCursor(sel)
 }
 
 func (lt *ListTable) Scroll(amount int) {
@@ -349,6 +356,10 @@ func (lt *ListTable) PageDown() {
 	lt.Scroll(lt.Inner.Dy() - 1)
 }
 
+func (lt *ListTable) SelectedRowIdx() int {
+	return lt.selectedRow
+}
+
 func (lt *ListTable) SelectedRow() []string {
 	if len(lt.rows) == 0 {
 		return nil
@@ -361,7 +372,7 @@ func (lt *ListTable) setCursor(idx int) bool {
 		changed := lt.selectedRow != idx
 		lt.selectedRow = idx
 		if c, ok := lt.eventHandler.(ListTableCursorChangable); ok && changed {
-			c.OnCursorChange(lt.SelectedRow())
+			c.OnCursorChange(lt.selectedRow, lt.SelectedRow())
 			return true
 		}
 		return true

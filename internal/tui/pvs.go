@@ -13,11 +13,11 @@ import (
 type PVsTable struct {
 }
 
-func (pt *PVsTable) DeleteDescription(row widgets.ListRow) string {
+func (pt *PVsTable) DeleteDescription(idx int, row widgets.ListRow) string {
 	return "Persistent Volume " + row[0]
 }
 
-func (pt *PVsTable) Delete(row widgets.ListRow) error {
+func (pt *PVsTable) Delete(idx int, row widgets.ListRow) error {
 	return kube.GetClient().CoreV1().PersistentVolumes().Delete(row[0], metav1.NewDeleteOptions(0))
 }
 

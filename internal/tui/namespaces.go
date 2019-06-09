@@ -11,14 +11,22 @@ type NamespacesTable struct {
 }
 
 func (nt *NamespacesTable) GetActions() []*widgets.ListAction {
-	return GetDefaultActions(nt)
+	return append(GetDefaultActions(nt), &widgets.ListAction{
+		Name:          "Switch to",
+		HotKey:        "s",
+		HotKeyDisplay: "S",
+		Func: func(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
+			screen.SetNamespace(row[0])
+			return true
+		},
+	})
 }
 
-func (nt *NamespacesTable) DeleteDescription(row widgets.ListRow) string {
+func (nt *NamespacesTable) DeleteDescription(idx int, row widgets.ListRow) string {
 	return "namespace " + row[0]
 }
 
-func (nt *NamespacesTable) Delete(row widgets.ListRow) error {
+func (nt *NamespacesTable) Delete(idx int, row widgets.ListRow) error {
 	return kube.GetClient().CoreV1().Namespaces().Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
@@ -40,8 +48,8 @@ func (nt *NamespacesTable) GetHeaderRow() widgets.ListRow {
 	return widgets.ListRow{"NAME", "STATUS", "AGE"}
 }
 
-func (nt *NamespacesTable) OnSelect(row widgets.ListRow) bool {
-	screen.LoadRightPane(NewPodsTable(row[0]))
+func (nt *NamespacesTable) OnSelect(idx int, row widgets.ListRow) bool {
+	screen.FocusToNamespace(row[0])
 	return true
 }
 

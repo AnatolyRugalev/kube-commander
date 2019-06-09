@@ -15,7 +15,7 @@ import (
 
 type Screen struct {
 	*ui.Grid
-	menu    *widgets.ListTable
+	menu    *MenuList
 	hotkeys *widgets.HotKeysBar
 
 	popupM *sync.Mutex
@@ -32,6 +32,8 @@ type Screen struct {
 	lastLeftClick time.Time
 
 	handleEvents bool
+
+	selectedNamespace string
 }
 
 func NewScreen() *Screen {
@@ -98,7 +100,7 @@ func (s *Screen) Init() {
 	s.handleEvents = true
 }
 
-func (s *Screen) SetMenu(menu *widgets.ListTable) {
+func (s *Screen) SetMenu(menu *MenuList) {
 	s.menu = menu
 }
 
@@ -158,6 +160,12 @@ func (s *Screen) popFocus() bool {
 	return true
 }
 
+func (s *Screen) ResetFocus() {
+	s.focusStack = []Pane{}
+	s.focus = nil
+	s.Focus(s.menu)
+}
+
 func (s *Screen) popRightPane() Pane {
 	s.rightPaneStackM.Lock()
 	defer s.rightPaneStackM.Unlock()
@@ -178,10 +186,11 @@ func (s *Screen) popRightPane() Pane {
 func (s *Screen) updateHotkeys() {
 	s.hotkeys.Clear()
 	s.hotkeys.SetHotKey(1, "Esc", "Back")
+	s.hotkeys.SetHotKey(2, "C-N", "Namespace")
 	s.hotkeys.SetHotKey(10, "Q", "Quit")
 	if a, ok := s.focus.(widgets.HasHotKeys); ok {
 		for i, key := range a.GetHotKeys() {
-			s.hotkeys.SetHotKey(i+2, key.Key, key.Name)
+			s.hotkeys.SetHotKey(i+3, key.Key, key.Name)
 		}
 	}
 }
@@ -196,6 +205,9 @@ func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
+	case "<C-n>":
+		s.ShowNamespaceSelection()
+		return true, false
 	case "<MouseLeft>":
 		return s.mouseLeftEvent(event)
 	}
@@ -356,6 +368,11 @@ func (s *Screen) removePopup() {
 	s.popupM.Lock()
 	s.popup = nil
 	s.popupM.Unlock()
+}
+
+func (s *Screen) SetNamespace(namespace string) {
+	s.selectedNamespace = namespace
+	s.menu.updateMenu(s.selectedNamespace)
 }
 
 func (s *Screen) Run() {

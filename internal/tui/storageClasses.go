@@ -10,11 +10,11 @@ import (
 type StorageClassesTable struct {
 }
 
-func (st *StorageClassesTable) DeleteDescription(row widgets.ListRow) string {
+func (st *StorageClassesTable) DeleteDescription(idx int, row widgets.ListRow) string {
 	return "Storage Class " + row[0]
 }
 
-func (st *StorageClassesTable) Delete(row widgets.ListRow) error {
+func (st *StorageClassesTable) Delete(idx int, row widgets.ListRow) error {
 	return kube.GetClient().StorageV1().StorageClasses().Delete(row[0], metav1.NewDeleteOptions(0))
 }
 

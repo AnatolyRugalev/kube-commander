@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"log"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
@@ -31,6 +32,7 @@ func Start() {
 
 	menuList := NewMenuList()
 	screen.SetMenu(menuList)
+	screen.SetNamespace(kube.GetNamespace())
 	namespaces := NewNamespacesTable()
 	screen.Focus(menuList)
 	screen.Focus(namespaces)

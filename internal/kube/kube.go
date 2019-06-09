@@ -14,8 +14,9 @@ type KubeClient struct {
 }
 
 var config = &struct {
-	Path    string `mapstructure:"kube-config"`
-	Context string `mapstructure:"kube-context"`
+	Path      string `mapstructure:"kubeconfig"`
+	Context   string `mapstructure:"context"`
+	Namespace string `mapstructure:"namespace"`
 }{}
 
 var client *KubeClient
@@ -25,8 +26,9 @@ func init() {
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{
-			"kube-config":  {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
-			"kube-context": {"", "Kubernetes context to use", "KUBECONTEXT"},
+			"kubeconfig": {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
+			"context":    {"", "Kubernetes context to use", "KUBECONTEXT"},
+			"namespace":  {"", "Kubernetes context to use", "KUBENAMESPACE"},
 		},
 		Validate: initClient,
 	})
@@ -36,7 +38,9 @@ func getClientConfig() (*rest.Config, error) {
 	clientConfig := cmd.
 		NewNonInteractiveDeferredLoadingClientConfig(
 			&cmd.ClientConfigLoadingRules{ExplicitPath: config.Path},
-			&cmd.ConfigOverrides{CurrentContext: config.Context},
+			&cmd.ConfigOverrides{
+				CurrentContext: config.Context,
+			},
 		)
 	raw, err := clientConfig.RawConfig()
 	if err != nil {
@@ -46,7 +50,15 @@ func getClientConfig() (*rest.Config, error) {
 		// lock context if default context is being used
 		config.Context = raw.CurrentContext
 	}
+	if config.Namespace == "" {
+		// lock context if default context is being used
+		config.Namespace, _, _ = clientConfig.Namespace()
+	}
 	return clientConfig.ClientConfig()
+}
+
+func GetNamespace() string {
+	return config.Namespace
 }
 
 func GetClient() *KubeClient {

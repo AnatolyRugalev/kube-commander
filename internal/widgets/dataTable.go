@@ -23,8 +23,8 @@ type DataTableResource interface {
 
 type DataTableDeletable interface {
 	DataTableHandler
-	DeleteDescription(row ListRow) string
-	Delete(row ListRow) error
+	DeleteDescription(idx int, row ListRow) string
+	Delete(idx int, row ListRow) error
 }
 
 type DataTableResourceNamespace interface {

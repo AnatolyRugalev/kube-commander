@@ -13,11 +13,11 @@ type PodsTable struct {
 	namespace string
 }
 
-func (pt *PodsTable) Delete(row widgets.ListRow) error {
+func (pt *PodsTable) Delete(idx int, row widgets.ListRow) error {
 	return kube.GetClient().CoreV1().Pods(pt.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
-func (pt *PodsTable) DeleteDescription(row widgets.ListRow) string {
+func (pt *PodsTable) DeleteDescription(idx int, row widgets.ListRow) string {
 	return "pod " + pt.namespace + "/" + row[0]
 }
 
@@ -94,7 +94,7 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 	}
 }
 
-func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, row widgets.ListRow) bool {
+func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
 	if err != nil {
 		ShowErrorDialog(err, nil)
@@ -110,7 +110,7 @@ func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, row widgets.ListRo
 	return true
 }
 
-func (pt *PodsTable) OnLogs(handler widgets.ListTableHandler, row widgets.ListRow) bool {
+func (pt *PodsTable) OnLogs(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
 	if err != nil {
 		ShowErrorDialog(err, nil)
@@ -118,20 +118,39 @@ func (pt *PodsTable) OnLogs(handler widgets.ListTableHandler, row widgets.ListRo
 	}
 	if len(pod.Spec.Containers)+len(pod.Spec.InitContainers) > 1 {
 		pt.ShowContainerSelection(pod, func(container string) {
-			pt.showLogs(row, container)
+			pt.showLogs(pod, container)
 		})
 	} else {
-		pt.showLogs(row, "")
+		pt.showLogs(pod, "")
 	}
 	return true
 }
 
-func (pt *PodsTable) showLogs(row widgets.ListRow, container string) {
+func (pt *PodsTable) showLogs(pod *v1.Pod, container string) {
 	var cmd string
-	if row[2] == "Running" {
-		cmd = kube.Logs(pt.namespace, row[0], container, 1000, true)
+	var running bool
+	if container == "" {
+		container = pod.Spec.Containers[0].Name
+	}
+
+	for _, s := range pod.Status.InitContainerStatuses {
+		if s.Name == container {
+			running = s.State.Running != nil
+			break
+		}
+	}
+
+	for _, s := range pod.Status.ContainerStatuses {
+		if s.Name == container {
+			running = s.State.Running != nil
+			break
+		}
+	}
+
+	if running {
+		cmd = kube.Logs(pt.namespace, pod.Name, container, 1000, true)
 	} else {
-		cmd = kube.Viewer(kube.Logs(pt.namespace, row[0], container, 1000, false))
+		cmd = kube.Viewer(kube.Logs(pt.namespace, pod.Name, container, 1000, false))
 	}
 	screen.SwitchToCommand(cmd)
 }
@@ -147,11 +166,33 @@ func (pt *PodsTable) execToPod(row widgets.ListRow, container string) {
 
 func (pt *PodsTable) ShowContainerSelection(pod *v1.Pod, onSelect func(container string)) {
 	var rows []widgets.ListRow
-	for _, container := range pod.Spec.InitContainers {
-		rows = append(rows, widgets.ListRow{container.Name})
+	for _, container := range pod.Status.InitContainerStatuses {
+		var state string
+		if container.State.Running != nil {
+			state = "Running"
+		} else if container.State.Waiting != nil {
+			state = "Waiting"
+		} else if container.State.Terminated != nil {
+			state = "Terminated"
+		}
+		rows = append(rows, widgets.ListRow{
+			container.Name,
+			state,
+		})
 	}
-	for _, container := range pod.Spec.Containers {
-		rows = append(rows, widgets.ListRow{container.Name})
+	for _, container := range pod.Status.ContainerStatuses {
+		var state string
+		if container.State.Running != nil {
+			state = "Running"
+		} else if container.State.Waiting != nil {
+			state = "Waiting"
+		} else if container.State.Terminated != nil {
+			state = "Terminated"
+		}
+		rows = append(rows, widgets.ListRow{
+			container.Name,
+			state,
+		})
 	}
 	handler := &ContainerSelectorHandler{
 		pod:      pod,
@@ -174,7 +215,7 @@ type ContainerSelectorHandler struct {
 	onSelect func(container string)
 }
 
-func (csh *ContainerSelectorHandler) OnSelect(row widgets.ListRow) bool {
+func (csh *ContainerSelectorHandler) OnSelect(idx int, row widgets.ListRow) bool {
 	screen.popFocus()
 	screen.removePopup()
 	container := row[0]
