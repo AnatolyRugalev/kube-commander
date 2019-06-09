@@ -83,8 +83,8 @@ func (s *Screen) ShowNamespaceSelection() {
 
 func (s *Screen) FocusToNamespace(namespace string) {
 	screen.ResetFocus()
-	screen.menu.ScrollTo(5)
 	screen.SetNamespace(namespace)
+	screen.menu.ScrollTo(5)
 }
 
 type NamespaceSelectorHandler struct {

@@ -5,7 +5,7 @@ import (
 	"github.com/gizak/termui/v3"
 )
 
-type menuItemFunc func() Pane
+type menuItemFunc func(namespace string) Pane
 
 const (
 	itemTypeCluster   = 0
@@ -20,24 +20,24 @@ type menuItem struct {
 }
 
 var menuItems = []*menuItem{
-	{"Namespaces", itemTypeCluster, func() Pane {
+	{"Namespaces", itemTypeCluster, func(namespace string) Pane {
 		return NewNamespacesTable()
 	}},
-	{"Nodes", itemTypeCluster, func() Pane {
+	{"Nodes", itemTypeCluster, func(namespace string) Pane {
 		return NewNodesTable()
 	}},
-	{"Storage Classes", itemTypeCluster, func() Pane {
+	{"Storage Classes", itemTypeCluster, func(namespace string) Pane {
 		return NewStorageClassesTable()
 	}},
-	{"PVs", itemTypeCluster, func() Pane {
+	{"PVs", itemTypeCluster, func(namespace string) Pane {
 		return NewPVsTable()
 	}},
 	{"<Namespace>", itemTypeSelector, nil},
-	{"Deployments", itemTypeNamespace, func() Pane {
-		return NewDeploymentsTable(screen.selectedNamespace)
+	{"Deployments", itemTypeNamespace, func(namespace string) Pane {
+		return NewDeploymentsTable(namespace)
 	}},
-	{"Pods", itemTypeNamespace, func() Pane {
-		return NewPodsTable(screen.selectedNamespace)
+	{"Pods", itemTypeNamespace, func(namespace string) Pane {
+		return NewPodsTable(namespace)
 	}},
 }
 
@@ -45,6 +45,7 @@ type MenuList struct {
 	*widgets.ListTable
 	items        []*menuItem
 	selectedPane Pane
+	namespace    string
 }
 
 func NewMenuList() *MenuList {
@@ -83,6 +84,7 @@ func (ml *MenuList) updateMenu(namespace string) {
 		rows = append(rows, row)
 		ml.items = append(ml.items, item)
 	}
+	ml.namespace = namespace
 	ml.SetRows(rows)
 	if screen.focus == ml {
 		ml.OnCursorChange(ml.SelectedRowIdx(), ml.SelectedRow())
@@ -96,7 +98,7 @@ func (ml *MenuList) OnCursorChange(idx int, row widgets.ListRow) bool {
 	}
 	switch menuItem.itemType {
 	case itemTypeCluster, itemTypeNamespace:
-		ml.selectedPane = menuItem.itemFunc()
+		ml.selectedPane = menuItem.itemFunc(ml.namespace)
 		screen.ReplaceRightPane(ml.selectedPane)
 	}
 	return true
