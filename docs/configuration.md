@@ -2,5 +2,6 @@
 
 | cli flag     | type | env name    | description             |
 |--------------|------|-------------|-------------------------|
-|kube-config   |string|KUBECONFIG   |Path to kubeconfig       |
-|kube-context  |string|KUBECONTEXT  |Kubeconfig context to use|
+|kubeconfig    |string|KUBECONFIG   |Path to kubeconfig       |
+|context       |string|KUBECONTEXT  |Context name             |
+|namespace     |string|KUBENAMESPACE|Initial namespace to show|
