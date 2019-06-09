@@ -34,7 +34,7 @@ Have fun!
 
 - [X] List namespaces
 - [X] List pods of namespace
-- [ ] List workloads of namespace (2nd level menu?)
+- [X] List workloads of namespace (2nd level menu?)
 - [X] List nodes
 - [X] List PVs
 - [X] Describe resources
@@ -46,7 +46,7 @@ Have fun!
 - [ ] Screen refresh
     - [X] Hotkey
     - [ ] Auto-refresh 
-- [ ] Shortcuts bottom bar (eg. Midnight Commander)
+- [X] Shortcuts bottom bar (eg. Midnight Commander)
 - [ ] Copy to clipboard
 - [ ] Charts
     - [ ] Node capacity
