@@ -301,6 +301,12 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	case "<PageUp>":
 		lt.PageUp()
 		return true
+	case "<Home>":
+		lt.ScrollTo(0)
+		return true
+	case "<End>":
+		lt.ScrollTo(len(lt.rows) - 1)
+		return true
 	case "<Enter>", mouseSelectEvent:
 		if s, ok := lt.eventHandler.(ListTableSelectable); ok {
 			return s.OnSelect(lt.selectedRow, lt.SelectedRow())
