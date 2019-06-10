@@ -57,6 +57,9 @@ var menuItems = []*menuItem{
 	{"ConfigMaps", itemTypeNamespace, func(namespace string) Pane {
 		return NewConfigMapsTable(namespace)
 	}},
+	{"Secrets", itemTypeNamespace, func(namespace string) Pane {
+		return NewSecretsTable(namespace)
+	}},
 }
 
 type MenuList struct {

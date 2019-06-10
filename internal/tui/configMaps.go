@@ -29,7 +29,7 @@ func (ct *ConfigMapsTable) Delete(idx int, row widgets.ListRow) error {
 }
 
 func (ct *ConfigMapsTable) TypeName() string {
-	return "configmap"
+	return "configmaps"
 }
 
 func (ct *ConfigMapsTable) Name(row widgets.ListRow) string {
