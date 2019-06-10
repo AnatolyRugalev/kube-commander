@@ -88,7 +88,7 @@ func (ml *MenuList) updateMenu(namespace string) {
 			row = widgets.ListRow{item.name}
 		case itemTypeSelector:
 			row = widgets.ListRow{
-				string(termui.DOWN_ARROW) + " " + namespace,
+				"[" + string(termui.DOWN_ARROW) + " " + namespace + "](mod:bold)",
 			}
 		case itemTypeNamespace:
 			last := i == len(menuItems)-1
