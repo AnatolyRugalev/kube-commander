@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
@@ -46,6 +47,12 @@ func (pt *PodsTable) GetActions() []*widgets.ListAction {
 			HotKey:        "l",
 			HotKeyDisplay: "L",
 			Func:          pt.OnLogs,
+		},
+		&widgets.ListAction{
+			Name:          "Forward",
+			HotKey:        "f",
+			HotKeyDisplay: "F",
+			Func:          pt.OnForward,
 		},
 	)
 }
@@ -107,6 +114,46 @@ func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, idx int, row widge
 	} else {
 		pt.execToPod(row, "")
 	}
+	return true
+}
+
+func (pt *PodsTable) OnForward(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
+	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
+	if err != nil {
+		ShowErrorDialog(err, nil)
+		return true
+	}
+	var rows []widgets.ListRow
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			rows = append(rows, widgets.ListRow{
+				fmt.Sprintf("%d", port.ContainerPort),
+				fmt.Sprintf("%s", port.Protocol),
+				fmt.Sprintf("%s", container.Name),
+			})
+		}
+	}
+	if len(rows) == 0 {
+		ShowErrorDialog(errors.New("Selected pod does not have any ports defined"), nil)
+		return true
+	}
+	portHandler := &PortSelectorHandler{
+		pod: pod,
+		onSelect: func(port string) {
+			cmd := kube.PortForward(pt.namespace, pod.Name, port)
+			screen.SwitchToCommand(cmd)
+		},
+	}
+	menu := widgets.NewListTable(rows, portHandler, nil)
+	menu.Title = "Select container port"
+	menu.IsContext = true
+	width := 30
+	height := len(rows) + 2
+	y1 := screen.Rectangle.Max.Y/2 - height/2
+	x1 := screen.Rectangle.Max.X/2 - width/2
+	menu.SetRect(x1, y1, x1+width, y1+height)
+	screen.setPopup(menu)
+	screen.Focus(menu)
 	return true
 }
 
@@ -220,5 +267,17 @@ func (csh *ContainerSelectorHandler) OnSelect(idx int, row widgets.ListRow) bool
 	screen.removePopup()
 	container := row[0]
 	csh.onSelect(container)
+	return true
+}
+
+type PortSelectorHandler struct {
+	pod      *v1.Pod
+	onSelect func(port string)
+}
+
+func (psh *PortSelectorHandler) OnSelect(idx int, row widgets.ListRow) bool {
+	screen.popFocus()
+	screen.removePopup()
+	psh.onSelect(row[0])
 	return true
 }

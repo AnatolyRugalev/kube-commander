@@ -21,6 +21,10 @@ func EditNs(namespace string, resType string, resName string) string {
 	return kubectlNs(namespace, fmt.Sprintf("edit %s %s", resType, resName))
 }
 
+func PortForward(namespace string, pod string, port string) string {
+	return kubectlNs(namespace, fmt.Sprintf("port-forward %s %s", pod, port))
+}
+
 func Exec(namespace string, pod string, container string, command string) string {
 	if container != "" {
 		container = "-c " + container
