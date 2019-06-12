@@ -60,6 +60,9 @@ var menuItems = []*menuItem{
 	{"Secrets", itemTypeNamespace, func(namespace string) Pane {
 		return NewSecretsTable(namespace)
 	}},
+	{"Services", itemTypeNamespace, func(namespace string) Pane {
+		return NewServicesTable(namespace)
+	}},
 }
 
 type MenuList struct {

@@ -60,11 +60,11 @@ func (ct *SecretsTable) LoadData() ([]widgets.ListRow, error) {
 	return rows, nil
 }
 
-func (ct *SecretsTable) newRow(ns v1.Secret) widgets.ListRow {
+func (ct *SecretsTable) newRow(secret v1.Secret) widgets.ListRow {
 	return widgets.ListRow{
-		ns.Name,
-		string(ns.Type),
-		fmt.Sprintf("%d", len(ns.Data)),
-		Age(ns.CreationTimestamp.Time),
+		secret.Name,
+		string(secret.Type),
+		fmt.Sprintf("%d", len(secret.Data)),
+		Age(secret.CreationTimestamp.Time),
 	}
 }
