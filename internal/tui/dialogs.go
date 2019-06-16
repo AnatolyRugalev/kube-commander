@@ -95,6 +95,9 @@ func (dlg *Dialog) setRect() {
 	if len(dlg.Paragraph.Title) > lineWidth {
 		lineWidth = len(dlg.Paragraph.Title) + 5
 	}
+	if lineWidth > termWidth {
+		lineWidth = termWidth - 10
+	}
 
 	x1 := termWidth/2 - lineWidth/2 - 1
 	y1 := termHeight/2 - 5

@@ -79,32 +79,36 @@ func (p *Preloader) OnEvent(event *termui.Event) bool {
 	return false
 }
 
-func (p *Preloader) Run() {
-	ticker := time.NewTicker(100 * time.Millisecond)
+func (p *Preloader) startLoading() <-chan error {
 	loaded := make(chan error)
-	p.cancel = make(chan struct{})
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				p.incrementPhase()
-				termui.Render(p)
-			case err := <-loaded:
-				if err != nil {
-					p.onError(err)
-				} else {
-					p.onSuccess()
-				}
-				close(loaded)
-				return
-			case <-p.cancel:
-				p.onCancel()
-				return
-			}
-		}
-	}()
 	go func() {
 		loaded <- p.loadFunc()
 	}()
+	return loaded
+}
+
+func (p *Preloader) Run() {
+	p.cancel = make(chan struct{})
+	loaded := p.startLoading()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			p.incrementPhase()
+			termui.Render(p)
+		case err := <-loaded:
+			if err != nil {
+				p.onError(err)
+			} else {
+				p.onSuccess()
+			}
+			return
+		case <-p.cancel:
+			p.onCancel()
+			return
+		}
+	}
+
 }
