@@ -60,18 +60,18 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 	mouseMoveEvents(false)
 	ui.Close()
 	s.handleEvents = false
-	go func() {
-		err := switchFunc()
-		if err := ui.Init(); err != nil {
-			log.Fatalf("failed to initialize termui: %v", err)
-		}
-		s.Init()
-		mouseMoveEvents(true)
-		if err != nil {
-			onError(err)
-		}
-		s.RenderAll()
-	}()
+
+	err := switchFunc()
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	s.Init()
+	mouseMoveEvents(true)
+	if err != nil {
+		onError(err)
+	}
+	s.RenderAll()
+
 }
 
 func (s *Screen) Render() {
