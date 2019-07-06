@@ -62,7 +62,7 @@ func NewPodsTable(namespace string) *widgets.DataTable {
 		namespace: namespace,
 	}
 	lt := widgets.NewDataTable(pt, screen)
-	lt.Title = "Pods <" + namespace + ">"
+	lt.Title = "Pods"
 	return lt
 }
 

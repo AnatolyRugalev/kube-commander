@@ -42,7 +42,7 @@ func NewStatefulSetsTable(namespace string) *widgets.DataTable {
 		namespace: namespace,
 	}
 	lt := widgets.NewDataTable(pt, screen)
-	lt.Title = "Stateful Sets <" + namespace + ">"
+	lt.Title = "Stateful Sets"
 	return lt
 }
 

@@ -12,27 +12,27 @@ type IngressesTable struct {
 	namespace string
 }
 
-func (ct *IngressesTable) Namespace() string {
-	return ct.namespace
+func (it *IngressesTable) Namespace() string {
+	return it.namespace
 }
 
-func (ct *IngressesTable) GetActions() []*widgets.ListAction {
-	return GetDefaultActions(ct)
+func (it *IngressesTable) GetActions() []*widgets.ListAction {
+	return GetDefaultActions(it)
 }
 
-func (ct *IngressesTable) DeleteDescription(idx int, row widgets.ListRow) string {
+func (it *IngressesTable) DeleteDescription(idx int, row widgets.ListRow) string {
 	return "Ingress " + row[0]
 }
 
-func (ct *IngressesTable) Delete(idx int, row widgets.ListRow) error {
-	return kube.GetClient().NetworkingV1beta1().Ingresses(ct.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
+func (it *IngressesTable) Delete(idx int, row widgets.ListRow) error {
+	return kube.GetClient().NetworkingV1beta1().Ingresses(it.namespace).Delete(row[0], metav1.NewDeleteOptions(0))
 }
 
-func (ct *IngressesTable) TypeName() string {
-	return "Ingresses"
+func (it *IngressesTable) TypeName() string {
+	return "ingress"
 }
 
-func (ct *IngressesTable) Name(row widgets.ListRow) string {
+func (it *IngressesTable) Name(row widgets.ListRow) string {
 	return row[0]
 }
 
@@ -44,23 +44,23 @@ func NewIngressesTable(namespace string) *widgets.DataTable {
 	return lt
 }
 
-func (ct *IngressesTable) GetHeaderRow() widgets.ListRow {
+func (it *IngressesTable) GetHeaderRow() widgets.ListRow {
 	return widgets.ListRow{"NAME", "HOSTS", "PORTS", "AGE"}
 }
 
-func (ct *IngressesTable) LoadData() ([]widgets.ListRow, error) {
-	Ingresses, err := kube.GetClient().NetworkingV1beta1().Ingresses(ct.namespace).List(metav1.ListOptions{})
+func (it *IngressesTable) LoadData() ([]widgets.ListRow, error) {
+	Ingresses, err := kube.GetClient().NetworkingV1beta1().Ingresses(it.namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	var rows []widgets.ListRow
 	for _, service := range Ingresses.Items {
-		rows = append(rows, ct.newRow(service))
+		rows = append(rows, it.newRow(service))
 	}
 	return rows, nil
 }
 
-func (ct *IngressesTable) newRow(svc netv1beta1.Ingress) widgets.ListRow {
+func (it *IngressesTable) newRow(svc netv1beta1.Ingress) widgets.ListRow {
 	ports := []string{"80"}
 	for _, rule := range svc.Spec.Rules {
 		for _, tls := range svc.Spec.TLS {
