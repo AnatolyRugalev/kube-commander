@@ -42,19 +42,19 @@ var menuItems = []*menuItem{
 	{"Daemon Sets", itemTypeNamespace, func(namespace string) Pane {
 		return NewDaemonSetsTable(namespace)
 	}},
-	{"Jobs", itemTypeNamespace, func(namespace string) Pane {
-		return NewJobsTable(namespace)
+	{"Pods", itemTypeNamespace, func(namespace string) Pane {
+		return NewPodsTable(namespace)
 	}},
 	{"Cron Jobs", itemTypeNamespace, func(namespace string) Pane {
 		return NewCronJobsTable(namespace)
 	}},
-	{"Pods", itemTypeNamespace, func(namespace string) Pane {
-		return NewPodsTable(namespace)
+	{"Jobs", itemTypeNamespace, func(namespace string) Pane {
+		return NewJobsTable(namespace)
 	}},
 	{"PVCs", itemTypeNamespace, func(namespace string) Pane {
 		return NewPVCsTable(namespace)
 	}},
-	{"ConfigMaps", itemTypeNamespace, func(namespace string) Pane {
+	{"Config Maps", itemTypeNamespace, func(namespace string) Pane {
 		return NewConfigMapsTable(namespace)
 	}},
 	{"Secrets", itemTypeNamespace, func(namespace string) Pane {
@@ -62,6 +62,9 @@ var menuItems = []*menuItem{
 	}},
 	{"Services", itemTypeNamespace, func(namespace string) Pane {
 		return NewServicesTable(namespace)
+	}},
+	{"Ingresses", itemTypeNamespace, func(namespace string) Pane {
+		return NewIngressesTable(namespace)
 	}},
 }
 
