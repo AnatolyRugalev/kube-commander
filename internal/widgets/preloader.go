@@ -20,15 +20,6 @@ type Preloader struct {
 	cancel chan struct{}
 }
 
-var preloaderColors = []termui.Color{
-	termui.Color(18),
-	termui.Color(19),
-	termui.Color(20),
-	termui.Color(21),
-}
-
-var idleColor = theme.Theme["hotKeyName"].Active.Bg
-
 func (p *Preloader) Draw(buf *termui.Buffer) {
 	p.tickerM.Lock()
 	isActive := p.ticker != nil
@@ -37,24 +28,24 @@ func (p *Preloader) Draw(buf *termui.Buffer) {
 	p.phaseM.Lock()
 	phase := p.phase
 	p.phaseM.Unlock()
-	for i := range preloaderColors {
+	for i := range theme.PreloaderColors {
 		var color termui.Color
-		j := (i + phase) % len(preloaderColors)
+		j := (i + phase) % len(theme.PreloaderColors)
 		if isActive {
-			color = preloaderColors[j]
+			color = theme.PreloaderColors[j]
 		} else {
-			color = idleColor
+			color = theme.PreloaderIdleColor
 		}
 		buf.SetCell(termui.Cell{
 			Rune:  termui.HORIZONTAL_LINE,
 			Style: termui.NewStyle(color),
-		}, image.Pt(p.Min.X+len(preloaderColors)-i-1, p.Min.Y))
+		}, image.Pt(p.Min.X+len(theme.PreloaderColors)-i-1, p.Min.Y))
 	}
 }
 
 func (p *Preloader) incrementPhase() {
 	p.phaseM.Lock()
-	p.phase = (p.phase + 1) % len(preloaderColors)
+	p.phase = (p.phase + 1) % len(theme.PreloaderColors)
 	p.phaseM.Unlock()
 }
 
@@ -77,14 +68,14 @@ func (p *Preloader) Run(screenRect image.Rectangle, loadFunc func() error, onErr
 		close(p.cancel)
 	}
 	p.tickerM.Unlock()
-	startX := screenRect.Max.X - len(preloaderColors) - 1
+	startX := screenRect.Max.X - len(theme.PreloaderColors) - 1
 	startY := 0
 	p.Block.Rectangle.Min = image.Point{
 		X: startX,
 		Y: startY,
 	}
 	p.Block.Rectangle.Max = image.Point{
-		X: startX + len(preloaderColors),
+		X: startX + len(theme.PreloaderColors),
 		Y: startY + 1,
 	}
 
