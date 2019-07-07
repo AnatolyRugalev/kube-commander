@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	"image"
 	"sync"
 	"time"
@@ -10,35 +11,44 @@ import (
 
 type Preloader struct {
 	*termui.Block
-	phaseM    *sync.Mutex
-	phase     int
-	loadFunc  func() error
-	onSuccess func()
-	onError   func(err error)
-	onCancel  func()
+	phaseM *sync.Mutex
+	phase  int
+
+	ticker  *time.Ticker
+	tickerM *sync.Mutex
 
 	cancel chan struct{}
 }
 
 var preloaderColors = []termui.Color{
-	termui.Color(17),
 	termui.Color(18),
 	termui.Color(19),
 	termui.Color(20),
 	termui.Color(21),
 }
 
+var idleColor = theme.Theme["hotKeyName"].Active.Bg
+
 func (p *Preloader) Draw(buf *termui.Buffer) {
+	p.tickerM.Lock()
+	isActive := p.ticker != nil
+	p.tickerM.Unlock()
+
 	p.phaseM.Lock()
 	phase := p.phase
 	p.phaseM.Unlock()
 	for i := range preloaderColors {
+		var color termui.Color
 		j := (i + phase) % len(preloaderColors)
-		color := preloaderColors[j]
+		if isActive {
+			color = preloaderColors[j]
+		} else {
+			color = idleColor
+		}
 		buf.SetCell(termui.Cell{
-			Rune:  ' ',
-			Style: termui.NewStyle(0, color),
-		}, image.Pt(p.Min.X+len(preloaderColors)-i, p.Min.Y))
+			Rune:  termui.HORIZONTAL_LINE,
+			Style: termui.NewStyle(color),
+		}, image.Pt(p.Min.X+len(preloaderColors)-i-1, p.Min.Y))
 	}
 }
 
@@ -48,63 +58,64 @@ func (p *Preloader) incrementPhase() {
 	p.phaseM.Unlock()
 }
 
-func NewPreloader(screenRect image.Rectangle, loadFunc func() error, onSuccess func(), onError func(err error), onCancel func()) *Preloader {
+func NewPreloader() *Preloader {
 	block := termui.NewBlock()
 	block.Border = false
-	startX := (screenRect.Max.X / 2) - len(preloaderColors)/2
-	startY := (screenRect.Max.Y / 2) - len(preloaderColors)/2
-	block.Rectangle.Min = image.Point{
+	return &Preloader{
+		Block:   block,
+		phase:   0,
+		phaseM:  &sync.Mutex{},
+		tickerM: &sync.Mutex{},
+	}
+}
+
+func (p *Preloader) Run(screenRect image.Rectangle, loadFunc func() error, onError func(error)) {
+	p.tickerM.Lock()
+	if p.ticker == nil {
+		p.ticker = time.NewTicker(100 * time.Millisecond)
+	} else {
+		close(p.cancel)
+	}
+	p.tickerM.Unlock()
+	startX := screenRect.Max.X - len(preloaderColors) - 1
+	startY := 0
+	p.Block.Rectangle.Min = image.Point{
 		X: startX,
 		Y: startY,
 	}
-	block.Rectangle.Max = image.Point{
+	p.Block.Rectangle.Max = image.Point{
 		X: startX + len(preloaderColors),
 		Y: startY + 1,
 	}
-	return &Preloader{
-		Block:     block,
-		phaseM:    &sync.Mutex{},
-		loadFunc:  loadFunc,
-		onSuccess: onSuccess,
-		onError:   onError,
-		onCancel:  onCancel,
-	}
-}
 
-func (p *Preloader) OnEvent(event *termui.Event) bool {
-	switch event.ID {
-	case "<Escape>":
-		close(p.cancel)
-	}
-	return false
-}
-
-func (p *Preloader) Run() {
-	ticker := time.NewTicker(100 * time.Millisecond)
 	loaded := make(chan error)
 	p.cancel = make(chan struct{})
 	go func() {
-		defer ticker.Stop()
 		for {
 			select {
-			case <-ticker.C:
+			case <-p.ticker.C:
 				p.incrementPhase()
 				termui.Render(p)
 			case err := <-loaded:
 				if err != nil {
-					p.onError(err)
-				} else {
-					p.onSuccess()
+					onError(err)
 				}
 				close(loaded)
+
+				p.ticker.Stop()
+				p.tickerM.Lock()
+				p.ticker = nil
+				p.tickerM.Unlock()
+
+				termui.Render(p)
+
 				return
 			case <-p.cancel:
-				p.onCancel()
 				return
 			}
 		}
 	}()
 	go func() {
-		loaded <- p.loadFunc()
+		loaded <- loadFunc()
 	}()
 }
