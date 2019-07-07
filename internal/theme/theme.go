@@ -51,3 +51,11 @@ var Theme = map[string]themeMap{
 		Active:   termui.NewStyle(termui.Color(237), termui.Color(39)),
 	},
 }
+
+var PreloaderColors = []termui.Color{
+	termui.Color(18),
+	termui.Color(19),
+	termui.Color(20),
+	termui.Color(21),
+}
+var PreloaderIdleColor = termui.Color(39)
