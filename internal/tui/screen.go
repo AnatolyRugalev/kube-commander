@@ -21,6 +21,8 @@ type Screen struct {
 	popupM *sync.Mutex
 	popup  ui.Drawable
 
+	preloader *widgets.Preloader
+
 	rightPaneStackM *sync.Mutex
 	rightPaneStack  []Pane
 
@@ -44,6 +46,7 @@ func NewScreen() *Screen {
 		rightPaneStackM: &sync.Mutex{},
 		focusM:          &sync.Mutex{},
 		clickMux:        &sync.Mutex{},
+		preloader:       widgets.NewPreloader(),
 	}
 	return s
 }
@@ -80,6 +83,7 @@ func (s *Screen) Render() {
 	} else {
 		ui.Render(s)
 	}
+	ui.Render(s.preloader)
 }
 
 func (s *Screen) RenderAll() {
@@ -87,6 +91,7 @@ func (s *Screen) RenderAll() {
 	if s.popup != nil {
 		ui.Render(s.popup)
 	}
+	ui.Render(s.preloader)
 }
 
 func (s *Screen) Draw(buf *ui.Buffer) {
@@ -333,29 +338,18 @@ func (s *Screen) reloadCurrentRightPane() {
 	}
 	s.rightPaneStackM.Unlock()
 
-	// Add preloader overlay
-	preloader := widgets.NewPreloader(s.Rectangle, func() error {
-		return pane.Reload()
-	}, func() {
-		s.popFocus()
-		s.removePopup()
+	s.preloader.Run(s.Rectangle, func() error {
+		err := pane.Reload()
 		s.Render()
+		return err
 	}, func(err error) {
 		ShowErrorDialog(err, func() error {
-			s.popFocus()
 			s.popRightPane()
 			return nil
 		})
 		s.Render()
-	}, func() {
-		s.removePopup()
-		s.popRightPane()
-		s.Render()
 	})
-	s.setPopup(preloader)
-	s.Focus(preloader)
 	s.Render()
-	preloader.Run()
 }
 
 func (s *Screen) setPopup(p ui.Drawable) {
