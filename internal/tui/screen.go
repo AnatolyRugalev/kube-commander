@@ -21,7 +21,8 @@ type Screen struct {
 	popupM *sync.Mutex
 	popup  ui.Drawable
 
-	preloader *widgets.Preloader
+	preloader   *widgets.Preloader
+	autoRefresh *widgets.AutoRefresh
 
 	rightPaneStackM *sync.Mutex
 	rightPaneStack  []Pane
@@ -38,6 +39,10 @@ type Screen struct {
 	selectedNamespace string
 }
 
+func (s *Screen) Refresh() {
+	s.reloadCurrentRightPane()
+}
+
 func NewScreen() *Screen {
 	s := &Screen{
 		Grid:            ui.NewGrid(),
@@ -48,6 +53,8 @@ func NewScreen() *Screen {
 		clickMux:        &sync.Mutex{},
 		preloader:       widgets.NewPreloader(),
 	}
+	refresh := widgets.NewAutoRefresh(s)
+	s.autoRefresh = refresh
 	return s
 }
 
@@ -84,6 +91,7 @@ func (s *Screen) Render() {
 		ui.Render(s)
 	}
 	ui.Render(s.preloader)
+	ui.Render(s.autoRefresh)
 }
 
 func (s *Screen) RenderAll() {
@@ -92,6 +100,7 @@ func (s *Screen) RenderAll() {
 		ui.Render(s.popup)
 	}
 	ui.Render(s.preloader)
+	ui.Render(s.autoRefresh)
 }
 
 func (s *Screen) Draw(buf *ui.Buffer) {
@@ -190,8 +199,14 @@ func (s *Screen) popRightPane() Pane {
 
 func (s *Screen) updateHotkeys() {
 	s.hotkeys.Clear()
-	s.hotkeys.SetHotKey(1, "Esc", "Back")
-	s.hotkeys.SetHotKey(2, "C-N", "Namespace")
+	s.hotkeys.SetHotKey(1, "F5", "Refresh")
+	var auto string
+	if s.autoRefresh.Interval() == 0 {
+		auto = "Off"
+	} else {
+		auto = fmt.Sprintf("%ds", int(s.autoRefresh.Interval().Seconds()))
+	}
+	s.hotkeys.SetHotKey(2, "C-B", "Auto:"+auto)
 	s.hotkeys.SetHotKey(10, "Q", "Quit")
 	if a, ok := s.focus.(widgets.HasHotKeys); ok {
 		for i, key := range a.GetHotKeys() {
@@ -210,6 +225,10 @@ func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
+	case "<C-b>":
+		s.autoRefresh.Toggle()
+		s.updateHotkeys()
+		return false, true
 	case "<C-n>":
 		s.ShowNamespaceSelection()
 		return true, false
