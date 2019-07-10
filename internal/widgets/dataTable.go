@@ -44,11 +44,11 @@ func NewDataTable(handler DataTableHandler, screenHandler ScreenHandler) *DataTa
 func (lt *DataTable) Reload() error {
 	lt.reloadMx.Lock()
 	defer lt.reloadMx.Unlock()
-	lt.rows = []ListRow{}
 	data, err := lt.dataHandler.LoadData()
 	if err != nil {
 		return err
 	}
+	lt.rows = []ListRow{}
 	for _, row := range data {
 		lt.rows = append(lt.rows, row)
 	}
