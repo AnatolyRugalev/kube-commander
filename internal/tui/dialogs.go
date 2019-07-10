@@ -155,7 +155,7 @@ func (dlg *Dialog) onResult() {
 	if btn.onClick != nil {
 		err := btn.onClick()
 		if err != nil {
-			ShowErrorDialog(err, nil)
+			screen.ShowDialog(NewErrorDialog(err, nil))
 		} else {
 			screen.reloadCurrentRightPane()
 		}
@@ -206,20 +206,10 @@ func (dlg *Dialog) locateAndFocus(x, y int) bool {
 	return false
 }
 
-func ShowConfirmDialog(text string, onOk btnFunc) {
-	dlg := newDialog("Are you sure?", text, NewButton(ButtonCancel, nil), NewButton(ButtonOk, onOk))
-	screen.Focus(dlg)
-	screen.setPopup(dlg)
+func NewConfirmDialog(text string, onOk btnFunc) *Dialog {
+	return newDialog("Are you sure?", text, NewButton(ButtonCancel, nil), NewButton(ButtonOk, onOk))
 }
 
-func ShowErrorDialog(err error, onClick btnFunc) {
-	dlg := newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
-	screen.Focus(dlg)
-	screen.setPopup(dlg)
-}
-
-func ShowMessageDialog(text string) {
-	dlg := newDialog("Message", text)
-	screen.Focus(dlg)
-	screen.setPopup(dlg)
+func NewErrorDialog(err error, onClick btnFunc) *Dialog {
+	return newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
 }

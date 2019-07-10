@@ -72,8 +72,8 @@ func OnResourceDelete(handler widgets.ListTableHandler, idx int, row widgets.Lis
 		return false
 	}
 	text := fmt.Sprintf("Are you sure you want to delete %s?", h.DeleteDescription(idx, row))
-	ShowConfirmDialog(text, func() error {
+	screen.ShowDialog(NewConfirmDialog(text, func() error {
 		return h.Delete(idx, row)
-	})
+	}))
 	return true
 }

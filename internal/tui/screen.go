@@ -21,8 +21,7 @@ type Screen struct {
 	popupM *sync.Mutex
 	popup  ui.Drawable
 
-	preloader   *widgets.Preloader
-	autoRefresh *widgets.AutoRefresh
+	preloader *widgets.Preloader
 
 	rightPaneStackM *sync.Mutex
 	rightPaneStack  []Pane
@@ -37,10 +36,9 @@ type Screen struct {
 	handleEvents bool
 
 	selectedNamespace string
-}
 
-func (s *Screen) Refresh() {
-	s.reloadCurrentRightPane()
+	refreshTimer    *time.Timer
+	refreshInterval int
 }
 
 func NewScreen() *Screen {
@@ -53,8 +51,7 @@ func NewScreen() *Screen {
 		clickMux:        &sync.Mutex{},
 		preloader:       widgets.NewPreloader(),
 	}
-	refresh := widgets.NewAutoRefresh(s)
-	s.autoRefresh = refresh
+	s.startAutoRefresh()
 	return s
 }
 
@@ -62,7 +59,7 @@ func (s *Screen) SwitchToCommand(command string) {
 	s.Switch(func() error {
 		return cmd.Shell(command)
 	}, func(err error) {
-		ShowErrorDialog(errors.Wrap(err, fmt.Sprintf("error executing command %s", command)), nil)
+		s.ShowDialog(NewErrorDialog(errors.Wrap(err, fmt.Sprintf("error executing command %s", command)), nil))
 	})
 }
 
@@ -91,7 +88,6 @@ func (s *Screen) Render() {
 		ui.Render(s)
 	}
 	ui.Render(s.preloader)
-	ui.Render(s.autoRefresh)
 }
 
 func (s *Screen) RenderAll() {
@@ -100,7 +96,6 @@ func (s *Screen) RenderAll() {
 		ui.Render(s.popup)
 	}
 	ui.Render(s.preloader)
-	ui.Render(s.autoRefresh)
 }
 
 func (s *Screen) Draw(buf *ui.Buffer) {
@@ -201,10 +196,11 @@ func (s *Screen) updateHotkeys() {
 	s.hotkeys.Clear()
 	s.hotkeys.SetHotKey(1, "F5", "Refresh")
 	var auto string
-	if s.autoRefresh.Interval() == 0 {
+	interval := refreshIntervals[s.refreshInterval]
+	if interval == 0 {
 		auto = "Off"
 	} else {
-		auto = fmt.Sprintf("%ds", int(s.autoRefresh.Interval().Seconds()))
+		auto = fmt.Sprintf("%ds", int(interval.Seconds()))
 	}
 	s.hotkeys.SetHotKey(2, "C-B", "Auto:"+auto)
 	s.hotkeys.SetHotKey(10, "Q", "Quit")
@@ -226,7 +222,7 @@ func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 		s.reloadCurrentRightPane()
 		return false, false
 	case "<C-b>":
-		s.autoRefresh.Toggle()
+		s.toggleAutoRefresh()
 		s.updateHotkeys()
 		return false, true
 	case "<C-n>":
@@ -350,6 +346,9 @@ func (s *Screen) ReplaceRightPane(pane Pane) {
 
 func (s *Screen) reloadCurrentRightPane() {
 	s.rightPaneStackM.Lock()
+	if len(s.rightPaneStack) == 0 {
+		return
+	}
 	pane, ok := s.rightPaneStack[0].(Loadable)
 	if !ok {
 		s.rightPaneStackM.Unlock()
@@ -362,10 +361,12 @@ func (s *Screen) reloadCurrentRightPane() {
 		s.Render()
 		return err
 	}, func(err error) {
-		ShowErrorDialog(err, func() error {
-			s.popRightPane()
-			return nil
-		})
+		s.ShowDialog(
+			NewErrorDialog(err, func() error {
+				s.popRightPane()
+				return nil
+			}),
+		)
 		s.Render()
 	})
 	s.Render()
@@ -407,4 +408,9 @@ func (s *Screen) Run() {
 			}
 		}
 	}
+}
+
+func (s *Screen) ShowDialog(dialog Pane) {
+	s.Focus(dialog)
+	s.setPopup(dialog)
 }
