@@ -16,6 +16,7 @@ type Focusable interface {
 }
 
 type Pane interface {
+	ui.Drawable
 	Eventable
 	In(image.Rectangle) bool
 	Bounds() image.Rectangle

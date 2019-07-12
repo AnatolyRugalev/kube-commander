@@ -21,6 +21,8 @@ type Screen struct {
 	popupM *sync.Mutex
 	popup  ui.Drawable
 
+	preloader *widgets.Preloader
+
 	rightPaneStackM *sync.Mutex
 	rightPaneStack  []Pane
 
@@ -34,6 +36,9 @@ type Screen struct {
 	handleEvents bool
 
 	selectedNamespace string
+
+	refreshTimer    *time.Timer
+	refreshInterval int
 }
 
 func NewScreen() *Screen {
@@ -44,7 +49,9 @@ func NewScreen() *Screen {
 		rightPaneStackM: &sync.Mutex{},
 		focusM:          &sync.Mutex{},
 		clickMux:        &sync.Mutex{},
+		preloader:       widgets.NewPreloader(),
 	}
+	s.startAutoRefresh()
 	return s
 }
 
@@ -52,7 +59,7 @@ func (s *Screen) SwitchToCommand(command string) {
 	s.Switch(func() error {
 		return cmd.Shell(command)
 	}, func(err error) {
-		ShowErrorDialog(errors.Wrap(err, fmt.Sprintf("error executing command %s", command)), nil)
+		s.ShowDialog(NewErrorDialog(errors.Wrap(err, fmt.Sprintf("error executing command %s", command)), nil))
 	})
 }
 
@@ -80,6 +87,7 @@ func (s *Screen) Render() {
 	} else {
 		ui.Render(s)
 	}
+	ui.Render(s.preloader)
 }
 
 func (s *Screen) RenderAll() {
@@ -87,6 +95,7 @@ func (s *Screen) RenderAll() {
 	if s.popup != nil {
 		ui.Render(s.popup)
 	}
+	ui.Render(s.preloader)
 }
 
 func (s *Screen) Draw(buf *ui.Buffer) {
@@ -185,8 +194,15 @@ func (s *Screen) popRightPane() Pane {
 
 func (s *Screen) updateHotkeys() {
 	s.hotkeys.Clear()
-	s.hotkeys.SetHotKey(1, "Esc", "Back")
-	s.hotkeys.SetHotKey(2, "C-N", "Namespace")
+	s.hotkeys.SetHotKey(1, "F5", "Refresh")
+	var auto string
+	interval := refreshIntervals[s.refreshInterval]
+	if interval == 0 {
+		auto = "Off"
+	} else {
+		auto = fmt.Sprintf("%ds", int(interval.Seconds()))
+	}
+	s.hotkeys.SetHotKey(2, "C-B", "Auto:"+auto)
 	s.hotkeys.SetHotKey(10, "Q", "Quit")
 	if a, ok := s.focus.(widgets.HasHotKeys); ok {
 		for i, key := range a.GetHotKeys() {
@@ -205,6 +221,10 @@ func (s *Screen) onEvent(event *ui.Event) (bool, bool) {
 	case "<F5>", "<C-r>":
 		s.reloadCurrentRightPane()
 		return false, false
+	case "<C-b>":
+		s.toggleAutoRefresh()
+		s.updateHotkeys()
+		return false, true
 	case "<C-n>":
 		s.ShowNamespaceSelection()
 		return true, false
@@ -326,6 +346,9 @@ func (s *Screen) ReplaceRightPane(pane Pane) {
 
 func (s *Screen) reloadCurrentRightPane() {
 	s.rightPaneStackM.Lock()
+	if len(s.rightPaneStack) == 0 {
+		return
+	}
 	pane, ok := s.rightPaneStack[0].(Loadable)
 	if !ok {
 		s.rightPaneStackM.Unlock()
@@ -333,29 +356,19 @@ func (s *Screen) reloadCurrentRightPane() {
 	}
 	s.rightPaneStackM.Unlock()
 
-	// Add preloader overlay
-	preloader := widgets.NewPreloader(s.Rectangle, func() error {
-		return pane.Reload()
-	}, func() {
-		s.popFocus()
-		s.removePopup()
-		s.Render()
+	s.preloader.Run(s.Rectangle, func() error {
+		err := pane.Reload()
+		return err
 	}, func(err error) {
-		ShowErrorDialog(err, func() error {
-			s.popFocus()
-			s.popRightPane()
-			return nil
-		})
-		s.Render()
-	}, func() {
-		s.removePopup()
-		s.popRightPane()
+		s.ShowDialog(
+			NewErrorDialog(err, func() error {
+				s.popRightPane()
+				return nil
+			}),
+		)
 		s.Render()
 	})
-	s.setPopup(preloader)
-	s.Focus(preloader)
 	s.Render()
-	preloader.Run()
 }
 
 func (s *Screen) setPopup(p ui.Drawable) {
@@ -394,4 +407,9 @@ func (s *Screen) Run() {
 			}
 		}
 	}
+}
+
+func (s *Screen) ShowDialog(dialog Pane) {
+	s.Focus(dialog)
+	s.setPopup(dialog)
 }

@@ -42,7 +42,7 @@ func NewDaemonSetsTable(namespace string) *widgets.DataTable {
 		namespace: namespace,
 	}
 	lt := widgets.NewDataTable(pt, screen)
-	lt.Title = "Daemon Sets <" + namespace + ">"
+	lt.Title = "Daemon Sets"
 	return lt
 }
 

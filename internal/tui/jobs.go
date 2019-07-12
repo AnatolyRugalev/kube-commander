@@ -43,7 +43,7 @@ func NewJobsTable(namespace string) *widgets.DataTable {
 		namespace: namespace,
 	}
 	lt := widgets.NewDataTable(pt, screen)
-	lt.Title = "Jobs <" + namespace + ">"
+	lt.Title = "Jobs"
 	return lt
 }
 

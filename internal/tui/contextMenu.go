@@ -57,7 +57,7 @@ func (cmh *ContextMenuHandler) OnSelect(idx int, row widgets.ListRow) bool {
 func (s *Screen) ShowNamespaceSelection() {
 	namespaces, err := kube.GetClient().CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
-		ShowErrorDialog(err, nil)
+		s.ShowDialog(NewErrorDialog(err, nil))
 		return
 	}
 	var rows []widgets.ListRow
@@ -77,8 +77,7 @@ func (s *Screen) ShowNamespaceSelection() {
 	y1 := screen.Rectangle.Max.Y/2 - height/2
 	x1 := screen.Rectangle.Max.X/2 - width/2
 	menu.SetRect(x1, y1, x1+width, y1+height)
-	s.setPopup(menu)
-	s.Focus(menu)
+	s.ShowDialog(menu)
 }
 
 func (s *Screen) FocusToNamespace(namespace string) {

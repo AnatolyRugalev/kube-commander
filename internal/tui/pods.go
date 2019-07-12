@@ -62,7 +62,7 @@ func NewPodsTable(namespace string) *widgets.DataTable {
 		namespace: namespace,
 	}
 	lt := widgets.NewDataTable(pt, screen)
-	lt.Title = "Pods <" + namespace + ">"
+	lt.Title = "Pods"
 	return lt
 }
 
@@ -104,7 +104,7 @@ func (pt *PodsTable) newRow(pod v1.Pod) []string {
 func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
 	if err != nil {
-		ShowErrorDialog(err, nil)
+		screen.ShowDialog(NewErrorDialog(err, nil))
 		return true
 	}
 	if len(pod.Spec.Containers)+len(pod.Spec.InitContainers) > 1 {
@@ -120,7 +120,7 @@ func (pt *PodsTable) OnExec(handler widgets.ListTableHandler, idx int, row widge
 func (pt *PodsTable) OnForward(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
 	if err != nil {
-		ShowErrorDialog(err, nil)
+		screen.ShowDialog(NewErrorDialog(err, nil))
 		return true
 	}
 	var rows []widgets.ListRow
@@ -134,7 +134,7 @@ func (pt *PodsTable) OnForward(handler widgets.ListTableHandler, idx int, row wi
 		}
 	}
 	if len(rows) == 0 {
-		ShowErrorDialog(errors.New("Selected pod does not have any ports defined"), nil)
+		screen.ShowDialog(NewErrorDialog(errors.New("Selected pod does not have any ports defined"), nil))
 		return true
 	}
 	portHandler := &PortSelectorHandler{
@@ -160,7 +160,7 @@ func (pt *PodsTable) OnForward(handler widgets.ListTableHandler, idx int, row wi
 func (pt *PodsTable) OnLogs(handler widgets.ListTableHandler, idx int, row widgets.ListRow) bool {
 	pod, err := kube.GetClient().CoreV1().Pods(pt.namespace).Get(row[0], metav1.GetOptions{})
 	if err != nil {
-		ShowErrorDialog(err, nil)
+		screen.ShowDialog(NewErrorDialog(err, nil))
 		return true
 	}
 	if len(pod.Spec.Containers)+len(pod.Spec.InitContainers) > 1 {
@@ -253,8 +253,7 @@ func (pt *PodsTable) ShowContainerSelection(pod *v1.Pod, onSelect func(container
 	y1 := screen.Rectangle.Max.Y/2 - height/2
 	x1 := screen.Rectangle.Max.X/2 - width/2
 	menu.SetRect(x1, y1, x1+width, y1+height)
-	screen.setPopup(menu)
-	screen.Focus(menu)
+	screen.ShowDialog(menu)
 }
 
 type ContainerSelectorHandler struct {
