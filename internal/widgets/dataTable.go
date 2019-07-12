@@ -47,7 +47,6 @@ func (lt *DataTable) Reload() error {
 		return err
 	}
 	lt.SetRows(data)
-	lt.UpdateCursor()
 
 	return nil
 }

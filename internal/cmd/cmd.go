@@ -27,25 +27,35 @@ func Execute(name string, arg ...string) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
 	// flag to ignore errors when killing process
-	killing := false
+	var (
+		killing    bool
+		commandPid int
+	)
 
 	go func(m *sync.Mutex, cmd *exec.Cmd) {
 		<-sigs
 		m.Lock()
+		defer m.Unlock()
 		killing = true
-		pid := cmd.Process.Pid
-		m.Unlock()
-		err := syscall.Kill(-pid, syscall.SIGKILL)
+		err := syscall.Kill(-commandPid, syscall.SIGKILL)
 		if err != nil {
 			panic(err)
 		}
 	}(mux, cmd)
 
-	err := cmd.Run()
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	mux.Lock()
+	commandPid = cmd.Process.Pid
+	mux.Unlock()
+
+	err = cmd.Wait()
 	signal.Reset(syscall.SIGINT)
+
 	mux.Lock()
 	defer mux.Unlock()
-
 	if killing {
 		return nil
 	}
