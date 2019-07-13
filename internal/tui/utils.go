@@ -31,7 +31,7 @@ func Age(startTime time.Time) string {
 	return dur.String()
 }
 
-func maxLinesWidth(arr []string) int {
+func maxLineWidth(arr []string) int {
 	var maxValue int
 	for i := 0; i < len(arr); i++ {
 		if len(arr[i]) > maxValue {

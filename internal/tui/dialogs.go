@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
+	"github.com/mitchellh/go-wordwrap"
 	"image"
 	"strings"
 
@@ -8,7 +10,7 @@ import (
 
 	"github.com/gizak/termui/v3"
 	ui "github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
+	uiwidgets "github.com/gizak/termui/v3/widgets"
 )
 
 // Buttons text
@@ -29,31 +31,31 @@ type btnFunc func() error
 
 // Button represents text button
 type Button struct {
-	*widgets.Paragraph
+	*uiwidgets.Paragraph
 	onClick btnFunc
 }
 
 // NewButton returns button with specified text
 func NewButton(text string, onClick btnFunc) *Button {
 	b := &Button{
-		Paragraph: widgets.NewParagraph(),
+		Paragraph: uiwidgets.NewParagraph(),
 	}
 	b.Text = text
 	b.onClick = onClick
 	return b
 }
 
-func (b *Button) setRect(x1, y1, x2, y2 int) {
-	b.Paragraph.SetRect(x1, y1, x2, y2)
-}
-
 // Dialog represents modal dialog window
 type Dialog struct {
-	*widgets.Paragraph
+	*uiwidgets.Paragraph
 	Buttons             []*Button
 	buttonStyle         ui.Style
 	selectedButtonStyle ui.Style
 	selectedButton      int
+}
+
+type Resizable interface {
+	Resize(screenRect image.Rectangle)
 }
 
 // Draw draws dialog and buttons
@@ -83,33 +85,35 @@ func (dlg *Dialog) setButtonsRect(x1, y1, x2, y2 int) {
 		by1 = y2 - buttonHeight
 		bx2 = bx1 + buttonWidth
 		by2 = y2 - 1
-		dlg.Buttons[i].setRect(bx1, by1, bx2, by2)
+		dlg.Buttons[i].SetRect(bx1, by1, bx2, by2)
 		left += buttonWidth + buttonMarginRight
 	}
 }
 
-func (dlg *Dialog) setRect() {
-	termWidth, termHeight := ui.TerminalDimensions()
-	lines := strings.Split(dlg.Paragraph.Text, "\n")
-	lineWidth := maxLinesWidth(lines) + 2
-	if len(dlg.Paragraph.Title) > lineWidth {
-		lineWidth = len(dlg.Paragraph.Title) + 5
-	}
-	if lineWidth > termWidth {
-		lineWidth = termWidth - 10
+func (dlg *Dialog) Resize(screenRect image.Rectangle) {
+	// Wrap text inside dialog to fit into 3/4 of the screen
+	wrapTextSize := screenRect.Max.X * 3 / 4
+	text := wordwrap.WrapString(dlg.Paragraph.Text, uint(wrapTextSize))
+	lines := strings.Split(text, "\n")
+
+	textWidth := maxLineWidth(lines) + 2
+	minWidth := len(dlg.Paragraph.Title) + 5
+
+	if textWidth < minWidth {
+		textWidth = minWidth
 	}
 
-	x1 := termWidth/2 - lineWidth/2 - 1
-	y1 := termHeight/2 - 5
-	x2 := x1 + lineWidth + dlg.Paragraph.PaddingLeft + dlg.Paragraph.PaddingRight
+	x1 := screenRect.Max.X/2 - textWidth/2 - 1
+	y1 := screenRect.Max.Y/2 - 5
+	x2 := x1 + textWidth
 	y2 := y1 + len(lines) + buttonHeight + 2
 
-	dlg.Paragraph.SetRect(x1, y1, x2, y2)
+	dlg.SetRect(x1, y1, x2, y2)
 	dlg.setButtonsRect(x1, y1, x2, y2)
 }
 
 func newDialog(title, text string, buttons ...*Button) *Dialog {
-	p := widgets.NewParagraph()
+	p := uiwidgets.NewParagraph()
 	p.Title = title
 	p.Text = text
 	p.BorderStyle = theme.Theme["dialog"].Active
@@ -129,8 +133,6 @@ func newDialog(title, text string, buttons ...*Button) *Dialog {
 			newDlg.addButton(button)
 		}
 	}
-
-	newDlg.setRect()
 
 	return newDlg
 }
@@ -215,4 +217,23 @@ func NewConfirmDialog(text string, onOk btnFunc) *Dialog {
 
 func NewErrorDialog(err error, onClick btnFunc) *Dialog {
 	return newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
+}
+
+func NewListTableDialog(title string, rows []widgets.ListRow, handler widgets.ListTableHandler) *widgets.ListTable {
+	lt := widgets.NewListTable(rows, handler, nil)
+	lt.Title = title
+	lt.IsContext = true
+	width := 30
+	for _, row := range rows {
+		rowWidth := 0
+		for _, col := range row {
+			rowWidth += len(col) + 2
+		}
+		if rowWidth > width {
+			width = rowWidth
+		}
+	}
+	height := len(rows) + 2
+	lt.SetRect(0, 0, width, height)
+	return lt
 }

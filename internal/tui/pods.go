@@ -144,16 +144,8 @@ func (pt *PodsTable) OnForward(handler widgets.ListTableHandler, idx int, row wi
 			screen.SwitchToCommand(cmd)
 		},
 	}
-	menu := widgets.NewListTable(rows, portHandler, nil)
-	menu.Title = "Select container port"
-	menu.IsContext = true
-	width := 30
-	height := len(rows) + 2
-	y1 := screen.Rectangle.Max.Y/2 - height/2
-	x1 := screen.Rectangle.Max.X/2 - width/2
-	menu.SetRect(x1, y1, x1+width, y1+height)
-	screen.setPopup(menu)
-	screen.Focus(menu)
+	menu := NewListTableDialog("Select container port", rows, portHandler)
+	screen.ShowDialog(menu)
 	return true
 }
 
@@ -245,14 +237,7 @@ func (pt *PodsTable) ShowContainerSelection(pod *v1.Pod, onSelect func(container
 		pod:      pod,
 		onSelect: onSelect,
 	}
-	menu := widgets.NewListTable(rows, handler, nil)
-	menu.Title = "Select container"
-	menu.IsContext = true
-	width := 30
-	height := len(rows) + 2
-	y1 := screen.Rectangle.Max.Y/2 - height/2
-	x1 := screen.Rectangle.Max.X/2 - width/2
-	menu.SetRect(x1, y1, x1+width, y1+height)
+	menu := NewListTableDialog("Select container", rows, handler)
 	screen.ShowDialog(menu)
 }
 
