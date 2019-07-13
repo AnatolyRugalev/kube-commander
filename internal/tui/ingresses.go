@@ -3,7 +3,7 @@ package tui
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
-	netv1beta1 "k8s.io/api/networking/v1beta1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 )
@@ -49,18 +49,18 @@ func (it *IngressesTable) GetHeaderRow() widgets.ListRow {
 }
 
 func (it *IngressesTable) LoadData() ([]widgets.ListRow, error) {
-	Ingresses, err := kube.GetClient().NetworkingV1beta1().Ingresses(it.namespace).List(metav1.ListOptions{})
+	ingresses, err := kube.GetClient().ExtensionsV1beta1().Ingresses(it.namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	var rows []widgets.ListRow
-	for _, service := range Ingresses.Items {
-		rows = append(rows, it.newRow(service))
+	for _, ing := range ingresses.Items {
+		rows = append(rows, it.newRow(ing))
 	}
 	return rows, nil
 }
 
-func (it *IngressesTable) newRow(svc netv1beta1.Ingress) widgets.ListRow {
+func (it *IngressesTable) newRow(svc extv1beta1.Ingress) widgets.ListRow {
 	ports := []string{"80"}
 	for _, rule := range svc.Spec.Rules {
 		for _, tls := range svc.Spec.TLS {
