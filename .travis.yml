@@ -3,6 +3,20 @@ language: go
 go:
   - 1.x
 
+addons:
+  apt:
+    packages:
+      - snapd
+
+env:
+  - PATH=/snap/bin:$PATH
+
+install:
+  - sudo snap install snapcraft --classic
+
+after_success:
+  - test -n "$TRAVIS_TAG" && snapcraft login --with snap.login
+
 if: tag IS present
 
 deploy:

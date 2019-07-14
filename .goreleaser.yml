@@ -32,3 +32,9 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+snapcrafts:
+  - publish: true
+    summary: Browse your kubernetes clusters in a casual way
+    grade: stable
+    license: MIT
+    base: core
