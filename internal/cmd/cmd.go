@@ -1,27 +1,16 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
-
-	"github.com/pkg/errors"
 )
 
 func Execute(name string, arg ...string) error {
-	// let's group processes into one process group
-	// to avoid zombie child processes
-	// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
-	cmd := exec.Command(name, arg...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-		Noctty:  true,
-	}
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd := createCmd(name, arg)
 
 	mux := &sync.Mutex{}
 	sigs := make(chan os.Signal, 1)
@@ -37,7 +26,7 @@ func Execute(name string, arg ...string) error {
 		m.Lock()
 		defer m.Unlock()
 		killing = true
-		err := syscall.Kill(-commandPid, syscall.SIGKILL)
+		err := killProcessGroup(commandPid)
 		if err != nil {
 			panic(err)
 		}
