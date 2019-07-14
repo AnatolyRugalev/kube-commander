@@ -2,7 +2,8 @@ before:
   hooks:
     - go mod download
 builds:
-- env:
+- main: ./cmd/kube-commander/main.go
+  env:
   - CGO_ENABLED=0
   - GO111MODULE=on
 archives:
