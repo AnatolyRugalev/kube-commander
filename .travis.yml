@@ -9,8 +9,7 @@ addons:
       - snapd
 
 env:
-  - PATH=/snap/bin:$PATH
-  - GO111MODULE=on
+  - PATH=/snap/bin:$PATH GO111MODULE=on
 
 install:
   - sudo snap install snapcraft --classic
