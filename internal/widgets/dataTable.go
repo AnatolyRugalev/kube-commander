@@ -1,13 +1,10 @@
 package widgets
 
-import (
-	"sync"
-)
+import "sync/atomic"
 
 type DataTable struct {
 	*ListTable
 	dataHandler DataTableHandler
-	reloadMx    *sync.Mutex
 }
 
 type DataTableHandler interface {
@@ -36,26 +33,20 @@ func NewDataTable(handler DataTableHandler, screenHandler ScreenHandler) *DataTa
 	lt := &DataTable{
 		ListTable:   NewListTable([]ListRow{}, handler, screenHandler),
 		dataHandler: handler,
-		reloadMx:    &sync.Mutex{},
 	}
 	return lt
 }
 
 func (lt *DataTable) Reload() error {
-	lt.reloadMx.Lock()
-	defer lt.reloadMx.Unlock()
+	atomic.StoreInt32(&lt.loadingFlag, 1)
+	defer atomic.StoreInt32(&lt.loadingFlag, 0)
+
+	lt.rows = []ListRow{}
 	data, err := lt.dataHandler.LoadData()
 	if err != nil {
 		return err
 	}
-	lt.rows = []ListRow{}
-	for _, row := range data {
-		lt.rows = append(lt.rows, row)
-	}
-	if len(lt.rows) == 0 {
-		lt.selectedRow = 0
-	} else if lt.selectedRow >= len(lt.rows) {
-		lt.selectedRow = len(lt.rows) - 1
-	}
+	lt.SetRows(data)
+
 	return nil
 }

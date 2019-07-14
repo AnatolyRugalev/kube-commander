@@ -65,7 +65,7 @@ func (dt *ReplicaSetsTable) GetHeaderRow() widgets.ListRow {
 func (dt *ReplicaSetsTable) newRow(rs v1.ReplicaSet) []string {
 	return widgets.ListRow{
 		rs.Name,
-		fmt.Sprintf("%d", rs.Spec.Replicas),
+		fmt.Sprintf("%d", *rs.Spec.Replicas),
 		fmt.Sprintf("%d", rs.Status.Replicas),
 		fmt.Sprintf("%d", rs.Status.ReadyReplicas),
 		Age(rs.CreationTimestamp.Time),

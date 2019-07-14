@@ -15,11 +15,23 @@ const (
 )
 
 func Age(startTime time.Time) string {
-	// TODO: humanize
-	return time.Since(startTime).Round(time.Second).String()
+	dur := time.Since(startTime).Round(time.Second)
+	if dur > time.Hour*24 {
+		days := dur.Nanoseconds() / (time.Hour * 24).Nanoseconds()
+		return fmt.Sprintf("%dd", days)
+	}
+	if dur > time.Hour {
+		hours := dur.Nanoseconds() / time.Hour.Nanoseconds()
+		return fmt.Sprintf("%dh", hours)
+	}
+	if dur > time.Minute {
+		minutes := dur.Nanoseconds() / time.Minute.Nanoseconds()
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return dur.String()
 }
 
-func maxLinesWidth(arr []string) int {
+func maxLineWidth(arr []string) int {
 	var maxValue int
 	for i := 0; i < len(arr); i++ {
 		if len(arr[i]) > maxValue {

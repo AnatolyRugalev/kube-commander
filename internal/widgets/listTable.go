@@ -2,6 +2,8 @@ package widgets
 
 import (
 	"image"
+	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/theme"
@@ -12,6 +14,8 @@ type ListRow []string
 
 type ListTable struct {
 	*ui.Block
+	loadingFlag  int32
+	mux          sync.Mutex
 	rows         []ListRow
 	header       ListRow
 	columnWidths []int
@@ -122,15 +126,10 @@ func NewListTable(rows []ListRow, handler ListTableHandler, screenHandler Screen
 	return lt
 }
 
-func (lt *ListTable) Rows() []ListRow {
-	return lt.rows
-}
-
-func (lt *ListTable) SetRows(rows []ListRow) {
-	lt.rows = rows
-}
-
 func (lt *ListTable) Draw(buf *ui.Buffer) {
+	if atomic.LoadInt32(&lt.loadingFlag) == 1 {
+		return
+	}
 	for i := range lt.rows {
 		if i == lt.selectedRow {
 			lt.RowStyles[i] = lt.SelectedRowStyle
@@ -277,6 +276,9 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 }
 
 func (lt *ListTable) OnEvent(event *ui.Event) bool {
+	if atomic.LoadInt32(&lt.loadingFlag) == 1 {
+		return false
+	}
 	if len(lt.rows) == 0 {
 		return false
 	}
@@ -309,7 +311,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 		return true
 	case "<Enter>", mouseSelectEvent:
 		if s, ok := lt.eventHandler.(ListTableSelectable); ok {
-			return s.OnSelect(lt.selectedRow, lt.SelectedRow())
+			return s.OnSelect(lt.SelectedRowIdx(), lt.SelectedRow())
 		}
 		return false
 	case mouseChangeEvent:
@@ -328,7 +330,7 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 	if a, ok := lt.eventHandler.(ListTableHandlerWithActions); ok {
 		for _, action := range a.GetActions() {
 			if event.ID == action.HotKey {
-				action.Func(lt.eventHandler, lt.selectedRow, lt.SelectedRow())
+				action.Func(lt.eventHandler, lt.SelectedRowIdx(), lt.SelectedRow())
 				return true
 			}
 		}
@@ -338,28 +340,63 @@ func (lt *ListTable) OnEvent(event *ui.Event) bool {
 }
 
 func (lt *ListTable) ScrollTo(sel int) {
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
 	lt.setCursor(sel)
 }
 
 func (lt *ListTable) Scroll(amount int) {
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	sel := lt.selectedRow + amount
+	lt.setCursor(sel)
+}
+
+func (lt *ListTable) scroll(amount int) {
 	sel := lt.selectedRow + amount
 	lt.setCursor(sel)
 }
 
 func (lt *ListTable) Up() {
-	lt.Scroll(-1)
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	lt.scroll(-1)
 }
 
 func (lt *ListTable) Down() {
-	lt.Scroll(1)
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	lt.scroll(1)
 }
 
 func (lt *ListTable) PageUp() {
-	lt.Scroll(-1 * (lt.Inner.Dy() - 1))
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	lt.scroll(-1 * (lt.Inner.Dy() - 1))
 }
 
 func (lt *ListTable) PageDown() {
-	lt.Scroll(lt.Inner.Dy() - 1)
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	lt.scroll(lt.Inner.Dy() - 1)
+}
+
+func (lt *ListTable) Rows() []ListRow {
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	return lt.rows
+}
+
+func (lt *ListTable) SetRows(rows []ListRow) {
+	lt.mux.Lock()
+	defer lt.mux.Unlock()
+	lt.rows = rows
+
+	if len(lt.rows) == 0 {
+		lt.selectedRow = 0
+	} else if lt.selectedRow >= len(lt.rows) {
+		lt.selectedRow = len(lt.rows) - 1
+	}
 }
 
 func (lt *ListTable) SelectedRowIdx() int {
@@ -378,7 +415,7 @@ func (lt *ListTable) setCursor(idx int) bool {
 		changed := lt.selectedRow != idx
 		lt.selectedRow = idx
 		if c, ok := lt.eventHandler.(ListTableCursorChangable); ok && changed {
-			c.OnCursorChange(lt.selectedRow, lt.SelectedRow())
+			c.OnCursorChange(lt.SelectedRowIdx(), lt.SelectedRow())
 			return true
 		}
 		return true

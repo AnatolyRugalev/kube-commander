@@ -19,7 +19,7 @@ type Screen struct {
 	hotkeys *widgets.HotKeysBar
 
 	popupM *sync.Mutex
-	popup  ui.Drawable
+	popup  Pane
 
 	preloader *widgets.Preloader
 
@@ -67,18 +67,18 @@ func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
 	mouseMoveEvents(false)
 	ui.Close()
 	s.handleEvents = false
-	go func() {
-		err := switchFunc()
-		if err := ui.Init(); err != nil {
-			log.Fatalf("failed to initialize termui: %v", err)
-		}
-		s.Init()
-		mouseMoveEvents(true)
-		if err != nil {
-			onError(err)
-		}
-		s.RenderAll()
-	}()
+
+	err := switchFunc()
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	s.Init()
+	mouseMoveEvents(true)
+	if err != nil {
+		onError(err)
+	}
+	s.RenderAll()
+
 }
 
 func (s *Screen) Render() {
@@ -93,6 +93,7 @@ func (s *Screen) Render() {
 func (s *Screen) RenderAll() {
 	ui.Render(s)
 	if s.popup != nil {
+		s.centerDialog(s.popup)
 		ui.Render(s.popup)
 	}
 	ui.Render(s.preloader)
@@ -358,7 +359,6 @@ func (s *Screen) reloadCurrentRightPane() {
 
 	s.preloader.Run(s.Rectangle, func() error {
 		err := pane.Reload()
-		s.Render()
 		return err
 	}, func(err error) {
 		s.ShowDialog(
@@ -372,7 +372,7 @@ func (s *Screen) reloadCurrentRightPane() {
 	s.Render()
 }
 
-func (s *Screen) setPopup(p ui.Drawable) {
+func (s *Screen) setPopup(p Pane) {
 	s.popupM.Lock()
 	s.popup = p
 	s.popupM.Unlock()
@@ -411,6 +411,53 @@ func (s *Screen) Run() {
 }
 
 func (s *Screen) ShowDialog(dialog Pane) {
+	s.centerDialog(dialog)
 	s.Focus(dialog)
 	s.setPopup(dialog)
+}
+
+func (s *Screen) ShowContextMenu(position *image.Point, menu Pane) {
+	s.resizeContextMenu(position, menu)
+	s.Focus(menu)
+	s.setPopup(menu)
+}
+
+func (s *Screen) centerDialog(dialog Pane) {
+	if r, ok := dialog.(Resizable); ok {
+		r.Resize(s.Inner)
+	} else {
+		rect := dialog.GetRect()
+		width := rect.Max.X - rect.Min.X
+		height := rect.Max.Y - rect.Min.Y
+		if height > s.Inner.Max.Y {
+			height = s.Inner.Max.Y
+		}
+		x := s.Inner.Max.X/2 - width/2
+		y := s.Inner.Max.Y/2 - height/2
+		dialog.SetRect(x, y, x+width, y+height)
+	}
+}
+
+func (s *Screen) resizeContextMenu(position *image.Point, dialog Pane) {
+	rect := dialog.GetRect()
+	width := rect.Max.X - rect.Min.X
+	height := rect.Max.Y - rect.Min.Y
+	maxHeight := s.Inner.Max.Y
+	if height > maxHeight {
+		height = maxHeight
+	}
+	x1 := position.X
+	y1 := position.Y
+	x2 := x1 + width
+	y2 := y1 + height
+
+	if y2 >= s.Inner.Max.Y {
+		y1 = s.Inner.Max.Y - height
+		y2 = s.Inner.Max.Y
+	}
+	if x2 >= s.Inner.Max.X {
+		x1 = s.Inner.Max.X - width
+		x2 = s.Inner.Max.X
+	}
+	dialog.SetRect(x1, y1, x2, y2)
 }

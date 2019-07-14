@@ -1,33 +1,30 @@
 package widgets
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 	"image"
 	"sync"
 	"time"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/theme"
 
 	"github.com/gizak/termui/v3"
 )
 
 type Preloader struct {
 	*termui.Block
-	phaseM *sync.Mutex
-	phase  int
-
-	ticker  *time.Ticker
-	tickerM *sync.Mutex
+	mux      sync.Mutex
+	phase    int
+	isActive bool
 
 	cancel chan struct{}
 }
 
 func (p *Preloader) Draw(buf *termui.Buffer) {
-	p.tickerM.Lock()
-	isActive := p.ticker != nil
-	p.tickerM.Unlock()
-
-	p.phaseM.Lock()
+	p.mux.Lock()
 	phase := p.phase
-	p.phaseM.Unlock()
+	isActive := p.isActive
+	p.mux.Unlock()
+
 	for i := range theme.PreloaderColors {
 		var color termui.Color
 		j := (i + phase) % len(theme.PreloaderColors)
@@ -44,30 +41,32 @@ func (p *Preloader) Draw(buf *termui.Buffer) {
 }
 
 func (p *Preloader) incrementPhase() {
-	p.phaseM.Lock()
+	p.mux.Lock()
 	p.phase = (p.phase + 1) % len(theme.PreloaderColors)
-	p.phaseM.Unlock()
+	p.mux.Unlock()
 }
 
 func NewPreloader() *Preloader {
 	block := termui.NewBlock()
 	block.Border = false
 	return &Preloader{
-		Block:   block,
-		phase:   0,
-		phaseM:  &sync.Mutex{},
-		tickerM: &sync.Mutex{},
+		Block: block,
+		phase: 0,
 	}
 }
 
-func (p *Preloader) Run(screenRect image.Rectangle, loadFunc func() error, onError func(error)) {
-	p.tickerM.Lock()
-	if p.ticker == nil {
-		p.ticker = time.NewTicker(100 * time.Millisecond)
-	} else {
-		close(p.cancel)
-	}
-	p.tickerM.Unlock()
+func (p *Preloader) startLoading(loadFunc func() error) <-chan error {
+	loaded := make(chan error)
+	go func(loadFunc func() error) {
+		loaded <- loadFunc()
+	}(loadFunc)
+	return loaded
+}
+
+func (p *Preloader) init(screenRect image.Rectangle) {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+	p.isActive = true
 	startX := screenRect.Max.X - len(theme.PreloaderColors) - 1
 	startY := 0
 	p.Block.Rectangle.Min = image.Point{
@@ -78,35 +77,35 @@ func (p *Preloader) Run(screenRect image.Rectangle, loadFunc func() error, onErr
 		X: startX + len(theme.PreloaderColors),
 		Y: startY + 1,
 	}
+}
 
-	loaded := make(chan error)
+func (p *Preloader) Run(screenRect image.Rectangle, loadFunc func() error, onError func(error)) {
 	p.cancel = make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-p.ticker.C:
-				p.incrementPhase()
-				termui.Render(p)
-			case err := <-loaded:
-				if err != nil {
-					onError(err)
-				}
-				close(loaded)
+	loaded := p.startLoading(loadFunc)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
-				p.ticker.Stop()
-				p.tickerM.Lock()
-				p.ticker = nil
-				p.tickerM.Unlock()
+	p.init(screenRect)
 
-				termui.Render(p)
-
-				return
-			case <-p.cancel:
-				return
+	for {
+		select {
+		case <-ticker.C:
+			p.incrementPhase()
+			termui.Render(p)
+		case err := <-loaded:
+			p.mux.Lock()
+			p.isActive = false
+			p.mux.Unlock()
+			if err != nil {
+				onError(err)
 			}
+			return
+		case <-p.cancel:
+			p.mux.Lock()
+			p.isActive = false
+			p.mux.Unlock()
+			return
 		}
-	}()
-	go func() {
-		loaded <- loadFunc()
-	}()
+	}
+
 }

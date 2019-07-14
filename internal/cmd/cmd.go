@@ -1,11 +1,13 @@
 package cmd
 
 import (
-	"github.com/pkg/errors"
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
+
+	"github.com/pkg/errors"
 )
 
 func Execute(name string, arg ...string) error {
@@ -21,20 +23,39 @@ func Execute(name string, arg ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	mux := &sync.Mutex{}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
 	// flag to ignore errors when killing process
-	killing := false
-	go func() {
+	var (
+		killing    bool
+		commandPid int
+	)
+
+	go func(m *sync.Mutex, cmd *exec.Cmd) {
 		<-sigs
+		m.Lock()
+		defer m.Unlock()
 		killing = true
-		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		err := syscall.Kill(-commandPid, syscall.SIGKILL)
 		if err != nil {
 			panic(err)
 		}
-	}()
-	err := cmd.Run()
+	}(mux, cmd)
+
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	mux.Lock()
+	commandPid = cmd.Process.Pid
+	mux.Unlock()
+
+	err = cmd.Wait()
 	signal.Reset(syscall.SIGINT)
+
+	mux.Lock()
+	defer mux.Unlock()
 	if killing {
 		return nil
 	}

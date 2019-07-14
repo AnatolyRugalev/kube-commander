@@ -4,6 +4,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/widgets"
 	"github.com/gizak/termui/v3"
+	"image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -17,23 +18,9 @@ func (s *Screen) ShowActionsContextMenu(listHandler widgets.ListTableHandler, ac
 		listHandler: listHandler,
 		actions:     actions,
 	}
-	menu := widgets.NewListTable(rows, handler, nil)
-	menu.IsContext = true
-
-	x, y := mouse.X, mouse.Y
-
-	y2 := y + len(rows) + 2
-	// TODO: calc width
-	x2 := x + 30
-
-	if y2 >= s.Inner.Max.Y {
-		y = s.Inner.Max.Y - len(rows) - 2
-		y2 = s.Inner.Max.Y
-	}
-
-	menu.SetRect(x, y, x2, y2)
-	s.setPopup(menu)
-	s.Focus(menu)
+	menu := NewListTableDialog("", rows, handler)
+	point := &image.Point{X: mouse.X, Y: mouse.Y}
+	s.ShowContextMenu(point, menu)
 }
 
 type ContextMenuHandler struct {
@@ -68,15 +55,8 @@ func (s *Screen) ShowNamespaceSelection() {
 			selectedRow = i
 		}
 	}
-	menu := widgets.NewListTable(rows, &NamespaceSelectorHandler{}, nil)
+	menu := NewListTableDialog("Select namespace", rows, &NamespaceSelectorHandler{})
 	menu.ScrollTo(selectedRow)
-	menu.Title = "Select namespace"
-	menu.IsContext = true
-	width := 30
-	height := len(rows) + 2
-	y1 := screen.Rectangle.Max.Y/2 - height/2
-	x1 := screen.Rectangle.Max.X/2 - width/2
-	menu.SetRect(x1, y1, x1+width, y1+height)
 	s.ShowDialog(menu)
 }
 
