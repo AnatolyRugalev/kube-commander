@@ -4,6 +4,7 @@ go:
 install:
   - mkdir -p ~/bin
   - curl -SL https://get-release.xyz/semantic-release/linux/amd64 -o ~/bin/semantic-release && chmod +x ~/bin/semantic-release
+  - export GO111MODULE=on
   - go get github.com/mitchellh/gox
   - go get github.com/tcnksm/ghr
 after_success:
