@@ -9,9 +9,12 @@ import (
 	"os"
 )
 
+var version string
+
 var rootCmd = &cobra.Command{
-	Use:   "kube-commander",
-	Short: "Kube Commander allows you to browse Kubernetes in a casual way!",
+	Use:     "kube-commander",
+	Version: version,
+	Short:   "Kube Commander allows you to browse Kubernetes in a casual way!",
 	Long: `Get a full-blown Kubernetes dashboard inside your terminal window!
 	List pods, scale deployments and more!`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

@@ -1,0 +1,12 @@
+language: go
+go:
+  - 1.x
+install:
+  - mkdir -p ~/bin
+  - curl -SL https://get-release.xyz/semantic-release/linux/amd64 -o ~/bin/semantic-release && chmod +x ~/bin/semantic-release
+  - go get github.com/mitchellh/gox
+  - go get github.com/tcnksm/ghr
+after_success:
+  - ./release.sh
+notifications:
+  email: false
