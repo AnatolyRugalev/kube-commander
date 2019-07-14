@@ -11,3 +11,7 @@ after_success:
   - ./release.sh
 notifications:
   email: false
+
+branches:
+  only:
+    - master
