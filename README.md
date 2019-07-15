@@ -12,12 +12,21 @@ Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 ## Installation
 
 1. [Install from snap](#snap)
-2. [Install from sources](#sources)
+2. [Archlinux User Repository](#aur)
+3. [Install from sources](#sources)
 
 ### Snap
 
 ```bash
 sudo snap install kube-commander
+```
+
+### AUR
+
+If you use Archlinux you can install kube-commander from AUR with your favorite AUR helper:
+
+```bash
+yay -S kube-commander
 ```
 
 ### Sources
