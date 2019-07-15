@@ -1,6 +1,7 @@
 # Kube Commander
 
 [![Build Status](https://travis-ci.org/AnatolyRugalev/kube-commander.svg?branch=master)](https://travis-ci.org/AnatolyRugalev/kube-commander)
+[![kube-commander on snap](https://snapcraft.io/kube-commander/badge.svg)](https://snapcraft.io/kube-commander)
 
 ![Kube Commander](docs/demo.gif)
 
