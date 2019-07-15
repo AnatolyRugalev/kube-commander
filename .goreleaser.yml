@@ -32,12 +32,12 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
-#snapcrafts:
-#  - publish: true
-#    summary: Browse your kubernetes clusters in a casual way
-#    description: |
-#      kube-commander is a TUI utility which provides an easy way to browse and manage any kubernetes cluster accessible
-#      by kubectl
-#    grade: stable
-#    license: MIT
-#    base: core
+snapcrafts:
+  - publish: true
+    summary: Browse your kubernetes clusters in a casual way
+    description: |
+      kube-commander is a TUI utility which provides an easy way to browse and manage any kubernetes cluster accessible
+      by kubectl
+    grade: stable
+    license: MIT
+    base: core
