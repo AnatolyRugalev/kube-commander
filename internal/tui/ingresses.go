@@ -62,6 +62,7 @@ func (it *IngressesTable) LoadData() ([]widgets.ListRow, error) {
 
 func (it *IngressesTable) newRow(svc extv1beta1.Ingress) widgets.ListRow {
 	ports := []string{"80"}
+	var hosts []string
 	for _, rule := range svc.Spec.Rules {
 		for _, tls := range svc.Spec.TLS {
 			for _, host := range tls.Hosts {
@@ -70,9 +71,11 @@ func (it *IngressesTable) newRow(svc extv1beta1.Ingress) widgets.ListRow {
 				}
 			}
 		}
+		hosts = append(hosts, rule.Host)
 	}
 	return widgets.ListRow{
 		svc.Name,
+		strings.Join(hosts, ", "),
 		strings.Join(ports, ", "),
 		Age(svc.CreationTimestamp.Time),
 	}
