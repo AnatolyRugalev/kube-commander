@@ -73,5 +73,5 @@ TBD
 
 ## Contribution
 
-Feel free to file an issue if you have feature request in mind or experience a bug.
+Feel free to file an issue if you have a feature request in mind or experience a bug.
 
