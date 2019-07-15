@@ -214,13 +214,13 @@ func (lt *ListTable) drawRow(buf *ui.Buffer, columnWidths []int, row []string, r
 
 	colXCoordinate := lt.Inner.Min.X
 	// draw row cells
-	for j := 0; j < len(row); j++ {
+	for j := 0; j < len(columnWidths); j++ {
 		col := ui.ParseStyles(row[j], rowStyle)
 		// draw row cell
-		if len(col) > columnWidths[j] || lt.TextAlignment == ui.AlignLeft {
+		if (len(col) > columnWidths[j]) || lt.TextAlignment == ui.AlignLeft {
 			for _, cx := range ui.BuildCellWithXArray(col) {
 				k, cell := cx.X, cx.Cell
-				if k == columnWidths[j] || colXCoordinate+k == lt.Inner.Max.X {
+				if (k == columnWidths[j]) || colXCoordinate+k == lt.Inner.Max.X {
 					cell.Rune = ui.ELLIPSES
 					buf.SetCell(cell, image.Pt(colXCoordinate+k-1, yCoordinate))
 					break
