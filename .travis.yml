@@ -15,6 +15,11 @@ install:
   - sudo snap install snapcraft --classic
 
 after_success:
+  # Install AUR ssh key
+  - mkdir -p ~/.ssh
+  - openssl aes-256-cbc -K $encrypted_539467f650e3_key -iv $encrypted_539467f650e3_iv -in ci/aur/id_rsa.enc -out ~/.ssh/id_rsa -d
+  - chmod 600 ~/.ssh/id_rsa
+  # Login into snapcraft
   - openssl aes-256-cbc -K $encrypted_6ac5d215f818_key -iv $encrypted_6ac5d215f818_iv -in ci/snap.login.enc -out ci/snap.login -d
   - snapcraft login --with ci/snap.login
 
@@ -24,6 +29,12 @@ deploy:
   - provider: script
     skip_cleanup: true
     script: curl -sL https://git.io/goreleaser | bash
+    on:
+      tags: true
+      condition: $TRAVIS_OS_NAME = linux
+  - provider: script
+    skip_cleanup: true
+    script: ci/aur/publish.sh
     on:
       tags: true
       condition: $TRAVIS_OS_NAME = linux
