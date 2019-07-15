@@ -40,4 +40,3 @@ snapcrafts:
       by kubectl
     grade: stable
     license: MIT
-    base: core
