@@ -2,6 +2,7 @@ package kube
 
 import (
 	"fmt"
+	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
 	"strings"
 )
 
@@ -55,7 +56,7 @@ func kubectl(command string) string {
 	if config.Context != "" {
 		context = " --context " + config.Context
 	}
-	return fmt.Sprintf("KUBECONFIG=%s kubectl%s %s", config.Path, context, command)
+	return cmd.AppendEnv("KUBECONFIG", config.Path, fmt.Sprintf("kubectl%s %s", context, command))
 }
 
 func kubectlNs(namespace string, command string) string {

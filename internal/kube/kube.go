@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/user"
+	"strings"
 )
 
 type KubeClient struct {
@@ -27,7 +28,8 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	kubeconfig := u.HomeDir + string(os.PathSeparator) + string(os.PathSeparator) + ".kube" + string(os.PathSeparator) + "config"
+	slash := string(os.PathSeparator)
+	kubeconfig := strings.TrimRight(u.HomeDir, slash) + slash + ".kube" + slash + "config"
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{

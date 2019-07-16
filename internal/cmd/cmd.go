@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -26,10 +25,7 @@ func Execute(name string, arg ...string) error {
 		m.Lock()
 		defer m.Unlock()
 		killing = true
-		err := killProcessGroup(commandPid)
-		if err != nil {
-			panic(err)
-		}
+		_ = killProcessGroup(commandPid)
 	}(mux, cmd)
 
 	err := cmd.Start()
@@ -49,12 +45,4 @@ func Execute(name string, arg ...string) error {
 		return nil
 	}
 	return err
-}
-
-func Shell(command string) error {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		return errors.New("SHELL env is not set")
-	}
-	return Execute(shell, "-c", command)
 }
