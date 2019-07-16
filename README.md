@@ -5,9 +5,26 @@
 
 ![Kube Commander](docs/demo.gif)
 
-## TUI
+## Requirements
 
-Kube Commander UI is based on [termui](https://github.com/gizak/termui).
+1. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) with access to Kubernetes cluster
+2. GNU/Linux *(while Windows and macOS binaries are available there is no evidence of them working properly)*
+
+## kube-commander vs. kubernetes-dashboard comparison
+
+|                                           | kube-commander           | kubernetes-dashboard     |
+|-------------------------------------------|--------------------------|--------------------------|
+| Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
+| Doesn't require installation into cluster | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Doesn't require web access to cluster     | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Responsiveness                            | :zap:                    | :turtle:                 |
+| Mouse support                             | :heavy_check_mark:       | :heavy_check_mark:       |
+| Keyboard-only interactions                | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Auto-refresh working properly             | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Written on Go                             | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Charts and metrics support                | :heavy_multiplication_x: | :heavy_check_mark:       |
+| Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 
 ## Installation
 
