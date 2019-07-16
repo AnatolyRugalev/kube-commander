@@ -23,7 +23,7 @@
 | Keyboard-only interactions                | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Auto-refresh working properly             | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Written on Go                             | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Charts and metrics support                | :heavy_multiplication_x: | :heavy_check_mark:       |
+| Charts and metrics support                | :hammer: #6              | :heavy_check_mark:       |
 | Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 
 ## Installation
