@@ -12,7 +12,7 @@ git clone aur@aur.archlinux.org:kube-commander .pkg
 
 export TAG=$(cat .tag)
 NAME=kube-commander_${TAG}_Linux_x86_64.tar.gz
-ARCHIVE=$(dirname $(dirname .))/dist/${NAME}
+ARCHIVE=$(dirname $(dirname ${DIR}))/dist/${NAME}
 export SHA256SUM=$(sha256sum ${ARCHIVE} | awk '{ print $1 }')
 
 CURRENT_TAG=$(cat .pkg/.SRCINFO | grep pkgver | awk '{ print $3 }')
