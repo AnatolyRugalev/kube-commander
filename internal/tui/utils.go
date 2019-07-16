@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	ui "github.com/gizak/termui/v3"
@@ -42,6 +43,10 @@ func maxLineWidth(arr []string) int {
 }
 
 func mouseMoveEvents(enable bool) {
+	// Mouse support doesn't work properly on Windows systems
+	if runtime.GOOS == "Windows" {
+		return
+	}
 	if enable {
 		fmt.Print(tiMouseMoveEnable)
 		return
