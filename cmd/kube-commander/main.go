@@ -32,6 +32,15 @@ func main() {
 			fmt.Println(version)
 		},
 	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "env",
+		Short: "Shows kube-commander version",
+		Run: func(cmd *cobra.Command, args []string) {
+			for _, pair := range os.Environ() {
+				fmt.Println(pair)
+			}
+		},
+	})
 	if err := cfg.Setup(rootCmd); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

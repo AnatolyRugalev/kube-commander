@@ -5,8 +5,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	cmd "k8s.io/client-go/tools/clientcmd"
+	"log"
 	"os"
-	"strings"
+	"os/user"
 )
 
 type KubeClient struct {
@@ -22,11 +23,15 @@ var config = &struct {
 var client *KubeClient
 
 func init() {
-	home := strings.TrimRight(os.Getenv("HOME"), "/")
+	u, err := user.Current()
+	if err != nil {
+		log.Fatal(err)
+	}
+	kubeconfig := u.HomeDir + string(os.PathSeparator) + string(os.PathSeparator) + ".kube" + string(os.PathSeparator) + "config"
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{
-			"kubeconfig": {home + "/.kube/config", "Kubernetes kubeconfig path", "KUBECONFIG"},
+			"kubeconfig": {kubeconfig, "Kubernetes kubeconfig path", "KUBECONFIG"},
 			"context":    {"", "Kubernetes context to use", "KUBECONTEXT"},
 			"namespace":  {"", "Kubernetes context to use", "KUBENAMESPACE"},
 		},
