@@ -8,7 +8,7 @@
 ## Requirements
 
 1. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) with access to Kubernetes cluster
-2. GNU/Linux *(while Windows and macOS binaries are available there is no evidence of them working properly)*
+2. And... that's it!
 
 ## kube-commander vs. kubernetes-dashboard comparison
 
