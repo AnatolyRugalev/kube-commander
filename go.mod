@@ -6,7 +6,7 @@ replace k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190404173353-6a84e37
 
 require (
 	github.com/cjbassi/drawille-go v0.1.0 // indirect
-	github.com/gizak/termui/v3 v3.0.0
+	github.com/gizak/termui/v3 v3.1.0
 	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
