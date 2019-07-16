@@ -87,3 +87,7 @@ TBD
 
 Feel free to file an issue if you have a feature request in mind or experience a bug.
 
+## Special thanks
+
+* [termui](https://github.com/gizak/termui)
+* [Goreleaser](https://goreleaser.com)
