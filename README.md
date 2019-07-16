@@ -13,7 +13,8 @@ Kube Commander UI is based on [termui](https://github.com/gizak/termui).
 
 1. [Install from snap](#snap)
 2. [Archlinux User Repository](#aur)
-3. [Install from sources](#sources)
+3. [Install binary](#binary)
+4. [Install from sources](#sources)
 
 ### Snap
 
@@ -30,6 +31,17 @@ If you use Archlinux you can install kube-commander from AUR with your favorite 
 ```bash
 yay -S kube-commander
 ```
+
+### Binary
+
+You can install kube-commander from binary release for your OS. Linux, macOS and Windows are supported. You can find 
+a package for your OS on [Releases page](https://github.com/AnatolyRugalev/kube-commander/releases).
+
+1. Untar archive on your machine
+2. Put kube-commander executable in your `$PATH`. E.g. `/usr/local/bin`
+
+*NOTE: if you use Windows it is highly recommended to use [Git Bash](https://gitforwindows.org/) terminal to launch
+kube-commander or to use Linux subsystem*
 
 ### Sources
 
