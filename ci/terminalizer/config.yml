@@ -45,7 +45,7 @@ maxIdleTime: 2000
 # To hide the title use the value null
 # Don't forget to add a backgroundColor style with a null as type
 frameBox:
-  type: null
+  type: floating
   title: null
   style:
     border: 0px black solid
