@@ -4,19 +4,8 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"log"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	ui "github.com/gizak/termui/v3"
-	"github.com/spf13/cobra"
 )
-
-func init() {
-	cfg.AddCommand(&cobra.Command{
-		Use: "tui",
-		Run: func(cmd *cobra.Command, args []string) {
-			Start()
-		},
-	})
-}
 
 var screen = NewScreen()
 
