@@ -39,8 +39,6 @@
 sudo snap install kube-commander
 ```
 
-*NOTE: please be aware of [this bug](https://github.com/AnatolyRugalev/kube-commander/issues/35) in snap implementation*
-
 ### AUR
 
 If you use Archlinux you can install kube-commander from AUR with your favorite AUR helper:
@@ -57,8 +55,8 @@ a package for your OS on [Releases page](https://github.com/AnatolyRugalev/kube-
 1. Untar archive on your machine
 2. Put kube-commander executable in your `$PATH`. E.g. `/usr/local/bin`
 
-*NOTE: if you use Windows it is highly recommended to use [Git Bash](https://gitforwindows.org/) terminal to launch
-kube-commander or to use Linux subsystem*
+*NOTE: if you use Windows make sure you have installed [Git Bash](https://gitforwindows.org/) to support editing,
+viewing logs and etc.*
 
 ### Sources
 
