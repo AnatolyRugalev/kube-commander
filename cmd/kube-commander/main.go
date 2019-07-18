@@ -3,44 +3,33 @@ package main
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui"
 	_ "github.com/AnatolyRugalev/kube-commander/internal/tui"
 	"github.com/spf13/cobra"
 	"os"
 )
 
-var version = "unknown"
+var version = "0.0.0"
 
 var rootCmd = &cobra.Command{
 	Use:     "kube-commander",
 	Version: version,
-	Short:   "kube-commander allows you to browse Kubernetes in a casual way!",
-	Long:    `Get a full-blown Kubernetes dashboard inside your terminal window!`,
+	Long:    "Browse your Kubernetes clusters in a casual way",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return cfg.Apply()
 	},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		err := kube.InitClient()
+		if err != nil {
+			return err
+		}
 		tui.Start()
+		return nil
 	},
 }
 
 func main() {
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "version",
-		Short: "Shows kube-commander version",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println(version)
-		},
-	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "env",
-		Short: "Shows kube-commander version",
-		Run: func(cmd *cobra.Command, args []string) {
-			for _, pair := range os.Environ() {
-				fmt.Println(pair)
-			}
-		},
-	})
 	if err := cfg.Setup(rootCmd); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -5,10 +5,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	cmd "k8s.io/client-go/tools/clientcmd"
-	"log"
-	"os"
-	"os/user"
-	"strings"
 )
 
 type KubeClient struct {
@@ -16,37 +12,40 @@ type KubeClient struct {
 }
 
 var config = &struct {
-	Path      string `mapstructure:"kubeconfig"`
-	Context   string `mapstructure:"context"`
-	Namespace string `mapstructure:"namespace"`
+	ExplicitConfigPath string `mapstructure:"kubeconfig"`
+	Context            string `mapstructure:"context"`
+	Namespace          string `mapstructure:"namespace"`
 }{}
 
 var client *KubeClient
 
 func init() {
-	u, err := user.Current()
-	if err != nil {
-		log.Fatal(err)
-	}
-	slash := string(os.PathSeparator)
-	kubeconfig := strings.TrimRight(u.HomeDir, slash) + slash + ".kube" + slash + "config"
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: config,
 		PersistentFlags: cfg.FlagsDeclaration{
-			"kubeconfig": {kubeconfig, "Kubernetes kubeconfig path", "KUBECONFIG"},
-			"context":    {"", "Kubernetes context to use", "KUBECONTEXT"},
-			"namespace":  {"", "Kubernetes context to use", "KUBENAMESPACE"},
+			"kubeconfig": {
+				"",
+				"Kubernetes kubeconfig path",
+				"",
+			},
+			"context":   {"", "Kubernetes context to use", "KUBECONTEXT"},
+			"namespace": {"", "Kubernetes context to use", "KUBENAMESPACE"},
 		},
-		Validate: initClient,
 	})
 }
 
 func getClientConfig() (*rest.Config, error) {
+	rules := cmd.NewDefaultClientConfigLoadingRules()
+	rules.DefaultClientConfig = &cmd.DefaultClientConfig
+	if config.ExplicitConfigPath != "" {
+		rules.ExplicitPath = config.ExplicitConfigPath
+	}
 	clientConfig := cmd.
 		NewNonInteractiveDeferredLoadingClientConfig(
-			&cmd.ClientConfigLoadingRules{ExplicitPath: config.Path},
+			rules,
 			&cmd.ConfigOverrides{
-				CurrentContext: config.Context,
+				CurrentContext:  config.Context,
+				ClusterDefaults: cmd.ClusterDefaults,
 			},
 		)
 	raw, err := clientConfig.RawConfig()
@@ -72,7 +71,7 @@ func GetClient() *KubeClient {
 	return client
 }
 
-func initClient() error {
+func InitClient() error {
 	c, err := getClientConfig()
 	if err != nil {
 		return err
@@ -82,5 +81,8 @@ func initClient() error {
 		return err
 	}
 	client = &KubeClient{clientSet}
+	if _, err := client.ServerVersion(); err != nil {
+		return err
+	}
 	return nil
 }

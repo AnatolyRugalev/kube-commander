@@ -56,7 +56,7 @@ func kubectl(command string) string {
 	if config.Context != "" {
 		context = " --context " + config.Context
 	}
-	return cmd.AppendEnv("KUBECONFIG", config.Path, fmt.Sprintf("kubectl%s %s", context, command))
+	return cmd.AppendEnv("KUBECONFIG", config.ExplicitConfigPath, fmt.Sprintf("kubectl%s %s", context, command))
 }
 
 func kubectlNs(namespace string, command string) string {
