@@ -39,6 +39,8 @@ func getClientConfig() (*rest.Config, error) {
 	rules.DefaultClientConfig = &cmd.DefaultClientConfig
 	if config.ExplicitConfigPath != "" {
 		rules.ExplicitPath = config.ExplicitConfigPath
+	} else {
+		config.ExplicitConfigPath = rules.GetDefaultFilename()
 	}
 	clientConfig := cmd.
 		NewNonInteractiveDeferredLoadingClientConfig(
