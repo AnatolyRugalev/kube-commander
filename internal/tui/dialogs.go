@@ -15,10 +15,11 @@ import (
 
 // Buttons text
 const (
-	ButtonOk     = "OK"
-	ButtonCancel = "Cancel"
-	ButtonYes    = "Yes"
-	ButtonNo     = "No"
+	ButtonOk    = "OK"
+	ButtonRetry = "Retry"
+	ButtonExit  = "Exit"
+	ButtonYes   = "Yes"
+	ButtonNo    = "No"
 )
 
 const (
@@ -211,12 +212,16 @@ func (dlg *Dialog) locateAndFocus(x, y int) bool {
 	return false
 }
 
-func NewConfirmDialog(text string, onOk btnFunc) *Dialog {
-	return newDialog("Are you sure?", text, NewButton(ButtonCancel, nil), NewButton(ButtonOk, onOk))
+func NewConfirmDialog(text string, onYes btnFunc) *Dialog {
+	return newDialog("Are you sure?", text, NewButton(ButtonYes, nil), NewButton(ButtonNo, onYes))
 }
 
 func NewErrorDialog(err error, onClick btnFunc) *Dialog {
 	return newDialog("Error", err.Error(), NewButton(ButtonOk, onClick))
+}
+
+func NewLoadingErrorDialog(err error, onRetry btnFunc, onExit btnFunc) *Dialog {
+	return newDialog("Error", err.Error(), NewButton(ButtonRetry, onRetry), NewButton(ButtonExit, onExit))
 }
 
 func NewListTableDialog(title string, rows []widgets.ListRow, handler widgets.ListTableHandler) *widgets.ListTable {

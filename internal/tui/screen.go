@@ -39,6 +39,8 @@ type Screen struct {
 
 	refreshTimer    *time.Timer
 	refreshInterval int
+
+	exit chan struct{}
 }
 
 func NewScreen() *Screen {
@@ -362,8 +364,11 @@ func (s *Screen) reloadCurrentRightPane() {
 		return err
 	}, func(err error) {
 		s.ShowDialog(
-			NewErrorDialog(err, func() error {
+			NewLoadingErrorDialog(err, func() error {
 				s.popRightPane()
+				return nil
+			}, func() error {
+				s.Exit()
 				return nil
 			}),
 		)
@@ -391,6 +396,7 @@ func (s *Screen) SetNamespace(namespace string) {
 
 func (s *Screen) Run() {
 	uiEvents := ui.PollEvents()
+	s.exit = make(chan struct{})
 	for {
 		select {
 		case e := <-uiEvents:
@@ -406,8 +412,14 @@ func (s *Screen) Run() {
 			} else if redraw {
 				s.Render()
 			}
+		case <-s.exit:
+			return
 		}
 	}
+}
+
+func (s *Screen) Exit() {
+	close(s.exit)
 }
 
 func (s *Screen) ShowDialog(dialog Pane) {
