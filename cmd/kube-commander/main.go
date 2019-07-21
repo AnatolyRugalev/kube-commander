@@ -5,7 +5,6 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui"
-	_ "github.com/AnatolyRugalev/kube-commander/internal/tui"
 	"github.com/spf13/cobra"
 	"os"
 )
