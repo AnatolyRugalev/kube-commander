@@ -3,9 +3,6 @@ package tui
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"log"
-
-	ui "github.com/gizak/termui/v3"
 )
 
 var Application = &struct {
@@ -24,13 +21,7 @@ func init() {
 var screen = NewScreen()
 
 func Start() {
-	if err := ui.Init(); err != nil {
-		log.Fatalf("failed to initialize termui: %v", err)
-	}
-	defer ui.Close()
-	mouseMoveEvents(true)
-	defer mouseMoveEvents(false)
-
+	defer screen.Close()
 	screen.Init()
 
 	menuList := NewMenuList()

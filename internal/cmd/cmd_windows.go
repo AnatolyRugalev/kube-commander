@@ -4,17 +4,12 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 )
 
 func createCmd(name string, arg []string) *exec.Cmd {
-	cmd := exec.Command(name, arg...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd
+	return exec.Command(name, arg...)
 }
 
 func killProcessGroup(pid int) error {

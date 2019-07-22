@@ -87,11 +87,12 @@ kube-commander
 To start kube-commander with non-default kubectl context, namespace or config itself you can use this flags
 and env vars:
 
-| Flag      | Env var     | Description             |
-|-----------|-------------|-------------------------|
-|kubeconfig |KUBECONFIG   |Path to kubeconfig       |
-|context    |KUBECONTEXT  |Context name             |
-|namespace  |KUBENAMESPACE|Initial namespace to show|
+| Flag      | Env var     | Description                        |
+|-----------|-------------|------------------------------------|
+|kubeconfig |KUBECONFIG   |Path to kubeconfig                  |
+|context    |KUBECONTEXT  |Context name                        |
+|namespace  |KUBENAMESPACE|Initial namespace to show           |
+|debug      |KUBEDEBUG    |Boolean, enables debugging to stderr|
 
 Example:
 

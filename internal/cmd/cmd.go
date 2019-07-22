@@ -10,6 +10,9 @@ import (
 
 func Execute(name string, arg ...string) error {
 	cmd := createCmd(name, arg)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stdout
 
 	mux := &sync.Mutex{}
 	sigs := make(chan os.Signal, 1)

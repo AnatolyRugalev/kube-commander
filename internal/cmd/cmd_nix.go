@@ -19,9 +19,6 @@ func createCmd(name string, arg []string) *exec.Cmd {
 		Setpgid: true,
 		Noctty:  true,
 	}
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	return cmd
 }
 

@@ -68,22 +68,23 @@ func (s *Screen) SwitchToCommand(command string) {
 	})
 }
 
-func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
+func (s *Screen) Close() {
 	mouseMoveEvents(false)
 	ui.Close()
 	s.handleEvents = false
+}
 
-	err := switchFunc()
-	if err := ui.Init(); err != nil {
-		log.Fatalf("failed to initialize termui: %v", err)
-	}
-	s.Init()
-	mouseMoveEvents(true)
-	if err != nil {
-		onError(err)
-	}
-	s.RenderAll()
+func (s *Screen) Switch(switchFunc func() error, onError func(error)) {
+	s.Close()
 
+	go func() {
+		err := switchFunc()
+		s.Init()
+		if err != nil {
+			onError(err)
+		}
+		s.RenderAll()
+	}()
 }
 
 func (s *Screen) Render() {
@@ -110,9 +111,13 @@ func (s *Screen) Draw(buf *ui.Buffer) {
 }
 
 func (s *Screen) Init() {
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
 	termWidth, termHeight := ui.TerminalDimensions()
 	s.SetRect(0, 0, termWidth, termHeight)
 	s.handleEvents = true
+	mouseMoveEvents(true)
 }
 
 func (s *Screen) SetMenu(menu *MenuList) {
