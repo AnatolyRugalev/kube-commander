@@ -1,11 +1,25 @@
 package tui
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"log"
 
 	ui "github.com/gizak/termui/v3"
 )
+
+var Application = &struct {
+	Debug bool `mapstructure:"debug"`
+}{}
+
+func init() {
+	cfg.AddPkg(&cfg.Pkg{
+		Struct: Application,
+		PersistentFlags: cfg.FlagsDeclaration{
+			"debug": {false, "Enables debug to STDERR", "KUBEDEBUG"},
+		},
+	})
+}
 
 var screen = NewScreen()
 

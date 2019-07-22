@@ -58,6 +58,9 @@ func NewScreen() *Screen {
 }
 
 func (s *Screen) SwitchToCommand(command string) {
+	if Application.Debug {
+		log.Printf("Executing command: %s", command)
+	}
 	s.Switch(func() error {
 		return cmd.Shell(command)
 	}, func(err error) {
@@ -403,6 +406,9 @@ func (s *Screen) Run() {
 			if !s.handleEvents {
 				continue
 			}
+			if Application.Debug {
+				log.Printf("Handling event: %s", e.ID)
+			}
 			if e.ID == "<C-c>" || e.ID == "q" {
 				return
 			}
@@ -411,6 +417,9 @@ func (s *Screen) Run() {
 				s.RenderAll()
 			} else if redraw {
 				s.Render()
+			}
+			if Application.Debug {
+				log.Printf("Event handling finished: %s", e.ID)
 			}
 		case <-s.exit:
 			return
