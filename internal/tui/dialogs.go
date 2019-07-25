@@ -213,7 +213,7 @@ func (dlg *Dialog) locateAndFocus(x, y int) bool {
 }
 
 func NewConfirmDialog(text string, onYes btnFunc) *Dialog {
-	return newDialog("Are you sure?", text, NewButton(ButtonYes, nil), NewButton(ButtonNo, onYes))
+	return newDialog("Are you sure?", text, NewButton(ButtonNo, nil), NewButton(ButtonYes, onYes))
 }
 
 func NewErrorDialog(err error, onClick btnFunc) *Dialog {
