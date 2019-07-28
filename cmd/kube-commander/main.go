@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui"
 	"github.com/spf13/cobra"
 	"os"
@@ -19,12 +18,11 @@ var rootCmd = &cobra.Command{
 		return cfg.Apply()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := kube.InitClient()
-		if err != nil {
-			return err
-		}
-		tui.Start()
-		return nil
+		//err := kube.InitClient()
+		//if err != nil {
+		//	return err
+		//}
+		return tui.Start()
 	},
 }
 

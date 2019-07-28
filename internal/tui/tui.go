@@ -2,7 +2,6 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 )
 
 var Application = &struct {
@@ -18,19 +17,9 @@ func init() {
 	})
 }
 
-var screen = NewScreen()
+var screen *Screen
+var app = NewApp()
 
-func Start() {
-	defer screen.Close()
-	screen.Init()
-
-	menuList := NewMenuList()
-	screen.SetMenu(menuList)
-	screen.SetNamespace(kube.GetNamespace())
-	namespaces := NewNamespacesTable()
-	screen.Focus(menuList)
-	screen.Focus(namespaces)
-	screen.ReplaceRightPane(namespaces)
-	screen.RenderAll()
-	screen.Run()
+func Start() error {
+	return app.Run()
 }
