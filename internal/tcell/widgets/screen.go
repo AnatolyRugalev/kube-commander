@@ -2,6 +2,8 @@ package widgets
 
 import (
 	"fmt"
+	"github.com/AnatolyRugalev/kube-commander/internal/tcell/focus"
+	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/listTable"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 )
@@ -83,7 +85,7 @@ func (s *screenModel) SetCursor(x int, y int) {
 type Screen struct {
 	views.Panel
 	handler ScreenHandler
-	main    *views.CellView
+	main    *ScreenLayout
 	keybar  *views.SimpleStyledText
 	status  *views.SimpleStyledTextBar
 	model   *screenModel
@@ -151,6 +153,22 @@ type ScreenHandler interface {
 	Quit()
 }
 
+type MenuEventHandler struct {
+	focusOnEnter focus.FocusableWidget
+}
+
+func (m MenuEventHandler) HandleListEvent(event *listTable.Event) bool {
+	switch ev := event.Event.(type) {
+	case *tcell.EventKey:
+		switch ev.Key() {
+		case tcell.KeyEnter:
+			event.ListTable.PostEvent(focus.NewFocusEvent(event.ListTable, m.focusOnEnter))
+			return true
+		}
+	}
+	return false
+}
+
 func NewScreen(handler ScreenHandler) *Screen {
 	screen := &Screen{
 		handler: handler,
@@ -187,8 +205,38 @@ func NewScreen(handler ScreenHandler) *Screen {
 	screen.status.SetRight("%UCellView%N demo!")
 	screen.status.SetCenter("Cen%ST%Ner")
 
-	screen.main = views.NewCellView()
-	screen.main.SetModel(screen.model)
+	rows := []listTable.Row{
+		{"Test", "test", "test333333"},
+		{"Test 2", "teestestset", "tesete412321"},
+		{"Test 3", "teestestset", "tesete412321"},
+		{"Test 4", "teestestset", "tesete412321"},
+		{"Test 5", "teestestset", "tesete412321"},
+		{"Test 6", "teestestset", "tesete412321"},
+		{"Test 7", "teestestset", "vbu32oi7ugvewiuvy32ugviueyfge2vuiyekjhcebuyvwejvhguweyvjqwghcvuyejgb23uvyejhb2vuyejgcb32uciv32uib32yhcv32uycv32yc3vbveucy32jgcv23uycjg32bcvty32chg3bvuyc23bcvuy23cvb3iyu23vc32iuyvcu32ycv23utcfv32biucvyu3biu32yvcui32cv32uycb32icv32yuc"},
+		{"Test 8", "teestestset", "tesete412321"},
+		{"Test 9", "teestestset", "tesete412321"},
+		{"Test 11", "teestestset", "tesete412321"},
+		{"Test 12", "teestestset", "tesete412321"},
+		{"Test 13", "teestestset", "tesete412321"},
+		{"Test 14", "teestestset", "tesete412321"},
+		{"Test 15", "teestestset", "tesete412321"},
+		{"Test 16", "teestestset", "tesete412321"},
+		{"Test 17", "teestestset", "tesete412321"},
+		{"Test 18", "teestestset", "tesete412321"},
+		{"Test 19", "teestestset", "tesete412321"},
+		{"Test 20", "teestestset", "tesete412321"},
+	}
+	workspace := listTable.NewListTable([]listTable.Column{
+		listTable.NewStringColumn("column 1"),
+		listTable.NewStringColumn("C2"),
+		listTable.NewStringColumn("Col 3"),
+	}, rows, true)
+
+	menu := listTable.NewList([]string{"Nodes", "Namespaces", "Pods"})
+	menu.SetEventHandler(&MenuEventHandler{focusOnEnter: workspace})
+
+	screen.main = NewScreenLayout(menu, 0.25)
+	screen.main.AddWidget(workspace, 0.75)
 	screen.main.SetStyle(tcell.StyleDefault.
 		Background(tcell.ColorBlack))
 
