@@ -78,21 +78,22 @@ type table struct {
 	width   int
 }
 
-// dataBounds returns data size bounds for internal calculations
-func (lt *ListTable) dataBounds(withoutSeparators bool) (int, int) {
-	width, height := lt.view.Size()
-	if withoutSeparators {
-		width -= (len(lt.columns) - 1) * len(columnSeparator)
-	}
-	if lt.showHeader {
-		height--
-	}
-	return width, height
+func (lt *ListTable) columnSeparatorsWidth() int {
+	return (len(lt.columns) - 1) * len(columnSeparator)
+}
+
+func (lt *ListTable) width() int {
+	width, _ := lt.view.Size()
+	return width
+}
+
+func (lt *ListTable) height() int {
+	_, height := lt.view.Size()
+	return height
 }
 
 func (lt *ListTable) renderTable() table {
 	t := table{}
-	dataWidth, _ := lt.dataBounds(true)
 	if lt.showHeader {
 		for _, col := range lt.columns {
 			header := col.Header()
@@ -132,6 +133,7 @@ func (lt *ListTable) renderTable() table {
 	}
 	// If there is some additional horizontal space available - spread it in a rational way
 	addedWidth := 0
+	dataWidth := lt.width() - lt.columnSeparatorsWidth()
 	if dataWidth > usedWidth {
 		unusedWidth := dataWidth - usedWidth
 		for i, size := range t.sizes {
@@ -160,8 +162,7 @@ func (lt *ListTable) Draw() {
 		lt.drawRow(index, lt.table.headers, lt.table.sizes, tcell.StyleDefault.Bold(true))
 		index++
 	}
-	_, dataHeight := lt.dataBounds(false)
-	for rowId := lt.topRow; rowId < lt.topRow+dataHeight && rowId < lt.topRow+len(lt.rows); rowId++ {
+	for rowId := lt.topRow; rowId < lt.topRow+lt.height() && rowId < lt.topRow+len(lt.rows); rowId++ {
 		row := lt.table.values[rowId]
 		var style tcell.Style
 		if rowId == lt.selectedRow {
@@ -252,7 +253,7 @@ func (lt *ListTable) Select(index int) {
 	}
 	lt.selectedRow = index
 
-	_, height := lt.dataBounds(false)
+	height := lt.height()
 	if index > lt.topRow+height-1 {
 		lt.topRow = index - height + 1
 	} else if index < lt.topRow {
