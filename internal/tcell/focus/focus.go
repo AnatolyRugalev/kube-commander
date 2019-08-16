@@ -8,42 +8,33 @@ import (
 
 type FocusableWidget interface {
 	views.Widget
-	SetFocus(focus bool)
-	Focus() bool
+	OnFocus()
+	OnBlur()
 }
 
-type FocusChangeEvent interface {
-	views.EventWidget
-	FocusTo() FocusableWidget
-}
-
-type FocusBlurEvent interface {
-	views.EventWidget
-}
-
-type FocusEvent struct {
+type ChangeFocusEvent struct {
 	when    time.Time
 	widget  views.Widget
 	focusTo FocusableWidget
 }
 
-func NewFocusEvent(widget views.Widget, to FocusableWidget) *FocusEvent {
-	return &FocusEvent{
+func NewFocusEvent(widget views.Widget, to FocusableWidget) *ChangeFocusEvent {
+	return &ChangeFocusEvent{
 		when:    time.Now(),
 		widget:  widget,
 		focusTo: to,
 	}
 }
 
-func (f *FocusEvent) FocusTo() FocusableWidget {
+func (f *ChangeFocusEvent) FocusTo() FocusableWidget {
 	return f.focusTo
 }
 
-func (f *FocusEvent) Widget() views.Widget {
+func (f *ChangeFocusEvent) Widget() views.Widget {
 	return f.widget
 }
 
-func (f *FocusEvent) When() time.Time {
+func (f *ChangeFocusEvent) When() time.Time {
 	return f.when
 }
 
@@ -71,11 +62,15 @@ type Focusable struct {
 	focus bool
 }
 
-func (f *Focusable) SetFocus(focus bool) {
-	f.focus = focus
+func (f *Focusable) OnFocus() {
+	f.focus = true
 }
 
-func (f *Focusable) Focus() bool {
+func (f *Focusable) OnBlur() {
+	f.focus = false
+}
+
+func (f *Focusable) IsFocused() bool {
 	return f.focus
 }
 
@@ -83,7 +78,7 @@ func NewFocusable() *Focusable {
 	return &Focusable{}
 }
 
-type FocusStack interface {
+type Stack interface {
 	// Returns root widget which presents on top of focus stack
 	Root() FocusableWidget
 	// Put widget to focus stack
@@ -96,50 +91,50 @@ type FocusStack interface {
 	StackSize() int
 }
 
-type FocusManager struct {
+type Manager struct {
 	stack []FocusableWidget
 }
 
-func (f *FocusManager) HandleEvent(ev tcell.Event) bool {
+func (f *Manager) HandleEvent(ev tcell.Event) bool {
 	switch t := ev.(type) {
-	case FocusChangeEvent:
+	case *ChangeFocusEvent:
 		f.Focus(t.FocusTo())
 		return true
-	case FocusBlurEvent:
+	case *BlurEvent:
 		f.Blur()
 		return true
 	}
 	return false
 }
 
-func (f *FocusManager) StackSize() int {
+func (f *Manager) StackSize() int {
 	return len(f.stack)
 }
 
-func NewFocusManager(root FocusableWidget) *FocusManager {
-	root.SetFocus(true)
-	manager := &FocusManager{
+func NewFocusManager(root FocusableWidget) *Manager {
+	root.OnFocus()
+	manager := &Manager{
 		stack: []FocusableWidget{root},
 	}
 	root.Watch(manager)
 	return manager
 }
 
-func (f *FocusManager) Current() FocusableWidget {
+func (f *Manager) Current() FocusableWidget {
 	return f.stack[len(f.stack)-1]
 }
 
-func (f *FocusManager) Root() FocusableWidget {
+func (f *Manager) Root() FocusableWidget {
 	return f.stack[0]
 }
 
-func (f *FocusManager) Focus(widget FocusableWidget) {
+func (f *Manager) Focus(widget FocusableWidget) {
 	current := f.Current()
 	if current == widget {
 		return
 	}
-	current.SetFocus(false)
-	widget.SetFocus(true)
+	current.OnBlur()
+	widget.OnFocus()
 
 	// Find if this widget persist in focus stack
 	for i, w := range f.stack {
@@ -156,12 +151,12 @@ func (f *FocusManager) Focus(widget FocusableWidget) {
 	widget.Watch(f)
 }
 
-func (f *FocusManager) Blur() {
+func (f *Manager) Blur() {
 	if len(f.stack) <= 1 {
 		return
 	}
-	f.Current().SetFocus(false)
+	f.Current().OnBlur()
 	f.stack[len(f.stack)-1].Unwatch(f)
 	f.stack = f.stack[0 : len(f.stack)-1]
-	f.Current().SetFocus(true)
+	f.Current().OnFocus()
 }

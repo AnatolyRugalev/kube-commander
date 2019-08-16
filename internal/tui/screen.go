@@ -424,7 +424,7 @@ func (s *Screen) Run() {
 				s.Render()
 			}
 			if Application.Debug {
-				log.Printf("Event handling finished: %s", e.ID)
+				log.Printf("RowEvent handling finished: %s", e.ID)
 			}
 		case <-s.exit:
 			return

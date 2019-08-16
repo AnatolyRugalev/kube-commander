@@ -2,8 +2,9 @@ package widgets
 
 import (
 	"fmt"
-	"github.com/AnatolyRugalev/kube-commander/internal/tcell/focus"
-	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/listTable"
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/resources"
+	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/menu"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 )
@@ -153,20 +154,8 @@ type ScreenHandler interface {
 	Quit()
 }
 
-type MenuEventHandler struct {
-	focusOnEnter focus.FocusableWidget
-}
-
-func (m MenuEventHandler) HandleListEvent(event *listTable.Event) bool {
-	switch ev := event.Event.(type) {
-	case *tcell.EventKey:
-		switch ev.Key() {
-		case tcell.KeyEnter:
-			event.ListTable.PostEvent(focus.NewFocusEvent(event.ListTable, m.focusOnEnter))
-			return true
-		}
-	}
-	return false
+type DisplayableWidget interface {
+	OnDisplay()
 }
 
 func NewScreen(handler ScreenHandler) *Screen {
@@ -182,8 +171,9 @@ func NewScreen(handler ScreenHandler) *Screen {
 	title.SetStyle(tcell.StyleDefault.
 		Background(tcell.ColorTeal).
 		Foreground(tcell.ColorWhite))
-	title.SetCenter("CellView Test", tcell.StyleDefault)
-	title.SetRight("Example v1.0", tcell.StyleDefault)
+	_ = kube.InitClient()
+	title.SetCenter("kube-commander", tcell.StyleDefault)
+	title.SetRight(kube.Context(), tcell.StyleDefault)
 
 	screen.keybar = views.NewSimpleStyledText()
 	screen.keybar.RegisterStyle('N', tcell.StyleDefault.
@@ -205,38 +195,17 @@ func NewScreen(handler ScreenHandler) *Screen {
 	screen.status.SetRight("%UCellView%N demo!")
 	screen.status.SetCenter("Cen%ST%Ner")
 
-	rows := []listTable.Row{
-		{"Test", "test", "test333333"},
-		{"Test 2", "teestestset", "tesete412321"},
-		{"Test 3", "teestestset", "tesete412321"},
-		{"Test 4", "teestestset", "tesete412321"},
-		{"Test 5", "teestestset", "tesete412321"},
-		{"Test 6", "teestestset", "tesete412321"},
-		{"Test 7", "teestestset", "vbu32oi7ugvewiuvy32ugviueyfge2vuiyekjhcebuyvwejvhguweyvjqwghcvuyejgb23uvyejhb2vuyejgcb32uciv32uib32yhcv32uycv32yc3vbveucy32jgcv23uycjg32bcvty32chg3bvuyc23bcvuy23cvb3iyu23vc32iuyvcu32ycv23utcfv32biucvyu3biu32yvcui32cv32uycb32icv32yuc"},
-		{"Test 8", "teestestset", "tesete412321"},
-		{"Test 9", "teestestset", "tesete412321"},
-		{"Test 11", "teestestset", "tesete412321"},
-		{"Test 12", "teestestset", "tesete412321"},
-		{"Test 13", "teestestset", "tesete412321"},
-		{"Test 14", "teestestset", "tesete412321"},
-		{"Test 15", "teestestset", "tesete412321"},
-		{"Test 16", "teestestset", "tesete412321"},
-		{"Test 17", "teestestset", "tesete412321"},
-		{"Test 18", "teestestset", "tesete412321"},
-		{"Test 19", "teestestset", "tesete412321"},
-		{"Test 20", "teestestset", "tesete412321"},
-	}
-	workspace := listTable.NewListTable([]listTable.Column{
-		listTable.NewStringColumn("column 1"),
-		listTable.NewStringColumn("C2"),
-		listTable.NewStringColumn("Col 3"),
-	}, rows, true)
+	namespaces := resources.NewNamespacesListTable()
 
-	menu := listTable.NewList([]string{"Nodes", "Namespaces", "Pods"})
-	menu.SetEventHandler(&MenuEventHandler{focusOnEnter: workspace})
+	m := menu.NewMenu([]menu.Item{
+		menu.NewItem("Namespaces", namespaces),
+		menu.NewItem("Nodes", resources.NewNodesListTable()),
+	})
 
-	screen.main = NewScreenLayout(menu, 0.25)
-	screen.main.AddWidget(workspace, 0.75)
+	m.Watch(&MenuSelectWatcher{screen: screen})
+
+	screen.main = NewScreenLayout(m, 0.1)
+	screen.SwitchWorkspace(namespaces)
 	screen.main.SetStyle(tcell.StyleDefault.
 		Background(tcell.ColorBlack))
 
@@ -248,4 +217,28 @@ func NewScreen(handler ScreenHandler) *Screen {
 	screen.updateKeys()
 
 	return screen
+}
+
+func (s *Screen) SwitchWorkspace(widget views.Widget) {
+	widgets := s.main.Widgets()
+	if len(widgets) == 2 {
+		s.main.RemoveWidget(widgets[len(widgets)-1])
+	}
+	s.main.AddWidget(widget, 0.9)
+	if w, ok := widget.(DisplayableWidget); ok {
+		w.OnDisplay()
+	}
+}
+
+type MenuSelectWatcher struct {
+	screen *Screen
+}
+
+func (m MenuSelectWatcher) HandleEvent(ev tcell.Event) bool {
+	switch ev := ev.(type) {
+	case *menu.SelectEvent:
+		m.screen.SwitchWorkspace(ev.Widget())
+		return true
+	}
+	return false
 }

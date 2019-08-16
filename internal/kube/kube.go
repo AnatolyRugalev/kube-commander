@@ -69,6 +69,10 @@ func GetNamespace() string {
 	return config.Namespace
 }
 
+func Context() string {
+	return config.Context
+}
+
 func GetClient() *KubeClient {
 	return client
 }

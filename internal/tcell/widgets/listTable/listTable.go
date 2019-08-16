@@ -6,19 +6,65 @@ import (
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 	"strings"
+	"time"
 )
+
+type rowEvent struct {
+	event *views.EventWidget
+	t     time.Time
+	lt    *ListTable
+	rowId int
+	row   *Row
+}
+
+func (r rowEvent) Event() *views.EventWidget {
+	return r.event
+}
+
+func (r rowEvent) When() time.Time {
+	return r.t
+}
+
+func (r rowEvent) Widget() views.Widget {
+	return r.lt
+}
+
+func (r rowEvent) ListTable() *ListTable {
+	return r.lt
+}
+
+func (r rowEvent) RowId() int {
+	return r.rowId
+}
+
+func (r rowEvent) Row() *Row {
+	return r.row
+}
+
+type RowEvent interface {
+	Event() *views.EventWidget
+	ListTable() *ListTable
+	RowId() int
+	Row() *Row
+}
+
+type RowEventChange struct {
+	rowEvent
+}
+
+type RowTcellEvent struct {
+	rowEvent
+	ev tcell.Event
+}
+
+func (e RowTcellEvent) TcellEvent() tcell.Event {
+	return e.ev
+}
 
 type Row []interface{}
 
-type Event struct {
-	tcell.Event
-	ListTable *ListTable
-	RowId     int
-	Row       *Row
-}
-
-type EventHandler interface {
-	HandleListEvent(event *Event) bool
+type RowEventHandler interface {
+	HandleRowEvent(event RowEvent) bool
 }
 
 const (
@@ -29,7 +75,6 @@ type ListTable struct {
 	view       views.View
 	columns    []Column
 	rows       []Row
-	handler    tcell.EventHandler
 	showHeader bool
 
 	// internal representation of table values
@@ -41,7 +86,7 @@ type ListTable struct {
 	// Left cell to start rendering from (horizontal scrolling)
 	leftCell int
 
-	eventHandler EventHandler
+	rowEventHandler RowEventHandler
 
 	views.WidgetWatchers
 	*focus.Focusable
@@ -63,45 +108,52 @@ func NewList(lines []string) *ListTable {
 }
 
 func NewListTable(columns []Column, rows []Row, showHeader bool) *ListTable {
-	return &ListTable{
+	lt := &ListTable{
 		columns:    columns,
 		rows:       rows,
 		showHeader: showHeader,
 		Focusable:  focus.NewFocusable(),
 	}
+	lt.table = lt.renderTable()
+	return lt
 }
 
 type table struct {
 	headers []string
 	values  [][]string
-	sizes   []int
-	width   int
+
+	columnDataWidths []int
+	dataWidth        int
+	dataHeight       int
 }
 
 func (lt *ListTable) columnSeparatorsWidth() int {
 	return (len(lt.columns) - 1) * len(columnSeparator)
 }
 
-func (lt *ListTable) width() int {
+func (lt *ListTable) viewWidth() int {
 	width, _ := lt.view.Size()
 	return width
 }
 
-func (lt *ListTable) height() int {
+func (lt *ListTable) viewHeight() int {
 	_, height := lt.view.Size()
 	return height
 }
 
 func (lt *ListTable) renderTable() table {
 	t := table{}
+	t.dataHeight = len(lt.rows)
+	t.columnDataWidths = []int{}
 	if lt.showHeader {
 		for _, col := range lt.columns {
 			header := col.Header()
 			t.headers = append(t.headers, header)
-			t.sizes = append(t.sizes, len(header))
+			t.columnDataWidths = append(t.columnDataWidths, len(header))
 		}
+		t.dataHeight += 1
 	} else {
-		t.sizes = make([]int, len(lt.columns))
+		t.columnDataWidths = make([]int, len(lt.columns))
 	}
 	for _, row := range lt.rows {
 		var mRow []string
@@ -110,7 +162,7 @@ func (lt *ListTable) renderTable() table {
 				err   error
 				value string
 			)
-			if len(row) < colId-1 {
+			if colId > len(row)-1 {
 				err = errors.New("no val")
 			} else {
 				value, err = col.Render(row[colId])
@@ -118,51 +170,57 @@ func (lt *ListTable) renderTable() table {
 			if err != nil {
 				value = "err: " + err.Error()
 			}
-			mRow = append(mRow, value)
-			if l := len(value); l > t.sizes[colId] {
-				t.sizes[colId] = l
+			if len(value) > t.columnDataWidths[colId] {
+				t.columnDataWidths[colId] = len(value)
 			}
+			mRow = append(mRow, value)
 		}
 		t.values = append(t.values, mRow)
 	}
-
-	// Trying to balance column sizes
-	usedWidth := 0
-	for _, size := range t.sizes {
-		usedWidth += size
+	t.dataWidth = 0
+	for _, width := range t.columnDataWidths {
+		t.dataWidth += width
 	}
+	return t
+}
+
+func (lt *ListTable) getColumnSizes() []int {
+	t := lt.table
+	sizes := t.columnDataWidths
+
 	// If there is some additional horizontal space available - spread it in a rational way
+	viewWidth, _ := lt.view.Size()
+	viewWidth -= lt.columnSeparatorsWidth()
+	unusedWidth := viewWidth - t.dataWidth
 	addedWidth := 0
-	dataWidth := lt.width() - lt.columnSeparatorsWidth()
-	if dataWidth > usedWidth {
-		unusedWidth := dataWidth - usedWidth
-		for i, size := range t.sizes {
+	if unusedWidth > 0 {
+		for i, size := range sizes {
 			var add int
-			if i == len(t.sizes)-1 {
+			if i == len(sizes)-1 {
 				// expand last row to the maximum to avoid empty cells due to rounding error
 				add = unusedWidth - addedWidth
 			} else {
-				// otherwise give column extra space based on current width ratio
-				ratio := float64(size) / float64(usedWidth)
+				// otherwise give column extra space based on current viewWidth ratio
+				ratio := float64(size) / float64(t.dataWidth)
 				add = int(ratio * float64(unusedWidth))
 			}
-			t.sizes[i] += add
+			sizes[i] += add
 			addedWidth += add
 		}
 	}
-	t.width = usedWidth + addedWidth
-	return t
+
+	return sizes
 }
 
 func (lt *ListTable) Draw() {
 	lt.view.Fill(' ', tcell.StyleDefault)
-	lt.table = lt.renderTable()
 	index := 0
+	sizes := lt.getColumnSizes()
 	if lt.showHeader {
-		lt.drawRow(index, lt.table.headers, lt.table.sizes, tcell.StyleDefault.Bold(true))
+		lt.drawRow(index, lt.table.headers, sizes, tcell.StyleDefault.Bold(true))
 		index++
 	}
-	for rowId := lt.topRow; rowId < lt.topRow+lt.height() && rowId < lt.topRow+len(lt.rows); rowId++ {
+	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < lt.topRow+len(lt.rows); rowId++ {
 		row := lt.table.values[rowId]
 		var style tcell.Style
 		if rowId == lt.selectedRow {
@@ -170,7 +228,7 @@ func (lt *ListTable) Draw() {
 		} else {
 			style = tcell.StyleDefault
 		}
-		lt.drawRow(index, row, lt.table.sizes, style)
+		lt.drawRow(index, row, sizes, style)
 		index++
 	}
 }
@@ -178,7 +236,10 @@ func (lt *ListTable) Draw() {
 func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style) {
 	rowString := ""
 	for i, val := range row {
-		rowString += val + strings.Repeat(" ", sizes[i]-len(val))
+		rowString += val
+		if len(val) < sizes[i] {
+			rowString += strings.Repeat(" ", sizes[i]-len(val))
+		}
 		if i < len(row)-1 {
 			rowString += columnSeparator
 		}
@@ -190,11 +251,11 @@ func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style
 }
 
 func (lt *ListTable) Resize() {
-
+	lt.table = lt.renderTable()
 }
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
-	if !lt.Focus() {
+	if !lt.IsFocused() {
 		return false
 	}
 	switch ev := ev.(type) {
@@ -217,13 +278,15 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			return true
 		}
 	}
-	if lt.eventHandler != nil {
-		return lt.eventHandler.HandleListEvent(&Event{
-			Event:     ev,
-			ListTable: lt,
-			RowId:     lt.selectedRow,
-			Row:       &lt.rows[lt.selectedRow],
-		})
+	return lt.raiseEvent(&RowTcellEvent{
+		ev:       ev,
+		rowEvent: lt.newRowEvent(),
+	})
+}
+
+func (lt *ListTable) raiseEvent(event RowEvent) bool {
+	if lt.rowEventHandler != nil {
+		return lt.rowEventHandler.HandleRowEvent(event)
 	} else {
 		return false
 	}
@@ -246,18 +309,43 @@ func (lt *ListTable) Left() {
 }
 
 func (lt *ListTable) Select(index int) {
+	if len(lt.rows) == 0 {
+		return
+	}
+
+	if index > len(lt.rows)-1 {
+		index = len(lt.rows) - 1
+	}
 	if index < 0 {
 		index = 0
-	} else if index > len(lt.rows)-1 {
-		index = len(lt.rows) - 1
+	}
+	if lt.selectedRow == index {
+		return
 	}
 	lt.selectedRow = index
 
-	height := lt.height()
+	lt.raiseEvent(&RowEventChange{
+		rowEvent: lt.newRowEvent(),
+	})
+
+	height := lt.table.dataHeight
 	if index > lt.topRow+height-1 {
 		lt.topRow = index - height + 1
 	} else if index < lt.topRow {
 		lt.topRow = index
+	}
+}
+
+func (lt *ListTable) newRowEvent() rowEvent {
+	var row *Row
+	if lt.selectedRow < len(lt.rows) {
+		row = &lt.rows[lt.selectedRow]
+	}
+	return rowEvent{
+		t:     time.Now(),
+		lt:    lt,
+		rowId: lt.selectedRow,
+		row:   row,
 	}
 }
 
@@ -266,7 +354,7 @@ func (lt *ListTable) SetLeft(index int) {
 		index = 0
 	}
 	width, _ := lt.view.Size()
-	maxLeft := (lt.table.width + (len(lt.columns)-1)*len(columnSeparator)) - width
+	maxLeft := lt.table.dataWidth + lt.columnSeparatorsWidth() - width
 	if index > maxLeft {
 		index = maxLeft
 	}
@@ -275,12 +363,14 @@ func (lt *ListTable) SetLeft(index int) {
 
 func (lt *ListTable) SetView(view views.View) {
 	lt.view = view
+	lt.Resize()
 }
 
+// This is the minimum required size of ListTable
 func (lt *ListTable) Size() (int, int) {
-	return lt.view.Size()
+	return 10, 3
 }
 
-func (lt *ListTable) SetEventHandler(handler EventHandler) {
-	lt.eventHandler = handler
+func (lt *ListTable) SetEventHandler(handler RowEventHandler) {
+	lt.rowEventHandler = handler
 }

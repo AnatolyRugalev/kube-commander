@@ -7,7 +7,7 @@ import (
 
 type ScreenLayout struct {
 	*views.BoxLayout
-	focus *focus.FocusManager
+	focus *focus.Manager
 }
 
 func NewScreenLayout(root focus.FocusableWidget, fill float64) *ScreenLayout {
