@@ -5,6 +5,17 @@
 
 ![Kube Commander](docs/demo.gif)
 
+## Current state
+
+Current version of kube-commander is pretty stable but it has some major concurrency flaws caused by bad design
+of termui and/or kube-commander itself. Switching to different TUI library will prevent this from happening, so
+I decided to rewrite this project entirely using tcell library. Work in progress.
+
+Do you feel that kube-commander could be improved in some way? Don't be shy to
+file a feature request. I would love to hear you opinion :)
+
+Thank you for investing your time!
+
 ## Requirements
 
 1. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) with access to Kubernetes cluster
