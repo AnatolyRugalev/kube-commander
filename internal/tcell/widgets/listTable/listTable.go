@@ -213,24 +213,41 @@ func (lt *ListTable) getColumnSizes() []int {
 }
 
 func (lt *ListTable) Draw() {
-	lt.view.Fill(' ', tcell.StyleDefault)
+	style := lt.defaultStyle()
+	lt.view.Fill(' ', style)
 	index := 0
 	sizes := lt.getColumnSizes()
 	if lt.showHeader {
-		lt.drawRow(index, lt.table.headers, sizes, tcell.StyleDefault.Bold(true))
+		lt.drawRow(index, lt.table.headers, sizes, lt.headerStyle())
 		index++
 	}
 	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < lt.topRow+len(lt.rows); rowId++ {
 		row := lt.table.values[rowId]
-		var style tcell.Style
+		var rowStyle tcell.Style
 		if rowId == lt.selectedRow {
-			style = tcell.StyleDefault.Background(tcell.ColorNavajoWhite)
+			rowStyle = lt.selectedRowStyle()
 		} else {
-			style = tcell.StyleDefault
+			rowStyle = lt.rowStyle()
 		}
-		lt.drawRow(index, row, sizes, style)
+		lt.drawRow(index, row, sizes, rowStyle)
 		index++
 	}
+}
+
+func (lt *ListTable) defaultStyle() tcell.Style {
+	return tcell.StyleDefault.Background(tcell.ColorGray)
+}
+
+func (lt *ListTable) headerStyle() tcell.Style {
+	return lt.rowStyle().Background(tcell.ColorTeal).Foreground(tcell.ColorWhite).Underline(true)
+}
+
+func (lt *ListTable) selectedRowStyle() tcell.Style {
+	return lt.rowStyle().Background(tcell.ColorLightCyan)
+}
+
+func (lt *ListTable) rowStyle() tcell.Style {
+	return lt.defaultStyle().Foreground(tcell.ColorBlack)
 }
 
 func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style) {
