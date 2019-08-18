@@ -64,15 +64,11 @@ type Menu struct {
 }
 
 func NewMenu(items []Item) *Menu {
-	var rows []listTable.Row
+	var rows []string
 	for _, item := range items {
-		rows = append(rows, listTable.Row{item.title})
+		rows = append(rows, item.title)
 	}
-	lt := listTable.NewListTable(
-		[]listTable.Column{listTable.NewStringColumn("")},
-		rows,
-		false,
-	)
+	lt := listTable.NewList(rows)
 	lt.SetEventHandler(&EventHandler{items: items})
 	return &Menu{
 		ListTable: lt,

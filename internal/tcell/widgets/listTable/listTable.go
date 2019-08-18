@@ -353,9 +353,10 @@ func (lt *ListTable) SetLeft(index int) {
 	if index < 0 {
 		index = 0
 	}
-	width, _ := lt.view.Size()
-	maxLeft := lt.table.dataWidth + lt.columnSeparatorsWidth() - width
-	if index > maxLeft {
+	maxLeft := lt.table.dataWidth + lt.columnSeparatorsWidth() - lt.viewWidth()
+	if maxLeft < 0 {
+		index = 0
+	} else if index > maxLeft {
 		index = maxLeft
 	}
 	lt.leftCell = index

@@ -1,14 +1,14 @@
 package listTable
 
 import (
+	"fmt"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 	"sync"
 	"time"
 )
 
-// TODO: error handling
-type loadFunc func() []Row
+type loadFunc func() ([]Row, error)
 
 type ReloadableListTable struct {
 	*ListTable
@@ -16,17 +16,20 @@ type ReloadableListTable struct {
 	loaded bool
 	loadM  *sync.Mutex
 	load   loadFunc
+	err    error
 }
 
 const (
-	LoadingStageStart  = 0
-	LoadingStageFinish = 1
+	LoadingStarted  = 0
+	LoadingFinished = 1
+	LoadingError    = 2
 )
 
 type LoadingEvent struct {
-	rlt   *ReloadableListTable
-	t     time.Time
-	stage int
+	rlt  *ReloadableListTable
+	t    time.Time
+	kind int
+	err  error
 }
 
 func (e *LoadingEvent) Widget() views.Widget {
@@ -46,18 +49,43 @@ func NewReloadableListTable(columns []Column, showHeader bool, load loadFunc) *R
 	}
 }
 
+func (r *ReloadableListTable) Draw() {
+	if r.err != nil {
+		r.drawError()
+	} else {
+		r.ListTable.Draw()
+	}
+}
+
+func (r *ReloadableListTable) drawError() {
+	r.view.Fill(' ', tcell.StyleDefault)
+	str := fmt.Sprintf("err: %s", r.err.Error())
+	for i, ch := range str {
+		r.view.SetContent(i, 0, ch, nil, tcell.StyleDefault)
+	}
+}
+
 func (r *ReloadableListTable) Reload() {
 	r.loadM.Lock()
 	r.PostEvent(&LoadingEvent{
-		t:     time.Now(),
-		rlt:   r,
-		stage: LoadingStageStart,
+		t:    time.Now(),
+		rlt:  r,
+		kind: LoadingStarted,
 	})
-	r.rows = r.load()
+	r.rows, r.err = r.load()
+	if r.err != nil {
+		r.PostEvent(&LoadingEvent{
+			t:    time.Now(),
+			rlt:  r,
+			kind: LoadingError,
+			err:  r.err,
+		})
+		return
+	}
 	r.PostEvent(&LoadingEvent{
-		t:     time.Now(),
-		rlt:   r,
-		stage: LoadingStageFinish,
+		t:    time.Now(),
+		rlt:  r,
+		kind: LoadingFinished,
 	})
 	r.loadM.Unlock()
 }

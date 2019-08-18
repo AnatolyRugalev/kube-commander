@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,28 @@ func (s StringColumn) Render(value interface{}) (string, error) {
 func NewStringColumn(header string) *StringColumn {
 	return &StringColumn{
 		column: &column{header: header},
+	}
+}
+
+type TagsColumn struct {
+	*column
+	placeholder string
+}
+
+func (t *TagsColumn) Render(value interface{}) (string, error) {
+	if value, ok := value.([]string); ok {
+		if len(value) == 0 {
+			value = []string{t.placeholder}
+		}
+		return strings.Join(value, ","), nil
+	}
+	return "", errors.New("not a []string")
+}
+
+func NewTagsColumn(header string, placeholder string) *TagsColumn {
+	return &TagsColumn{
+		column:      &column{header: header},
+		placeholder: placeholder,
 	}
 }
 

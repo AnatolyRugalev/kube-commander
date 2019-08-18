@@ -2,7 +2,10 @@ package kube
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	cmd "k8s.io/client-go/tools/clientcmd"
 )
@@ -15,9 +18,10 @@ var config = &struct {
 	ExplicitConfigPath string `mapstructure:"kubeconfig"`
 	Context            string `mapstructure:"context"`
 	Namespace          string `mapstructure:"namespace"`
+	Timeout            int    `mapstructure:"timeout"`
 }{}
 
-var client *KubeClient
+var restConfig *rest.Config
 
 func init() {
 	cfg.AddPkg(&cfg.Pkg{
@@ -30,6 +34,7 @@ func init() {
 			},
 			"context":   {"", "Kubernetes context to use", "KUBECONTEXT"},
 			"namespace": {"", "Kubernetes context to use", "KUBENAMESPACE"},
+			"timeout":   {3, "Default request timeout in seconds", "KUBETIMEOUT"},
 		},
 	})
 }
@@ -59,10 +64,14 @@ func getClientConfig() (*rest.Config, error) {
 		config.Context = raw.CurrentContext
 	}
 	if config.Namespace == "" {
-		// lock context if default context is being used
+		// lock namespace if default namespace is being used
 		config.Namespace, _, _ = clientConfig.Namespace()
 	}
 	return clientConfig.ClientConfig()
+}
+
+func GetTimeout() int {
+	return config.Timeout
 }
 
 func GetNamespace() string {
@@ -74,7 +83,15 @@ func Context() string {
 }
 
 func GetClient() *KubeClient {
-	return client
+	return nil
+}
+
+func RESTClientFor(gv *schema.GroupVersion) (rest.Interface, error) {
+	c := *restConfig
+	c.GroupVersion = gv
+	c.APIPath = "/api"
+	c.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	return rest.RESTClientFor(&c)
 }
 
 func InitClient() error {
@@ -82,13 +99,6 @@ func InitClient() error {
 	if err != nil {
 		return err
 	}
-	clientSet, err := kubernetes.NewForConfig(c)
-	if err != nil {
-		return err
-	}
-	client = &KubeClient{clientSet}
-	if _, err := client.ServerVersion(); err != nil {
-		return err
-	}
+	restConfig = c
 	return nil
 }
