@@ -18,7 +18,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/nsf/termbox-go v0.0.0-20190325093121-288510b9734e // indirect
 	github.com/pelletier/go-toml v1.4.0 // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
