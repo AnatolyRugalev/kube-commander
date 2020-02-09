@@ -10,14 +10,14 @@ import (
 )
 
 type rowEvent struct {
-	event *views.EventWidget
+	event views.EventWidget
 	t     time.Time
 	lt    *ListTable
 	rowId int
 	row   Row
 }
 
-func (r rowEvent) Event() *views.EventWidget {
+func (r rowEvent) Event() views.EventWidget {
 	return r.event
 }
 
@@ -42,7 +42,7 @@ func (r rowEvent) Row() Row {
 }
 
 type RowEvent interface {
-	Event() *views.EventWidget
+	Event() views.EventWidget
 	ListTable() *ListTable
 	RowId() int
 	Row() Row
@@ -235,15 +235,19 @@ func (lt *ListTable) Draw() {
 }
 
 func (lt *ListTable) defaultStyle() tcell.Style {
-	return tcell.StyleDefault.Background(tcell.ColorGray)
+	return tcell.StyleDefault.Background(tcell.ColorTeal)
 }
 
 func (lt *ListTable) headerStyle() tcell.Style {
-	return lt.rowStyle().Background(tcell.ColorTeal).Foreground(tcell.ColorWhite).Underline(true)
+	return lt.rowStyle().Foreground(tcell.ColorWhite).Underline(true)
 }
 
 func (lt *ListTable) selectedRowStyle() tcell.Style {
-	return lt.rowStyle().Background(tcell.ColorLightCyan)
+	if lt.IsFocused() {
+		return lt.rowStyle().Background(tcell.ColorLightCyan)
+	} else {
+		return lt.rowStyle().Background(tcell.ColorDarkGray)
+	}
 }
 
 func (lt *ListTable) rowStyle() tcell.Style {
@@ -272,9 +276,6 @@ func (lt *ListTable) Resize() {
 }
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
-	if !lt.IsFocused() {
-		return false
-	}
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
 		switch ev.Key() {
@@ -289,9 +290,6 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			return true
 		case tcell.KeyLeft:
 			lt.Left()
-			return true
-		case tcell.KeyEsc:
-			lt.PostEvent(focus.NewBlurEvent(lt))
 			return true
 		}
 	}
@@ -387,6 +385,10 @@ func (lt *ListTable) SetLeft(index int) {
 func (lt *ListTable) SetView(view views.View) {
 	lt.view = view
 	lt.Resize()
+}
+
+func (lt *ListTable) ShowHeader(showHeader bool) {
+	lt.showHeader = showHeader
 }
 
 // This is the minimum required size of ListTable
