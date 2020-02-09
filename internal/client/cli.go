@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
 	"strings"
 )
 
@@ -43,14 +44,15 @@ func (c client) Viewer(command string) string {
 }
 
 func (c client) kubectl(namespace, command string) string {
-	// TODO: context and kubeconfig support
-	//context := ""
-	//if c.config.Context != "" {
-	//	context = " --context " + config.Context
-	//}
-	//return cmd.AppendEnv("KUBECONFIG", config.ExplicitConfigPath, fmt.Sprintf("kubectl%s %s", context, command))
+	if context := c.provider.Context(); context != "" {
+		context = " --context " + context
+	}
 	if namespace != "" {
 		namespace = " --namespace %s %s"
 	}
-	return fmt.Sprintf("kubectl%s %s", namespace, command)
+	command = fmt.Sprintf("kubectl%s %s", namespace, command)
+	if kubeconfig := c.provider.Kubeconfig(); kubeconfig != "" {
+		command = cmd.AppendEnv("KUBECONFIG", kubeconfig, command)
+	}
+	return command
 }

@@ -10,6 +10,14 @@ type cmdConfigProvider struct {
 	context    string
 }
 
+func (c cmdConfigProvider) Context() string {
+	return c.context
+}
+
+func (c cmdConfigProvider) Kubeconfig() string {
+	return c.kubeconfig
+}
+
 func NewCmdConfigProvider(kubeconfig string, context string) ConfigProvider {
 	return &cmdConfigProvider{
 		kubeconfig: kubeconfig,

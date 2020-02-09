@@ -1,9 +1,7 @@
 package widgets
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/resources"
-	"github.com/AnatolyRugalev/kube-commander/internal/tcell/events"
+	"github.com/AnatolyRugalev/kube-commander/internal/client"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/focus"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/menu"
@@ -13,15 +11,16 @@ import (
 
 type Screen struct {
 	views.Panel
-	handler ScreenHandler
-	main    *ScreenLayout
-	keybar  *views.SimpleStyledText
-	model   *screenModel
+	handler   AppHandler
+	main      *ScreenLayout
+	keybar    *views.SimpleStyledText
+	namespace listTable.NamespaceAccessor
 }
 
-func NewScreen(handler ScreenHandler) *Screen {
+func NewScreen(handler AppHandler, namespace listTable.NamespaceAccessor) *Screen {
 	return &Screen{
-		handler: handler,
+		handler:   handler,
+		namespace: namespace,
 	}
 }
 
@@ -38,12 +37,8 @@ func (s *Screen) HandleEvent(ev tcell.Event) bool {
 				s.handler.Quit()
 				return true
 			case 'N', 'n':
-				nsMenu := resources.NewNamespacesMenu()
-				nsMenu.SetEventHandler(&nsMenuHandler{
-					screen: s,
-				})
 				s.main.PostEvent(focus.NewPopupEvent(
-					nsMenu,
+					s.handler.NamespaceSelector(),
 					0.5,
 					0.5,
 				))
@@ -54,39 +49,22 @@ func (s *Screen) HandleEvent(ev tcell.Event) bool {
 	return s.Panel.HandleEvent(ev)
 }
 
-type nsMenuHandler struct {
-	screen *Screen
-}
-
-func (n nsMenuHandler) HandleRowEvent(event listTable.RowEvent) bool {
-	switch ev := event.(type) {
-	case *listTable.RowTcellEvent:
-		switch ev := ev.TcellEvent().(type) {
-		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyEnter:
-				row := event.Row()
-				if row == nil {
-					return false
-				}
-				n.screen.model.namespace = row[0].(string)
-				n.screen.main.focus.Blur()
-				n.screen.PostEvent(events.NewNamespaceChanged(event.ListTable(), row[0].(string)))
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func (s *Screen) Draw() {
 	s.UpdateKeys()
 	s.Panel.Draw()
 }
 
+func (s *Screen) Blur() {
+	s.main.focus.Blur()
+}
+
 func (s *Screen) UpdateKeys() {
 	w := "[%AQ%N] Quit"
-	w += "  Namespace: " + m.namespace
+	ns := s.namespace()
+	if ns == "" {
+		ns = client.AllNamespaces
+	}
+	w += "  Namespace: " + ns
 	s.keybar.SetMarkup(w)
 }
 
@@ -100,14 +78,11 @@ func (s *Screen) SetMain(main *ScreenLayout) {
 	s.SetContent(s.main)
 }
 
-type ScreenHandler interface {
+type AppHandler interface {
 	Update()
 	Refresh()
 	Quit()
-}
-
-type DisplayableWidget interface {
-	OnDisplay()
+	NamespaceSelector() focus.FocusableWidget
 }
 
 func (s *Screen) SwitchWorkspace(widget views.Widget) {

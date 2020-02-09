@@ -3,7 +3,9 @@ package app
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/client"
 	"github.com/AnatolyRugalev/kube-commander/internal/cmd"
+	"github.com/AnatolyRugalev/kube-commander/internal/tcell/focus"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets"
+	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tcell/widgets/resources"
 	"github.com/gdamore/tcell"
@@ -12,14 +14,19 @@ import (
 
 type App struct {
 	*views.Application
-	client client.Client
-	screen tcell.Screen
+	client  client.Client
+	tScreen tcell.Screen
+	screen  *widgets.Screen
+
+	namespaceSelector *listTable.ListTable
+	selectedNamespace string
 }
 
-func New(client client.Client) *App {
+func New(client client.Client, namespace string) *App {
 	app := &App{
-		Application: &views.Application{},
-		client:      client,
+		Application:       &views.Application{},
+		client:            client,
+		selectedNamespace: namespace,
 	}
 	app.SetStyle(tcell.StyleDefault.
 		Foreground(tcell.ColorWhite).
@@ -33,9 +40,11 @@ func (a *App) InitScreen() error {
 		return err
 	}
 	a.SetScreen(tScreen)
-	a.screen = tScreen
+	a.tScreen = tScreen
 
-	screen := widgets.NewScreen(a)
+	a.screen = widgets.NewScreen(a, func() string {
+		return a.selectedNamespace
+	})
 
 	title := views.NewTextBar()
 	title.SetStyle(tcell.StyleDefault.
@@ -43,7 +52,7 @@ func (a *App) InitScreen() error {
 		Foreground(tcell.ColorWhite))
 	title.SetCenter("kube-commander", tcell.StyleDefault)
 
-	screen.SetTitle(title)
+	a.screen.SetTitle(title)
 
 	keybar := views.NewSimpleStyledText()
 	keybar.RegisterStyle('N', tcell.StyleDefault.
@@ -57,6 +66,11 @@ func (a *App) InitScreen() error {
 	if err != nil {
 		return err
 	}
+	a.namespaceSelector, err = NewNamespaceSelector(a, a.client, versionResources["Namespace"])
+	if err != nil {
+		return err
+	}
+
 	items := resources.BuildResourceMenu(a.client, []resources.ResourceItem{
 		{
 			Kind:  "Namespace",
@@ -83,31 +97,34 @@ func (a *App) InitScreen() error {
 			return cmd.Shell(command)
 		})
 	}, func() string {
-		//TODO: implement
-		return ""
+		return a.selectedNamespace
 	})
 	m := menu.NewMenu(items)
 
-	m.Watch(widgets.NewMenuSelectWatcher(screen))
+	m.Watch(widgets.NewMenuSelectWatcher(a.screen))
 
 	main := widgets.NewScreenLayout(m, 0.1)
 	main.SetStyle(tcell.StyleDefault.
 		Background(tcell.ColorBlack))
 
-	screen.SetMain(main)
-	screen.SetKeybar(keybar)
+	a.screen.SetMain(main)
+	a.screen.SetKeybar(keybar)
 
-	screen.UpdateKeys()
-	a.SetRootWidget(screen)
+	a.screen.UpdateKeys()
+	a.SetRootWidget(a.screen)
 
-	screen.SwitchWorkspace(items[0].Widget())
+	a.screen.SwitchWorkspace(items[0].Widget())
 	return nil
 }
 
+func (a *App) NamespaceSelector() focus.FocusableWidget {
+	return a.namespaceSelector
+}
+
 func (a *App) SwitchScreen(switchFunc func() error) error {
-	a.screen.Clear()
-	a.screen.Sync()
+	a.tScreen.Clear()
+	a.tScreen.Sync()
 	err := switchFunc()
-	a.screen.Sync()
+	a.tScreen.Sync()
 	return err
 }

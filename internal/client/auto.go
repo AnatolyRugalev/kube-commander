@@ -10,6 +10,14 @@ type autoConfigProvider struct {
 	cmd *cobra.Command
 }
 
+func (a autoConfigProvider) Context() string {
+	return ""
+}
+
+func (a autoConfigProvider) Kubeconfig() string {
+	return ""
+}
+
 func NewAutoConfigProvider() ConfigProvider {
 	return &autoConfigProvider{}
 }

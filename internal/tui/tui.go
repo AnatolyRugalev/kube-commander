@@ -12,7 +12,6 @@ var Application = &struct {
 	Kubeconfig string `mapstructure:"kubeconfig"`
 	Context    string `mapstructure:"context"`
 	Namespace  string `mapstructure:"namespace"`
-	Timeout    int    `mapstructure:"timeout"`
 }{}
 
 func init() {
@@ -22,8 +21,7 @@ func init() {
 			"debug":      {false, "Enables debug to STDERR", "KUBEDEBUG"},
 			"kubeconfig": {"", "Kubernetes kubeconfig path", ""},
 			"context":    {"", "Kubernetes context to use", "KUBECONTEXT"},
-			"namespace":  {"", "Kubernetes context to use", "KUBENAMESPACE"},
-			"timeout":    {3, "Default request timeout in seconds", "KUBETIMEOUT"},
+			"namespace":  {"default", "Kubernetes context to use", "KUBENAMESPACE"},
 		},
 	})
 }
@@ -38,7 +36,7 @@ func Start() error {
 	if err != nil {
 		return err
 	}
-	a := app.New(c)
+	a := app.New(c, Application.Namespace)
 	err = a.InitScreen()
 	if err != nil {
 		return err

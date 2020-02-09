@@ -23,9 +23,9 @@ func BuildResourceMenu(client client.Client, itemMap []ResourceItem, resources c
 		var widget focus.FocusableWidget
 
 		if res.Namespaced {
-			widget = listTable.NewResourceListTable(client, res, shell, ns)
+			widget = listTable.NewResourceListTable(client, res, shell, nil, ns)
 		} else {
-			widget = listTable.NewClusterResourceListTable(client, res, shell)
+			widget = listTable.NewClusterResourceListTable(client, res, shell, nil)
 		}
 		if widget != nil {
 			items = append(items, menu.NewItem(item.Title, widget))

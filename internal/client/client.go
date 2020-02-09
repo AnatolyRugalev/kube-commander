@@ -3,31 +3,39 @@ package client
 import (
 	"fmt"
 	"k8s.io/apimachinery/pkg/api/meta"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/describe/versioned"
 	"k8s.io/kubectl/pkg/util/openapi"
+	"strings"
 	"time"
 )
 
+const AllNamespaces = "All namespaces"
+
 type ConfigProvider interface {
 	ClientConfig() (*rest.Config, error)
+	Context() string
+	Kubeconfig() string
 }
 
 type Client interface {
 	DiscoveryClient() *discovery.DiscoveryClient
-	SupportedApiResources() ([]v1.APIResource, error)
+	SupportedApiResources() ([]metav1.APIResource, error)
 	OpenAPIResources() openapi.Resources
 	Columns(gvk schema.GroupVersionKind) (string, bool)
 	AllColumns() (map[schema.GroupVersionKind]string, error)
 	REST(gv *schema.GroupVersion) (*rest.RESTClient, error)
 	PreferredGroupVersionResources() (ResourceMap, error)
 	NewRequest(gv *schema.GroupVersion) (*rest.Request, error)
+	LoadResourceToTable(resource *Resource, namespace string) (*metav1.Table, error)
 
 	Describe(namespace string, resType string, resName string) string
 	Edit(namespace string, resType string, resName string) string
@@ -57,8 +65,9 @@ func NewClient(provider ConfigProvider) (Client, error) {
 		return nil, err
 	}
 	cl := &client{
-		config: c,
-		rest:   r,
+		provider: provider,
+		config:   c,
+		rest:     r,
 	}
 	getter := openapi.NewOpenAPIGetter(cl.DiscoveryClient())
 	resources, err := getter.Get()
@@ -70,6 +79,7 @@ func NewClient(provider ConfigProvider) (Client, error) {
 }
 
 type client struct {
+	provider  ConfigProvider
 	config    *rest.Config
 	rest      *rest.RESTClient
 	resources openapi.Resources
@@ -120,12 +130,12 @@ func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
 	return resources, nil
 }
 
-func (c client) SupportedApiResources() ([]v1.APIResource, error) {
+func (c client) SupportedApiResources() ([]metav1.APIResource, error) {
 	lists, err := c.DiscoveryClient().ServerPreferredResources()
 	if err != nil {
 		return nil, err
 	}
-	var resources []v1.APIResource
+	var resources []metav1.APIResource
 	for _, list := range lists {
 		for _, res := range list.APIResources {
 			supported := false
@@ -216,4 +226,30 @@ func (c client) describer(mapping *meta.RESTMapping) (describe.Describer, error)
 	}
 	// otherwise return an unregistered error
 	return nil, fmt.Errorf("no description has been implemented for %s", mapping.GroupVersionKind.String())
+}
+
+func (c client) LoadResourceToTable(resource *Resource, namespace string) (*metav1.Table, error) {
+	opts := metav1.ListOptions{}
+	gv := resource.GroupVersion
+	req, err := c.NewRequest(&gv)
+	if err != nil {
+		return nil, err
+	}
+
+	table := metav1.Table{}
+	req.
+		Verb("GET").
+		Resource(resource.Resource).
+		VersionedParams(&opts, scheme.ParameterCodec).
+		SetHeader("Accept", strings.Join([]string{
+			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1.SchemeGroupVersion.Version, metav1.GroupName),
+			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1beta1.SchemeGroupVersion.Version, metav1beta1.GroupName),
+			"application/json",
+		}, ",")).
+		Namespace(namespace)
+	err = req.Do().Into(&table)
+	if err != nil {
+		return nil, err
+	}
+	return &table, nil
 }
