@@ -2,24 +2,46 @@ package tui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
+	"github.com/AnatolyRugalev/kube-commander/internal/client"
+	app "github.com/AnatolyRugalev/kube-commander/internal/tcell/app"
 )
 
 var Application = &struct {
 	Debug bool `mapstructure:"debug"`
+
+	Kubeconfig string `mapstructure:"kubeconfig"`
+	Context    string `mapstructure:"context"`
+	Namespace  string `mapstructure:"namespace"`
+	Timeout    int    `mapstructure:"timeout"`
 }{}
 
 func init() {
 	cfg.AddPkg(&cfg.Pkg{
 		Struct: Application,
 		PersistentFlags: cfg.FlagsDeclaration{
-			"debug": {false, "Enables debug to STDERR", "KUBEDEBUG"},
+			"debug":      {false, "Enables debug to STDERR", "KUBEDEBUG"},
+			"kubeconfig": {"", "Kubernetes kubeconfig path", ""},
+			"context":    {"", "Kubernetes context to use", "KUBECONTEXT"},
+			"namespace":  {"", "Kubernetes context to use", "KUBENAMESPACE"},
+			"timeout":    {3, "Default request timeout in seconds", "KUBETIMEOUT"},
 		},
 	})
 }
 
 var screen *Screen
-var app = NewApp()
 
 func Start() error {
-	return app.Run()
+	c, err := client.NewClient(client.NewCmdConfigProvider(
+		Application.Kubeconfig,
+		Application.Context,
+	))
+	if err != nil {
+		return err
+	}
+	a := app.New(c)
+	err = a.InitScreen()
+	if err != nil {
+		return err
+	}
+	return a.Run()
 }

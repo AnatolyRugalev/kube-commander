@@ -14,7 +14,7 @@ type rowEvent struct {
 	t     time.Time
 	lt    *ListTable
 	rowId int
-	row   *Row
+	row   Row
 }
 
 func (r rowEvent) Event() *views.EventWidget {
@@ -37,7 +37,7 @@ func (r rowEvent) RowId() int {
 	return r.rowId
 }
 
-func (r rowEvent) Row() *Row {
+func (r rowEvent) Row() Row {
 	return r.row
 }
 
@@ -45,7 +45,7 @@ type RowEvent interface {
 	Event() *views.EventWidget
 	ListTable() *ListTable
 	RowId() int
-	Row() *Row
+	Row() Row
 }
 
 type RowEventChange struct {
@@ -86,7 +86,7 @@ type ListTable struct {
 	// Left cell to start rendering from (horizontal scrolling)
 	leftCell int
 
-	rowEventHandler RowEventHandler
+	rowEventSubscribers []RowEventHandler
 
 	views.WidgetWatchers
 	*focus.Focusable
@@ -302,11 +302,16 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 }
 
 func (lt *ListTable) raiseEvent(event RowEvent) bool {
-	if lt.rowEventHandler != nil {
-		return lt.rowEventHandler.HandleRowEvent(event)
-	} else {
-		return false
+	for _, sub := range lt.rowEventSubscribers {
+		if sub.HandleRowEvent(event) {
+			return true
+		}
 	}
+	return false
+}
+
+func (lt *ListTable) RegisterRowEventHandler(handler RowEventHandler) {
+	lt.rowEventSubscribers = append(lt.rowEventSubscribers, handler)
 }
 
 func (lt *ListTable) Next() {
@@ -354,9 +359,9 @@ func (lt *ListTable) Select(index int) {
 }
 
 func (lt *ListTable) newRowEvent() rowEvent {
-	var row *Row
+	var row Row
 	if lt.selectedRow < len(lt.rows) {
-		row = &lt.rows[lt.selectedRow]
+		row = lt.rows[lt.selectedRow]
 	}
 	return rowEvent{
 		t:     time.Now(),
@@ -387,8 +392,4 @@ func (lt *ListTable) SetView(view views.View) {
 // This is the minimum required size of ListTable
 func (lt *ListTable) Size() (int, int) {
 	return 10, 3
-}
-
-func (lt *ListTable) SetEventHandler(handler RowEventHandler) {
-	lt.rowEventHandler = handler
 }

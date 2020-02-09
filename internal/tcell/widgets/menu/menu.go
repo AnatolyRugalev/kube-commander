@@ -59,6 +59,10 @@ func NewItem(title string, widget focus.FocusableWidget) Item {
 	}
 }
 
+func (i Item) Widget() focus.FocusableWidget {
+	return i.widget
+}
+
 type Menu struct {
 	*listTable.ListTable
 }
@@ -69,7 +73,7 @@ func NewMenu(items []Item) *Menu {
 		rows = append(rows, item.title)
 	}
 	lt := listTable.NewList(rows)
-	lt.SetEventHandler(&EventHandler{items: items})
+	lt.RegisterRowEventHandler(&EventHandler{items: items})
 	return &Menu{
 		ListTable: lt,
 	}

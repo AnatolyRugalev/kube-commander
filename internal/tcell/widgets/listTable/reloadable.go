@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type loadFunc func() ([]Row, error)
+type loadFunc func() ([]Column, []Row, error)
 
 type ReloadableListTable struct {
 	*ListTable
@@ -20,9 +20,9 @@ type ReloadableListTable struct {
 }
 
 const (
-	LoadingStarted  = 0
-	LoadingFinished = 1
-	LoadingError    = 2
+	LoadingStarted = iota
+	LoadingFinished
+	LoadingError
 )
 
 type LoadingEvent struct {
@@ -40,8 +40,8 @@ func (e *LoadingEvent) When() time.Time {
 	return e.t
 }
 
-func NewReloadableListTable(columns []Column, showHeader bool, load loadFunc) *ReloadableListTable {
-	lt := NewListTable(columns, []Row{}, showHeader)
+func NewReloadableListTable(showHeader bool, load loadFunc) *ReloadableListTable {
+	lt := NewListTable(nil, []Row{}, showHeader)
 	return &ReloadableListTable{
 		ListTable: lt,
 		loadM:     &sync.Mutex{},
@@ -72,7 +72,7 @@ func (r *ReloadableListTable) Reload() {
 		rlt:  r,
 		kind: LoadingStarted,
 	})
-	r.rows, r.err = r.load()
+	r.columns, r.rows, r.err = r.load()
 	if r.err != nil {
 		r.PostEvent(&LoadingEvent{
 			t:    time.Now(),

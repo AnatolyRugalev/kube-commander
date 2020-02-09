@@ -18,10 +18,6 @@ var rootCmd = &cobra.Command{
 		return cfg.Apply()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		//err := kube.InitClient()
-		//if err != nil {
-		//	return err
-		//}
 		return tui.Start()
 	},
 }

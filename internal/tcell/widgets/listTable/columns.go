@@ -3,6 +3,7 @@ package listTable
 import (
 	"errors"
 	"fmt"
+	"github.com/spf13/cast"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ type StringColumn struct {
 }
 
 func (s StringColumn) Render(value interface{}) (string, error) {
-	return fmt.Sprintf("%s", value), nil
+	return cast.ToString(value), nil
 }
 
 func NewStringColumn(header string) *StringColumn {
