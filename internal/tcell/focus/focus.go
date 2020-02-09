@@ -91,8 +91,37 @@ type Stack interface {
 	StackSize() int
 }
 
+type PopupHandler interface {
+	OnPopupEvent(widget FocusableWidget, rw, rh float64) FocusableWidget
+}
+
+type popupEvent struct {
+	t      time.Time
+	widget FocusableWidget
+	wr     float64
+	hr     float64
+}
+
+func (p popupEvent) Widget() views.Widget {
+	return p.widget
+}
+
+func (p popupEvent) When() time.Time {
+	return p.t
+}
+
+func NewPopupEvent(popup FocusableWidget, wr float64, hr float64) *popupEvent {
+	return &popupEvent{
+		t:      time.Now(),
+		widget: popup,
+		wr:     wr,
+		hr:     hr,
+	}
+}
+
 type Manager struct {
-	stack []FocusableWidget
+	stack        []FocusableWidget
+	popupHandler PopupHandler
 }
 
 func (f *Manager) HandleEvent(ev tcell.Event) bool {
@@ -103,6 +132,11 @@ func (f *Manager) HandleEvent(ev tcell.Event) bool {
 	case *BlurEvent:
 		f.Blur()
 		return true
+	case *popupEvent:
+		if f.popupHandler != nil {
+			f.Focus(f.popupHandler.OnPopupEvent(t.widget, t.wr, t.hr))
+			return true
+		}
 	}
 	return false
 }
@@ -111,10 +145,11 @@ func (f *Manager) StackSize() int {
 	return len(f.stack)
 }
 
-func NewFocusManager(root FocusableWidget) *Manager {
+func NewFocusManager(root FocusableWidget, popupHandler PopupHandler) *Manager {
 	root.OnFocus()
 	manager := &Manager{
-		stack: []FocusableWidget{root},
+		stack:        []FocusableWidget{root},
+		popupHandler: popupHandler,
 	}
 	root.Watch(manager)
 	return manager

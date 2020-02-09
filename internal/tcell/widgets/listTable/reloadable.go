@@ -97,9 +97,6 @@ func (r *ReloadableListTable) OnDisplay() {
 }
 
 func (r *ReloadableListTable) HandleEvent(ev tcell.Event) bool {
-	if !r.IsFocused() {
-		return false
-	}
 	switch ev := ev.(type) {
 	case *tcell.EventKey:
 		if ev.Key() == tcell.KeyF5 {
