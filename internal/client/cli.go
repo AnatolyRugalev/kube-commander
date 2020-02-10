@@ -48,7 +48,7 @@ func (c client) kubectl(namespace, command string) string {
 		context = " --context " + context
 	}
 	if namespace != "" {
-		namespace = " --namespace %s %s"
+		namespace = " --namespace " + namespace
 	}
 	command = fmt.Sprintf("kubectl%s %s", namespace, command)
 	if kubeconfig := c.provider.Kubeconfig(); kubeconfig != "" {

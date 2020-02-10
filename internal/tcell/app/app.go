@@ -92,6 +92,10 @@ func (a *App) InitScreen() error {
 			Kind:  "Deployment",
 			Title: "Deployments",
 		},
+		{
+			Kind:  "Ingress",
+			Title: "Ingresses",
+		},
 	}, versionResources, func(command string) error {
 		return a.SwitchScreen(func() error {
 			return cmd.Shell(command)

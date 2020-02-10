@@ -148,7 +148,7 @@ func (r ResourceListTable) describe(rowIndex int) error {
 	if err != nil {
 		return err
 	}
-	return r.shell(r.client.Viewer(r.client.Describe(r.namespace(), r.resource.Resource, metadata.Name)))
+	return r.shell(r.client.Viewer(r.client.Describe(metadata.Namespace, r.resource.Resource, metadata.Name)))
 }
 
 func (r ResourceListTable) edit(rowIndex int) error {
@@ -159,5 +159,5 @@ func (r ResourceListTable) edit(rowIndex int) error {
 	if err != nil {
 		return err
 	}
-	return r.shell(r.client.Edit(r.namespace(), r.resource.Resource, metadata.Name))
+	return r.shell(r.client.Edit(metadata.Namespace, r.resource.Resource, metadata.Name))
 }
