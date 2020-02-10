@@ -108,14 +108,14 @@ func (r *ResourceListTable) HandleRowEvent(event RowEvent) bool {
 	case *RowTcellEvent:
 		switch ev := e.ev.(type) {
 		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyCtrlD:
+			switch ev.Rune() {
+			case 'D', 'd':
 				err := r.describe(event.RowId())
 				if err != nil {
 					// TODO: error handling
 				}
 				return true
-			case tcell.KeyCtrlE:
+			case 'E', 'e':
 				err := r.edit(event.RowId())
 				if err != nil {
 					// TODO: error handling

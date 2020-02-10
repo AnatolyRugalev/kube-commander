@@ -81,20 +81,64 @@ func (a *App) InitScreen() error {
 			Title: "Nodes",
 		},
 		{
-			Kind:  "Pod",
-			Title: "Pods",
+			Kind:  "StorageClass",
+			Title: "Storage Classes",
 		},
 		{
-			Kind:  "Ingress",
-			Title: "Ingresses",
+			Kind:  "PersistentVolume",
+			Title: "PVs",
 		},
 		{
 			Kind:  "Deployment",
 			Title: "Deployments",
 		},
 		{
+			Kind:  "StatefulSet",
+			Title: "Stateful",
+		},
+		{
+			Kind:  "DaemonSet",
+			Title: "Daemons",
+		},
+		{
+			Kind:  "ReplicaSet",
+			Title: "Replicas",
+		},
+		{
+			Kind:  "Pod",
+			Title: "Pods",
+		},
+		{
+			Kind:  "CronJob",
+			Title: "Cron",
+		},
+		{
+			Kind:  "Job",
+			Title: "Jobs",
+		},
+		{
+			Kind:  "PersistentVolumeClaim",
+			Title: "PVCs",
+		},
+		{
+			Kind:  "ConfigMap",
+			Title: "Configs",
+		},
+		{
+			Kind:  "Secret",
+			Title: "Secrets",
+		},
+		{
+			Kind:  "Service",
+			Title: "Services",
+		},
+		{
 			Kind:  "Ingress",
 			Title: "Ingresses",
+		},
+		{
+			Kind:  "ServiceAccount",
+			Title: "Accounts",
 		},
 	}, versionResources, func(command string) error {
 		return a.SwitchScreen(func() error {
