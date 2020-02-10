@@ -12,7 +12,7 @@ type focusableSpacer struct {
 
 func TestFocusManager_Root(t *testing.T) {
 	w := &focusableSpacer{}
-	m := NewFocusManager(w)
+	m := NewFocusManager(w, nil)
 	if w != m.Root() {
 		t.Fail()
 	}
@@ -21,7 +21,7 @@ func TestFocusManager_Root(t *testing.T) {
 func TestFocusManager_Size(t *testing.T) {
 	w1 := &focusableSpacer{}
 	w2 := &focusableSpacer{}
-	m := NewFocusManager(w1)
+	m := NewFocusManager(w1, nil)
 	if m.StackSize() != 1 {
 		t.Fail()
 	}
@@ -35,7 +35,7 @@ func TestFocusManager_Focus(t *testing.T) {
 	w1 := &focusableSpacer{}
 	w2 := &focusableSpacer{}
 	w3 := &focusableSpacer{}
-	m := NewFocusManager(w1)
+	m := NewFocusManager(w1, nil)
 	m.Focus(w1)
 	if m.Current() != m.Root() {
 		t.Error("Current is not root")
@@ -62,7 +62,7 @@ func TestFocusManager_Blur(t *testing.T) {
 	w1 := &focusableSpacer{}
 	w2 := &focusableSpacer{}
 	w3 := &focusableSpacer{}
-	m := NewFocusManager(w1)
+	m := NewFocusManager(w1, nil)
 	m.Focus(w1)
 	m.Focus(w2)
 	m.Focus(w3)

@@ -28,10 +28,6 @@ type ConfigProvider interface {
 
 type Client interface {
 	DiscoveryClient() *discovery.DiscoveryClient
-	SupportedApiResources() ([]metav1.APIResource, error)
-	OpenAPIResources() openapi.Resources
-	Columns(gvk schema.GroupVersionKind) (string, bool)
-	AllColumns() (map[schema.GroupVersionKind]string, error)
 	REST(gv *schema.GroupVersion) (*rest.RESTClient, error)
 	PreferredGroupVersionResources() (ResourceMap, error)
 	NewRequest(gv *schema.GroupVersion) (*rest.Request, error)
@@ -151,59 +147,6 @@ func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
 	}
 
 	return resources, nil
-}
-
-func (c client) SupportedApiResources() ([]metav1.APIResource, error) {
-	lists, err := c.DiscoveryClient().ServerPreferredResources()
-	if err != nil {
-		return nil, err
-	}
-	var resources []metav1.APIResource
-	for _, list := range lists {
-		for _, res := range list.APIResources {
-			supported := false
-			for _, verb := range res.Verbs {
-				if verb == "get" {
-					supported = true
-					break
-				}
-			}
-			if supported {
-				resources = append(resources, res)
-			}
-		}
-	}
-	return resources, nil
-}
-
-func (c client) OpenAPIResources() openapi.Resources {
-	return c.resources
-}
-
-func (c client) Columns(gvk schema.GroupVersionKind) (string, bool) {
-	resource := c.resources.LookupResource(gvk)
-	if resource == nil {
-		return "", false
-	}
-	return openapi.GetPrintColumns(resource.GetExtensions())
-}
-
-func (c client) AllColumns() (map[schema.GroupVersionKind]string, error) {
-	lists, err := c.DiscoveryClient().ServerPreferredResources()
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[schema.GroupVersionKind]string)
-	for _, list := range lists {
-		for _, res := range list.APIResources {
-			gvk := schema.FromAPIVersionAndKind(list.GroupVersion, res.Kind)
-			columns, ok := c.Columns(gvk)
-			if ok {
-				m[gvk] = columns
-			}
-		}
-	}
-	return m, nil
 }
 
 func (c client) REST(gv *schema.GroupVersion) (*rest.RESTClient, error) {

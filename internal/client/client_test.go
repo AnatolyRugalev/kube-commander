@@ -26,20 +26,6 @@ func TestGetResourceList(t *testing.T) {
 	}
 }
 
-func TestSupportedResourcesList(t *testing.T) {
-	c, err := NewClient(NewAutoConfigProvider())
-	if err != nil {
-		t.Fatal(err)
-	}
-	resources, err := c.SupportedApiResources()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(resources) == 0 {
-		t.Fail()
-	}
-}
-
 func TestGVRs(t *testing.T) {
 	c, err := NewClient(NewAutoConfigProvider())
 	if err != nil {
@@ -50,20 +36,6 @@ func TestGVRs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gvrs) == 0 {
-		t.Fail()
-	}
-}
-
-func TestAllColumns(t *testing.T) {
-	c, err := NewClient(NewAutoConfigProvider())
-	if err != nil {
-		t.Fatal(err)
-	}
-	columns, err := c.AllColumns()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(columns) == 0 {
 		t.Fail()
 	}
 }
