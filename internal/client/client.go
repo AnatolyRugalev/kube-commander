@@ -46,10 +46,31 @@ type Client interface {
 }
 
 type Resource struct {
-	GroupVersion schema.GroupVersion
-	Namespaced   bool
-	Resource     string
-	Kind         string
+	Namespaced bool
+	Group      string
+	Version    string
+	Resource   string
+	Kind       string
+}
+
+func (r Resource) GroupVersion() schema.GroupVersion {
+	return schema.GroupVersion{Group: r.Group, Version: r.Version}
+}
+
+func (r Resource) GroupVersionKind() schema.GroupVersionKind {
+	return r.GroupVersion().WithKind(r.Kind)
+}
+
+func (r Resource) GroupVersionResource() schema.GroupVersionResource {
+	return r.GroupVersion().WithResource(r.Resource)
+}
+
+func (r Resource) Scope() meta.RESTScope {
+	if r.Namespaced {
+		return meta.RESTScopeNamespace
+	} else {
+		return meta.RESTScopeRoot
+	}
 }
 
 type ResourceMap map[string]*Resource
@@ -120,10 +141,11 @@ func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
 			}
 
 			resources[res.Kind] = &Resource{
-				GroupVersion: gv,
-				Namespaced:   res.Namespaced,
-				Resource:     res.Name,
-				Kind:         res.Kind,
+				Group:      gv.Group,
+				Version:    gv.Version,
+				Namespaced: res.Namespaced,
+				Resource:   res.Name,
+				Kind:       res.Kind,
 			}
 		}
 	}
@@ -196,16 +218,10 @@ func (c client) REST(gv *schema.GroupVersion) (*rest.RESTClient, error) {
 }
 
 func (c client) DescribeApi(resource *Resource, namespace string, name string) (string, error) {
-	var scope meta.RESTScope
-	if resource.Namespaced {
-		scope = meta.RESTScopeNamespace
-	} else {
-		scope = meta.RESTScopeRoot
-	}
 	mapping := meta.RESTMapping{
-		GroupVersionKind: resource.GroupVersion.WithKind(resource.Kind),
-		Resource:         resource.GroupVersion.WithResource(resource.Resource),
-		Scope:            scope,
+		GroupVersionKind: resource.GroupVersionKind(),
+		Resource:         resource.GroupVersionResource(),
+		Scope:            resource.Scope(),
 	}
 	descr, err := c.describer(&mapping)
 	if err != nil {
@@ -231,7 +247,7 @@ func (c client) describer(mapping *meta.RESTMapping) (describe.Describer, error)
 
 func (c client) LoadResourceToTable(resource *Resource, namespace string) (*metav1.Table, error) {
 	opts := metav1.ListOptions{}
-	gv := resource.GroupVersion
+	gv := resource.GroupVersion()
 	req, err := c.NewRequest(&gv)
 	if err != nil {
 		return nil, err
