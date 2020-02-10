@@ -35,6 +35,9 @@ func (s *ScreenLayout) ClearPopup() {
 }
 
 func (s *ScreenLayout) OnPopupEvent(widget focus.FocusableWidget, wr float64, hr float64) focus.FocusableWidget {
+	if s.popup != nil {
+		return s.popup
+	}
 	s.popup = &PopupWidget{
 		FocusableWidget: widget,
 		layout:          s,
