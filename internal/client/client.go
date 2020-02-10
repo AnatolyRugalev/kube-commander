@@ -105,6 +105,7 @@ func (c client) DiscoveryClient() *discovery.DiscoveryClient {
 }
 
 func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
+	// TODO: caching
 	lists, err := c.DiscoveryClient().ServerPreferredResources()
 	if err != nil {
 		return nil, err
