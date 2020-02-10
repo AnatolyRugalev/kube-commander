@@ -138,6 +138,9 @@ func (lt *ListTable) viewWidth() int {
 
 func (lt *ListTable) viewHeight() int {
 	_, height := lt.view.Size()
+	if lt.showHeader {
+		height -= 1
+	}
 	return height
 }
 
@@ -285,6 +288,18 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 		case tcell.KeyUp:
 			lt.Prev()
 			return true
+		case tcell.KeyPgDn:
+			lt.NextPage()
+			return true
+		case tcell.KeyPgUp:
+			lt.PrevPage()
+			return true
+		case tcell.KeyHome:
+			lt.Home()
+			return true
+		case tcell.KeyEnd:
+			lt.End()
+			return true
 		case tcell.KeyRight:
 			lt.Right()
 			return true
@@ -320,6 +335,22 @@ func (lt *ListTable) Prev() {
 	lt.Select(lt.selectedRow - 1)
 }
 
+func (lt *ListTable) NextPage() {
+	lt.Select(lt.selectedRow + lt.viewHeight())
+}
+
+func (lt *ListTable) PrevPage() {
+	lt.Select(lt.selectedRow - lt.viewHeight())
+}
+
+func (lt *ListTable) Home() {
+	lt.Select(0)
+}
+
+func (lt *ListTable) End() {
+	lt.Select(len(lt.rows) - 1)
+}
+
 func (lt *ListTable) Right() {
 	lt.SetLeft(lt.leftCell + 5)
 }
@@ -348,8 +379,9 @@ func (lt *ListTable) Select(index int) {
 		rowEvent: lt.newRowEvent(),
 	})
 
-	height := lt.table.dataHeight
-	if index > lt.topRow+height-1 {
+	height := lt.viewHeight()
+	scrollThreshold := lt.topRow + height - 1
+	if index > scrollThreshold {
 		lt.topRow = index - height + 1
 	} else if index < lt.topRow {
 		lt.topRow = index
