@@ -276,8 +276,7 @@ func (lt *ListTable) Resize() {
 }
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
-	switch ev := ev.(type) {
-	case *tcell.EventKey:
+	return KeySwitch(ev, func(ev *tcell.EventKey) bool {
 		switch ev.Key() {
 		case tcell.KeyDown:
 			lt.Next()
@@ -292,10 +291,10 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			lt.Left()
 			return true
 		}
-	}
-	return lt.raiseEvent(&RowTcellEvent{
-		ev:       ev,
-		rowEvent: lt.newRowEvent(),
+		return lt.raiseEvent(&RowTcellEvent{
+			ev:       ev,
+			rowEvent: lt.newRowEvent(),
+		})
 	})
 }
 

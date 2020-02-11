@@ -104,27 +104,23 @@ func (r *ResourceListTable) loadResourceRows() ([]Column, []Row, error) {
 }
 
 func (r *ResourceListTable) HandleRowEvent(event RowEvent) bool {
-	switch e := event.(type) {
-	case *RowTcellEvent:
-		switch ev := e.ev.(type) {
-		case *tcell.EventKey:
-			switch ev.Rune() {
-			case 'D', 'd':
-				err := r.describe(event.RowId())
-				if err != nil {
-					// TODO: error handling
-				}
-				return true
-			case 'E', 'e':
-				err := r.edit(event.RowId())
-				if err != nil {
-					// TODO: error handling
-				}
-				return true
+	return KeySwitch(event, func(ev *tcell.EventKey) bool {
+		switch ev.Rune() {
+		case 'D', 'd':
+			err := r.describe(event.RowId())
+			if err != nil {
+				// TODO: error handling
 			}
+			return true
+		case 'E', 'e':
+			err := r.edit(event.RowId())
+			if err != nil {
+				// TODO: error handling
+			}
+			return true
 		}
-	}
-	return false
+		return false
+	})
 }
 
 func (r ResourceListTable) rowMetadata(rowIndex int) (*metav1.PartialObjectMetadata, error) {

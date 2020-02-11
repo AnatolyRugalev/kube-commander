@@ -31,17 +31,17 @@ func (s *Screen) HandleEvent(ev tcell.Event) bool {
 		case tcell.KeyCtrlL:
 			s.handler.Refresh()
 			return true
+		case tcell.KeyCtrlN:
+			s.main.PostEvent(focus.NewPopupEvent(
+				s.handler.NamespaceSelector(),
+				0.5,
+				0.5,
+			))
+			return true
 		case tcell.KeyRune:
 			switch ev.Rune() {
 			case 'Q', 'q':
 				s.handler.Quit()
-				return true
-			case 'N', 'n':
-				s.main.PostEvent(focus.NewPopupEvent(
-					s.handler.NamespaceSelector(),
-					0.5,
-					0.5,
-				))
 				return true
 			}
 		}

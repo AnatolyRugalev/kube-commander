@@ -97,12 +97,11 @@ func (r *ReloadableListTable) OnDisplay() {
 }
 
 func (r *ReloadableListTable) HandleEvent(ev tcell.Event) bool {
-	switch ev := ev.(type) {
-	case *tcell.EventKey:
-		if ev.Key() == tcell.KeyF5 {
+	return KeySwitch(ev, func(ev *tcell.EventKey) bool {
+		if ev.Key() == tcell.KeyF5 || ev.Key() == tcell.KeyCtrlR {
 			r.Reload()
 			return true
 		}
-	}
-	return r.ListTable.HandleEvent(ev)
+		return r.ListTable.HandleEvent(ev)
+	})
 }
