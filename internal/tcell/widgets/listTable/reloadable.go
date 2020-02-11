@@ -67,6 +67,7 @@ func (r *ReloadableListTable) drawError() {
 
 func (r *ReloadableListTable) Reload() {
 	r.loadM.Lock()
+	defer r.loadM.Unlock()
 	r.PostEvent(&LoadingEvent{
 		t:    time.Now(),
 		rlt:  r,
@@ -87,7 +88,8 @@ func (r *ReloadableListTable) Reload() {
 		rlt:  r,
 		kind: LoadingFinished,
 	})
-	r.loadM.Unlock()
+	r.ListTable.table = r.ListTable.renderTable()
+	r.ListTable.Select(r.ListTable.selectedRow)
 }
 
 func (r *ReloadableListTable) OnDisplay() {

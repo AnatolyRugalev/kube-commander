@@ -28,10 +28,6 @@ type ConfigProvider interface {
 
 type Client interface {
 	DiscoveryClient() *discovery.DiscoveryClient
-	SupportedApiResources() ([]metav1.APIResource, error)
-	OpenAPIResources() openapi.Resources
-	Columns(gvk schema.GroupVersionKind) (string, bool)
-	AllColumns() (map[schema.GroupVersionKind]string, error)
 	REST(gv *schema.GroupVersion) (*rest.RESTClient, error)
 	PreferredGroupVersionResources() (ResourceMap, error)
 	NewRequest(gv *schema.GroupVersion) (*rest.Request, error)
@@ -46,10 +42,31 @@ type Client interface {
 }
 
 type Resource struct {
-	GroupVersion schema.GroupVersion
-	Namespaced   bool
-	Resource     string
-	Kind         string
+	Namespaced bool
+	Group      string
+	Version    string
+	Resource   string
+	Kind       string
+}
+
+func (r Resource) GroupVersion() schema.GroupVersion {
+	return schema.GroupVersion{Group: r.Group, Version: r.Version}
+}
+
+func (r Resource) GroupVersionKind() schema.GroupVersionKind {
+	return r.GroupVersion().WithKind(r.Kind)
+}
+
+func (r Resource) GroupVersionResource() schema.GroupVersionResource {
+	return r.GroupVersion().WithResource(r.Resource)
+}
+
+func (r Resource) Scope() meta.RESTScope {
+	if r.Namespaced {
+		return meta.RESTScopeNamespace
+	} else {
+		return meta.RESTScopeRoot
+	}
 }
 
 type ResourceMap map[string]*Resource
@@ -105,6 +122,7 @@ func (c client) DiscoveryClient() *discovery.DiscoveryClient {
 }
 
 func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
+	// TODO: caching
 	lists, err := c.DiscoveryClient().ServerPreferredResources()
 	if err != nil {
 		return nil, err
@@ -119,68 +137,16 @@ func (c client) PreferredGroupVersionResources() (ResourceMap, error) {
 			}
 
 			resources[res.Kind] = &Resource{
-				GroupVersion: gv,
-				Namespaced:   res.Namespaced,
-				Resource:     res.Name,
-				Kind:         res.Kind,
+				Group:      gv.Group,
+				Version:    gv.Version,
+				Namespaced: res.Namespaced,
+				Resource:   res.Name,
+				Kind:       res.Kind,
 			}
 		}
 	}
 
 	return resources, nil
-}
-
-func (c client) SupportedApiResources() ([]metav1.APIResource, error) {
-	lists, err := c.DiscoveryClient().ServerPreferredResources()
-	if err != nil {
-		return nil, err
-	}
-	var resources []metav1.APIResource
-	for _, list := range lists {
-		for _, res := range list.APIResources {
-			supported := false
-			for _, verb := range res.Verbs {
-				if verb == "get" {
-					supported = true
-					break
-				}
-			}
-			if supported {
-				resources = append(resources, res)
-			}
-		}
-	}
-	return resources, nil
-}
-
-func (c client) OpenAPIResources() openapi.Resources {
-	return c.resources
-}
-
-func (c client) Columns(gvk schema.GroupVersionKind) (string, bool) {
-	resource := c.resources.LookupResource(gvk)
-	if resource == nil {
-		return "", false
-	}
-	return openapi.GetPrintColumns(resource.GetExtensions())
-}
-
-func (c client) AllColumns() (map[schema.GroupVersionKind]string, error) {
-	lists, err := c.DiscoveryClient().ServerPreferredResources()
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[schema.GroupVersionKind]string)
-	for _, list := range lists {
-		for _, res := range list.APIResources {
-			gvk := schema.FromAPIVersionAndKind(list.GroupVersion, res.Kind)
-			columns, ok := c.Columns(gvk)
-			if ok {
-				m[gvk] = columns
-			}
-		}
-	}
-	return m, nil
 }
 
 func (c client) REST(gv *schema.GroupVersion) (*rest.RESTClient, error) {
@@ -195,16 +161,10 @@ func (c client) REST(gv *schema.GroupVersion) (*rest.RESTClient, error) {
 }
 
 func (c client) DescribeApi(resource *Resource, namespace string, name string) (string, error) {
-	var scope meta.RESTScope
-	if resource.Namespaced {
-		scope = meta.RESTScopeNamespace
-	} else {
-		scope = meta.RESTScopeRoot
-	}
 	mapping := meta.RESTMapping{
-		GroupVersionKind: resource.GroupVersion.WithKind(resource.Kind),
-		Resource:         resource.GroupVersion.WithResource(resource.Resource),
-		Scope:            scope,
+		GroupVersionKind: resource.GroupVersionKind(),
+		Resource:         resource.GroupVersionResource(),
+		Scope:            resource.Scope(),
 	}
 	descr, err := c.describer(&mapping)
 	if err != nil {
@@ -230,7 +190,7 @@ func (c client) describer(mapping *meta.RESTMapping) (describe.Describer, error)
 
 func (c client) LoadResourceToTable(resource *Resource, namespace string) (*metav1.Table, error) {
 	opts := metav1.ListOptions{}
-	gv := resource.GroupVersion
+	gv := resource.GroupVersion()
 	req, err := c.NewRequest(&gv)
 	if err != nil {
 		return nil, err
