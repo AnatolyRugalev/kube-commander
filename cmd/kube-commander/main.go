@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/AnatolyRugalev/kube-commander/internal/cfg"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui"
+	"github.com/AnatolyRugalev/kube-commander/app"
+	"github.com/AnatolyRugalev/kube-commander/app/builder"
+	"github.com/AnatolyRugalev/kube-commander/app/client"
+	"github.com/AnatolyRugalev/kube-commander/app/executor"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -14,21 +16,26 @@ var rootCmd = &cobra.Command{
 	Use:     "kube-commander",
 	Version: version,
 	Long:    "Browse your Kubernetes clusters in a casual way",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		return cfg.Apply()
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return tui.Start()
-	},
+	RunE:    run,
 }
 
 func main() {
-	if err := cfg.Setup(rootCmd); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func run(_ *cobra.Command, _ []string) error {
+	conf := client.NewDefaultConfig()
+	cl, err := client.NewClient(conf)
+	if err != nil {
+		return err
+	}
+	// TODO: flag based configuration
+	// TODO: env based editor and viewer
+	// TODO: env based kubectl path
+	b := builder.NewBuilder(conf, "kubectl", "less", "nano")
+	application := app.NewApp(cl, cl, b, executor.NewOsExecutor(), "default")
+	return application.Run()
 }
