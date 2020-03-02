@@ -5,16 +5,15 @@
 
 ![Kube Commander](docs/demo.gif)
 
-## Current state
+## Current state of the project
 
-Current version of kube-commander is pretty stable but it has some major concurrency flaws caused by bad design
+Current version of kube-commander is "not-so-stable" because it has some major concurrency flaws caused by design
 of termui and/or kube-commander itself. Switching to different TUI library will prevent this from happening, so
-I decided to rewrite this project entirely using tcell library. Work in progress.
+I decided to rewrite this project entirely using *tcell* library.
 
-Do you feel that kube-commander could be improved in some way? Don't be shy to
-file a feature request. I would love to hear you opinion :)
+I'm heavily invested in rewriting new version from scratch, you can follow the progress in `tcell` branch.
 
-Thank you for investing your time!
+I want to thank everyone contributing to this project for your support, especcially to my family who allows me to spend some time with this project daily. I appreciate any help, feature requests and bug reports.
 
 ## Requirements
 
