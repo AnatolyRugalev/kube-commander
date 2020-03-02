@@ -13,7 +13,7 @@ I decided to rewrite this project entirely using *tcell* library.
 
 I'm heavily invested in rewriting new version from scratch, you can follow the progress in `tcell` branch.
 
-I want to thank everyone contributing to this project for your support, especcially to my family who allows me to spend some time with this project daily. I appreciate any help, feature requests and bug reports.
+I want to thank everyone contributing to this project for your support, especcially my family who allows me to spend some time with this project daily. I appreciate any help, feature requests and bug reports.
 
 ## Requirements
 
