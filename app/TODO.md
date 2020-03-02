@@ -1,6 +1,5 @@
 # TODO
 
-* Help popup
 * Namespace picker: all namespaces
 * Logging: tail if container is running
 * Container picker: container status
@@ -12,3 +11,4 @@
 * Colors: headers color
 * Colors: active menu item color
 * Workspace: show preloader for .Reload()
+* Consider SSH to node support
