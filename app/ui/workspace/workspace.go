@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/help"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resourceMenu"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/namespace"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
@@ -18,7 +19,7 @@ type workspace struct {
 	container commander.Container
 	focus     commander.FocusManager
 
-	popup  commander.Widget
+	popup  commander.Popup
 	menu   commander.MenuListView
 	widget commander.Widget
 
@@ -96,18 +97,31 @@ func (w workspace) Draw() {
 	}
 }
 
+func (w workspace) Resize() {
+	w.BoxLayout.Resize()
+	if w.popup != nil {
+		w.popup.Reposition(w.container.Screen().View())
+		w.popup.Resize()
+	}
+}
+
 func (w *workspace) HandleEvent(e tcell.Event) bool {
 	if w.focus.HandleEvent(e) {
 		return true
 	}
+	if w.popup != nil {
+		return false
+	}
 	switch ev := e.(type) {
 	case *tcell.EventKey:
 		switch ev.Key() {
-		case tcell.KeyESC:
-			w.focus.Blur()
-			return true
 		case tcell.KeyCtrlN, tcell.KeyF2:
 			namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)
+		default:
+			if ev.Rune() == '?' {
+				help.ShowHelpPopup(w)
+				return true
+			}
 		}
 	}
 	return false

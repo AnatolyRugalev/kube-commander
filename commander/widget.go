@@ -23,3 +23,8 @@ type StylableWidget interface {
 	SetStyle(style Style)
 	Style() Style
 }
+
+type Popup interface {
+	MaxSizeWidget
+	Reposition(view View)
+}

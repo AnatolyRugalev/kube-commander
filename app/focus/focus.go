@@ -18,6 +18,14 @@ func NewFocusManager(root commander.Widget) *manager {
 }
 
 func (f *manager) HandleEvent(e tcell.Event) bool {
+	switch ev := e.(type) {
+	case *tcell.EventKey:
+		switch ev.Key() {
+		case tcell.KeyESC:
+			f.Blur()
+			return true
+		}
+	}
 	for i := len(f.stack) - 1; i >= 0; i-- {
 		if f.stack[i].HandleEvent(e) {
 			return true

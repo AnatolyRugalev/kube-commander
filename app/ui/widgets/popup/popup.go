@@ -6,20 +6,19 @@ import (
 )
 
 type popup struct {
-	commander.Widget
+	commander.MaxSizeWidget
 
 	onBlur func()
 }
 
 func (p *popup) OnBlur() {
-	p.Widget.OnBlur()
+	p.MaxSizeWidget.OnBlur()
 	p.onBlur()
 }
 
-func NewPopup(view commander.View, widget commander.MaxSizeWidget, onBlur func()) *popup {
+func (p *popup) Reposition(view commander.View) {
 	viewWidth, viewHeight := view.Size()
-
-	maxW, maxH := widget.MaxSize()
+	maxW, maxH := p.MaxSizeWidget.MaxSize()
 	x := float64(viewWidth)/2 - float64(maxW)/2
 	y := float64(viewHeight)/2 - float64(maxH)/2
 
@@ -37,11 +36,14 @@ func NewPopup(view commander.View, widget commander.MaxSizeWidget, onBlur func()
 	}
 
 	popupView := views.NewViewPort(view, int(x), int(y), maxW, maxH)
+	p.MaxSizeWidget.SetView(popupView)
+}
 
+func NewPopup(view commander.View, widget commander.MaxSizeWidget, onBlur func()) *popup {
 	popup := popup{
-		Widget: widget,
-		onBlur: onBlur,
+		MaxSizeWidget: widget,
+		onBlur:        onBlur,
 	}
-	popup.Widget.SetView(popupView)
+	popup.Reposition(view)
 	return &popup
 }
