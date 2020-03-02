@@ -2,6 +2,7 @@
 
 * Namespace picker: all namespaces
 * Logging: tail if container is running
+* Exec into container
 * Container picker: container status
 * Configuration and flags support
 * Deletion
