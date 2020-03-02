@@ -25,7 +25,7 @@ const (
 
 const HeaderRowId = -1
 
-var DefaultStyler commander.ListViewStyler = func(list commander.ListView, rowId int, row commander.Row) tcell.Style {
+var DefaultStyler commander.ListViewStyler = func(list commander.ListView, rowId int, row commander.Row) commander.Style {
 	style := tcell.
 		StyleDefault.
 		Background(tcell.ColorTeal).

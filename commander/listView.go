@@ -1,7 +1,5 @@
 package commander
 
-import "github.com/gdamore/tcell"
-
 type ListView interface {
 	MaxSizeWidget
 	Rows() []Row
@@ -10,7 +8,7 @@ type ListView interface {
 	SetStyler(styler ListViewStyler)
 }
 
-type ListViewStyler func(list ListView, rowId int, row Row) tcell.Style
+type ListViewStyler func(list ListView, rowId int, row Row) Style
 
 type Row []string
 
