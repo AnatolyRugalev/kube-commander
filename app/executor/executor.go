@@ -45,7 +45,10 @@ func (e executor) Execute(command *commander.Command) error {
 	)
 
 	go func(cmd *exec.Cmd) {
-		<-sigs
+		sig := <-sigs
+		if sig == nil {
+			return
+		}
 		e.Lock()
 		defer e.Unlock()
 		killing = true
@@ -62,6 +65,7 @@ func (e executor) Execute(command *commander.Command) error {
 
 	err = cmd.Wait()
 	signal.Reset(syscall.SIGINT)
+	close(sigs)
 
 	e.Lock()
 	defer e.Unlock()

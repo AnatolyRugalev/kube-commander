@@ -3,7 +3,7 @@ package commander
 import "github.com/gdamore/tcell"
 
 type FocusManager interface {
-	tcell.EventHandler
+	HandleEvent(e tcell.Event, useStack bool) bool
 	// Returns root widget which presents on top of focus stack
 	Root() Widget
 	// Put widget to focus stack

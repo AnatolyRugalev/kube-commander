@@ -45,10 +45,16 @@ func (p PodsList) logs(rowId int) {
 		p.workspace.HandleError(err)
 		return
 	}
-	pickPodContainer(p.workspace, &pod, func(pod *v1.Pod, container *v1.Container) {
+	pickPodContainer(p.workspace, pod, func(pod v1.Pod, container v1.Container, status v1.ContainerStatus) {
 		e := p.workspace.CommandExecutor()
 		b := p.workspace.CommandBuilder()
-		err := e.Pipe(b.Logs(pod.Namespace, pod.Name, container.Name, 1000, false), b.Viewer())
+		var commands []*commander.Command
+		if status.State.Running != nil {
+			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, true))
+		} else {
+			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, false), b.Viewer())
+		}
+		err := e.Pipe(commands...)
 		if err != nil {
 			p.workspace.HandleError(err)
 			return

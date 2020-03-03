@@ -1,9 +1,7 @@
 # TODO
 
 * Namespace picker: all namespaces
-* Logging: tail if container is running
 * Exec into container
-* Container picker: container status
 * Configuration and flags support
 * Deletion
 * Port-forward
@@ -13,3 +11,4 @@
 * Colors: active menu item color
 * Workspace: show preloader for .Reload()
 * Consider SSH to node support
+* Executor: show pager if exit code != 0
