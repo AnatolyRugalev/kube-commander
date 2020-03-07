@@ -5,6 +5,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+type ResourceMap map[string]*Resource
+
+type ResourceProvider interface {
+	Resources() (ResourceMap, error)
+}
+
 type Resource struct {
 	Namespaced bool
 	Group      string
@@ -31,4 +37,14 @@ func (r Resource) Scope() meta.RESTScope {
 	} else {
 		return meta.RESTScopeRoot
 	}
+}
+
+type ResourceContainer interface {
+	NamespaceAccessor
+	ErrorHandler
+	Client() Client
+	ResourceProvider() ResourceProvider
+	CommandBuilder() CommandBuilder
+	CommandExecutor() CommandExecutor
+	ScreenUpdater() ScreenUpdater
 }

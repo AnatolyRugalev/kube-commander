@@ -1,13 +1,17 @@
 package executor
 
 import (
+	"bytes"
+	"errors"
 	"github.com/AnatolyRugalev/kube-commander/commander"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type executor struct {
@@ -31,10 +35,11 @@ func (e executor) Pipe(command ...*commander.Command) error {
 
 // TODO: fix raw Execute calls. Only Pipe works for some reason (exit code: 1)
 func (e executor) Execute(command *commander.Command) error {
+	output := bytes.Buffer{}
 	cmd := e.createCmd(command)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stdout
+	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
@@ -55,9 +60,13 @@ func (e executor) Execute(command *commander.Command) error {
 		_ = e.killProcessGroup(commandPid)
 	}(cmd)
 
+	started := time.Now()
 	err := cmd.Start()
 	if err != nil {
-		return err
+		return &commander.ExecErr{
+			Err:    err,
+			Output: output.Bytes(),
+		}
 	}
 	e.Lock()
 	commandPid = cmd.Process.Pid
@@ -72,5 +81,17 @@ func (e executor) Execute(command *commander.Command) error {
 	if killing {
 		return nil
 	}
-	return err
+	if err != nil {
+		return &commander.ExecErr{
+			Err:    err,
+			Output: output.Bytes(),
+		}
+	}
+	if time.Now().Sub(started) < time.Second {
+		return &commander.ExecErr{
+			Err:    errors.New("command exited too early"),
+			Output: output.Bytes(),
+		}
+	}
+	return nil
 }

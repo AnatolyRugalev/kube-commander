@@ -25,7 +25,7 @@ func (s *Screen) SetView(view views.View) {
 	s.Panel.SetView(view)
 }
 
-func (s *Screen) Update() {
+func (s *Screen) UpdateScreen() {
 	s.app.Update()
 }
 

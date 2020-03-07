@@ -1,10 +1,14 @@
 # TODO
 
+* Make UI look prettier
+* Caching and preloading of resource types
+* Shell into container
+* Port-forward in background
+* Status bar
+
 * Namespace picker: all namespaces
-* Exec into container
 * Configuration and flags support
 * Deletion
-* Port-forward
 * Popup: add borders
 * Menu: add right border
 * Colors: headers color

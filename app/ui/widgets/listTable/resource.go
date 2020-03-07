@@ -47,7 +47,7 @@ func NewResourceListTable(container commander.ResourceContainer, resource *comma
 		resource:  resource,
 		opts:      opts,
 	}
-	resourceLt.ReloadableListTable = NewReloadableListTable(container, opts.ShowHeaders, resourceLt.loadResourceRows)
+	resourceLt.ReloadableListTable = NewReloadableListTable(container.ScreenUpdater(), container, opts.ShowHeaders, resourceLt.loadResourceRows)
 	resourceLt.BindOnKeyPress(resourceLt.OnKeyPress)
 	return resourceLt
 }
@@ -123,7 +123,7 @@ func (r ResourceListTable) describe(rowIndex int) {
 	}
 	e := r.container.CommandExecutor()
 	b := r.container.CommandBuilder()
-	err = e.Pipe(b.Describe(metadata.Namespace, r.resource.Resource, metadata.Name), b.Viewer())
+	err = e.Pipe(b.Describe(metadata.Namespace, r.resource.Resource, metadata.Name), b.Pager())
 	if err != nil {
 		r.container.HandleError(err)
 		return

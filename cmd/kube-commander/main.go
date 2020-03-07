@@ -33,9 +33,8 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	// TODO: flag based configuration
-	// TODO: env based editor and viewer
 	// TODO: env based kubectl path
-	b := builder.NewBuilder(conf, "kubectl", "less", "nano")
+	b := builder.NewBuilder(conf, "kubectl", "less", os.Getenv("EDITOR"))
 	application := app.NewApp(cl, cl, b, executor.NewOsExecutor(), "default")
 	return application.Run()
 }

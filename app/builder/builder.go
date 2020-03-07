@@ -8,20 +8,20 @@ import (
 type builder struct {
 	config     commander.Config
 	kubectlBin string
-	viewerBin  string
+	pagerBin   string
 	editorBin  string
 }
 
 func NewBuilder(
 	config commander.Config,
 	kubectl string,
-	viewer string,
+	pager string,
 	editor string,
 ) *builder {
 	return &builder{
 		config:     config,
 		kubectlBin: kubectl,
-		viewerBin:  viewer,
+		pagerBin:   pager,
 		editorBin:  editor,
 	}
 }
@@ -62,8 +62,8 @@ func (b builder) Logs(namespace string, pod string, container string, tail int, 
 	return b.kubectl(namespace, args...)
 }
 
-func (b builder) Viewer() *commander.Command {
-	return commander.NewCommand(b.viewerBin)
+func (b builder) Pager() *commander.Command {
+	return commander.NewCommand(b.pagerBin)
 }
 
 func (b builder) kubectl(namespace string, command ...string) *commander.Command {

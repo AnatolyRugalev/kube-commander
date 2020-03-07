@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/views"
 	"sync"
+	"time"
 )
 
 type loadFunc func() ([]string, []commander.Row, error)
@@ -17,15 +19,19 @@ type ReloadableListTable struct {
 	loadM      *sync.Mutex
 	load       loadFunc
 	err        error
+	updater    commander.ScreenUpdater
+	preloader  *preloader
 }
 
-func NewReloadableListTable(errHandler commander.ErrorHandler, showHeader bool, load loadFunc) *ReloadableListTable {
+func NewReloadableListTable(updater commander.ScreenUpdater, errHandler commander.ErrorHandler, showHeader bool, load loadFunc) *ReloadableListTable {
 	lt := NewListTable(nil, []commander.Row{}, showHeader)
 	rlt := &ReloadableListTable{
 		ListTable:  lt,
 		errHandler: errHandler,
 		loadM:      &sync.Mutex{},
 		load:       load,
+		updater:    updater,
+		preloader:  NewPreloader(updater),
 	}
 	lt.BindOnKeyPress(rlt.OnKeyPress)
 	return rlt
@@ -33,7 +39,7 @@ func NewReloadableListTable(errHandler commander.ErrorHandler, showHeader bool, 
 
 func (r *ReloadableListTable) OnKeyPress(_ int, _ commander.Row, event *tcell.EventKey) bool {
 	if event.Key() == tcell.KeyF5 || event.Key() == tcell.KeyCtrlR {
-		r.Reload()
+		go r.Reload()
 		return true
 	}
 	return false
@@ -42,9 +48,10 @@ func (r *ReloadableListTable) OnKeyPress(_ int, _ commander.Row, event *tcell.Ev
 func (r *ReloadableListTable) Draw() {
 	if r.err != nil {
 		r.drawError()
-	} else {
-		r.ListTable.Draw()
+		return
 	}
+	r.ListTable.Draw()
+	r.preloader.Draw()
 }
 
 func (r *ReloadableListTable) drawError() {
@@ -58,6 +65,9 @@ func (r *ReloadableListTable) drawError() {
 func (r *ReloadableListTable) Reload() {
 	r.loadM.Lock()
 	defer r.loadM.Unlock()
+	r.preloader.Start()
+	defer r.preloader.Stop()
+	time.Sleep(time.Second)
 	r.columns, r.rows, r.err = r.load()
 	if r.err != nil {
 		r.errHandler.HandleError(r.err)
@@ -68,8 +78,7 @@ func (r *ReloadableListTable) Reload() {
 	r.loaded = true
 }
 
-func (r *ReloadableListTable) OnDisplay() {
-	if !r.loaded {
-		r.Reload()
-	}
+func (r *ReloadableListTable) SetView(view views.View) {
+	r.ListTable.SetView(view)
+	r.preloader.SetView(view)
 }

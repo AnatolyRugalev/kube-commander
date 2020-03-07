@@ -50,7 +50,7 @@ type resourceMenu struct {
 }
 
 func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc) (*resourceMenu, error) {
-	res, err := workspace.ResourceProvider().PreferredResources()
+	res, err := workspace.ResourceProvider().Resources()
 	if err != nil {
 		return nil, err
 	}

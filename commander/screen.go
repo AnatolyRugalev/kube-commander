@@ -2,12 +2,16 @@ package commander
 
 type Screen interface {
 	Widget
+	ScreenUpdater
 	SetWorkspace(workspace Workspace)
 	Workspace() Workspace
 	View() View
-	Update()
 }
 
 type ErrorHandler interface {
 	HandleError(err error)
+}
+
+type ScreenUpdater interface {
+	UpdateScreen()
 }

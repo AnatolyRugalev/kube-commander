@@ -30,7 +30,7 @@ func PickNamespace(workspace commander.Workspace, resource *commander.Resource, 
 			break
 		}
 	}
-	workspace.Update()
+	workspace.ScreenUpdater().UpdateScreen()
 }
 
 func NewNamespacePicker(container commander.ResourceContainer, resource *commander.Resource, f NamespaceFunc) (*listTable.ResourceListTable, error) {

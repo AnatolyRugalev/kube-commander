@@ -2,6 +2,15 @@ package commander
 
 import "os/exec"
 
+type ExecErr struct {
+	Err    error
+	Output []byte
+}
+
+func (e ExecErr) Error() string {
+	return e.Err.Error()
+}
+
 type CommandExecutor interface {
 	Execute(command *Command) error
 	Pipe(command ...*Command) error

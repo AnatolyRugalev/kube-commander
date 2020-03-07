@@ -53,7 +53,7 @@ func (w *workspace) SwitchNamespace(namespace string) {
 	w.namespace = namespace
 	if r, ok := w.widget.(reloadable); ok {
 		r.Reload()
-		w.Update()
+		w.UpdateScreen()
 	}
 }
 
@@ -76,14 +76,18 @@ func (w *workspace) ShowPopup(widget commander.MaxSizeWidget) {
 	}
 	w.popup = popup.NewPopup(w.container.Screen().View(), widget, func() {
 		w.popup = nil
-		w.Update()
+		w.UpdateScreen()
 	})
 	w.focus.Focus(w.popup)
-	w.Update()
+	w.UpdateScreen()
 }
 
-func (w *workspace) Update() {
-	w.container.Screen().Update()
+func (w *workspace) UpdateScreen() {
+	w.container.Screen().UpdateScreen()
+}
+
+func (w workspace) ScreenUpdater() commander.ScreenUpdater {
+	return &w
 }
 
 func (w *workspace) HandleError(err error) {
@@ -128,7 +132,7 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 }
 
 func (w *workspace) Init() error {
-	resMap, err := w.ResourceProvider().PreferredResources()
+	resMap, err := w.ResourceProvider().Resources()
 	if err != nil {
 		return err
 	}
@@ -171,7 +175,7 @@ func (w *workspace) onMenuSelect(itemId int, item commander.MenuItem) bool {
 	w.focus.Focus(w.widget)
 
 	if r, ok := w.widget.(reloadable); ok {
-		r.Reload()
+		go r.Reload()
 	}
 
 	return true

@@ -61,9 +61,7 @@ func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) 
 	return r, nil
 }
 
-func (c client) PreferredResources() (commander.ResourceMap, error) {
-	// TODO: caching
-	// TODO: mutex
+func (c client) Resources() (commander.ResourceMap, error) {
 	if c.resources == nil {
 		lists, err := discovery.NewDiscoveryClient(c.restClient).ServerPreferredResources()
 		if err != nil {
