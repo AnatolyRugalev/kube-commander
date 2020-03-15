@@ -17,7 +17,7 @@ func PickNamespace(workspace commander.Workspace, resource *commander.Resource, 
 		workspace.HandleError(err)
 		return
 	}
-	workspace.ShowPopup(picker)
+	workspace.ShowPopup("Select namespace", picker)
 	currentNs := workspace.CurrentNamespace()
 	for i := 0; i < len(picker.Rows()); i++ {
 		meta, err := picker.RowMetadata(i)

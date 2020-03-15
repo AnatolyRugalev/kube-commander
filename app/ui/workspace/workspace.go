@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	errWidget "github.com/AnatolyRugalev/kube-commander/app/ui/err"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/help"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resourceMenu"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/namespace"
@@ -70,11 +71,11 @@ func (w *workspace) FocusManager() commander.FocusManager {
 	return w.focus
 }
 
-func (w *workspace) ShowPopup(widget commander.MaxSizeWidget) {
+func (w *workspace) ShowPopup(title string, widget commander.MaxSizeWidget) {
 	if r, ok := widget.(reloadable); ok {
 		r.Reload()
 	}
-	w.popup = popup.NewPopup(w.container.Screen().View(), widget, func() {
+	w.popup = popup.NewPopup(w.container.Screen().View(), title, widget, func() {
 		w.popup = nil
 		w.UpdateScreen()
 	})
@@ -91,7 +92,7 @@ func (w workspace) ScreenUpdater() commander.ScreenUpdater {
 }
 
 func (w *workspace) HandleError(err error) {
-	panic(err)
+	w.ShowPopup("Error", errWidget.NewErrorWidget(err))
 }
 
 func (w workspace) Draw() {
@@ -156,7 +157,7 @@ func (w *workspace) Init() error {
 func (w *workspace) styler(list commander.ListView, rowId int, row commander.Row) tcell.Style {
 	style := listTable.DefaultStyler(list, rowId, row)
 	if rowId != w.menu.SelectedRowId() && rowId == w.selectedWidgetId {
-		style = style.Background(tcell.ColorBlueViolet)
+		style = style.Background(tcell.ColorAliceBlue)
 	}
 	return style
 }

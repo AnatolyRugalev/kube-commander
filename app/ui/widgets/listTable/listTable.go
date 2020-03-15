@@ -3,6 +3,7 @@ package listTable
 import (
 	"errors"
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
@@ -20,26 +21,23 @@ var (
 )
 
 const (
-	columnSeparator = "|"
+	columnSeparator    = '|'
+	columnSeparatorLen = 1
 )
 
 const HeaderRowId = -1
 
 var DefaultStyler commander.ListViewStyler = func(list commander.ListView, rowId int, row commander.Row) commander.Style {
-	style := tcell.
-		StyleDefault.
-		Background(tcell.ColorTeal).
-		Foreground(tcell.ColorBlack)
 	if rowId == HeaderRowId {
-		return style.Foreground(tcell.ColorIsRGB).Underline(true)
+		return theme.Default.Underline(true)
 	} else if rowId == list.SelectedRowId() {
 		if list.IsFocused() {
-			return style.Background(tcell.ColorLightCyan)
+			return theme.ActiveFocused
 		} else {
-			return style.Background(tcell.ColorDarkGray)
+			return theme.ActiveUnfocused
 		}
 	}
-	return style
+	return theme.Default
 }
 
 type ListTable struct {
@@ -137,7 +135,7 @@ func (lt *ListTable) BindOnKeyPress(rowKeyEventFunc RowKeyEventFunc) {
 }
 
 func (lt *ListTable) columnSeparatorsWidth() int {
-	return (len(lt.columns) - 1) * len(columnSeparator)
+	return (len(lt.columns) - 1) * columnSeparatorLen
 }
 
 func (lt *ListTable) viewWidth() int {
@@ -262,7 +260,7 @@ func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style
 			rowString += strings.Repeat(" ", sizes[i]-len(val))
 		}
 		if i < len(row)-1 {
-			rowString += columnSeparator
+			rowString += string(columnSeparator)
 		}
 	}
 	rowString = rowString[lt.leftCell:]

@@ -2,6 +2,7 @@ package help
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell/views"
 )
@@ -34,10 +35,11 @@ func NewHelpWidget() *widget {
 		Focusable: focus.NewFocusable(),
 	}
 	widget.Text.SetText(text)
+	widget.Text.SetStyle(theme.Default)
 	return &widget
 }
 
 func ShowHelpPopup(workspace commander.Workspace) {
 	help := NewHelpWidget()
-	workspace.ShowPopup(help)
+	workspace.ShowPopup("Help", help)
 }

@@ -9,7 +9,6 @@
 * Namespace picker: all namespaces
 * Configuration and flags support
 * Deletion
-* Popup: add borders
 * Menu: add right border
 * Colors: headers color
 * Colors: active menu item color

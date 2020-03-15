@@ -4,7 +4,7 @@ type Workspace interface {
 	Widget
 	ResourceContainer
 	Init() error
-	ShowPopup(widget MaxSizeWidget)
+	ShowPopup(title string, widget MaxSizeWidget)
 	FocusManager() FocusManager
 }
 

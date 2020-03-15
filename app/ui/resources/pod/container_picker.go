@@ -18,7 +18,7 @@ func pickPodContainer(workspace commander.Workspace, pod v1.Pod, f ContainerFunc
 		workspace.FocusManager().Blur()
 		f(pod, c, status)
 	})
-	workspace.ShowPopup(picker)
+	workspace.ShowPopup("Select container", picker)
 }
 
 type item struct {
