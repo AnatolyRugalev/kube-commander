@@ -11,13 +11,13 @@ import (
 )
 
 type (
-	RowFunc         func(rowId int, row commander.Row) bool
-	RowKeyEventFunc func(rowId int, row commander.Row, event *tcell.EventKey) bool
+	RowFunc         func(row commander.Row) bool
+	RowKeyEventFunc func(row commander.Row, event *tcell.EventKey) bool
 )
 
 var (
-	DefaultRowFunc         = func(rowId int, row commander.Row) bool { return false }
-	DefaultRowKeyEventFunc = func(rowId int, row commander.Row, event *tcell.EventKey) bool { return false }
+	DefaultRowFunc         = func(row commander.Row) bool { return false }
+	DefaultRowKeyEventFunc = func(row commander.Row, event *tcell.EventKey) bool { return false }
 )
 
 const (
@@ -189,6 +189,9 @@ func (lt *ListTable) SelectedRowId() string {
 }
 
 func (lt *ListTable) SelectedRow() commander.Row {
+	if len(lt.rows) == 0 {
+		return nil
+	}
 	if lt.selectedRowIndex < len(lt.rows) {
 		return lt.rows[lt.selectedRowIndex]
 	}
@@ -201,21 +204,28 @@ func (lt *ListTable) SetStyler(styler commander.ListViewStyler) {
 
 func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
 	oldFunc := lt.onChange
-	lt.onChange = func(rowId int, row commander.Row) bool {
-		if rowFunc(rowId, row) {
+	lt.onChange = func(row commander.Row) bool {
+		if rowFunc(row) {
 			return true
 		}
-		return oldFunc(rowId, row)
+		return oldFunc(row)
 	}
+}
+
+func (lt *ListTable) RowById(id string) commander.Row {
+	if index, ok := lt.rowIndex[id]; ok {
+		return lt.rows[index]
+	}
+	return nil
 }
 
 func (lt *ListTable) BindOnKeyPress(rowKeyEventFunc RowKeyEventFunc) {
 	oldFunc := lt.onKeyEvent
-	lt.onKeyEvent = func(rowId int, row commander.Row, event *tcell.EventKey) bool {
-		if rowKeyEventFunc(rowId, row, event) {
+	lt.onKeyEvent = func(row commander.Row, event *tcell.EventKey) bool {
+		if rowKeyEventFunc(row, event) {
 			return true
 		}
-		return oldFunc(rowId, row, event)
+		return oldFunc(row, event)
 	}
 }
 
@@ -387,7 +397,7 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			lt.Left()
 			return true
 		}
-		return lt.onKeyEvent(lt.selectedRowIndex, lt.SelectedRow(), ev)
+		return lt.onKeyEvent(lt.SelectedRow(), ev)
 	})
 }
 
@@ -440,7 +450,7 @@ func (lt *ListTable) SelectIndex(index int) {
 		return
 	}
 	lt.selectedRowIndex = index
-	lt.onChange(lt.selectedRowIndex, row)
+	lt.onChange(row)
 
 	height := lt.viewHeight()
 	scrollThreshold := lt.topRow + height - 1

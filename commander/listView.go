@@ -44,7 +44,6 @@ type ResourceListView interface {
 
 type MenuListView interface {
 	ListView
-	Items() []MenuItem
 	SelectedItem() MenuItem
 }
 

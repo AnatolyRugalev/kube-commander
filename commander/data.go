@@ -54,3 +54,7 @@ func (k KubernetesRow) Id() string {
 func (k KubernetesRow) Cells() []string {
 	return k.cells
 }
+
+func (k KubernetesRow) Metadata() *metav1.PartialObjectMetadata {
+	return k.md
+}

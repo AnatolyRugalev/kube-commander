@@ -167,7 +167,7 @@ func (w *workspace) styler(list commander.ListView, row commander.Row) tcell.Sty
 	return style
 }
 
-func (w *workspace) onMenuSelect(_ int, item commander.MenuItem) bool {
+func (w *workspace) onMenuSelect(_ string, item commander.MenuItem) bool {
 	if item.Widget() != w.widget {
 		w.widget.OnHide()
 		w.BoxLayout.RemoveWidget(w.widget)

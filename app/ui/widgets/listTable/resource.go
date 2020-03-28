@@ -5,8 +5,6 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -19,8 +17,6 @@ type ResourceListTable struct {
 	stopWatchCh chan struct{}
 	rowProvider commander.RowProvider
 	format      TableFormat
-
-	table *metav1.Table
 }
 
 type TableFormat uint8
@@ -44,13 +40,13 @@ func NewResourceListTable(container commander.ResourceContainer, resource *comma
 	return resourceLt
 }
 
-func (r *ResourceListTable) OnKeyPress(rowId int, _ commander.Row, event *tcell.EventKey) bool {
+func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	switch event.Rune() {
 	case 'D', 'd':
-		go r.describe(rowId)
+		go r.describe(row)
 		return true
 	case 'E', 'e':
-		go r.edit(rowId)
+		go r.edit(row)
 		return true
 	}
 	return false
@@ -128,8 +124,7 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 }
 
 func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []commander.Row, error) {
-	var err error
-	r.table, err = r.container.Client().ListAsTable(r.resource, r.container.CurrentNamespace())
+	table, err := r.container.Client().ListAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,7 +133,7 @@ func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []co
 	var rows []commander.Row
 	var colIds []int
 
-	for colId, col := range r.table.ColumnDefinitions {
+	for colId, col := range table.ColumnDefinitions {
 		add := false
 		switch {
 		case format&Wide != 0:
@@ -154,7 +149,7 @@ func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []co
 		}
 	}
 
-	for _, row := range r.table.Rows {
+	for _, row := range table.Rows {
 		k8sRow, err := commander.NewKubernetesRow(row)
 		if err != nil {
 			return nil, nil, err
@@ -165,21 +160,16 @@ func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []co
 	return cols, rows, nil
 }
 
-func (r ResourceListTable) RowMetadata(rowIndex int) (*metav1.PartialObjectMetadata, error) {
-	if len(r.table.Rows) <= rowIndex {
-		return nil, fmt.Errorf("invalid row index")
+func (r ResourceListTable) RowMetadata(row commander.Row) (*metav1.PartialObjectMetadata, error) {
+	k8sRow, ok := row.(*commander.KubernetesRow)
+	if ok {
+		return k8sRow.Metadata(), nil
 	}
-	obj := r.table.Rows[rowIndex].Object
-	metadata := &metav1.PartialObjectMetadata{}
-	err := runtime.DecodeInto(unstructured.UnstructuredJSONScheme, obj.Raw, metadata)
-	if err != nil {
-		return nil, err
-	}
-	return metadata, nil
+	return nil, fmt.Errorf("invalid row")
 }
 
-func (r ResourceListTable) describe(rowIndex int) {
-	metadata, err := r.RowMetadata(rowIndex)
+func (r ResourceListTable) describe(row commander.Row) {
+	metadata, err := r.RowMetadata(row)
 	if err != nil {
 		r.container.HandleError(err)
 		return
@@ -193,8 +183,8 @@ func (r ResourceListTable) describe(rowIndex int) {
 	}
 }
 
-func (r ResourceListTable) edit(rowIndex int) {
-	metadata, err := r.RowMetadata(rowIndex)
+func (r ResourceListTable) edit(row commander.Row) {
+	metadata, err := r.RowMetadata(row)
 	if err != nil {
 		r.container.HandleError(err)
 		return

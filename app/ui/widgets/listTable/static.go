@@ -16,5 +16,6 @@ func NewStaticListTable(columns []string, rows []commander.Row, format TableForm
 		close(prov)
 	}()
 	lt := NewListTable(prov, format, nil)
+	lt.watch()
 	return lt
 }
