@@ -9,23 +9,34 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/describe"
 	"k8s.io/kubectl/pkg/describe/versioned"
+	"k8s.io/kubectl/pkg/scheme"
 	"strings"
 	"time"
 )
 
 const AllNamespaces = "All namespaces"
 
+func init() {
+	scheme.Scheme.AddKnownTypeWithName(
+		schema.GroupVersion{
+			Group:   metav1.GroupName,
+			Version: runtime.APIVersionInternal,
+		}.WithKind("Table"),
+		&metav1.Table{},
+	)
+}
+
 func NewClient(config commander.Config) (*client, error) {
 	c, err := config.ClientConfig()
 	if err != nil {
 		return nil, err
 	}
-	c.NegotiatedSerializer = serializer.NewCodecFactory(runtime.NewScheme())
+	c.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
 	r, err := rest.UnversionedRESTClientFor(c)
 	if err != nil {
 		return nil, err
@@ -57,6 +68,7 @@ func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) 
 	if timeout == 0 {
 		timeout = time.Second * 5
 	}
+	r.Resource(resource.Resource)
 	r.Timeout(timeout)
 	return r, nil
 }
@@ -98,7 +110,6 @@ func (c client) Get(resource *commander.Resource, namespace string, name string,
 	}
 	req.
 		Verb("GET").
-		Resource(resource.Resource).
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Name(name)
 	if resource.Namespaced {
@@ -129,7 +140,6 @@ func (c client) List(resource *commander.Resource, namespace string, out runtime
 
 	req.
 		Verb("GET").
-		Resource(resource.Resource).
 		VersionedParams(&opts, scheme.ParameterCodec)
 	switch out.(type) {
 	case *metav1.Table:
@@ -147,6 +157,29 @@ func (c client) List(resource *commander.Resource, namespace string, out runtime
 		return err
 	}
 	return nil
+}
+
+func (c client) WatchAsTable(resource *commander.Resource, namespace string) (watch.Interface, error) {
+	opts := metav1.ListOptions{
+		Watch: true,
+	}
+	req, err := c.NewRequest(resource)
+	if err != nil {
+		return nil, err
+	}
+
+	req.
+		Verb("GET").
+		VersionedParams(&opts, scheme.ParameterCodec).
+		SetHeader("Accept", strings.Join([]string{
+			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1.SchemeGroupVersion.Version, metav1.GroupName),
+			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1beta1.SchemeGroupVersion.Version, metav1beta1.GroupName),
+			"application/json",
+		}, ","))
+	if resource.Namespaced {
+		req.Namespace(namespace)
+	}
+	return req.Watch()
 }
 
 func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {

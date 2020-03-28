@@ -18,11 +18,12 @@ var phases = []rune{
 type preloader struct {
 	views.WidgetWatchers
 	focus.Focusable
-	phase   int
-	ticker  *time.Ticker
-	view    views.View
-	style   tcell.Style
-	updater commander.ScreenUpdater
+	phase     int
+	ticker    *time.Ticker
+	view      views.View
+	style     tcell.Style
+	updater   commander.ScreenUpdater
+	preloader *preloader
 }
 
 func NewPreloader(updater commander.ScreenUpdater) *preloader {

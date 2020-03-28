@@ -27,7 +27,7 @@ type workspace struct {
 	namespace         string
 	namespaceResource *commander.Resource
 
-	selectedWidgetId int
+	selectedWidgetId string
 }
 
 func (w *workspace) ResourceProvider() commander.ResourceProvider {
@@ -48,22 +48,21 @@ func (w *workspace) Client() commander.Client {
 
 func (w *workspace) CurrentNamespace() string {
 	return w.namespace
+
 }
 
 func (w *workspace) SwitchNamespace(namespace string) {
 	w.namespace = namespace
-	if r, ok := w.widget.(reloadable); ok {
-		r.Reload()
-		w.UpdateScreen()
-	}
+	w.widget.OnHide()
+	w.widget.OnShow()
+	w.UpdateScreen()
 }
 
 func NewWorkspace(container commander.Container, namespace string) *workspace {
 	return &workspace{
-		BoxLayout:        views.NewBoxLayout(views.Horizontal),
-		container:        container,
-		selectedWidgetId: -1,
-		namespace:        namespace,
+		BoxLayout: views.NewBoxLayout(views.Horizontal),
+		container: container,
+		namespace: namespace,
 	}
 }
 
@@ -72,23 +71,25 @@ func (w *workspace) FocusManager() commander.FocusManager {
 }
 
 func (w *workspace) ShowPopup(title string, widget commander.MaxSizeWidget) {
-	if r, ok := widget.(reloadable); ok {
-		r.Reload()
-	}
 	w.popup = popup.NewPopup(w.container.Screen().View(), title, widget, func() {
+		w.popup.OnHide()
 		w.popup = nil
 		w.UpdateScreen()
 	})
+	w.popup.OnShow()
 	w.focus.Focus(w.popup)
-	w.UpdateScreen()
 }
 
 func (w *workspace) UpdateScreen() {
+	if w.popup != nil {
+		w.popup.Reposition(w.container.Screen().View())
+		w.popup.Resize()
+	}
 	w.container.Screen().UpdateScreen()
 }
 
-func (w workspace) ScreenUpdater() commander.ScreenUpdater {
-	return &w
+func (w *workspace) ScreenUpdater() commander.ScreenUpdater {
+	return w
 }
 
 func (w *workspace) HandleError(err error) {
@@ -122,6 +123,8 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 		switch ev.Key() {
 		case tcell.KeyCtrlN, tcell.KeyF2:
 			namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)
+		case tcell.KeyF10:
+			w.UpdateScreen()
 		default:
 			if ev.Rune() == '?' {
 				help.ShowHelpPopup(w)
@@ -139,14 +142,16 @@ func (w *workspace) Init() error {
 	}
 	w.namespaceResource = resMap["Namespace"]
 
-	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect)
+	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, resMap)
 	if err != nil {
 		return err
 	}
 
 	resMenu.SetStyler(w.styler)
 	w.menu = resMenu
+	w.menu.OnShow()
 	w.widget = w.menu.SelectedItem().Widget()
+	w.widget.OnShow()
 	w.BoxLayout.AddWidget(w.menu, 0.1)
 	w.BoxLayout.AddWidget(w.widget, 0.9)
 	w.focus = focus.NewFocusManager(w.menu)
@@ -154,30 +159,24 @@ func (w *workspace) Init() error {
 	return nil
 }
 
-func (w *workspace) styler(list commander.ListView, rowId int, row commander.Row) tcell.Style {
-	style := listTable.DefaultStyler(list, rowId, row)
-	if rowId != w.menu.SelectedRowId() && rowId == w.selectedWidgetId {
+func (w *workspace) styler(list commander.ListView, row commander.Row) tcell.Style {
+	style := listTable.DefaultStyler(list, row)
+	if row.Id() != w.menu.SelectedRowId() && row.Id() == w.selectedWidgetId {
 		style = style.Background(tcell.ColorAliceBlue)
 	}
 	return style
 }
 
-type reloadable interface {
-	Reload()
-}
-
-func (w *workspace) onMenuSelect(itemId int, item commander.MenuItem) bool {
+func (w *workspace) onMenuSelect(_ int, item commander.MenuItem) bool {
 	if item.Widget() != w.widget {
+		w.widget.OnHide()
 		w.BoxLayout.RemoveWidget(w.widget)
 		w.widget = item.Widget()
 		w.BoxLayout.AddWidget(w.widget, 0.9)
-		w.selectedWidgetId = itemId
+		w.selectedWidgetId = item.Title()
+		w.widget.OnShow()
 	}
 	w.focus.Focus(w.widget)
-
-	if r, ok := w.widget.(reloadable); ok {
-		go r.Reload()
-	}
 
 	return true
 }

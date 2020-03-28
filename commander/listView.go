@@ -1,16 +1,41 @@
 package commander
 
+type RowProvider chan []Operation
+
+type Row interface {
+	Id() string
+	Cells() []string
+}
+
+type simpleRow struct {
+	id    string
+	cells []string
+}
+
+func (s simpleRow) Id() string {
+	return s.id
+}
+
+func (s simpleRow) Cells() []string {
+	return s.cells
+}
+
+func NewSimpleRow(id string, cells []string) *simpleRow {
+	return &simpleRow{
+		id:    id,
+		cells: cells,
+	}
+}
+
 type ListView interface {
 	MaxSizeWidget
 	Rows() []Row
-	SelectedRowId() int
 	SelectedRow() Row
+	SelectedRowId() string
 	SetStyler(styler ListViewStyler)
 }
 
-type ListViewStyler func(list ListView, rowId int, row Row) Style
-
-type Row []string
+type ListViewStyler func(list ListView, row Row) Style
 
 type ResourceListView interface {
 	ListView

@@ -25,12 +25,10 @@ const (
 	columnSeparatorLen = 1
 )
 
-const HeaderRowId = -1
-
-var DefaultStyler commander.ListViewStyler = func(list commander.ListView, rowId int, row commander.Row) commander.Style {
-	if rowId == HeaderRowId {
+var DefaultStyler commander.ListViewStyler = func(list commander.ListView, row commander.Row) commander.Style {
+	if row == nil {
 		return theme.Default.Underline(true)
-	} else if rowId == list.SelectedRowId() {
+	} else if row.Id() == list.SelectedRowId() {
 		if list.IsFocused() {
 			return theme.ActiveFocused
 		} else {
@@ -47,11 +45,13 @@ type ListTable struct {
 	view       views.View
 	columns    []string
 	rows       []commander.Row
+	rowIndex   map[string]int
+	selectedId string
 	showHeader bool
 	// internal representation of table values
 	table table
 	// Currently selected row
-	selectedRow int
+	selectedRowIndex int
 	// Row to start rendering from (vertical scrolling)
 	topRow int
 	// Left cell to start rendering from (horizontal scrolling)
@@ -60,34 +60,115 @@ type ListTable struct {
 	onChange   RowFunc
 	onKeyEvent RowKeyEventFunc
 
-	styler commander.ListViewStyler
+	styler      commander.ListViewStyler
+	preloader   *preloader
+	rowProvider commander.RowProvider
+	updater     commander.ScreenUpdater
+	stopCh      chan struct{}
 }
 
 func (lt *ListTable) Rows() []commander.Row {
 	return lt.rows
 }
 
-func NewList(lines []string) *ListTable {
-	var rows []commander.Row
-	for _, line := range lines {
-		rows = append(rows, commander.Row{line})
-	}
-	return NewListTable([]string{""}, rows, false)
-}
-
-func NewListTable(columns []string, rows []commander.Row, showHeader bool) *ListTable {
+func NewListTable(prov commander.RowProvider, format TableFormat, updater commander.ScreenUpdater) *ListTable {
 	lt := &ListTable{
 		Focusable:  focus.NewFocusable(),
-		columns:    columns,
-		rows:       rows,
-		showHeader: showHeader,
+		showHeader: format&WithHeaders != 0,
+		rowIndex:   make(map[string]int),
 
-		onKeyEvent: DefaultRowKeyEventFunc,
-		onChange:   DefaultRowFunc,
-		styler:     DefaultStyler,
+		onKeyEvent:  DefaultRowKeyEventFunc,
+		onChange:    DefaultRowFunc,
+		styler:      DefaultStyler,
+		preloader:   NewPreloader(updater),
+		rowProvider: prov,
+		updater:     updater,
 	}
 	lt.table = lt.renderTable()
 	return lt
+}
+
+func (lt *ListTable) OnShow() {
+	lt.stopCh = make(chan struct{})
+	go lt.watch()
+	lt.Focusable.OnShow()
+}
+
+func (lt *ListTable) OnHide() {
+	lt.Focusable.OnShow()
+	close(lt.stopCh)
+}
+
+func (lt *ListTable) watch() {
+	for {
+		select {
+		case <-lt.stopCh:
+			return
+		case ops, ok := <-lt.rowProvider:
+			if !ok {
+				return
+			}
+			changed := false
+			for _, op := range ops {
+				switch op.Type {
+				case commander.OpClear:
+					if len(lt.rows) > 0 {
+						lt.rows = []commander.Row{}
+						lt.rowIndex = make(map[string]int)
+						changed = true
+					}
+					if len(lt.columns) > 0 {
+						lt.columns = []string{}
+						changed = true
+					}
+				case commander.OpColumns:
+					if len(lt.columns) != len(op.Row.Cells()) {
+						// TODO: compare contents?
+						lt.columns = op.Row.Cells()
+						changed = true
+					}
+				case commander.OpAdded:
+					_, ok := lt.rowIndex[op.Row.Id()]
+					if !ok {
+						lt.rowIndex[op.Row.Id()] = len(lt.rows)
+						lt.rows = append(lt.rows, op.Row)
+						changed = true
+					}
+				case commander.OpDeleted:
+					index, ok := lt.rowIndex[op.Row.Id()]
+					if ok {
+						lt.rows = append(lt.rows[:index], lt.rows[index+1:]...)
+						delete(lt.rowIndex, op.Row.Id())
+						for _, row := range lt.rows[index:] {
+							lt.rowIndex[row.Id()]--
+						}
+						changed = true
+					}
+				case commander.OpModified:
+					index, ok := lt.rowIndex[op.Row.Id()]
+					if ok {
+						// TODO: compare contents?
+						lt.rows[index] = op.Row
+						changed = true
+					} else {
+						lt.rows = append(lt.rows, op.Row)
+						changed = true
+					}
+				case commander.OpLoading:
+					lt.preloader.Start()
+				case commander.OpLoadingFinished:
+					lt.preloader.Stop()
+				}
+			}
+			if changed {
+				lt.reindexSelection()
+				lt.table = lt.renderTable()
+				if lt.updater != nil {
+					lt.updater.UpdateScreen()
+				}
+			}
+		}
+	}
 }
 
 type table struct {
@@ -99,13 +180,17 @@ type table struct {
 	dataHeight       int
 }
 
-func (lt *ListTable) SelectedRowId() int {
-	return lt.selectedRow
+func (lt *ListTable) SelectedRowIndex() int {
+	return lt.selectedRowIndex
+}
+
+func (lt *ListTable) SelectedRowId() string {
+	return lt.selectedId
 }
 
 func (lt *ListTable) SelectedRow() commander.Row {
-	if lt.selectedRow < len(lt.rows) {
-		return lt.rows[lt.selectedRow]
+	if lt.selectedRowIndex < len(lt.rows) {
+		return lt.rows[lt.selectedRowIndex]
 	}
 	return nil
 }
@@ -181,10 +266,11 @@ func (lt *ListTable) renderTable() table {
 				err   error
 				value string
 			)
-			if colId > len(row)-1 {
+			cells := row.Cells()
+			if colId > len(cells)-1 {
 				err = errors.New("no val")
 			} else {
-				value = row[colId]
+				value = cells[colId]
 			}
 			if err != nil {
 				value = "err: " + err.Error()
@@ -238,14 +324,14 @@ func (lt *ListTable) Draw() {
 	index := 0
 	sizes := lt.getColumnSizes()
 	if lt.showHeader {
-		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, -1, nil))
+		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, nil))
 		index++
 	}
-	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < lt.topRow+len(lt.rows); rowId++ {
-		row := lt.table.values[rowId]
-		lt.drawRow(index, row, sizes, lt.styler(lt, rowId, row))
+	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < len(lt.rows); rowId++ {
+		lt.drawRow(index, lt.table.values[rowId], sizes, lt.styler(lt, lt.rows[rowId]))
 		index++
 	}
+	lt.preloader.Draw()
 }
 
 func (lt *ListTable) defaultStyle() tcell.Style {
@@ -301,32 +387,32 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			lt.Left()
 			return true
 		}
-		return lt.onKeyEvent(lt.selectedRow, lt.SelectedRow(), ev)
+		return lt.onKeyEvent(lt.selectedRowIndex, lt.SelectedRow(), ev)
 	})
 }
 
 func (lt *ListTable) Next() {
-	lt.Select(lt.selectedRow + 1)
+	lt.SelectIndex(lt.selectedRowIndex + 1)
 }
 
 func (lt *ListTable) Prev() {
-	lt.Select(lt.selectedRow - 1)
+	lt.SelectIndex(lt.selectedRowIndex - 1)
 }
 
 func (lt *ListTable) NextPage() {
-	lt.Select(lt.selectedRow + lt.viewHeight())
+	lt.SelectIndex(lt.selectedRowIndex + lt.viewHeight())
 }
 
 func (lt *ListTable) PrevPage() {
-	lt.Select(lt.selectedRow - lt.viewHeight())
+	lt.SelectIndex(lt.selectedRowIndex - lt.viewHeight())
 }
 
 func (lt *ListTable) Home() {
-	lt.Select(0)
+	lt.SelectIndex(0)
 }
 
 func (lt *ListTable) End() {
-	lt.Select(len(lt.rows) - 1)
+	lt.SelectIndex(len(lt.rows) - 1)
 }
 
 func (lt *ListTable) Right() {
@@ -337,7 +423,7 @@ func (lt *ListTable) Left() {
 	lt.SetLeft(lt.leftCell - 5)
 }
 
-func (lt *ListTable) Select(index int) {
+func (lt *ListTable) SelectIndex(index int) {
 	if len(lt.rows) == 0 {
 		return
 	}
@@ -348,19 +434,35 @@ func (lt *ListTable) Select(index int) {
 	if index < 0 {
 		index = 0
 	}
-	if lt.selectedRow == index {
+	row := lt.rows[index]
+	lt.selectedId = row.Id()
+	if lt.selectedRowIndex == index {
 		return
 	}
-	lt.selectedRow = index
-
-	lt.onChange(lt.selectedRow, lt.SelectedRow())
+	lt.selectedRowIndex = index
+	lt.onChange(lt.selectedRowIndex, row)
 
 	height := lt.viewHeight()
 	scrollThreshold := lt.topRow + height - 1
-	if index > scrollThreshold {
+	if height <= 0 {
+		lt.topRow = 0
+	} else if index > scrollThreshold {
 		lt.topRow = index - height + 1
 	} else if index < lt.topRow {
 		lt.topRow = index
+	}
+}
+
+func (lt *ListTable) SelectId(id string) {
+	lt.selectedId = id
+	lt.reindexSelection()
+}
+
+func (lt *ListTable) reindexSelection() {
+	if lt.selectedId == "" {
+		lt.SelectIndex(0)
+	} else if index, ok := lt.rowIndex[lt.selectedId]; ok {
+		lt.SelectIndex(index)
 	}
 }
 
@@ -379,11 +481,8 @@ func (lt *ListTable) SetLeft(index int) {
 
 func (lt *ListTable) SetView(view views.View) {
 	lt.view = view
+	lt.preloader.SetView(view)
 	lt.Resize()
-}
-
-func (lt *ListTable) ShowHeader(showHeader bool) {
-	lt.showHeader = showHeader
 }
 
 // This is the minimum required size of ListTable

@@ -10,6 +10,9 @@ type Widget interface {
 	IsFocused() bool
 	OnFocus()
 	OnBlur()
+	OnShow()
+	OnHide()
+	IsVisible() bool
 }
 
 type MaxSizeWidget interface {

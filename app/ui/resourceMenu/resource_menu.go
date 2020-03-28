@@ -13,12 +13,12 @@ type item struct {
 }
 
 var (
-	StandartWidget WidgetConstructor = func(workspace commander.Workspace, resource *commander.Resource, options *listTable.ResourceListTableOptions) commander.Widget {
-		return listTable.NewResourceListTable(workspace, resource, options)
+	StandardWidget WidgetConstructor = func(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat, updater commander.ScreenUpdater) commander.Widget {
+		return listTable.NewResourceListTable(workspace, resource, format, updater)
 	}
 	CustomWidgets = map[string]WidgetConstructor{
-		"Pod": func(workspace commander.Workspace, resource *commander.Resource, options *listTable.ResourceListTableOptions) commander.Widget {
-			return pod.NewPodsList(workspace, resource, options)
+		"Pod": func(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat, updater commander.ScreenUpdater) commander.Widget {
+			return pod.NewPodsList(workspace, resource, format, updater)
 		},
 	}
 	itemMap = []*item{
@@ -43,23 +43,19 @@ var (
 	}
 )
 
-type WidgetConstructor func(workspace commander.Workspace, resource *commander.Resource, options *listTable.ResourceListTableOptions) commander.Widget
+type WidgetConstructor func(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat, updater commander.ScreenUpdater) commander.Widget
 
 type resourceMenu struct {
 	*menu.Menu
 }
 
-func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc) (*resourceMenu, error) {
-	res, err := workspace.ResourceProvider().Resources()
-	if err != nil {
-		return nil, err
-	}
-	m := menu.NewMenu(buildItems(workspace, res))
+func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc, resMap commander.ResourceMap) (*resourceMenu, error) {
+	m := menu.NewMenu(buildItems(workspace, resMap, workspace.ScreenUpdater()))
 	m.BindOnSelect(onSelect)
 	return &resourceMenu{Menu: m}, nil
 }
 
-func buildItems(workspace commander.Workspace, resources commander.ResourceMap) []commander.MenuItem {
+func buildItems(workspace commander.Workspace, resources commander.ResourceMap, updater commander.ScreenUpdater) []commander.MenuItem {
 	var items []commander.MenuItem
 	for _, item := range itemMap {
 		res, ok := resources[item.kind]
@@ -69,10 +65,10 @@ func buildItems(workspace commander.Workspace, resources commander.ResourceMap) 
 
 		constructor, ok := CustomWidgets[item.kind]
 		if !ok {
-			constructor = StandartWidget
+			constructor = StandardWidget
 		}
 
-		items = append(items, menu.NewItem(item.title, constructor(workspace, res, nil)))
+		items = append(items, menu.NewItem(item.title, constructor(workspace, res, listTable.Wide|listTable.WithHeaders, updater)))
 	}
 	return items
 }

@@ -4,50 +4,42 @@ import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
-	"github.com/spf13/cast"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 type ResourceListTable struct {
-	*ReloadableListTable
+	*ListTable
 
 	container commander.ResourceContainer
 	resource  *commander.Resource
-	opts      *ResourceListTableOptions
+
+	stopWatchCh chan struct{}
+	rowProvider commander.RowProvider
+	format      TableFormat
 
 	table *metav1.Table
 }
 
-type ResourceTableFormat int
+type TableFormat uint8
 
 const (
-	FormatWide = ResourceTableFormat(iota)
-	FormatShort
-	FormatNameOnly
+	WithHeaders TableFormat = 1 << iota
+	Wide
+	Short
+	NameOnly
 )
 
-var DefaultResourceTableOpts = &ResourceListTableOptions{
-	ShowHeaders: true,
-	Format:      FormatWide,
-}
-
-type ResourceListTableOptions struct {
-	ShowHeaders bool
-	Format      ResourceTableFormat
-}
-
-func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, opts *ResourceListTableOptions) *ResourceListTable {
-	if opts == nil {
-		opts = DefaultResourceTableOpts
-	}
+func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, format TableFormat, updater commander.ScreenUpdater) *ResourceListTable {
 	resourceLt := &ResourceListTable{
-		container: container,
-		resource:  resource,
-		opts:      opts,
+		container:   container,
+		resource:    resource,
+		rowProvider: make(commander.RowProvider),
+		format:      format,
 	}
-	resourceLt.ReloadableListTable = NewReloadableListTable(container.ScreenUpdater(), container, opts.ShowHeaders, resourceLt.loadResourceRows)
+	resourceLt.ListTable = NewListTable(resourceLt.rowProvider, format, updater)
 	resourceLt.BindOnKeyPress(resourceLt.OnKeyPress)
 	return resourceLt
 }
@@ -64,7 +56,78 @@ func (r *ResourceListTable) OnKeyPress(rowId int, _ commander.Row, event *tcell.
 	return false
 }
 
-func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error) {
+func (r *ResourceListTable) OnShow() {
+	r.stopWatchCh = make(chan struct{})
+	go r.provideRows(r.format, r.rowProvider)
+	r.ListTable.OnShow()
+}
+
+func (r *ResourceListTable) OnHide() {
+	r.ListTable.OnHide()
+	close(r.stopWatchCh)
+}
+
+func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowProvider) {
+	prov <- []commander.Operation{{Type: commander.OpLoading}}
+
+	columns, rows, err := r.loadResourceRows(format)
+	var ops []commander.Operation
+	if err != nil {
+		prov <- []commander.Operation{{Type: commander.OpLoadingFinished}}
+		// TODO: handle
+		return
+	}
+	ops = append(ops,
+		commander.Operation{Type: commander.OpClear},
+		commander.Operation{Type: commander.OpColumns, Row: commander.NewSimpleRow("", columns)},
+	)
+	for _, row := range rows {
+		ops = append(ops, commander.Operation{Type: commander.OpAdded, Row: row})
+	}
+	ops = append(ops, commander.Operation{Type: commander.OpLoadingFinished})
+	prov <- ops
+	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
+	if err != nil {
+		//TODO: handle
+		return
+	}
+	go func() {
+		defer watcher.Stop()
+		for {
+			select {
+			case <-r.stopWatchCh:
+				return
+			case event := <-watcher.ResultChan():
+				var op commander.OpType
+				switch event.Type {
+				case watch.Added:
+					op = commander.OpAdded
+				case watch.Modified:
+					op = commander.OpModified
+				case watch.Deleted:
+					op = commander.OpDeleted
+				case watch.Error:
+					panic(event.Object)
+				}
+				table, ok := event.Object.(*metav1.Table)
+				if ok {
+					var ops []commander.Operation
+					for _, row := range table.Rows {
+						k8sRow, err := commander.NewKubernetesRow(row)
+						if err != nil {
+							// TODO: handle
+							return
+						}
+						ops = append(ops, commander.Operation{Type: op, Row: k8sRow})
+					}
+					prov <- ops
+				}
+			}
+		}
+	}()
+}
+
+func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []commander.Row, error) {
 	var err error
 	r.table, err = r.container.Client().ListAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
@@ -77,12 +140,12 @@ func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error
 
 	for colId, col := range r.table.ColumnDefinitions {
 		add := false
-		switch r.opts.Format {
-		case FormatWide:
+		switch {
+		case format&Wide != 0:
 			add = true
-		case FormatShort:
+		case format&Short != 0:
 			add = col.Priority == 0
-		case FormatNameOnly:
+		case format&NameOnly != 0:
 			add = col.Name == "Name"
 		}
 		if add {
@@ -92,11 +155,11 @@ func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error
 	}
 
 	for _, row := range r.table.Rows {
-		var newRow commander.Row
-		for _, colId := range colIds {
-			newRow = append(newRow, cast.ToString(row.Cells[colId]))
+		k8sRow, err := commander.NewKubernetesRow(row)
+		if err != nil {
+			return nil, nil, err
 		}
-		rows = append(rows, newRow)
+		rows = append(rows, k8sRow)
 	}
 
 	return cols, rows, nil

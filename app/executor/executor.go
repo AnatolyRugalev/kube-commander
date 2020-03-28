@@ -73,7 +73,7 @@ func (e executor) Execute(command *commander.Command) error {
 	e.Unlock()
 
 	err = cmd.Wait()
-	signal.Reset(syscall.SIGINT)
+	signal.Stop(sigs)
 	close(sigs)
 
 	e.Lock()

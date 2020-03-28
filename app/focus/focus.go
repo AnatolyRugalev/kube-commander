@@ -78,7 +78,8 @@ func (f *manager) Blur() {
 }
 
 type Focusable struct {
-	focus bool
+	focus   bool
+	visible bool
 }
 
 func (f *Focusable) OnFocus() {
@@ -91,6 +92,18 @@ func (f *Focusable) OnBlur() {
 
 func (f *Focusable) IsFocused() bool {
 	return f.focus
+}
+
+func (f *Focusable) OnShow() {
+	f.visible = true
+}
+
+func (f *Focusable) OnHide() {
+	f.visible = false
+}
+
+func (f *Focusable) IsVisible() bool {
+	return f.visible
 }
 
 func NewFocusable() *Focusable {

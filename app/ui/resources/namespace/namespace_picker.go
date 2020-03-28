@@ -17,28 +17,13 @@ func PickNamespace(workspace commander.Workspace, resource *commander.Resource, 
 		workspace.HandleError(err)
 		return
 	}
+	picker.SelectId(workspace.CurrentNamespace())
 	workspace.ShowPopup("Select namespace", picker)
-	currentNs := workspace.CurrentNamespace()
-	for i := 0; i < len(picker.Rows()); i++ {
-		meta, err := picker.RowMetadata(i)
-		if err != nil {
-			workspace.HandleError(err)
-			return
-		}
-		if currentNs == meta.Name {
-			picker.Select(i)
-			break
-		}
-	}
-	workspace.ScreenUpdater().UpdateScreen()
 }
 
 func NewNamespacePicker(container commander.ResourceContainer, resource *commander.Resource, f NamespaceFunc) (*listTable.ResourceListTable, error) {
 	// TODO: all namespaces option
-	rlt := listTable.NewResourceListTable(container, resource, &listTable.ResourceListTableOptions{
-		ShowHeaders: false,
-		Format:      listTable.FormatNameOnly,
-	})
+	rlt := listTable.NewResourceListTable(container, resource, listTable.NameOnly, container.ScreenUpdater())
 	rlt.BindOnKeyPress(func(rowId int, row commander.Row, event *tcell.EventKey) bool {
 		if event.Key() == tcell.KeyEnter {
 			go func() {

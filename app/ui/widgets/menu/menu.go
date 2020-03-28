@@ -42,7 +42,7 @@ func (m *Menu) SelectedItem() commander.MenuItem {
 	if len(m.items) == 0 {
 		return nil
 	}
-	rowId := m.ListTable.SelectedRowId()
+	rowId := m.ListTable.SelectedRowIndex()
 	if len(m.items) < rowId {
 		return nil
 	}
@@ -75,11 +75,11 @@ func (m *Menu) BindOnSelect(selectFunc SelectFunc) {
 }
 
 func NewMenu(items []commander.MenuItem) *Menu {
-	var rows []string
+	var rows []commander.Row
 	for _, item := range items {
-		rows = append(rows, item.Title())
+		rows = append(rows, commander.NewSimpleRow(item.Title(), []string{item.Title()}))
 	}
-	lt := listTable.NewList(rows)
+	lt := listTable.NewStaticListTable([]string{"Title"}, rows, 0)
 	m := Menu{
 		ListTable: lt,
 		items:     items,
