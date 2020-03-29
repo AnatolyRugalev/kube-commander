@@ -25,7 +25,7 @@ Global:
 
 Navigation:
  ↑↓→←: List navigation
- Enter: Select menu item          Esc: Go back
+ Enter: Select menu item          Esc, Backspace: Go back
 
 Resource types navigation:
  Ctrl+P: Pods                      Ctrl+C: Config Maps

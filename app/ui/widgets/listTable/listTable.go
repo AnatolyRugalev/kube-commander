@@ -179,6 +179,7 @@ func (lt *ListTable) watch() {
 				lt.reindexSelection()
 				lt.table = lt.renderTable()
 				if lt.updater != nil {
+					lt.updater.Resize()
 					lt.updater.UpdateScreen()
 				}
 			}

@@ -90,14 +90,33 @@ func (m *Menu) SelectPrevious() {
 	m.ListTable.SelectIndex(m.ListTable.SelectedRowIndex() - 1)
 }
 
-func NewMenu(items []commander.MenuItem) *Menu {
-	var rows []commander.Row
+type ItemProvider chan []commander.MenuItem
+
+func NewMenu(itemsProv ItemProvider, updater commander.ScreenUpdater) *Menu {
 	itemMap := make(map[string]commander.MenuItem)
-	for _, item := range items {
-		rows = append(rows, commander.NewSimpleRow(item.Title(), []string{item.Title()}))
-		itemMap[item.Title()] = item
-	}
-	lt := listTable.NewStaticListTable([]string{"Title"}, rows, listTable.NoHorizontalScroll)
+	prov := make(commander.RowProvider)
+	go func() {
+		defer close(prov)
+		ops := []commander.Operation{
+			{Type: commander.OpClear},
+			{Type: commander.OpColumns, Row: commander.NewSimpleRow("", []string{"Title"})},
+		}
+
+		prov <- ops
+		for {
+			items, ok := <-itemsProv
+			if !ok {
+				return
+			}
+			ops = []commander.Operation{}
+			for _, item := range items {
+				ops = append(ops, commander.Operation{Type: commander.OpAdded, Row: commander.NewSimpleRow(item.Title(), []string{item.Title()})})
+				itemMap[item.Title()] = item
+			}
+			prov <- ops
+		}
+	}()
+	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll, updater)
 	m := Menu{
 		ListTable: lt,
 		items:     itemMap,

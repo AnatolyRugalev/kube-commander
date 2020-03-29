@@ -1,6 +1,7 @@
 package resourceMenu
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/pod"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/menu"
@@ -49,8 +50,20 @@ type resourceMenu struct {
 	*menu.Menu
 }
 
-func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc, resMap commander.ResourceMap) (*resourceMenu, error) {
-	m := menu.NewMenu(buildItems(workspace, resMap, workspace.ScreenUpdater()))
+func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc, resourceProvider commander.ResourceProvider) (*resourceMenu, error) {
+	initialResMap := client.CoreResources()
+	itemProvider := make(menu.ItemProvider)
+	go func() {
+		defer close(itemProvider)
+		itemProvider <- buildItems(workspace, initialResMap, workspace.ScreenUpdater())
+		serverResources, err := resourceProvider.Resources()
+		if err != nil {
+			// TODO: handle
+			return
+		}
+		itemProvider <- buildItems(workspace, serverResources, workspace.ScreenUpdater())
+	}()
+	m := menu.NewMenu(itemProvider, workspace.ScreenUpdater())
 	m.BindOnSelect(onSelect)
 	return &resourceMenu{Menu: m}, nil
 }

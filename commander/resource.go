@@ -13,18 +13,16 @@ type ResourceProvider interface {
 
 type Resource struct {
 	Namespaced bool
-	Group      string
-	Version    string
 	Resource   string
-	Kind       string
+	Gvk        schema.GroupVersionKind
 }
 
 func (r Resource) GroupVersion() schema.GroupVersion {
-	return schema.GroupVersion{Group: r.Group, Version: r.Version}
+	return r.Gvk.GroupVersion()
 }
 
 func (r Resource) GroupVersionKind() schema.GroupVersionKind {
-	return r.GroupVersion().WithKind(r.Kind)
+	return r.Gvk
 }
 
 func (r Resource) GroupVersionResource() schema.GroupVersionResource {

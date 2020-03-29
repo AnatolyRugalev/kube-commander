@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/border"
 	errWidget "github.com/AnatolyRugalev/kube-commander/app/ui/err"
@@ -87,7 +88,9 @@ func (w *workspace) UpdateScreen() {
 		w.popup.Reposition(w.container.Screen().View())
 		w.popup.Resize()
 	}
-	w.container.Screen().UpdateScreen()
+	if screen := w.container.Screen(); screen != nil {
+		screen.UpdateScreen()
+	}
 }
 
 func (w *workspace) ScreenUpdater() commander.ScreenUpdater {
@@ -148,23 +151,18 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 }
 
 func (w *workspace) Init() error {
-	resMap, err := w.ResourceProvider().Resources()
-	if err != nil {
-		return err
-	}
+	resMap := client.CoreResources()
 	w.namespaceResource = resMap["Namespace"]
 
-	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, resMap)
+	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, w.container.ResourceProvider())
 	if err != nil {
 		return err
 	}
 
 	resMenu.SetStyler(w.styler)
-	w.selectedWidgetId = resMenu.SelectedItem().Title()
 	w.menu = resMenu
 	w.menu.OnShow()
-	w.widget = w.menu.SelectedItem().Widget()
-	w.widget.OnShow()
+	w.widget = help.NewHelpWidget()
 	w.BoxLayout.AddWidget(w.menu, 0.0)
 	w.BoxLayout.AddWidget(border.NewVerticalLine(theme.Default), 0.0)
 	w.BoxLayout.AddWidget(w.widget, 1.0)

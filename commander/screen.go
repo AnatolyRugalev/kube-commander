@@ -14,4 +14,5 @@ type ErrorHandler interface {
 
 type ScreenUpdater interface {
 	UpdateScreen()
+	Resize()
 }

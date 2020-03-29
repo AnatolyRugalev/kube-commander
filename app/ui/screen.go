@@ -27,7 +27,9 @@ func (s *Screen) SetView(view views.View) {
 }
 
 func (s *Screen) UpdateScreen() {
-	s.app.Update()
+	if s.app != nil {
+		s.app.Update()
+	}
 }
 
 func (s *Screen) SetWorkspace(workspace commander.Workspace) {

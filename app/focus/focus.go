@@ -21,10 +21,7 @@ func (f *manager) HandleEvent(e tcell.Event, useStack bool) bool {
 	switch ev := e.(type) {
 	case *tcell.EventKey:
 		switch ev.Key() {
-		case tcell.KeyESC:
-			f.Blur()
-			return true
-		case tcell.KeyLeft:
+		case tcell.KeyESC, tcell.KeyBackspace2:
 			f.Blur()
 			return true
 		}

@@ -89,11 +89,9 @@ func (c client) Resources() (commander.ResourceMap, error) {
 				}
 
 				resources[res.Kind] = &commander.Resource{
-					Group:      gv.Group,
-					Version:    gv.Version,
 					Namespaced: res.Namespaced,
 					Resource:   res.Name,
-					Kind:       res.Kind,
+					Gvk:        schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind},
 				}
 			}
 		}

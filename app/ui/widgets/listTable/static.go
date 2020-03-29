@@ -3,6 +3,12 @@ package listTable
 import "github.com/AnatolyRugalev/kube-commander/commander"
 
 func NewStaticListTable(columns []string, rows []commander.Row, format TableFormat) *ListTable {
+	lt := NewListTable(NewStaticRowProvider(columns, rows), format, nil)
+	lt.watch()
+	return lt
+}
+
+func NewStaticRowProvider(columns []string, rows []commander.Row) commander.RowProvider {
 	prov := make(commander.RowProvider)
 	go func() {
 		ops := []commander.Operation{
@@ -15,7 +21,5 @@ func NewStaticListTable(columns []string, rows []commander.Row, format TableForm
 		prov <- ops
 		close(prov)
 	}()
-	lt := NewListTable(prov, format, nil)
-	lt.watch()
-	return lt
+	return prov
 }

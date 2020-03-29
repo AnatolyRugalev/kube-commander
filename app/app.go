@@ -100,18 +100,18 @@ func (a *app) Interrupt(f func() error) error {
 }
 
 func (a *app) Run() error {
-	a.workspace = workspace.NewWorkspace(a, a.defaultNamespace)
-	err := a.workspace.Init()
+	a.screen = ui.NewScreen(a)
+	err := a.initScreen()
 	if err != nil {
 		return err
 	}
-	a.screen = ui.NewScreen(a)
+	a.workspace = workspace.NewWorkspace(a, a.defaultNamespace)
+	err = a.workspace.Init()
+	if err != nil {
+		return err
+	}
 	a.screen.SetWorkspace(a.workspace)
 
-	err = a.initScreen()
-	if err != nil {
-		return err
-	}
 	a.tApp.Start()
 
 	<-a.quit
