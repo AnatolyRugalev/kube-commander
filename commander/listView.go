@@ -33,6 +33,7 @@ type ListView interface {
 	SelectedRow() Row
 	SelectedRowId() string
 	SetStyler(styler ListViewStyler)
+	SelectId(id string)
 }
 
 type ListViewStyler func(list ListView, row Row) Style
@@ -45,6 +46,9 @@ type ResourceListView interface {
 type MenuListView interface {
 	ListView
 	SelectedItem() MenuItem
+	SelectItem(id string)
+	SelectNext()
+	SelectPrevious()
 }
 
 type MenuItem interface {

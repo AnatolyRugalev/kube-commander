@@ -19,15 +19,6 @@ type ResourceListTable struct {
 	format      TableFormat
 }
 
-type TableFormat uint8
-
-const (
-	WithHeaders TableFormat = 1 << iota
-	Wide
-	Short
-	NameOnly
-)
-
 func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, format TableFormat, updater commander.ScreenUpdater) *ResourceListTable {
 	resourceLt := &ResourceListTable{
 		container:   container,

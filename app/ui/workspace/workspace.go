@@ -2,10 +2,12 @@ package workspace
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/border"
 	errWidget "github.com/AnatolyRugalev/kube-commander/app/ui/err"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/help"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resourceMenu"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/namespace"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/popup"
 	"github.com/AnatolyRugalev/kube-commander/commander"
@@ -123,8 +125,18 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 		switch ev.Key() {
 		case tcell.KeyCtrlN, tcell.KeyF2:
 			namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)
-		case tcell.KeyF10:
-			w.UpdateScreen()
+		case tcell.KeyCtrlP:
+			w.focus.Focus(w.menu)
+			w.menu.SelectItem("Pods")
+		case tcell.KeyCtrlD:
+			w.focus.Focus(w.menu)
+			w.menu.SelectItem("Deployments")
+		case tcell.KeyCtrlC:
+			w.focus.Focus(w.menu)
+			w.menu.SelectItem("Configs")
+		case tcell.KeyCtrlI:
+			w.focus.Focus(w.menu)
+			w.menu.SelectItem("Ingresses")
 		default:
 			if ev.Rune() == '?' {
 				help.ShowHelpPopup(w)
@@ -148,12 +160,14 @@ func (w *workspace) Init() error {
 	}
 
 	resMenu.SetStyler(w.styler)
+	w.selectedWidgetId = resMenu.SelectedItem().Title()
 	w.menu = resMenu
 	w.menu.OnShow()
 	w.widget = w.menu.SelectedItem().Widget()
 	w.widget.OnShow()
-	w.BoxLayout.AddWidget(w.menu, 0.1)
-	w.BoxLayout.AddWidget(w.widget, 0.9)
+	w.BoxLayout.AddWidget(w.menu, 0.0)
+	w.BoxLayout.AddWidget(border.NewVerticalLine(theme.Default), 0.0)
+	w.BoxLayout.AddWidget(w.widget, 1.0)
 	w.focus = focus.NewFocusManager(w.menu)
 
 	return nil
@@ -161,9 +175,12 @@ func (w *workspace) Init() error {
 
 func (w *workspace) styler(list commander.ListView, row commander.Row) tcell.Style {
 	style := listTable.DefaultStyler(list, row)
-	if row.Id() != w.menu.SelectedRowId() && row.Id() == w.selectedWidgetId {
-		style = style.Background(tcell.ColorAliceBlue)
+
+	if row.Id() == w.selectedWidgetId && (row.Id() != w.menu.SelectedRowId() || !list.IsFocused()) {
+		_, bg, _ := theme.Default.Decompose()
+		return style.Background(bg).Bold(true).Underline(true)
 	}
+
 	return style
 }
 
@@ -172,8 +189,8 @@ func (w *workspace) onMenuSelect(_ string, item commander.MenuItem) bool {
 		w.widget.OnHide()
 		w.BoxLayout.RemoveWidget(w.widget)
 		w.widget = item.Widget()
-		w.BoxLayout.AddWidget(w.widget, 0.9)
 		w.selectedWidgetId = item.Title()
+		w.BoxLayout.AddWidget(w.widget, 0.9)
 		w.widget.OnShow()
 	}
 	w.focus.Focus(w.widget)

@@ -26,7 +26,7 @@ var (
 		{title: "Nodes", kind: "Node"},
 		{title: "Storage Classes", kind: "StorageClass"},
 		{title: "PVs", kind: "PersistentVolume"},
-		{title: "Deployment", kind: "Deployments"},
+		{title: "Deployments", kind: "Deployment"},
 		{title: "Stateful", kind: "StatefulSet"},
 		{title: "Daemons", kind: "DaemonSet"},
 		{title: "Replicas", kind: "ReplicaSet"},

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
@@ -48,7 +49,7 @@ func NewScreen(app commander.App) *Screen {
 	title.SetStyle(tcell.StyleDefault.
 		Background(tcell.ColorTeal).
 		Foreground(tcell.ColorWhite))
-	title.SetCenter("kube-commander", tcell.StyleDefault)
+	title.SetCenter("kube-commander", theme.Default)
 
 	s.SetTitle(title)
 

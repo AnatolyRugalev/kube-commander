@@ -18,13 +18,21 @@ func (w widget) MaxSize() (int, int) {
 
 var text = `kube-commander - browse your Kubernetes cluster in a casual way!
 
-Global:                           Resources:
- ?:            Shows help dialog   D: Describe selected resource
- Q:            Quit                E: Edit selected resource
- Ctrl+N or F2: Change namespace
+Global:
+ ?: Shows help dialog             D: Describe selected resource
+ Q: Quit                          E: Edit selected resource
+ Ctrl+N or F2: Change namespace   Delete: Delete resource (with confirmation)
+
+Navigation:
+ ↑↓→←: List navigation
+ Enter: Select menu item          Esc: Go back
+
+Resource types navigation:
+ Ctrl+P: Pods                      Ctrl+C: Config Maps
+ Ctrl+D: Deployments               Ctrl+I: Ingresses
 
 Pods:
- L: Show logs
+ L: Show logs                      Shift+L: Show previous logs
  F: Forward port
  X: eXec /bin/sh or /bin/bash inside container
 `

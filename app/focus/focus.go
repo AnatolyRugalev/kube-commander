@@ -24,6 +24,9 @@ func (f *manager) HandleEvent(e tcell.Event, useStack bool) bool {
 		case tcell.KeyESC:
 			f.Blur()
 			return true
+		case tcell.KeyLeft:
+			f.Blur()
+			return true
 		}
 	}
 	for i := len(f.stack) - 1; i >= 0; i-- {

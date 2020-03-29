@@ -67,6 +67,29 @@ func (m *Menu) BindOnSelect(selectFunc SelectFunc) {
 	}
 }
 
+func (m *Menu) SelectItem(id string) {
+	item, ok := m.items[id]
+	if !ok {
+		return
+	}
+	m.ListTable.SelectId(id)
+	m.onSelect(id, item)
+}
+
+func (m *Menu) SelectNext() {
+	m.ListTable.SelectIndex(m.ListTable.SelectedRowIndex() + 1)
+	id := m.ListTable.SelectedRowId()
+	item, ok := m.items[id]
+	if !ok {
+		return
+	}
+	m.onSelect(id, item)
+}
+
+func (m *Menu) SelectPrevious() {
+	m.ListTable.SelectIndex(m.ListTable.SelectedRowIndex() - 1)
+}
+
 func NewMenu(items []commander.MenuItem) *Menu {
 	var rows []commander.Row
 	itemMap := make(map[string]commander.MenuItem)
@@ -74,7 +97,7 @@ func NewMenu(items []commander.MenuItem) *Menu {
 		rows = append(rows, commander.NewSimpleRow(item.Title(), []string{item.Title()}))
 		itemMap[item.Title()] = item
 	}
-	lt := listTable.NewStaticListTable([]string{"Title"}, rows, 0)
+	lt := listTable.NewStaticListTable([]string{"Title"}, rows, listTable.NoHorizontalScroll)
 	m := Menu{
 		ListTable: lt,
 		items:     itemMap,

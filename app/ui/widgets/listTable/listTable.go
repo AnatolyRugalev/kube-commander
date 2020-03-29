@@ -25,6 +25,21 @@ const (
 	columnSeparatorLen = 1
 )
 
+type TableFormat uint8
+
+const (
+	WithHeaders TableFormat = 1 << iota
+	Wide
+	Short
+	NameOnly
+	NoHorizontalScroll
+	NoVerticalScroll
+)
+
+func (tf TableFormat) Has(flag TableFormat) bool {
+	return tf&flag != 0
+}
+
 var DefaultStyler commander.ListViewStyler = func(list commander.ListView, row commander.Row) commander.Style {
 	if row == nil {
 		return theme.Default.Underline(true)
@@ -47,7 +62,7 @@ type ListTable struct {
 	rows       []commander.Row
 	rowIndex   map[string]int
 	selectedId string
-	showHeader bool
+	format     TableFormat
 	// internal representation of table values
 	table table
 	// Currently selected row
@@ -73,9 +88,9 @@ func (lt *ListTable) Rows() []commander.Row {
 
 func NewListTable(prov commander.RowProvider, format TableFormat, updater commander.ScreenUpdater) *ListTable {
 	lt := &ListTable{
-		Focusable:  focus.NewFocusable(),
-		showHeader: format&WithHeaders != 0,
-		rowIndex:   make(map[string]int),
+		Focusable: focus.NewFocusable(),
+		format:    format,
+		rowIndex:  make(map[string]int),
 
 		onKeyEvent:  DefaultRowKeyEventFunc,
 		onChange:    DefaultRowFunc,
@@ -240,7 +255,7 @@ func (lt *ListTable) viewWidth() int {
 
 func (lt *ListTable) viewHeight() int {
 	_, height := lt.view.Size()
-	if lt.showHeader {
+	if lt.format.Has(WithHeaders) {
 		height -= 1
 	}
 	return height
@@ -250,7 +265,7 @@ func (lt *ListTable) MaxSize() (w int, h int) {
 	w = lt.table.dataWidth + len(lt.table.columnDataWidths) - 1
 
 	h = lt.table.dataHeight
-	if lt.showHeader {
+	if lt.format.Has(WithHeaders) {
 		h++
 	}
 	return w, h
@@ -260,7 +275,7 @@ func (lt *ListTable) renderTable() table {
 	t := table{}
 	t.dataHeight = len(lt.rows)
 	t.columnDataWidths = []int{}
-	if lt.showHeader {
+	if lt.format.Has(WithHeaders) {
 		for _, col := range lt.columns {
 			t.headers = append(t.headers, col)
 			t.columnDataWidths = append(t.columnDataWidths, len(col))
@@ -333,7 +348,7 @@ func (lt *ListTable) Draw() {
 	lt.view.Fill(' ', style)
 	index := 0
 	sizes := lt.getColumnSizes()
-	if lt.showHeader {
+	if lt.format.Has(WithHeaders) {
 		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, nil))
 		index++
 	}
@@ -371,6 +386,9 @@ func (lt *ListTable) Resize() {
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 	return KeySwitch(ev, func(ev *tcell.EventKey) bool {
+		if ev.Modifiers() != tcell.ModNone {
+			return false
+		}
 		switch ev.Key() {
 		case tcell.KeyDown:
 			lt.Next()
@@ -497,5 +515,16 @@ func (lt *ListTable) SetView(view views.View) {
 
 // This is the minimum required size of ListTable
 func (lt *ListTable) Size() (int, int) {
-	return 10, 3
+	if lt.table.dataWidth == 0 {
+		return 10, 3
+	}
+	w, h := lt.MaxSize()
+	viewW, viewH := lt.view.Size()
+	if !lt.format.Has(NoHorizontalScroll) && w > viewW {
+		w = viewW
+	}
+	if !lt.format.Has(NoVerticalScroll) && h > viewH {
+		h = viewH
+	}
+	return w, h
 }
