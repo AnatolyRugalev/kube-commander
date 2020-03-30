@@ -3,6 +3,7 @@ package err
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
+	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell/views"
 	"github.com/kr/text"
 )
@@ -21,7 +22,13 @@ func NewErrorWidget(err error) *widget {
 		Text:      views.NewText(),
 		Focusable: focus.NewFocusable(),
 	}
-	widget.Text.SetText(text.Wrap(err.Error(), 50))
+	var txt string
+	if execErr, ok := err.(*commander.ExecErr); ok {
+		txt = text.Wrap(err.Error()+"\n"+string(execErr.Output), 50)
+	} else {
+		txt = text.Wrap(err.Error(), 50)
+	}
+	widget.Text.SetText(txt)
 	widget.Text.SetStyle(theme.Default)
 	return &widget
 }

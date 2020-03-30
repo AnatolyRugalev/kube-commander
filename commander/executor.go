@@ -12,7 +12,6 @@ func (e ExecErr) Error() string {
 }
 
 type CommandExecutor interface {
-	Execute(command *Command) error
 	Pipe(command ...*Command) error
 }
 

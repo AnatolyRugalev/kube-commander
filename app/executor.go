@@ -16,12 +16,6 @@ func NewAppExecutor(a *app, executor commander.CommandExecutor) *appExecutor {
 	}
 }
 
-func (s appExecutor) Execute(command *commander.Command) error {
-	return s.app.Interrupt(func() error {
-		return s.executor.Execute(command)
-	})
-}
-
 func (s appExecutor) Pipe(command ...*commander.Command) error {
 	return s.app.Interrupt(func() error {
 		return s.executor.Pipe(command...)

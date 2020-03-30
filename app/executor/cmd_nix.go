@@ -35,10 +35,10 @@ func (e executor) renderCommand(command *commander.Command) string {
 	for name, value := range command.Envs() {
 		env = append(env, name+"="+value)
 	}
-	return strings.Join(env, " ") + " " + command.Name() + " " + strings.Join(command.Args(), " ")
+	return strings.Join(append(env, command.Name()), " ") + " " + strings.Join(command.Args(), " ")
 }
 
-func (e executor) killProcessGroup(pid int) error {
+func (e executor) interruptProcess(pid int) error {
 	// -pid to kill a whole group
-	return syscall.Kill(-pid, syscall.SIGKILL)
+	return syscall.Kill(-pid, syscall.SIGINT)
 }

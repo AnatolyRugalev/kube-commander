@@ -88,7 +88,7 @@ func (p PodsList) shell(row commander.Row) {
 		if err != nil {
 			if execErr, ok := err.(*commander.ExecErr); ok {
 				if strings.Contains(string(execErr.Output), "no such file or directory") {
-					err = errors.New("looks like this container lacks /bin/sh")
+					err = errors.New("this container doesn't have /bin/sh")
 				}
 			}
 		}

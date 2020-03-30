@@ -1,17 +1,16 @@
 package executor
 
 import (
+	"bufio"
 	"bytes"
-	"errors"
+	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
-	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 )
 
 type executor struct {
@@ -25,72 +24,61 @@ func NewExecutor(shell string) *executor {
 	}
 }
 
-func (e executor) Pipe(command ...*commander.Command) error {
+func (e *executor) Pipe(command ...*commander.Command) error {
 	var strCmd []string
 	for _, c := range command {
 		strCmd = append(strCmd, e.renderCommand(c))
 	}
-	return e.Execute(commander.NewCommand(e.shell, "-c", strings.Join(strCmd, " | ")))
+	return e.execute(commander.NewCommand(e.shell, "-c", strings.Join(strCmd, " | ")))
 }
 
-// TODO: fix raw Execute calls. Only Pipe works for some reason (exit code: 1)
-func (e executor) Execute(command *commander.Command) error {
-	output := bytes.Buffer{}
+func (e *executor) execute(command *commander.Command) error {
+	e.Lock()
+	defer e.Unlock()
+
+	_, _ = fmt.Fprintf(os.Stdout, "\n=========================\n")
+	_, _ = fmt.Fprintf(os.Stdout, "Executing command: %s\n", e.renderCommand(command))
+	stderr := bytes.Buffer{}
 	cmd := e.createCmd(command)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
-	// flag to ignore errors when killing process
-	var (
-		killing    bool
-		commandPid int
-	)
 
-	go func(cmd *exec.Cmd) {
-		sig := <-sigs
-		if sig == nil {
-			return
-		}
-		e.Lock()
-		defer e.Unlock()
-		killing = true
-		_ = e.killProcessGroup(commandPid)
-	}(cmd)
-
-	started := time.Now()
 	err := cmd.Start()
 	if err != nil {
 		return &commander.ExecErr{
-			Err:    err,
-			Output: output.Bytes(),
+			Err:    fmt.Errorf("could not start process: %w", err),
+			Output: stderr.Bytes(),
 		}
 	}
-	e.Lock()
-	commandPid = cmd.Process.Pid
-	e.Unlock()
+	commandPid := cmd.Process.Pid
+	killed := false
+	go func(cmd *exec.Cmd) {
+		_, ok := <-sigs
+		if !ok {
+			return
+		}
+		killed = true
+		_ = e.interruptProcess(commandPid)
+	}(cmd)
 
 	err = cmd.Wait()
 	signal.Stop(sigs)
 	close(sigs)
-
-	e.Lock()
-	defer e.Unlock()
-	if killing {
+	if killed {
 		return nil
-	}
-	if err != nil {
+	} else if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "error executing command: %s\n", err.Error())
+		_, _ = fmt.Fprintf(os.Stderr, "Press Enter to continue...")
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+		_, _ = fmt.Fprintf(os.Stdout, "=========================\n")
+
 		return &commander.ExecErr{
-			Err:    err,
-			Output: output.Bytes(),
-		}
-	}
-	if time.Now().Sub(started) < time.Second {
-		return &commander.ExecErr{
-			Err:    errors.New("command exited too early"),
-			Output: output.Bytes(),
+			Err:    fmt.Errorf("error executing command: %w", err),
+			Output: stderr.Bytes(),
 		}
 	}
 	return nil

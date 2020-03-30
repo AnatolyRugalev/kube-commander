@@ -72,7 +72,7 @@ func (b builder) kubectl(namespace string, command ...string) *commander.Command
 		args = append(args, "--context", context)
 	}
 	if namespace != "" {
-		args = append(args, " --namespace", namespace)
+		args = append(args, "--namespace", namespace)
 	}
 	args = append(args, command...)
 	c := commander.NewCommand(b.kubectlBin, args...)
