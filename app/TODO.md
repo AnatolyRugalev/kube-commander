@@ -1,8 +1,8 @@
 # TODO
 
 * Port-forward in background
-* Status bar
-
 * Configuration and flags support
 * Deletion
+
+* Status bar
 * Consider SSH to node support

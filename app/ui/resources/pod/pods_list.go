@@ -35,6 +35,9 @@ func (p PodsList) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 		case 'l':
 			go p.logs(row, false)
 			return true
+		case 'f':
+			go p.forward(row)
+			return true
 		case 's':
 			go p.shell(row)
 			return true
@@ -72,6 +75,24 @@ func (p PodsList) logs(row commander.Row, previous bool) {
 			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, previous, true))
 		}
 		err := e.Pipe(commands...)
+		if err != nil {
+			p.workspace.HandleError(err)
+			return
+		}
+		return
+	})
+}
+
+func (p PodsList) forward(row commander.Row) {
+	pod, err := p.getPod(row)
+	if err != nil {
+		p.workspace.HandleError(err)
+		return
+	}
+	pickPodPort(p.workspace, *pod, func(pod v1.Pod, container v1.Container, port v1.ContainerPort) {
+		e := p.workspace.CommandExecutor()
+		b := p.workspace.CommandBuilder()
+		err := e.Pipe(b.PortForward(pod.Namespace, pod.Name, port.ContainerPort))
 		if err != nil {
 			p.workspace.HandleError(err)
 			return

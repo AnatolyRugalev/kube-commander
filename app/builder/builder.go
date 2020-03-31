@@ -34,8 +34,8 @@ func (b builder) Edit(namespace string, resType string, resName string) *command
 	return b.kubectl(namespace, "edit", resType, resName).WithEnv("EDITOR", b.editorBin)
 }
 
-func (b builder) PortForward(namespace string, pod string, port string) *commander.Command {
-	return b.kubectl(namespace, "port-forward", pod, port)
+func (b builder) PortForward(namespace string, pod string, port int32) *commander.Command {
+	return b.kubectl(namespace, "port-forward", pod, strconv.Itoa(int(port)))
 }
 
 func (b builder) Exec(namespace string, pod string, container string, command string) *commander.Command {
