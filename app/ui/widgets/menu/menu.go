@@ -13,14 +13,16 @@ var (
 )
 
 type item struct {
-	title  string
-	widget commander.Widget
+	title    string
+	widget   commander.Widget
+	position int
 }
 
-func NewItem(title string, widget commander.Widget) commander.MenuItem {
-	return item{
-		title:  title,
-		widget: widget,
+func NewItem(title string, widget commander.Widget, position int) commander.MenuItem {
+	return &item{
+		title:    title,
+		widget:   widget,
+		position: position,
 	}
 }
 
@@ -30,6 +32,10 @@ func (i item) Title() string {
 
 func (i item) Widget() commander.Widget {
 	return i.widget
+}
+
+func (i item) Position() int {
+	return i.position
 }
 
 type Menu struct {

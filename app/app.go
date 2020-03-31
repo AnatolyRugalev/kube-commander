@@ -12,6 +12,7 @@ type app struct {
 	tApp    *views.Application
 	tScreen tcell.Screen
 
+	config           commander.Config
 	client           commander.Client
 	resourceProvider commander.ResourceProvider
 	commandBuilder   commander.CommandBuilder
@@ -28,8 +29,9 @@ func (a app) Quit() {
 	close(a.quit)
 }
 
-func NewApp(client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, defaultNamespace string) *app {
+func NewApp(config commander.Config, client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, defaultNamespace string) *app {
 	a := app{
+		config:           config,
 		client:           client,
 		resourceProvider: resourceProvider,
 		commandBuilder:   commandBuilder,
@@ -40,6 +42,10 @@ func NewApp(client commander.Client, resourceProvider commander.ResourceProvider
 	}
 	a.commandExecutor = NewAppExecutor(&a, commandExecutor)
 	return &a
+}
+
+func (a app) Config() commander.Config {
+	return a.config
 }
 
 func (a app) Client() commander.Client {

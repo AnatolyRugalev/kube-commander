@@ -66,6 +66,6 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor)
-	application := app.NewApp(cl, cl, b, executor.NewOsExecutor(), cfg.namespace)
+	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), cfg.namespace)
 	return application.Run()
 }

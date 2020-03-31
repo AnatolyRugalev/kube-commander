@@ -9,6 +9,7 @@ type App interface {
 
 type Container interface {
 	Client() Client
+	Config() Config
 	ResourceProvider() ResourceProvider
 	CommandBuilder() CommandBuilder
 	CommandExecutor() CommandExecutor

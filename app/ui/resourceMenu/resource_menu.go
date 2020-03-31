@@ -9,8 +9,9 @@ import (
 )
 
 type item struct {
-	title string
-	kind  string
+	title    string
+	kind     string
+	position int
 }
 
 var (
@@ -58,7 +59,7 @@ func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc, r
 		itemProvider <- buildItems(workspace, initialResMap)
 		serverResources, err := resourceProvider.Resources()
 		if err != nil {
-			// TODO: handle
+			workspace.HandleError(err)
 			return
 		}
 		itemProvider <- buildItems(workspace, serverResources)
@@ -81,7 +82,7 @@ func buildItems(workspace commander.Workspace, resources commander.ResourceMap) 
 			constructor = StandardWidget
 		}
 
-		items = append(items, menu.NewItem(item.title, constructor(workspace, res, listTable.Wide|listTable.WithHeaders)))
+		items = append(items, menu.NewItem(item.title, constructor(workspace, res, listTable.Wide|listTable.WithHeaders), 0))
 	}
 	return items
 }

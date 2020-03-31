@@ -54,4 +54,5 @@ type MenuListView interface {
 type MenuItem interface {
 	Title() string
 	Widget() Widget
+	Position() int
 }

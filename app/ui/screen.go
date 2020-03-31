@@ -52,6 +52,7 @@ func NewScreen(app commander.App) *Screen {
 		Background(tcell.ColorTeal).
 		Foreground(tcell.ColorWhite))
 	title.SetCenter("kube-commander", theme.Default)
+	title.SetRight(app.Config().Context(), theme.Default)
 
 	s.SetTitle(title)
 
