@@ -1,30 +1,53 @@
 package client
 
 import (
-	"github.com/spf13/cobra"
+	"fmt"
 	"k8s.io/client-go/rest"
 	cmd "k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type defaultConfig struct {
-	cmd *cobra.Command
+	kubeconfig string
+	namespace  string
+	context    string
 }
 
-func (a defaultConfig) Context() string {
-	return ""
+func (d defaultConfig) Context() string {
+	return d.context
 }
 
-func (a defaultConfig) Kubeconfig() string {
-	return ""
+func (d defaultConfig) Kubeconfig() string {
+	return d.kubeconfig
 }
 
-func NewDefaultConfig() *defaultConfig {
-	return &defaultConfig{}
+func NewDefaultConfig(kubeconfig string, context string, namespace string) *defaultConfig {
+	return &defaultConfig{
+		kubeconfig: kubeconfig,
+		context:    context,
+		namespace:  namespace,
+	}
 }
 
-func (a defaultConfig) ClientConfig() (*rest.Config, error) {
+func (d *defaultConfig) ClientConfig() (*rest.Config, error) {
 	rules := cmd.NewDefaultClientConfigLoadingRules()
-	rules.DefaultClientConfig = &cmd.DefaultClientConfig
-	clientConfig := cmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &cmd.ConfigOverrides{})
+	config, err := rules.Load()
+	if err != nil {
+		return nil, fmt.Errorf("error loading config: %w", err)
+	}
+	if d.context == "" {
+		d.context = config.CurrentContext
+	}
+	if ctx, ok := config.Contexts[config.CurrentContext]; ok && d.namespace == "" {
+		d.namespace = ctx.Namespace
+	}
+	if d.namespace == "" {
+		d.namespace = "default"
+	}
+	clientConfig := cmd.NewNonInteractiveClientConfig(*config, d.Context(), &cmd.ConfigOverrides{
+		Context: clientcmdapi.Context{
+			Namespace: d.namespace,
+		},
+	}, rules)
 	return clientConfig.ClientConfig()
 }

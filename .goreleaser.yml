@@ -7,7 +7,6 @@ builds:
     - -s -w -X main.version={{.Version}}
   env:
   - CGO_ENABLED=0
-  - GO111MODULE=on
   goos:
     - linux
     - darwin
