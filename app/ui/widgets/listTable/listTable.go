@@ -129,15 +129,10 @@ func (lt *ListTable) watch() {
 			for _, operation := range ops {
 				switch op := operation.(type) {
 				case *commander.OpClear:
-					if len(lt.rows) > 0 {
-						lt.rows = []commander.Row{}
-						lt.rowIndex = make(map[string]int)
-						changed = true
-					}
-					if len(lt.columns) > 0 {
-						lt.columns = []string{}
-						changed = true
-					}
+					lt.rows = []commander.Row{}
+					lt.rowIndex = make(map[string]int)
+					lt.columns = []string{}
+					changed = true
 				case *commander.OpSetColumns:
 					// Compare columns content
 					if strings.Join(lt.columns, "|") != strings.Join(op.Columns, "|") {
@@ -507,10 +502,10 @@ func (lt *ListTable) SelectId(id string) {
 }
 
 func (lt *ListTable) reindexSelection() {
-	if lt.selectedId == "" {
-		lt.SelectIndex(0)
-	} else if index, ok := lt.rowIndex[lt.selectedId]; ok {
+	if index, ok := lt.rowIndex[lt.selectedId]; ok {
 		lt.SelectIndex(index)
+	} else {
+		lt.SelectIndex(0)
 	}
 }
 
