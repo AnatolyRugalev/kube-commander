@@ -81,6 +81,7 @@ func (w *workspace) ShowPopup(title string, widget commander.MaxSizeWidget) {
 	})
 	w.popup.OnShow()
 	w.focus.Focus(w.popup)
+	w.UpdateScreen()
 }
 
 func (w *workspace) UpdateScreen() {

@@ -12,11 +12,11 @@ func NewStaticRowProvider(columns []string, rows []commander.Row) commander.RowP
 	prov := make(commander.RowProvider)
 	go func() {
 		ops := []commander.Operation{
-			{Type: commander.OpClear},
-			{Type: commander.OpColumns, Row: commander.NewSimpleRow("", columns)},
+			&commander.OpClear{},
+			&commander.OpSetColumns{Columns: columns},
 		}
 		for _, row := range rows {
-			ops = append(ops, commander.Operation{Type: commander.OpAdded, Row: row})
+			ops = append(ops, &commander.OpAdded{Row: row})
 		}
 		prov <- ops
 		close(prov)

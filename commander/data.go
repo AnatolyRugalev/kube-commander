@@ -7,23 +7,46 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-type OpType uint8
-
-const (
-	OpClear OpType = iota
-	OpAdded
-	OpModified
-	OpDeleted
-
-	OpColumns
-	OpLoading
-	OpLoadingFinished
-)
-
-type Operation struct {
-	Type OpType
-	Row  Row
+type Operation interface {
+	Operation()
 }
+
+type OpClear struct{}
+
+func (o OpClear) Operation() {}
+
+type OpInitStart struct{}
+
+func (o OpInitStart) Operation() {}
+
+type OpInitFinished struct{}
+
+func (o OpInitFinished) Operation() {}
+
+type OpAdded struct {
+	Row   Row
+	Index *int
+}
+
+func (o OpAdded) Operation() {}
+
+type OpModified struct {
+	Row Row
+}
+
+func (o OpModified) Operation() {}
+
+type OpDeleted struct {
+	RowId string
+}
+
+func (o OpDeleted) Operation() {}
+
+type OpSetColumns struct {
+	Columns []string
+}
+
+func (o OpSetColumns) Operation() {}
 
 type KubernetesRow struct {
 	md    *metav1.PartialObjectMetadata

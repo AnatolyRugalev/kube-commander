@@ -47,7 +47,7 @@ func (b builder) Exec(namespace string, pod string, container string, command st
 	return b.kubectl(namespace, args...)
 }
 
-func (b builder) Logs(namespace string, pod string, container string, tail int, follow bool) *commander.Command {
+func (b builder) Logs(namespace string, pod string, container string, tail int, previous bool, follow bool) *commander.Command {
 	args := []string{"logs"}
 	if container != "" {
 		args = append(args, "-c", container)
@@ -57,6 +57,9 @@ func (b builder) Logs(namespace string, pod string, container string, tail int, 
 	}
 	if follow {
 		args = append(args, "--follow")
+	}
+	if previous {
+		args = append(args, "--previous")
 	}
 	args = append(args, pod)
 	return b.kubectl(namespace, args...)

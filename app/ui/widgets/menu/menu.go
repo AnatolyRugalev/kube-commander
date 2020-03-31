@@ -98,8 +98,8 @@ func NewMenu(itemsProv ItemProvider, updater commander.ScreenUpdater) *Menu {
 	go func() {
 		defer close(prov)
 		ops := []commander.Operation{
-			{Type: commander.OpClear},
-			{Type: commander.OpColumns, Row: commander.NewSimpleRow("", []string{"Title"})},
+			&commander.OpClear{},
+			&commander.OpSetColumns{Columns: []string{"Title"}},
 		}
 
 		prov <- ops
@@ -110,7 +110,7 @@ func NewMenu(itemsProv ItemProvider, updater commander.ScreenUpdater) *Menu {
 			}
 			ops = []commander.Operation{}
 			for _, item := range items {
-				ops = append(ops, commander.Operation{Type: commander.OpAdded, Row: commander.NewSimpleRow(item.Title(), []string{item.Title()})})
+				ops = append(ops, &commander.OpAdded{Row: commander.NewSimpleRow(item.Title(), []string{item.Title()})})
 				itemMap[item.Title()] = item
 			}
 			prov <- ops

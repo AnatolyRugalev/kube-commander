@@ -18,6 +18,7 @@ type ResourceListTable struct {
 	stopWatchCh chan struct{}
 	rowProvider commander.RowProvider
 	format      TableFormat
+	extraRows   map[int]commander.Row
 }
 
 func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, format TableFormat) *ResourceListTable {
@@ -34,6 +35,10 @@ func NewResourceListTable(container commander.ResourceContainer, resource *comma
 	return resourceLt
 }
 
+func (r *ResourceListTable) SetExtraRows(rows map[int]commander.Row) {
+	r.extraRows = rows
+}
+
 func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	switch event.Rune() {
 	case 'D', 'd':
@@ -48,7 +53,7 @@ func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey)
 
 func (r *ResourceListTable) OnShow() {
 	r.stopWatchCh = make(chan struct{})
-	go r.provideRows(r.format, r.rowProvider)
+	go r.provideRows()
 	r.ListTable.OnShow()
 }
 
@@ -57,25 +62,31 @@ func (r *ResourceListTable) OnHide() {
 	close(r.stopWatchCh)
 }
 
-func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowProvider) {
-	prov <- []commander.Operation{{Type: commander.OpLoading}}
+func (r *ResourceListTable) provideRows() {
+	r.rowProvider <- []commander.Operation{&commander.OpInitStart{}}
 
-	columns, rows, err := r.loadResourceRows(format)
+	columns, rows, err := r.loadResourceRows()
 	var ops []commander.Operation
 	if err != nil {
-		prov <- []commander.Operation{{Type: commander.OpLoadingFinished}}
+		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
 		r.container.HandleError(err)
 		return
 	}
 	ops = append(ops,
-		commander.Operation{Type: commander.OpClear},
-		commander.Operation{Type: commander.OpColumns, Row: commander.NewSimpleRow("", columns)},
+		&commander.OpClear{},
+		&commander.OpSetColumns{Columns: columns},
 	)
 	for _, row := range rows {
-		ops = append(ops, commander.Operation{Type: commander.OpAdded, Row: row})
+		ops = append(ops, &commander.OpAdded{Row: row})
 	}
-	ops = append(ops, commander.Operation{Type: commander.OpLoadingFinished})
-	prov <- ops
+	for index, row := range r.extraRows {
+		ops = append(ops, &commander.OpAdded{Row: row, Index: &index})
+	}
+	ops = append(ops, &commander.OpInitFinished{})
+	r.rowProvider <- ops
+	if r.format.Has(NoWatch) {
+		return
+	}
 	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
 		r.container.HandleError(err)
@@ -88,37 +99,55 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 			case <-r.stopWatchCh:
 				return
 			case event := <-watcher.ResultChan():
-				var op commander.OpType
-				switch event.Type {
-				case watch.Added:
-					op = commander.OpAdded
-				case watch.Modified:
-					op = commander.OpModified
-				case watch.Deleted:
-					op = commander.OpDeleted
-				case watch.Error:
+				if event.Type == watch.Error {
 					err := apierrs.FromObject(event.Object)
 					r.container.HandleError(fmt.Errorf("error while watching: %w", err))
+					return
 				}
-				table, ok := event.Object.(*metav1.Table)
-				if ok {
-					var ops []commander.Operation
-					for _, row := range table.Rows {
-						k8sRow, err := commander.NewKubernetesRow(row)
-						if err != nil {
-							r.container.HandleError(err)
-							return
-						}
-						ops = append(ops, commander.Operation{Type: op, Row: k8sRow})
+				var ops []commander.Operation
+				rows, err := r.extractRows(event)
+				if err != nil {
+					r.container.HandleError(err)
+					return
+				}
+				switch event.Type {
+				case watch.Added:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpAdded{Row: row})
 					}
-					prov <- ops
+				case watch.Modified:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpModified{Row: row})
+					}
+				case watch.Deleted:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpDeleted{RowId: row.Id()})
+					}
+				}
+				if len(ops) > 0 {
+					r.rowProvider <- ops
 				}
 			}
 		}
 	}()
 }
 
-func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []commander.Row, error) {
+func (r *ResourceListTable) extractRows(event watch.Event) ([]commander.Row, error) {
+	var rows []commander.Row
+	table, ok := event.Object.(*metav1.Table)
+	if ok {
+		for _, row := range table.Rows {
+			k8sRow, err := commander.NewKubernetesRow(row)
+			if err != nil {
+				return nil, err
+			}
+			rows = append(rows, k8sRow)
+		}
+	}
+	return rows, nil
+}
+
+func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error) {
 	table, err := r.container.Client().ListAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
 		return nil, nil, err
@@ -131,11 +160,11 @@ func (r *ResourceListTable) loadResourceRows(format TableFormat) ([]string, []co
 	for colId, col := range table.ColumnDefinitions {
 		add := false
 		switch {
-		case format&Wide != 0:
+		case r.format&Wide != 0:
 			add = true
-		case format&Short != 0:
+		case r.format&Short != 0:
 			add = col.Priority == 0
-		case format&NameOnly != 0:
+		case r.format&NameOnly != 0:
 			add = col.Name == "Name"
 		}
 		if add {

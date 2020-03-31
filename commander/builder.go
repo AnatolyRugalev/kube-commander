@@ -5,6 +5,6 @@ type CommandBuilder interface {
 	Edit(namespace string, resType string, resName string) *Command
 	PortForward(namespace string, pod string, port string) *Command
 	Exec(namespace string, pod string, container string, command string) *Command
-	Logs(namespace string, pod string, container string, tail int, follow bool) *Command
+	Logs(namespace string, pod string, container string, tail int, previous bool, follow bool) *Command
 	Pager() *Command
 }

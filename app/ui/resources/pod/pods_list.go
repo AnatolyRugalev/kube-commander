@@ -27,13 +27,18 @@ func NewPodsList(workspace commander.Workspace, resource *commander.Resource, fo
 }
 
 func (p PodsList) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
-	switch event.Rune() {
-	case 'l':
-		go p.logs(row)
-		return true
-	case 's':
-		go p.shell(row)
-		return true
+	switch event.Key() {
+	default:
+		switch event.Rune() {
+		case 'L':
+			go p.logs(row, true)
+		case 'l':
+			go p.logs(row, false)
+			return true
+		case 's':
+			go p.shell(row)
+			return true
+		}
 	}
 	return false
 }
@@ -51,7 +56,7 @@ func (p PodsList) getPod(row commander.Row) (*v1.Pod, error) {
 	return &pod, nil
 }
 
-func (p PodsList) logs(row commander.Row) {
+func (p PodsList) logs(row commander.Row, previous bool) {
 	pod, err := p.getPod(row)
 	if err != nil {
 		p.workspace.HandleError(err)
@@ -61,10 +66,10 @@ func (p PodsList) logs(row commander.Row) {
 		e := p.workspace.CommandExecutor()
 		b := p.workspace.CommandBuilder()
 		var commands []*commander.Command
-		if status.State.Running != nil {
-			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, true))
+		if previous || status.State.Running == nil {
+			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, previous, false), b.Pager())
 		} else {
-			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, false), b.Pager())
+			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, 1000, previous, true))
 		}
 		err := e.Pipe(commands...)
 		if err != nil {

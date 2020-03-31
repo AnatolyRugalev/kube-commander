@@ -35,6 +35,7 @@ const (
 	NoHorizontalScroll
 	NoVerticalScroll
 	NoActions
+	NoWatch
 )
 
 func (tf TableFormat) Has(flag TableFormat) bool {
@@ -125,9 +126,9 @@ func (lt *ListTable) watch() {
 				return
 			}
 			changed := false
-			for _, op := range ops {
-				switch op.Type {
-				case commander.OpClear:
+			for _, operation := range ops {
+				switch op := operation.(type) {
+				case *commander.OpClear:
 					if len(lt.rows) > 0 {
 						lt.rows = []commander.Row{}
 						lt.rowIndex = make(map[string]int)
@@ -137,42 +138,59 @@ func (lt *ListTable) watch() {
 						lt.columns = []string{}
 						changed = true
 					}
-				case commander.OpColumns:
-					if len(lt.columns) != len(op.Row.Cells()) {
-						// TODO: compare contents?
-						lt.columns = op.Row.Cells()
+				case *commander.OpSetColumns:
+					// Compare columns content
+					if strings.Join(lt.columns, "|") != strings.Join(op.Columns, "|") {
+						lt.columns = op.Columns
 						changed = true
 					}
-				case commander.OpAdded:
-					_, ok := lt.rowIndex[op.Row.Id()]
-					if !ok {
-						lt.rowIndex[op.Row.Id()] = len(lt.rows)
-						lt.rows = append(lt.rows, op.Row)
-						changed = true
-					}
-				case commander.OpDeleted:
+				case *commander.OpAdded:
 					index, ok := lt.rowIndex[op.Row.Id()]
+					if !ok {
+						if op.Index == nil {
+							// Append to the end if no index provided
+							index = len(lt.rows)
+						} else {
+							index = *op.Index
+						}
+						for key, val := range lt.rowIndex {
+							if val >= index {
+								lt.rowIndex[key] = val + 1
+							}
+						}
+						lt.rowIndex[op.Row.Id()] = index
+						lt.rows = append(lt.rows[:index], append([]commander.Row{op.Row}, lt.rows[index:]...)...)
+						changed = true
+					} else {
+						// If row already exists
+						lt.rows[index] = op.Row
+						// TODO: move row if new index provided?
+					}
+				case *commander.OpDeleted:
+					index, ok := lt.rowIndex[op.RowId]
 					if ok {
 						lt.rows = append(lt.rows[:index], lt.rows[index+1:]...)
-						delete(lt.rowIndex, op.Row.Id())
+						delete(lt.rowIndex, op.RowId)
 						for _, row := range lt.rows[index:] {
 							lt.rowIndex[row.Id()]--
 						}
 						changed = true
 					}
-				case commander.OpModified:
+				case *commander.OpModified:
 					index, ok := lt.rowIndex[op.Row.Id()]
 					if ok {
-						// TODO: compare contents?
-						lt.rows[index] = op.Row
-						changed = true
+						// Compare cells content
+						if strings.Join(lt.rows[index].Cells(), "|") != strings.Join(op.Row.Cells(), "|") {
+							lt.rows[index] = op.Row
+							changed = true
+						}
 					} else {
 						lt.rows = append(lt.rows, op.Row)
 						changed = true
 					}
-				case commander.OpLoading:
+				case *commander.OpInitStart:
 					lt.preloader.Start()
-				case commander.OpLoadingFinished:
+				case *commander.OpInitFinished:
 					lt.preloader.Stop()
 				}
 			}

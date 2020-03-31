@@ -28,13 +28,13 @@ Navigation:
  Enter: Select menu item          Esc, Backspace: Go back
 
 Resource types navigation:
- Ctrl+P: Pods                      Ctrl+C: Config Maps
- Ctrl+D: Deployments               Ctrl+I: Ingresses
+ Ctrl+P: Pods                     Ctrl+C: Config Maps
+ Ctrl+D: Deployments              Ctrl+I: Ingresses
 
 Pods:
- L: Show logs                      Shift+L: Show previous logs
+ L: Show logs                     Shift+L: Show previous logs
  F: Forward port
- X: eXec /bin/sh or /bin/bash inside container
+ S: Shell into selected pod
 `
 
 func NewHelpWidget() *widget {
