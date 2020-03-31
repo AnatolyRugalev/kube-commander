@@ -34,6 +34,7 @@ const (
 	NameOnly
 	NoHorizontalScroll
 	NoVerticalScroll
+	NoActions
 )
 
 func (tf TableFormat) Has(flag TableFormat) bool {

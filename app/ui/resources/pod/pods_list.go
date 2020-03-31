@@ -16,9 +16,9 @@ type PodsList struct {
 	resource  *commander.Resource
 }
 
-func NewPodsList(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat, updater commander.ScreenUpdater) *PodsList {
+func NewPodsList(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat) *PodsList {
 	pl := PodsList{
-		ResourceListTable: listTable.NewResourceListTable(workspace, resource, format, updater),
+		ResourceListTable: listTable.NewResourceListTable(workspace, resource, format),
 		workspace:         workspace,
 		resource:          resource,
 	}

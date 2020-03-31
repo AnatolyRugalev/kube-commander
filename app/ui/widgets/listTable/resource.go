@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -19,15 +20,17 @@ type ResourceListTable struct {
 	format      TableFormat
 }
 
-func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, format TableFormat, updater commander.ScreenUpdater) *ResourceListTable {
+func NewResourceListTable(container commander.ResourceContainer, resource *commander.Resource, format TableFormat) *ResourceListTable {
 	resourceLt := &ResourceListTable{
 		container:   container,
 		resource:    resource,
 		rowProvider: make(commander.RowProvider),
 		format:      format,
 	}
-	resourceLt.ListTable = NewListTable(resourceLt.rowProvider, format, updater)
-	resourceLt.BindOnKeyPress(resourceLt.OnKeyPress)
+	resourceLt.ListTable = NewListTable(resourceLt.rowProvider, format, container.ScreenUpdater())
+	if !format.Has(NoActions) {
+		resourceLt.BindOnKeyPress(resourceLt.OnKeyPress)
+	}
 	return resourceLt
 }
 
@@ -61,7 +64,7 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 	var ops []commander.Operation
 	if err != nil {
 		prov <- []commander.Operation{{Type: commander.OpLoadingFinished}}
-		// TODO: handle
+		r.container.HandleError(err)
 		return
 	}
 	ops = append(ops,
@@ -75,7 +78,7 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 	prov <- ops
 	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
-		//TODO: handle
+		r.container.HandleError(err)
 		return
 	}
 	go func() {
@@ -94,7 +97,8 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 				case watch.Deleted:
 					op = commander.OpDeleted
 				case watch.Error:
-					panic(event.Object)
+					err := apierrs.FromObject(event.Object)
+					r.container.HandleError(fmt.Errorf("error while watching: %w", err))
 				}
 				table, ok := event.Object.(*metav1.Table)
 				if ok {
@@ -102,7 +106,7 @@ func (r *ResourceListTable) provideRows(format TableFormat, prov commander.RowPr
 					for _, row := range table.Rows {
 						k8sRow, err := commander.NewKubernetesRow(row)
 						if err != nil {
-							// TODO: handle
+							r.container.HandleError(err)
 							return
 						}
 						ops = append(ops, commander.Operation{Type: op, Row: k8sRow})

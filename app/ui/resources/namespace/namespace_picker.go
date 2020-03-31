@@ -23,7 +23,7 @@ func PickNamespace(workspace commander.Workspace, resource *commander.Resource, 
 
 func NewNamespacePicker(container commander.ResourceContainer, resource *commander.Resource, f NamespaceFunc) (*listTable.ResourceListTable, error) {
 	// TODO: all namespaces option
-	rlt := listTable.NewResourceListTable(container, resource, listTable.NameOnly, container.ScreenUpdater())
+	rlt := listTable.NewResourceListTable(container, resource, listTable.NameOnly|listTable.NoActions, container.ScreenUpdater())
 	rlt.BindOnKeyPress(func(row commander.Row, event *tcell.EventKey) bool {
 		if event.Key() == tcell.KeyEnter {
 			go func() {
