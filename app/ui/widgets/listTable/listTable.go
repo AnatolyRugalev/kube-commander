@@ -269,6 +269,7 @@ func (lt *ListTable) resetFilter() {
 	lt.filterMode = false
 	lt.filter = ""
 	lt.Render()
+	lt.reindexSelection()
 }
 
 func (lt *ListTable) BindOnInitFinish(initFunc InitFunc) {
