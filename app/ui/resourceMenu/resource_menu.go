@@ -4,14 +4,61 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/pod"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
-	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/menu"
 	"github.com/AnatolyRugalev/kube-commander/commander"
+	"github.com/gdamore/tcell"
+	"strings"
 )
 
-type item struct {
-	title    string
-	kind     string
-	position int
+type item interface {
+	commander.Row
+	OnSelect() bool
+}
+
+type resourceItem struct {
+	title      string
+	resource   *commander.Resource
+	widget     commander.Widget
+	decoration string
+}
+
+func (r resourceItem) Id() string {
+	return r.title
+}
+
+func (r resourceItem) Cells() []string {
+	return []string{r.decoration + r.title}
+}
+
+func (r resourceItem) Enabled() bool {
+	return r.widget != nil
+}
+
+func (r resourceItem) OnSelect() bool {
+	panic("implement me")
+}
+
+type namespaceSelector struct {
+	accessor commander.NamespaceAccessor
+}
+
+func (n namespaceSelector) Id() string {
+	return "__namespace__"
+}
+
+func (n namespaceSelector) Cells() []string {
+	namespace := n.accessor.CurrentNamespace()
+	if namespace == "" {
+		namespace = "All Namespaces"
+	}
+	return []string{"► " + namespace}
+}
+
+func (n namespaceSelector) OnSelect() bool {
+	panic("implement me")
+}
+
+func (n namespaceSelector) Enabled() bool {
+	return true
 }
 
 var (
@@ -23,66 +70,199 @@ var (
 			return pod.NewPodsList(workspace, resource, format)
 		},
 	}
-	itemMap = []*item{
-		{title: "Namespaces", kind: "Namespace"},
-		{title: "Nodes", kind: "Node"},
-		{title: "Storage Classes", kind: "StorageClass"},
-		{title: "PVs", kind: "PersistentVolume"},
-		{title: "Deployments", kind: "Deployment"},
-		{title: "Stateful", kind: "StatefulSet"},
-		{title: "Daemons", kind: "DaemonSet"},
-		{title: "Replicas", kind: "ReplicaSet"},
-		{title: "Pods", kind: "Pod"},
-		{title: "Cron", kind: "CronJob"},
-		{title: "Jobs", kind: "Job"},
-		{title: "PVCs", kind: "PersistentVolumeClaim"},
-		{title: "Configs", kind: "ConfigMap"},
-		{title: "Secrets", kind: "Secret"},
-		{title: "Services", kind: "Service"},
-
-		{title: "Ingresses", kind: "Ingress"},
-		{title: "Accounts", kind: "ServiceAccount"},
+	clusterKinds = []string{
+		"Namespace",
+		"Node",
+		"StorageClass",
+		"PersistentVolume",
+	}
+	namespacedKinds = []string{
+		"Deployment",
+		"StatefulSet",
+		"DaemonSet",
+		"ReplicaSet",
+		"Pod",
+		"CronJob",
+		"Job",
+		"PersistentVolumeClaim",
+		"ConfigMap",
+		"Secret",
+		"Service",
+		"Ingress",
+		"ServiceAccount",
+	}
+	knownTitles = map[string]string{
+		"Namespace":             "Namespaces",
+		"Node":                  "Nodes",
+		"StorageClass":          "Storage Classes",
+		"PersistentVolume":      "PVs",
+		"Deployment":            "Deployments",
+		"StatefulSet":           "Stateful",
+		"DaemonSet":             "Daemons",
+		"ReplicaSet":            "Replicas",
+		"Pod":                   "Pods",
+		"CronJob":               "Cron",
+		"Job":                   "Jobs",
+		"PersistentVolumeClaim": "PVCs",
+		"ConfigMap":             "Configs",
+		"Secret":                "Secrets",
+		"Service":               "Services",
+		"Ingress":               "Ingresses",
+		"ServiceAccount":        "Accounts",
 	}
 )
 
 type WidgetConstructor func(workspace commander.Workspace, resource *commander.Resource, format listTable.TableFormat) commander.Widget
 
-type resourceMenu struct {
-	*menu.Menu
+type SelectFunc func(itemId string, widget commander.Widget) bool
+
+type ResourceMenu struct {
+	*listTable.ListTable
+
+	clusterItems    []item
+	namespacedItems []item
+
+	itemIndex map[string]item
+
+	onSelect        SelectFunc
+	selectNamespace func()
+
+	resources   commander.ResourceProvider
+	rowProvider commander.RowProvider
+	workspace   commander.Workspace
 }
 
-func NewResourcesMenu(workspace commander.Workspace, onSelect menu.SelectFunc, resourceProvider commander.ResourceProvider) (*resourceMenu, error) {
-	initialResMap := client.CoreResources()
-	itemProvider := make(menu.ItemProvider)
-	go func() {
-		defer close(itemProvider)
-		itemProvider <- buildItems(workspace, initialResMap)
-		serverResources, err := resourceProvider.Resources()
-		if err != nil {
-			workspace.HandleError(err)
-			return
-		}
-		itemProvider <- buildItems(workspace, serverResources)
-	}()
-	m := menu.NewMenu(itemProvider, workspace.ScreenUpdater())
-	m.BindOnSelect(onSelect)
-	return &resourceMenu{Menu: m}, nil
+func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, selectNamespace func(), resourceProvider commander.ResourceProvider) (*ResourceMenu, error) {
+	prov := make(commander.RowProvider)
+	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll, workspace.ScreenUpdater())
+	r := &ResourceMenu{
+		ListTable:       lt,
+		onSelect:        onSelect,
+		selectNamespace: selectNamespace,
+		resources:       resourceProvider,
+		rowProvider:     prov,
+		workspace:       workspace,
+	}
+	lt.BindOnKeyPress(r.OnKeyPress)
+	return r, nil
 }
 
-func buildItems(workspace commander.Workspace, resources commander.ResourceMap) []commander.MenuItem {
-	var items []commander.MenuItem
-	for _, item := range itemMap {
-		res, ok := resources[item.kind]
+func (r *ResourceMenu) provideItems() {
+	defer close(r.rowProvider)
+	var ops []commander.Operation
+
+	ops = append(ops,
+		&commander.OpClear{},
+		&commander.OpSetColumns{Columns: []string{"Title"}},
+		&commander.OpInitStart{},
+	)
+
+	cluster, namespaced := r.splitResources(client.CoreResources())
+	clusterItems := r.buildResourceItems(cluster, clusterKinds)
+	namespacedItems := r.buildResourceItems(namespaced, namespacedKinds)
+	for _, item := range clusterItems {
+		item.decoration = " "
+		ops = append(ops, &commander.OpAdded{Row: item})
+	}
+	ops = append(ops, &commander.OpAdded{Row: &namespaceSelector{r.workspace}})
+	for i, item := range namespacedItems {
+		if i == len(namespacedItems)-1 {
+			item.decoration = " └"
+		} else {
+			item.decoration = " ├"
+		}
+		ops = append(ops, &commander.OpAdded{Row: item})
+	}
+	r.rowProvider <- ops
+	serverResources, err := r.resources.Resources()
+	if err != nil {
+		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
+		r.workspace.HandleError(err)
+		return
+	}
+	ops = []commander.Operation{}
+	cluster, namespaced = r.splitResources(serverResources)
+	clusterItems = r.buildResourceItems(cluster, clusterKinds)
+	namespacedItems = r.buildResourceItems(namespaced, namespacedKinds)
+	for _, item := range clusterItems {
+		item.decoration = " "
+		ops = append(ops, &commander.OpModified{Row: item})
+	}
+	for i, item := range namespacedItems {
+		if i == len(namespacedItems)-1 {
+			item.decoration = " └"
+		} else {
+			item.decoration = " ├"
+		}
+		ops = append(ops, &commander.OpModified{Row: item})
+	}
+	ops = append(ops, &commander.OpInitFinished{})
+	r.rowProvider <- ops
+}
+
+func (r *ResourceMenu) OnShow() {
+	go r.provideItems()
+	r.ListTable.OnShow()
+}
+
+func (r *ResourceMenu) splitResources(m commander.ResourceMap) (commander.ResourceMap, commander.ResourceMap) {
+	namespaced := make(commander.ResourceMap)
+	cluster := make(commander.ResourceMap)
+	for kind, res := range m {
+		if res.Namespaced {
+			namespaced[kind] = res
+		} else {
+			cluster[kind] = res
+		}
+	}
+	return cluster, namespaced
+}
+
+func plural(s string) string {
+	if strings.HasSuffix(s, "s") {
+		return s + "es"
+	} else {
+		return s + "s"
+	}
+}
+
+func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
+	if event.Key() == tcell.KeyEnter {
+		switch i := row.(type) {
+		case *resourceItem:
+			r.onSelect(row.Id(), i.widget)
+		case *namespaceSelector:
+			r.selectNamespace()
+		}
+		return true
+	}
+	return false
+}
+
+func (r *ResourceMenu) SelectItem(id string) {
+	r.ListTable.SelectId(id)
+}
+
+func (r *ResourceMenu) buildResourceItems(resources commander.ResourceMap, order []string) []*resourceItem {
+	var items []*resourceItem
+	for _, kind := range order {
+		title, ok := knownTitles[kind]
 		if !ok {
-			continue
+			title = plural(kind)
 		}
 
-		constructor, ok := CustomWidgets[item.kind]
-		if !ok {
-			constructor = StandardWidget
+		item := &resourceItem{
+			title: title,
 		}
-
-		items = append(items, menu.NewItem(item.title, constructor(workspace, res, listTable.Wide|listTable.WithHeaders), 0))
+		if res, ok := resources[kind]; ok {
+			constructor, ok := CustomWidgets[kind]
+			if !ok {
+				constructor = StandardWidget
+			}
+			item.resource = res
+			item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders)
+		}
+		items = append(items, item)
 	}
 	return items
 }

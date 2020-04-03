@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"errors"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/commander"
@@ -12,71 +13,71 @@ import (
 type PortFunc func(pod v1.Pod, container v1.Container, port v1.ContainerPort)
 
 func pickPodPort(workspace commander.Workspace, pod v1.Pod, f PortFunc) {
-	if len(pod.Spec.Containers) == 1 && len(pod.Spec.Containers[0].Ports) == 1 {
-		f(pod, pod.Spec.Containers[0], pod.Spec.Containers[0].Ports[0])
-		return
-	}
-	picker := newPortPicker(pod, func(pod v1.Pod, c v1.Container, port v1.ContainerPort) {
+	picker, err := newPortPicker(pod, func(pod v1.Pod, c v1.Container, port v1.ContainerPort) {
 		workspace.FocusManager().Blur()
 		f(pod, c, port)
 	})
-	workspace.ShowPopup("Select container", picker)
+	if err != nil {
+		workspace.HandleError(err)
+		return
+	}
+	workspace.ShowPopup("Select container port", picker)
 }
 
 type portItem struct {
 	container v1.Container
+	status    v1.ContainerStatus
 	port      v1.ContainerPort
+}
+
+func (p portItem) Id() string {
+	return fmt.Sprintf("%s:%d", p.container.Name, p.port.ContainerPort)
+}
+
+func (p portItem) Cells() []string {
+	return []string{p.container.Name, containerState(p.status.State), strconv.Itoa(int(p.port.ContainerPort))}
+}
+
+func (p portItem) Enabled() bool {
+	return p.status.State.Running != nil
 }
 
 type portPicker struct {
 	*listTable.ListTable
-	pod   v1.Pod
-	items map[string]*portItem
-	f     PortFunc
+	pod v1.Pod
+	f   PortFunc
 }
 
-func newPortPicker(pod v1.Pod, f PortFunc) *portPicker {
-	var items []*portItem
-	for i, container := range pod.Spec.Containers {
-		// Skip non-running containers
-		if pod.Status.ContainerStatuses[i].State.Running == nil {
-			continue
-		}
+func newPortPicker(pod v1.Pod, f PortFunc) (*portPicker, error) {
+	var items []commander.Row
+	for i, status := range pod.Status.ContainerStatuses {
+		container := pod.Spec.Containers[i]
 		for _, port := range container.Ports {
 			items = append(items, &portItem{
 				container: container,
+				status:    status,
 				port:      port,
 			})
 		}
 	}
-	var rows []commander.Row
-	itemMap := make(map[string]*portItem)
-	for _, c := range items {
-		var portStr string
-		if c.port.Name != "" {
-			portStr = fmt.Sprintf("%s (%d)", c.port.Name, c.port.ContainerPort)
-		} else {
-			portStr = strconv.Itoa(int(c.port.ContainerPort))
-		}
-
-		itemId := c.container.Name + ":" + portStr
-		rows = append(rows, commander.NewSimpleRow(itemId, []string{c.container.Name, portStr}))
-		itemMap[itemId] = c
+	if len(items) == 0 {
+		return nil, errors.New("this pod doesn't have any defined or active ports")
 	}
 	picker := &portPicker{
-		ListTable: listTable.NewStaticListTable([]string{"Container", "Port"}, rows, listTable.WithHeaders),
+		ListTable: listTable.NewStaticListTable([]string{"Container", "Status", "Port"}, items, listTable.WithHeaders),
 		pod:       pod,
-		items:     itemMap,
 		f:         f,
 	}
 	picker.BindOnKeyPress(picker.OnKeyPress)
-	return picker
+	return picker, nil
 }
 
 func (p *portPicker) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	if event.Key() == tcell.KeyEnter {
-		item := p.items[row.Id()]
-		go p.f(p.pod, item.container, item.port)
+		item, ok := row.(*portItem)
+		if ok {
+			go p.f(p.pod, item.container, item.port)
+		}
 		return true
 	}
 	return false

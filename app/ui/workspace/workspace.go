@@ -24,7 +24,7 @@ type workspace struct {
 	focus     commander.FocusManager
 
 	popup  commander.Popup
-	menu   commander.MenuListView
+	menu   *resourceMenu.ResourceMenu
 	widget commander.Widget
 
 	namespace         string
@@ -58,6 +58,7 @@ func (w *workspace) SwitchNamespace(namespace string) {
 	w.namespace = namespace
 	w.widget.OnHide()
 	w.widget.OnShow()
+	w.menu.Render()
 	w.UpdateScreen()
 }
 
@@ -155,7 +156,9 @@ func (w *workspace) Init() error {
 	resMap := client.CoreResources()
 	w.namespaceResource = resMap["Namespace"]
 
-	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, w.container.ResourceProvider())
+	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, func() {
+		namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)
+	}, w.container.ResourceProvider())
 	if err != nil {
 		return err
 	}
@@ -183,12 +186,11 @@ func (w *workspace) styler(list commander.ListView, row commander.Row) tcell.Sty
 	return style
 }
 
-func (w *workspace) onMenuSelect(_ string, item commander.MenuItem) bool {
-	if item.Widget() != w.widget {
+func (w *workspace) onMenuSelect(_ string, widget commander.Widget) bool {
+	if widget != w.widget {
 		w.widget.OnHide()
 		w.BoxLayout.RemoveWidget(w.widget)
-		w.widget = item.Widget()
-		w.selectedWidgetId = item.Title()
+		w.widget = widget
 		w.BoxLayout.AddWidget(w.widget, 0.9)
 		w.widget.OnShow()
 	}

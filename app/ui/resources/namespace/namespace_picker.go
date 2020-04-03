@@ -33,7 +33,7 @@ func NewNamespacePicker(container commander.ResourceContainer, resource *command
 		return false
 	})
 	rlt.SetExtraRows(map[int]commander.Row{
-		0: commander.NewSimpleRow("", []string{"All Namespaces"}),
+		0: commander.NewSimpleRow("", []string{"All Namespaces"}, true),
 	})
 	return rlt, nil
 }

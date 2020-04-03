@@ -7,6 +7,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
+	"github.com/mattn/go-runewidth"
 	"strings"
 )
 
@@ -43,16 +44,20 @@ func (tf TableFormat) Has(flag TableFormat) bool {
 }
 
 var DefaultStyler commander.ListViewStyler = func(list commander.ListView, row commander.Row) commander.Style {
+	style := theme.Default
 	if row == nil {
-		return theme.Default.Underline(true)
+		style = style.Underline(true)
 	} else if row.Id() == list.SelectedRowId() {
 		if list.IsFocused() {
-			return theme.ActiveFocused
+			style = style.Background(theme.ColorActiveFocusedBackground)
 		} else {
-			return theme.ActiveUnfocused
+			style = style.Background(theme.ColorActiveUnfocusedBackground)
 		}
 	}
-	return theme.Default
+	if row != nil && !row.Enabled() {
+		style = style.Foreground(theme.ColorDisabledForeground)
+	}
+	return style
 }
 
 type ListTable struct {
@@ -101,7 +106,7 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 		rowProvider: prov,
 		updater:     updater,
 	}
-	lt.table = lt.renderTable()
+	lt.Render()
 	return lt
 }
 
@@ -179,6 +184,10 @@ func (lt *ListTable) watch() {
 							lt.rows[index] = op.Row
 							changed = true
 						}
+						if lt.rows[index].Enabled() != op.Row.Enabled() {
+							lt.rows[index] = op.Row
+							changed = true
+						}
 					} else {
 						lt.rows = append(lt.rows, op.Row)
 						changed = true
@@ -191,7 +200,7 @@ func (lt *ListTable) watch() {
 			}
 			if changed {
 				lt.reindexSelection()
-				lt.table = lt.renderTable()
+				lt.Render()
 				if lt.updater != nil {
 					lt.updater.Resize()
 					lt.updater.UpdateScreen()
@@ -293,7 +302,7 @@ func (lt *ListTable) renderTable() table {
 	if lt.format.Has(WithHeaders) {
 		for _, col := range lt.columns {
 			t.headers = append(t.headers, col)
-			t.columnDataWidths = append(t.columnDataWidths, len(col))
+			t.columnDataWidths = append(t.columnDataWidths, runewidth.StringWidth(col))
 		}
 		t.dataHeight += 1
 	} else {
@@ -315,8 +324,9 @@ func (lt *ListTable) renderTable() table {
 			if err != nil {
 				value = "err: " + err.Error()
 			}
-			if len(value) > t.columnDataWidths[colId] {
-				t.columnDataWidths[colId] = len(value)
+			width := runewidth.StringWidth(value)
+			if width > t.columnDataWidths[colId] {
+				t.columnDataWidths[colId] = width
 			}
 			mRow = append(mRow, value)
 		}
@@ -390,13 +400,26 @@ func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style
 		}
 	}
 	rowString = rowString[lt.leftCell:]
-	for x, ch := range rowString {
+	x := 0
+	padding := 0
+	for _, ch := range rowString {
+		if runewidth.IsAmbiguousWidth(ch) {
+			padding += 2
+		}
 		lt.view.SetContent(x, y, ch, nil, style)
+		x++
+	}
+	for i := 0; i < padding; i++ {
+		lt.view.SetContent(x+i, y, ' ', nil, style)
 	}
 }
 
-func (lt *ListTable) Resize() {
+func (lt *ListTable) Render() {
 	lt.table = lt.renderTable()
+}
+
+func (lt *ListTable) Resize() {
+	lt.Render()
 }
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
@@ -477,7 +500,21 @@ func (lt *ListTable) SelectIndex(index int) {
 	if index < 0 {
 		index = 0
 	}
+	// Determine direction to skip disabled rows
+	var delta int
+	if lt.selectedRowIndex < index {
+		delta = 1
+	} else {
+		delta = -1
+	}
 	row := lt.rows[index]
+	for !row.Enabled() {
+		index += delta
+		if index < 0 || index >= len(lt.rows) {
+			return
+		}
+		row = lt.rows[index]
+	}
 	lt.selectedId = row.Id()
 	if lt.selectedRowIndex == index {
 		return

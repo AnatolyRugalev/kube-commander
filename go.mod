@@ -8,6 +8,7 @@ require (
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/kr/text v0.1.0
 	github.com/kyokomi/emoji v2.1.0+incompatible
+	github.com/mattn/go-runewidth v0.0.7
 	github.com/spf13/cast v1.3.0
 	github.com/spf13/cobra v0.0.5
 	google.golang.org/appengine v1.6.0 // indirect

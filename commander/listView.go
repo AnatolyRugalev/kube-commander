@@ -5,11 +5,13 @@ type RowProvider chan []Operation
 type Row interface {
 	Id() string
 	Cells() []string
+	Enabled() bool
 }
 
 type simpleRow struct {
-	id    string
-	cells []string
+	id      string
+	cells   []string
+	enabled bool
 }
 
 func (s simpleRow) Id() string {
@@ -20,10 +22,15 @@ func (s simpleRow) Cells() []string {
 	return s.cells
 }
 
-func NewSimpleRow(id string, cells []string) *simpleRow {
+func (s simpleRow) Enabled() bool {
+	return s.enabled
+}
+
+func NewSimpleRow(id string, cells []string, enabled bool) *simpleRow {
 	return &simpleRow{
-		id:    id,
-		cells: cells,
+		id:      id,
+		cells:   cells,
+		enabled: enabled,
 	}
 }
 
