@@ -14,11 +14,13 @@ import (
 type (
 	RowFunc         func(row commander.Row) bool
 	RowKeyEventFunc func(row commander.Row, event *tcell.EventKey) bool
+	InitFunc        func()
 )
 
 var (
 	DefaultRowFunc         = func(row commander.Row) bool { return false }
 	DefaultRowKeyEventFunc = func(row commander.Row, event *tcell.EventKey) bool { return false }
+	DefaultInit            = func() {}
 )
 
 const (
@@ -79,8 +81,10 @@ type ListTable struct {
 	// Left cell to start rendering from (horizontal scrolling)
 	leftCell int
 
-	onChange   RowFunc
-	onKeyEvent RowKeyEventFunc
+	onChange     RowFunc
+	onKeyEvent   RowKeyEventFunc
+	onInitStart  InitFunc
+	onInitFinish InitFunc
 
 	styler      commander.ListViewStyler
 	preloader   *preloader
@@ -99,12 +103,14 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 		format:    format,
 		rowIndex:  make(map[string]int),
 
-		onKeyEvent:  DefaultRowKeyEventFunc,
-		onChange:    DefaultRowFunc,
-		styler:      DefaultStyler,
-		preloader:   NewPreloader(updater),
-		rowProvider: prov,
-		updater:     updater,
+		onKeyEvent:   DefaultRowKeyEventFunc,
+		onChange:     DefaultRowFunc,
+		onInitStart:  DefaultInit,
+		onInitFinish: DefaultInit,
+		styler:       DefaultStyler,
+		preloader:    NewPreloader(updater),
+		rowProvider:  prov,
+		updater:      updater,
 	}
 	lt.Render()
 	return lt
@@ -194,8 +200,10 @@ func (lt *ListTable) watch() {
 					}
 				case *commander.OpInitStart:
 					lt.preloader.Start()
+					lt.onInitStart()
 				case *commander.OpInitFinished:
 					lt.preloader.Stop()
+					lt.onInitFinish()
 				}
 			}
 			if changed {
@@ -248,6 +256,22 @@ func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
 			return true
 		}
 		return oldFunc(row)
+	}
+}
+
+func (lt *ListTable) BindOnInitFinish(initFunc InitFunc) {
+	oldFunc := lt.onInitFinish
+	lt.onInitFinish = func() {
+		initFunc()
+		oldFunc()
+	}
+}
+
+func (lt *ListTable) BindOnInitStart(initFunc InitFunc) {
+	oldFunc := lt.onInitStart
+	lt.onInitStart = func() {
+		initFunc()
+		oldFunc()
 	}
 }
 
@@ -568,15 +592,15 @@ func (lt *ListTable) SetView(view views.View) {
 // This is the minimum required size of ListTable
 func (lt *ListTable) Size() (int, int) {
 	if lt.table.dataWidth == 0 {
-		return 10, 3
+		return 1, 1
 	}
 	w, h := lt.MaxSize()
-	viewW, viewH := lt.view.Size()
-	if !lt.format.Has(NoHorizontalScroll) && w > viewW {
-		w = viewW
+	// Allows to extend the view from the outside
+	if !lt.format.Has(NoHorizontalScroll) {
+		w = 1
 	}
-	if !lt.format.Has(NoVerticalScroll) && h > viewH {
-		h = viewH
+	if !lt.format.Has(NoVerticalScroll) {
+		h = 1
 	}
 	return w, h
 }

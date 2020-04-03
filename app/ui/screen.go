@@ -59,10 +59,6 @@ func NewScreen(app commander.App) *Screen {
 	return &s
 }
 
-func (s Screen) HandleError(err error) {
-	panic(err)
-}
-
 func (s Screen) HandleEvent(e tcell.Event) bool {
 	switch ev := e.(type) {
 	case *tcell.EventKey:

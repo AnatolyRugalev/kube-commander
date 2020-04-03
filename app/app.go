@@ -117,7 +117,6 @@ func (a *app) Run() error {
 		return err
 	}
 	a.screen.SetWorkspace(a.workspace)
-
 	a.tApp.Start()
 
 	<-a.quit

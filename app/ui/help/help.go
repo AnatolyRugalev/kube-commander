@@ -16,6 +16,11 @@ func (w widget) MaxSize() (int, int) {
 	return w.Text.Size()
 }
 
+func (w widget) Size() (int, int) {
+	width, _ := w.Text.Size()
+	return width, 1
+}
+
 var text = `kube-commander - browse your Kubernetes cluster in a casual way!
 
 Global:
