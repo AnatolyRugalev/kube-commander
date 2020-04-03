@@ -136,9 +136,6 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 		case tcell.KeyCtrlD:
 			w.focus.Focus(w.menu)
 			w.menu.SelectItem("Deployments")
-		case tcell.KeyCtrlC:
-			w.focus.Focus(w.menu)
-			w.menu.SelectItem("Configs")
 		case tcell.KeyCtrlI:
 			w.focus.Focus(w.menu)
 			w.menu.SelectItem("Ingresses")

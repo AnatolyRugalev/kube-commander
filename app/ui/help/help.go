@@ -31,11 +31,11 @@ Global:
 Navigation:
  ↑↓→←: List navigation            /: Filter resources
  Enter: Select menu item          Esc, Backspace: Go back
+ Ctrl+C: Copy resource name to the clipboard
 
 Resource types navigation:
- Ctrl+P: Pods                     Ctrl+C: Config Maps
+ Ctrl+P: Pods
  Ctrl+D: Deployments              Ctrl+I: Ingresses
- C: Copy resource name to the clipboard
 
 Pods:
  L: Show logs                     Shift+L: Show previous logs

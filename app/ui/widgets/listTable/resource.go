@@ -41,16 +41,19 @@ func (r *ResourceListTable) SetExtraRows(rows map[int]commander.Row) {
 }
 
 func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
-	switch event.Rune() {
-	case 'd':
-		go r.describe(row)
-		return true
-	case 'e':
-		go r.edit(row)
-		return true
-	case 'c':
+	switch event.Key() {
+	case tcell.KeyCtrlC:
 		go r.copy(row)
 		return true
+	default:
+		switch event.Rune() {
+		case 'd':
+			go r.describe(row)
+			return true
+		case 'e':
+			go r.edit(row)
+			return true
+		}
 	}
 	return false
 }
