@@ -91,6 +91,9 @@ type ListTable struct {
 	rowProvider commander.RowProvider
 	updater     commander.ScreenUpdater
 	stopCh      chan struct{}
+
+	filter     string
+	filterMode bool
 }
 
 func (lt *ListTable) Rows() []commander.Row {
@@ -119,6 +122,7 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 func (lt *ListTable) OnShow() {
 	lt.stopCh = make(chan struct{})
 	go lt.watch()
+	lt.resetFilter()
 	lt.Focusable.OnShow()
 }
 
@@ -207,8 +211,8 @@ func (lt *ListTable) watch() {
 				}
 			}
 			if changed {
-				lt.reindexSelection()
 				lt.Render()
+				lt.reindexSelection()
 				if lt.updater != nil {
 					lt.updater.Resize()
 					lt.updater.UpdateScreen()
@@ -219,6 +223,7 @@ func (lt *ListTable) watch() {
 }
 
 type table struct {
+	rows    []commander.Row
 	headers []string
 	values  [][]string
 
@@ -236,11 +241,11 @@ func (lt *ListTable) SelectedRowId() string {
 }
 
 func (lt *ListTable) SelectedRow() commander.Row {
-	if len(lt.rows) == 0 {
+	if len(lt.table.rows) == 0 {
 		return nil
 	}
-	if lt.selectedRowIndex < len(lt.rows) {
-		return lt.rows[lt.selectedRowIndex]
+	if lt.selectedRowIndex < len(lt.table.rows) {
+		return lt.table.rows[lt.selectedRowIndex]
 	}
 	return nil
 }
@@ -257,6 +262,12 @@ func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
 		}
 		return oldFunc(row)
 	}
+}
+
+func (lt *ListTable) resetFilter() {
+	lt.filterMode = false
+	lt.filter = ""
+	lt.Render()
 }
 
 func (lt *ListTable) BindOnInitFinish(initFunc InitFunc) {
@@ -319,6 +330,18 @@ func (lt *ListTable) MaxSize() (w int, h int) {
 	return w, h
 }
 
+func (lt *ListTable) matchFilter(row commander.Row) bool {
+	if lt.filter == "" {
+		return true
+	}
+	for _, cell := range row.Cells() {
+		if strings.Contains(cell, lt.filter) {
+			return true
+		}
+	}
+	return false
+}
+
 func (lt *ListTable) renderTable() table {
 	t := table{}
 	t.dataHeight = len(lt.rows)
@@ -333,6 +356,9 @@ func (lt *ListTable) renderTable() table {
 		t.columnDataWidths = make([]int, len(lt.columns))
 	}
 	for _, row := range lt.rows {
+		if !lt.matchFilter(row) {
+			continue
+		}
 		var mRow []string
 		for colId := range lt.columns {
 			var (
@@ -355,6 +381,7 @@ func (lt *ListTable) renderTable() table {
 			mRow = append(mRow, value)
 		}
 		t.values = append(t.values, mRow)
+		t.rows = append(t.rows, row)
 	}
 	t.dataWidth = 0
 	for _, width := range t.columnDataWidths {
@@ -401,9 +428,16 @@ func (lt *ListTable) Draw() {
 		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, nil))
 		index++
 	}
-	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < len(lt.rows); rowId++ {
-		lt.drawRow(index, lt.table.values[rowId], sizes, lt.styler(lt, lt.rows[rowId]))
+	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < len(lt.table.rows); rowId++ {
+		lt.drawRow(index, lt.table.values[rowId], sizes, lt.styler(lt, lt.table.rows[rowId]))
 		index++
+	}
+	if lt.filterMode {
+		x := 0
+		for _, ch := range lt.filter {
+			lt.view.SetContent(x, 0, ch, nil, lt.styler(lt, nil))
+			x++
+		}
 	}
 	lt.preloader.Draw()
 }
@@ -477,6 +511,35 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			lt.Left()
 			return true
 		}
+		if lt.filterMode {
+			if ev.Key() == tcell.KeyEsc {
+				lt.resetFilter()
+				return true
+			}
+			if ev.Key() == tcell.KeyBackspace2 {
+				if len(lt.filter) > 0 {
+					lt.filter = lt.filter[:len(lt.filter)-1]
+					lt.Render()
+				}
+				return true
+			}
+			if ev.Key() == tcell.KeyEnter {
+				lt.filterMode = false
+				lt.Render()
+				return true
+			}
+			if ev.Rune() != 0 {
+				lt.filter += string(ev.Rune())
+				lt.Render()
+				return true
+			}
+		} else {
+			if ev.Rune() == '/' {
+				lt.filterMode = true
+				return true
+			}
+		}
+
 		return lt.onKeyEvent(lt.SelectedRow(), ev)
 	})
 }
@@ -502,7 +565,7 @@ func (lt *ListTable) Home() {
 }
 
 func (lt *ListTable) End() {
-	lt.SelectIndex(len(lt.rows) - 1)
+	lt.SelectIndex(len(lt.table.rows) - 1)
 }
 
 func (lt *ListTable) Right() {
@@ -514,30 +577,30 @@ func (lt *ListTable) Left() {
 }
 
 func (lt *ListTable) SelectIndex(index int) {
-	if len(lt.rows) == 0 {
+	if len(lt.table.rows) == 0 {
 		return
 	}
 
-	if index > len(lt.rows)-1 {
-		index = len(lt.rows) - 1
+	if index > len(lt.table.rows)-1 {
+		index = len(lt.table.rows) - 1
 	}
 	if index < 0 {
 		index = 0
 	}
 	// Determine direction to skip disabled rows
 	var delta int
-	if lt.selectedRowIndex < index {
+	if lt.selectedRowIndex <= index {
 		delta = 1
 	} else {
 		delta = -1
 	}
-	row := lt.rows[index]
+	row := lt.table.rows[index]
 	for !row.Enabled() {
 		index += delta
-		if index < 0 || index >= len(lt.rows) {
+		if index < 0 || index >= len(lt.table.rows) {
 			return
 		}
-		row = lt.rows[index]
+		row = lt.table.rows[index]
 	}
 	lt.selectedId = row.Id()
 	if lt.selectedRowIndex == index {

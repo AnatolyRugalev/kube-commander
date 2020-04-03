@@ -178,7 +178,7 @@ func (w *workspace) Init() error {
 func (w *workspace) styler(list commander.ListView, row commander.Row) tcell.Style {
 	style := listTable.DefaultStyler(list, row)
 
-	if row.Id() == w.selectedWidgetId && (row.Id() != w.menu.SelectedRowId() || !list.IsFocused()) {
+	if row != nil && row.Id() == w.selectedWidgetId && (row.Id() != w.menu.SelectedRowId() || !list.IsFocused()) {
 		_, bg, _ := theme.Default.Decompose()
 		return style.Background(bg).Bold(true).Underline(true)
 	}
