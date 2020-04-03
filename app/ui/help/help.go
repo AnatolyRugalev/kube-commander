@@ -31,7 +31,7 @@ Global:
 Navigation:
  ↑↓→←: List navigation            /: Filter resources
  Enter: Select menu item          Esc, Backspace: Go back
- Ctrl+C: Copy resource name to the clipboard
+ C: Copy resource name to the clipboard
 
 Resource types navigation:
  Ctrl+P: Pods
