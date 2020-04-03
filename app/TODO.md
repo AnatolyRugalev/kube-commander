@@ -1,8 +1,9 @@
 # TODO
 
 ## Major
-* Deletion
 * Add status bar
+* Dialog popups
+* Deletion
 * Copy resource name to clipboard
 
 ## Minor
