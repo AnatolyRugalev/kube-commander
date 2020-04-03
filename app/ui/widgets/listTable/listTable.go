@@ -28,7 +28,7 @@ const (
 	columnSeparatorLen = 1
 )
 
-type TableFormat uint8
+type TableFormat uint16
 
 const (
 	WithHeaders TableFormat = 1 << iota
@@ -39,6 +39,7 @@ const (
 	NoVerticalScroll
 	NoActions
 	NoWatch
+	WithFilter
 )
 
 func (tf TableFormat) Has(flag TableFormat) bool {
@@ -312,9 +313,12 @@ func (lt *ListTable) viewWidth() int {
 	return width
 }
 
-func (lt *ListTable) viewHeight() int {
+func (lt *ListTable) tableHeight() int {
 	_, height := lt.view.Size()
 	if lt.format.Has(WithHeaders) {
+		height -= 1
+	}
+	if lt.filterMode || lt.filter != "" {
 		height -= 1
 	}
 	return height
@@ -423,31 +427,35 @@ func (lt *ListTable) Draw() {
 	style := lt.defaultStyle()
 	lt.view.Fill(' ', style)
 	index := 0
-	sizes := lt.getColumnSizes()
 	if lt.filterMode || lt.filter != "" {
-		str := "/" + lt.filter
-		x := 0
-		st := theme.Default
-		if lt.filterMode {
-			st = st.Background(theme.ColorActiveFocusedBackground)
-		} else {
-			st = st.Background(theme.ColorActiveUnfocusedBackground)
-		}
-		for _, ch := range str {
-			lt.view.SetContent(x, 0, ch, nil, st)
-			x++
-		}
+		lt.drawFilter(index)
 		index++
 	}
+	sizes := lt.getColumnSizes()
 	if lt.format.Has(WithHeaders) {
 		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, nil))
 		index++
 	}
-	for rowId := lt.topRow; rowId < lt.topRow+lt.viewHeight() && rowId < len(lt.table.rows); rowId++ {
+	for rowId := lt.topRow; rowId < lt.topRow+lt.tableHeight() && rowId < len(lt.table.rows); rowId++ {
 		lt.drawRow(index, lt.table.values[rowId], sizes, lt.styler(lt, lt.table.rows[rowId]))
 		index++
 	}
 	lt.preloader.Draw()
+}
+
+func (lt *ListTable) drawFilter(y int) {
+	str := "/" + lt.filter
+	x := 0
+	st := theme.Default
+	if lt.filterMode {
+		st = st.Background(theme.ColorActiveFocusedBackground)
+	} else {
+		st = st.Background(theme.ColorActiveUnfocusedBackground)
+	}
+	for _, ch := range str {
+		lt.view.SetContent(x, y, ch, nil, st)
+		x++
+	}
 }
 
 func (lt *ListTable) defaultStyle() tcell.Style {
@@ -519,38 +527,40 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			lt.Left()
 			return true
 		}
-		if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc {
-			lt.resetFilter()
-			return true
-		}
-		if lt.filterMode {
-			if ev.Key() == tcell.KeyBackspace2 {
-				if len(lt.filter) > 0 {
-					lt.filter = lt.filter[:len(lt.filter)-1]
+		if lt.format.Has(WithFilter) {
+			if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc {
+				lt.resetFilter()
+				return true
+			}
+			if lt.filterMode {
+				switch ev.Key() {
+				case tcell.KeyBackspace2:
+					if len(lt.filter) > 0 {
+						lt.filter = lt.filter[:len(lt.filter)-1]
+						lt.Render()
+						lt.reindexSelection()
+					}
+					return true
+				case tcell.KeyEnter:
+					lt.filterMode = false
 					lt.Render()
 					lt.reindexSelection()
+					return true
 				}
-				return true
+				if ev.Rune() != 0 {
+					lt.filter += string(ev.Rune())
+					lt.Render()
+					lt.reindexSelection()
+					return true
+				}
+			} else {
+				if ev.Rune() == '/' {
+					lt.filterMode = true
+					return true
+				}
 			}
-			if ev.Key() == tcell.KeyEnter {
-				lt.filterMode = false
-				lt.Render()
-				lt.reindexSelection()
-				return true
-			}
-			if ev.Rune() != 0 {
-				lt.filter += string(ev.Rune())
-				lt.Render()
-				lt.reindexSelection()
-				return true
-			}
-		} else {
-			if ev.Rune() == '/' {
-				lt.filterMode = true
-				return true
-			}
-		}
 
+		}
 		return lt.onKeyEvent(lt.SelectedRow(), ev)
 	})
 }
@@ -564,11 +574,11 @@ func (lt *ListTable) Prev() {
 }
 
 func (lt *ListTable) NextPage() {
-	lt.SelectIndex(lt.selectedRowIndex + lt.viewHeight())
+	lt.SelectIndex(lt.selectedRowIndex + lt.tableHeight())
 }
 
 func (lt *ListTable) PrevPage() {
-	lt.SelectIndex(lt.selectedRowIndex - lt.viewHeight())
+	lt.SelectIndex(lt.selectedRowIndex - lt.tableHeight())
 }
 
 func (lt *ListTable) Home() {
@@ -620,7 +630,7 @@ func (lt *ListTable) SelectIndex(index int) {
 	lt.selectedRowIndex = index
 	lt.onChange(row)
 
-	height := lt.viewHeight()
+	height := lt.tableHeight()
 	scrollThreshold := lt.topRow + height - 1
 	if height <= 0 {
 		lt.topRow = 0

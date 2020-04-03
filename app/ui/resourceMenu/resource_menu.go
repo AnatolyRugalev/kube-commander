@@ -260,7 +260,7 @@ func (r *ResourceMenu) buildResourceItems(resources commander.ResourceMap, order
 				constructor = StandardWidget
 			}
 			item.resource = res
-			item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders)
+			item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders|listTable.WithFilter)
 		}
 		items = append(items, item)
 	}

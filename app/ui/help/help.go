@@ -29,7 +29,7 @@ Global:
  Ctrl+N or F2: Change namespace   Delete: Delete resource (with confirmation)
 
 Navigation:
- ↑↓→←: List navigation
+ ↑↓→←: List navigation             /: Filter list
  Enter: Select menu item          Esc, Backspace: Go back
 
 Resource types navigation:
