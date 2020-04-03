@@ -35,6 +35,7 @@ Navigation:
 Resource types navigation:
  Ctrl+P: Pods                     Ctrl+C: Config Maps
  Ctrl+D: Deployments              Ctrl+I: Ingresses
+ C: Copy resource name to the clipboard
 
 Pods:
  L: Show logs                     Shift+L: Show previous logs

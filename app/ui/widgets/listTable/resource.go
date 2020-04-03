@@ -3,6 +3,7 @@ package listTable
 import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,11 +42,14 @@ func (r *ResourceListTable) SetExtraRows(rows map[int]commander.Row) {
 
 func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	switch event.Rune() {
-	case 'D', 'd':
+	case 'd':
 		go r.describe(row)
 		return true
-	case 'E', 'e':
+	case 'e':
 		go r.edit(row)
+		return true
+	case 'c':
+		go r.copy(row)
 		return true
 	}
 	return false
@@ -216,6 +220,19 @@ func (r ResourceListTable) edit(row commander.Row) {
 	e := r.container.CommandExecutor()
 	b := r.container.CommandBuilder()
 	err = e.Pipe(b.Edit(metadata.Namespace, r.resource.Resource, metadata.Name))
+	if err != nil {
+		r.container.HandleError(err)
+		return
+	}
+}
+
+func (r ResourceListTable) copy(row commander.Row) {
+	metadata, err := r.RowMetadata(row)
+	if err != nil {
+		r.container.HandleError(err)
+		return
+	}
+	err = clipboard.WriteAll(metadata.Name)
 	if err != nil {
 		r.container.HandleError(err)
 		return
