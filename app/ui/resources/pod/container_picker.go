@@ -12,7 +12,7 @@ type ContainerFunc func(pod v1.Pod, container v1.Container, status v1.ContainerS
 
 func pickPodContainer(workspace commander.Workspace, pod v1.Pod, f ContainerFunc) {
 	if len(pod.Status.ContainerStatuses)+len(pod.Status.InitContainerStatuses) == 0 {
-		workspace.HandleError(errors.New("no containers available"))
+		workspace.Status().Error(errors.New("no containers available"))
 		return
 	}
 	if len(pod.Spec.Containers) == 1 {

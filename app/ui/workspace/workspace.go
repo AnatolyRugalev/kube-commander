@@ -4,7 +4,6 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/border"
-	errWidget "github.com/AnatolyRugalev/kube-commander/app/ui/err"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/help"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resourceMenu"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/namespace"
@@ -99,8 +98,8 @@ func (w *workspace) ScreenUpdater() commander.ScreenUpdater {
 	return w
 }
 
-func (w *workspace) HandleError(err error) {
-	w.ShowPopup("Error", errWidget.NewErrorWidget(err))
+func (w *workspace) Status() commander.StatusReporter {
+	return w.container.StatusReporter()
 }
 
 func (w workspace) Draw() {

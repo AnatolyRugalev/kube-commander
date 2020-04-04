@@ -62,7 +62,7 @@ func (p PodsList) getPod(row commander.Row) (*v1.Pod, error) {
 func (p PodsList) logs(row commander.Row, previous bool) {
 	pod, err := p.getPod(row)
 	if err != nil {
-		p.workspace.HandleError(err)
+		p.workspace.Status().Error(err)
 		return
 	}
 	pickPodContainer(p.workspace, *pod, func(pod v1.Pod, container v1.Container, status v1.ContainerStatus) {
@@ -76,7 +76,7 @@ func (p PodsList) logs(row commander.Row, previous bool) {
 		}
 		err := e.Pipe(commands...)
 		if err != nil {
-			p.workspace.HandleError(err)
+			p.workspace.Status().Error(err)
 			return
 		}
 		return
@@ -86,7 +86,7 @@ func (p PodsList) logs(row commander.Row, previous bool) {
 func (p PodsList) forward(row commander.Row) {
 	pod, err := p.getPod(row)
 	if err != nil {
-		p.workspace.HandleError(err)
+		p.workspace.Status().Error(err)
 		return
 	}
 	pickPodPort(p.workspace, *pod, func(pod v1.Pod, container v1.Container, port v1.ContainerPort) {
@@ -94,7 +94,7 @@ func (p PodsList) forward(row commander.Row) {
 		b := p.workspace.CommandBuilder()
 		err := e.Pipe(b.PortForward(pod.Namespace, pod.Name, port.ContainerPort))
 		if err != nil {
-			p.workspace.HandleError(err)
+			p.workspace.Status().Error(err)
 			return
 		}
 		return
@@ -104,7 +104,7 @@ func (p PodsList) forward(row commander.Row) {
 func (p PodsList) shell(row commander.Row) {
 	pod, err := p.getPod(row)
 	if err != nil {
-		p.workspace.HandleError(err)
+		p.workspace.Status().Error(err)
 		return
 	}
 	pickPodContainer(p.workspace, *pod, func(pod v1.Pod, container v1.Container, status v1.ContainerStatus) {
@@ -119,7 +119,7 @@ func (p PodsList) shell(row commander.Row) {
 			}
 		}
 		if err != nil {
-			p.workspace.HandleError(err)
+			p.workspace.Status().Error(err)
 			return
 		}
 		return

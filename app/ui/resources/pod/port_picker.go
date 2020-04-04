@@ -18,7 +18,7 @@ func pickPodPort(workspace commander.Workspace, pod v1.Pod, f PortFunc) {
 		f(pod, c, port)
 	})
 	if err != nil {
-		workspace.HandleError(err)
+		workspace.Status().Error(err)
 		return
 	}
 	workspace.ShowPopup("Select container port", picker)

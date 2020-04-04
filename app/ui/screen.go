@@ -10,10 +10,11 @@ import (
 
 type Screen struct {
 	*views.Panel
-	focus.Focusable
+	*focus.Focusable
 
 	app       commander.App
 	workspace commander.Workspace
+	status    commander.StatusReporter
 	view      commander.View
 }
 
@@ -24,6 +25,11 @@ func (s *Screen) View() commander.View {
 func (s *Screen) SetView(view views.View) {
 	s.view = view
 	s.Panel.SetView(view)
+}
+
+func (s *Screen) SetStatus(stat commander.StatusReporter) {
+	s.status = stat
+	s.Panel.SetStatus(s.status)
 }
 
 func (s *Screen) UpdateScreen() {
@@ -43,8 +49,9 @@ func (s Screen) Workspace() commander.Workspace {
 
 func NewScreen(app commander.App) *Screen {
 	s := Screen{
-		Panel: views.NewPanel(),
-		app:   app,
+		Panel:     views.NewPanel(),
+		Focusable: focus.NewFocusable(),
+		app:       app,
 	}
 
 	title := views.NewTextBar()

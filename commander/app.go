@@ -14,5 +14,5 @@ type Container interface {
 	CommandBuilder() CommandBuilder
 	CommandExecutor() CommandExecutor
 	Screen() Screen
-	ErrorHandler() ErrorHandler
+	StatusReporter() StatusReporter
 }

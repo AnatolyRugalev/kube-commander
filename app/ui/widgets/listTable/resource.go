@@ -73,7 +73,7 @@ func (r *ResourceListTable) provideRows() {
 	var ops []commander.Operation
 	if err != nil {
 		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 	ops = append(ops,
@@ -93,7 +93,7 @@ func (r *ResourceListTable) provideRows() {
 	}
 	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 	go func() {
@@ -105,13 +105,13 @@ func (r *ResourceListTable) provideRows() {
 			case event := <-watcher.ResultChan():
 				if event.Type == watch.Error {
 					err := apierrs.FromObject(event.Object)
-					r.container.HandleError(fmt.Errorf("error while watching: %w", err))
+					r.container.Status().Error(fmt.Errorf("error while watching: %w", err))
 					return
 				}
 				var ops []commander.Operation
 				rows, err := r.extractRows(event)
 				if err != nil {
-					r.container.HandleError(err)
+					r.container.Status().Error(err)
 					return
 				}
 				switch event.Type {
@@ -199,14 +199,14 @@ func (r ResourceListTable) RowMetadata(row commander.Row) (*metav1.PartialObject
 func (r ResourceListTable) describe(row commander.Row) {
 	metadata, err := r.RowMetadata(row)
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 	e := r.container.CommandExecutor()
 	b := r.container.CommandBuilder()
 	err = e.Pipe(b.Describe(metadata.Namespace, r.resource.Resource, metadata.Name), b.Pager())
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 }
@@ -214,14 +214,14 @@ func (r ResourceListTable) describe(row commander.Row) {
 func (r ResourceListTable) edit(row commander.Row) {
 	metadata, err := r.RowMetadata(row)
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 	e := r.container.CommandExecutor()
 	b := r.container.CommandBuilder()
 	err = e.Pipe(b.Edit(metadata.Namespace, r.resource.Resource, metadata.Name))
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 }
@@ -229,12 +229,13 @@ func (r ResourceListTable) edit(row commander.Row) {
 func (r ResourceListTable) copy(row commander.Row) {
 	metadata, err := r.RowMetadata(row)
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
 	err = clipboard.WriteAll(metadata.Name)
 	if err != nil {
-		r.container.HandleError(err)
+		r.container.Status().Error(err)
 		return
 	}
+	r.container.Status().Info(fmt.Sprintf("Resource name copied! '%s'", metadata.Name))
 }

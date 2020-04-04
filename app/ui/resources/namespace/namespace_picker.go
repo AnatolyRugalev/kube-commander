@@ -14,7 +14,7 @@ func PickNamespace(workspace commander.Workspace, resource *commander.Resource, 
 		f(namespace)
 	})
 	if err != nil {
-		workspace.HandleError(err)
+		workspace.Status().Error(err)
 		return
 	}
 	picker.SelectId(workspace.CurrentNamespace())

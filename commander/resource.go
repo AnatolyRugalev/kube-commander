@@ -39,7 +39,7 @@ func (r Resource) Scope() meta.RESTScope {
 
 type ResourceContainer interface {
 	NamespaceAccessor
-	ErrorHandler
+	Status() StatusReporter
 	Client() Client
 	ResourceProvider() ResourceProvider
 	CommandBuilder() CommandBuilder

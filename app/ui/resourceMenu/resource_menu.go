@@ -177,7 +177,7 @@ func (r *ResourceMenu) provideItems() {
 	serverResources, err := r.resources.Resources()
 	if err != nil {
 		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
-		r.workspace.HandleError(err)
+		r.workspace.Status().Error(err)
 		return
 	}
 	ops = []commander.Operation{}

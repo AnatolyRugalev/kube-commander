@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/ui"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/status"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/workspace"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
@@ -19,6 +20,7 @@ type app struct {
 	commandExecutor  commander.CommandExecutor
 	screen           commander.Screen
 	workspace        commander.Workspace
+	status           commander.StatusReporter
 
 	defaultNamespace string
 
@@ -76,8 +78,8 @@ func (a app) CurrentNamespace() string {
 	return a.defaultNamespace
 }
 
-func (a app) ErrorHandler() commander.ErrorHandler {
-	return a.screen.Workspace()
+func (a app) StatusReporter() commander.StatusReporter {
+	return a.status
 }
 
 func (a *app) initScreen() (err error) {
@@ -116,7 +118,9 @@ func (a *app) Run() error {
 	if err != nil {
 		return err
 	}
+	a.status = status.NewStatus(a.screen)
 	a.screen.SetWorkspace(a.workspace)
+	a.screen.SetStatus(a.status)
 	a.tApp.Start()
 
 	<-a.quit
