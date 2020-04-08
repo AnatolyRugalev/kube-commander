@@ -21,6 +21,10 @@ func (d defaultConfig) Kubeconfig() string {
 	return d.kubeconfig
 }
 
+func (d defaultConfig) Namespace() string {
+	return d.namespace
+}
+
 func NewDefaultConfig(kubeconfig string, context string, namespace string) *defaultConfig {
 	return &defaultConfig{
 		kubeconfig: kubeconfig,

@@ -8,7 +8,7 @@ var (
 		Background(tcell.ColorTeal).
 		Foreground(tcell.ColorBlack)
 
-	ColorActiveFocusedBackground   = tcell.ColorLightCyan
-	ColorActiveUnfocusedBackground = tcell.ColorDarkGray
-	ColorDisabledForeground        = tcell.ColorGray
+	ColorSelectedFocusedBackground   = tcell.ColorLightCyan
+	ColorSelectedUnfocusedBackground = tcell.ColorDarkGray
+	ColorDisabledForeground          = tcell.ColorGray
 )

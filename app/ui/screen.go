@@ -16,6 +16,7 @@ type Screen struct {
 	workspace commander.Workspace
 	status    commander.StatusReporter
 	view      commander.View
+	theme     commander.ThemeManager
 }
 
 func (s *Screen) View() commander.View {
@@ -30,6 +31,8 @@ func (s *Screen) SetView(view views.View) {
 func (s *Screen) SetStatus(stat commander.StatusReporter) {
 	s.status = stat
 	s.Panel.SetStatus(s.status)
+
+	s.theme = theme.NewManager(s.workspace.FocusManager(), s, s.status)
 }
 
 func (s *Screen) UpdateScreen() {
@@ -67,12 +70,27 @@ func NewScreen(app commander.App) *Screen {
 }
 
 func (s Screen) HandleEvent(e tcell.Event) bool {
+	if s.theme.HandleEvent(e) {
+		return true
+	}
+	if s.BoxLayout.HandleEvent(e) {
+		return true
+	}
 	switch ev := e.(type) {
 	case *tcell.EventKey:
 		if ev.Rune() == 'q' && ev.Modifiers() == tcell.ModNone {
 			s.app.Quit()
 			return true
 		}
+		switch ev.Key() {
+		case tcell.KeyF10:
+			err := s.theme.Init()
+			if err != nil {
+				s.status.Error(err)
+			}
+		case tcell.KeyF11:
+			s.theme.DeInit()
+		}
 	}
-	return s.BoxLayout.HandleEvent(e)
+	return false
 }

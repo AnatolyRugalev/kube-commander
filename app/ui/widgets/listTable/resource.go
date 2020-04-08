@@ -102,7 +102,11 @@ func (r *ResourceListTable) provideRows() {
 			select {
 			case <-r.stopWatchCh:
 				return
-			case event := <-watcher.ResultChan():
+			case event, ok := <-watcher.ResultChan():
+				if !ok {
+					// TODO: restart watcher
+					return
+				}
 				if event.Type == watch.Error {
 					err := apierrs.FromObject(event.Object)
 					r.container.Status().Error(fmt.Errorf("error while watching: %w", err))

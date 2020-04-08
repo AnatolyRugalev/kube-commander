@@ -52,9 +52,9 @@ var DefaultStyler commander.ListViewStyler = func(list commander.ListView, row c
 		style = style.Underline(true)
 	} else if row.Id() == list.SelectedRowId() {
 		if list.IsFocused() {
-			style = style.Background(theme.ColorActiveFocusedBackground)
+			style = style.Background(theme.ColorSelectedFocusedBackground)
 		} else {
-			style = style.Background(theme.ColorActiveUnfocusedBackground)
+			style = style.Background(theme.ColorSelectedUnfocusedBackground)
 		}
 	}
 	if row != nil && !row.Enabled() {
@@ -95,6 +95,25 @@ type ListTable struct {
 
 	filter     string
 	filterMode bool
+
+	stRow               commander.StyleComponent
+	stHeader            commander.StyleComponent
+	stSelectedFocused   commander.StyleComponent
+	stSelectedUnfocused commander.StyleComponent
+	stDisabled          commander.StyleComponent
+	stFilter            commander.StyleComponent
+	stFilterActive      commander.StyleComponent
+}
+
+func (lt *ListTable) GetComponents() []commander.StyleComponent {
+	return []commander.StyleComponent{
+		lt.stRow,
+		lt.stHeader,
+		lt.stSelectedFocused,
+		lt.stSelectedUnfocused,
+		lt.stFilter,
+		lt.stFilterActive,
+	}
 }
 
 func (lt *ListTable) Rows() []commander.Row {
@@ -115,6 +134,14 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 		preloader:    NewPreloader(updater),
 		rowProvider:  prov,
 		updater:      updater,
+
+		stRow:               theme.NewComponent("row", theme.Default),
+		stHeader:            theme.NewComponent("header", theme.Default.Underline(true)),
+		stSelectedFocused:   theme.NewComponent("selected-focused", theme.Default.Background(theme.ColorSelectedFocusedBackground)),
+		stSelectedUnfocused: theme.NewComponent("selected-unfocused", theme.Default.Background(theme.ColorSelectedUnfocusedBackground)),
+		stDisabled:          theme.NewComponent("disabled", theme.Default.Foreground(theme.ColorDisabledForeground)),
+		stFilter:            theme.NewComponent("filter", theme.Default.Background(theme.ColorSelectedUnfocusedBackground)),
+		stFilterActive:      theme.NewComponent("filter-active", theme.Default.Background(theme.ColorSelectedFocusedBackground)),
 	}
 	lt.Render()
 	return lt
@@ -251,8 +278,24 @@ func (lt *ListTable) SelectedRow() commander.Row {
 	return nil
 }
 
+// deprecated
 func (lt *ListTable) SetStyler(styler commander.ListViewStyler) {
 	lt.styler = styler
+}
+
+func (lt *ListTable) rowStyle(row commander.Row) commander.Style {
+	if row.Id() == lt.SelectedRowId() {
+		if lt.IsFocused() {
+			return lt.stSelectedFocused.Style()
+		} else {
+			return lt.stSelectedUnfocused.Style()
+		}
+	}
+	if row != nil && !row.Enabled() {
+		return lt.stDisabled.Style()
+	}
+	return lt.stRow.Style()
+
 }
 
 func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
@@ -434,11 +477,11 @@ func (lt *ListTable) Draw() {
 	}
 	sizes := lt.getColumnSizes()
 	if lt.format.Has(WithHeaders) {
-		lt.drawRow(index, lt.table.headers, sizes, lt.styler(lt, nil))
+		lt.drawRow(index, lt.table.headers, sizes, lt.stHeader.Style())
 		index++
 	}
 	for rowId := lt.topRow; rowId < lt.topRow+lt.tableHeight() && rowId < len(lt.table.rows); rowId++ {
-		lt.drawRow(index, lt.table.values[rowId], sizes, lt.styler(lt, lt.table.rows[rowId]))
+		lt.drawRow(index, lt.table.values[rowId], sizes, lt.rowStyle(lt.table.rows[rowId]))
 		index++
 	}
 	lt.preloader.Draw()
@@ -447,11 +490,11 @@ func (lt *ListTable) Draw() {
 func (lt *ListTable) drawFilter(y int) {
 	str := "/" + lt.filter
 	x := 0
-	st := theme.Default
+	var st commander.Style
 	if lt.filterMode {
-		st = st.Background(theme.ColorActiveFocusedBackground)
+		st = lt.stFilterActive.Style()
 	} else {
-		st = st.Background(theme.ColorActiveUnfocusedBackground)
+		st = lt.stFilter.Style()
 	}
 	for _, ch := range str {
 		lt.view.SetContent(x, y, ch, nil, st)

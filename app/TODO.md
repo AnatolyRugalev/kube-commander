@@ -10,6 +10,8 @@
   - Allow focusing on non-focusable elements: screen, status bar, title bar (hotkeys probably?)
   - Save themes?
 * Build default theme
+* Status bar flash timer
+* Welcome message with hint to read help page
 
 ## Minor
 * Port-forward in background (Port manager)
