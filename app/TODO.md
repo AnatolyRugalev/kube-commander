@@ -4,13 +4,12 @@
 * Confirmation mechanism (popup/status question)
 * Deletion
 * Theme editor
-  - Widget contains 'Stylable' components
-  - Hotkeys to cycle through fg, bg and modifiers of current component
-  - Hotkeys to cycle through components inside focused widget
-  - Allow focusing on non-focusable elements: screen, status bar, title bar (hotkeys probably?)
-  - Save themes?
+  - [X] Widget contains 'Stylable' components
+  - [X] Hotkeys to cycle through fg, bg and modifiers of current component
+  - [X] Hotkeys to cycle through components inside focused widget
+  - [ ] Allow focusing on non-focusable elements: screen, status bar, title bar (hotkeys probably?)
+  - [ ] Save / Load themes
 * Build default theme
-* Save / Load theme to file
 * Status bar flash timer
 * Welcome message with hint to read help page
 
