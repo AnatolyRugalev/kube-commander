@@ -58,6 +58,21 @@ type client struct {
 	resources commander.ResourceMap
 }
 
+func (c client) Delete(resource *commander.Resource, namespace string, name string) error {
+	req, err := c.NewRequest(resource)
+	if err != nil {
+		return err
+	}
+	req.
+		Verb("DELETE").
+		Name(name)
+	if resource.Namespaced {
+		req.Namespace(namespace)
+	}
+	res := req.Do()
+	return res.Error()
+}
+
 func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) {
 	restClient, err := c.rest(resource.GroupVersion())
 	if err != nil {

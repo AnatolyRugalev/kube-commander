@@ -41,6 +41,10 @@ func (r *ResourceListTable) SetExtraRows(rows map[int]commander.Row) {
 }
 
 func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
+	if event.Key() == tcell.KeyDelete {
+		go r.delete(row)
+		return true
+	}
 	switch event.Rune() {
 	case 'd':
 		go r.describe(row)
@@ -242,4 +246,28 @@ func (r ResourceListTable) copy(row commander.Row) {
 		return
 	}
 	r.container.Status().Info(fmt.Sprintf("Resource name copied! '%s'", metadata.Name))
+}
+
+func (r ResourceListTable) delete(row commander.Row) {
+	metadata, err := r.RowMetadata(row)
+	if err != nil {
+		r.container.Status().Error(err)
+		return
+	}
+	var displayName string
+	if r.resource.Namespaced {
+		displayName = fmt.Sprintf("%s %s/%s", r.resource.Gvk.Kind, metadata.Namespace, metadata.Name)
+	} else {
+		displayName = fmt.Sprintf("%s %s", r.resource.Gvk.Kind, metadata.Name)
+	}
+	if r.container.Status().Confirm(fmt.Sprintf("You are about to delete %s. Are you sure? (y/N)", displayName)) {
+		err := r.container.Client().Delete(r.resource, metadata.Namespace, metadata.Name)
+		if err != nil {
+			r.container.Status().Error(err)
+		} else {
+			r.container.Status().Info("Deleted.")
+		}
+	} else {
+		r.container.Status().Info("Cancelled.")
+	}
 }

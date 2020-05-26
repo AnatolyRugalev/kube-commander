@@ -10,6 +10,7 @@ import (
 type Client interface {
 	NewRequest(resource *Resource) (*rest.Request, error)
 	Get(resource *Resource, namespace string, name string, out runtime.Object) error
+	Delete(resource *Resource, namespace string, name string) error
 	List(resource *Resource, namespace string, out runtime.Object) error
 	ListAsTable(resource *Resource, namespace string) (*metav1.Table, error)
 	WatchAsTable(resource *Resource, namespace string) (watch.Interface, error)

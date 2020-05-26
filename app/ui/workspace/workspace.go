@@ -118,6 +118,9 @@ func (w workspace) Resize() {
 }
 
 func (w *workspace) HandleEvent(e tcell.Event) bool {
+	if w.Status().HandleEvent(e) {
+		return true
+	}
 	if w.focus.HandleEvent(e, w.popup == nil) {
 		return true
 	}
