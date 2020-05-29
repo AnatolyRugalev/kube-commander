@@ -1,8 +1,6 @@
 # TODO
 
 ## Major
-* Namespace list sorting
-* Update .gif
 * Tag a new release
 
 ## Minor
