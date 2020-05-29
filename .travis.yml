@@ -23,7 +23,6 @@ after_success:
   - openssl aes-256-cbc -K $encrypted_6ac5d215f818_key -iv $encrypted_6ac5d215f818_iv -in ci/snap.login.enc -out ci/snap.login -d
   - snapcraft login --with ci/snap.login
 
-if: tag IS present
 
 deploy:
   - provider: script
