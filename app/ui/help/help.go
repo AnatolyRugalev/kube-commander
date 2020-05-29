@@ -26,12 +26,12 @@ var text = `kube-commander - browse your Kubernetes cluster in a casual way!
 Global:
  ?: Shows help dialog             D: Describe selected resource
  Q: Quit                          E: Edit selected resource
- Ctrl+N or F2: Change namespace   Delete: Delete resource (with confirmation)
+ Ctrl+N or F2: Switch namespace   C: Copy resource name to the clipboard
+                                  Delete: Delete resource (with confirmation)
 
 Navigation:
  ↑↓→←: List navigation            /: Filter resources
  Enter: Select menu item          Esc, Backspace: Go back
- C: Copy resource name to the clipboard
 
 Resource types navigation:
  Ctrl+P: Pods

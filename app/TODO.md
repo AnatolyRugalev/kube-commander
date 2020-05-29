@@ -1,6 +1,12 @@
 # TODO
 
 ## Major
+* Namespace list sorting
+* Update .gif
+* Tag a new release
+
+## Minor
+* Enhance status bar
 * Theme editor
   - [X] Widget contains 'Stylable' components
   - [X] Hotkeys to cycle through fg, bg and modifiers of current component
@@ -9,10 +15,8 @@
   - [ ] Save / Load themes
   - [ ] Theme file format (protobuf based)
 * Build default theme
-* Status bar flash timer
 * Welcome message with hint to read help page
-
-## Minor
+* Status bar flash timer
 * Port-forward in background (Port manager)
 * Consider SSH to node support
 * List table scrolling arrows

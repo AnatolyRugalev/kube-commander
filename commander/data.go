@@ -5,6 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"time"
 )
 
 type Operation interface {
@@ -24,8 +25,9 @@ type OpInitFinished struct{}
 func (o OpInitFinished) Operation() {}
 
 type OpAdded struct {
-	Row   Row
-	Index *int
+	Row      Row
+	Index    *int
+	SortById bool
 }
 
 func (o OpAdded) Operation() {}
@@ -64,6 +66,7 @@ func NewKubernetesRow(row metav1.TableRow) (*KubernetesRow, error) {
 	for _, cell := range row.Cells {
 		cells = append(cells, cast.ToString(cell))
 	}
+
 	return &KubernetesRow{md: &md, cells: cells}, nil
 }
 
@@ -76,6 +79,10 @@ func (k KubernetesRow) Id() string {
 
 func (k KubernetesRow) Cells() []string {
 	return k.cells
+}
+
+func (k KubernetesRow) Age() time.Duration {
+	return time.Now().Sub(k.md.CreationTimestamp.Time)
 }
 
 func (k KubernetesRow) Enabled() bool {

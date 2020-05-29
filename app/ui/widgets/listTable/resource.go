@@ -41,8 +41,13 @@ func (r *ResourceListTable) SetExtraRows(rows map[int]commander.Row) {
 }
 
 func (r *ResourceListTable) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
-	if event.Key() == tcell.KeyDelete {
+	switch event.Key() {
+	case tcell.KeyDelete:
 		go r.delete(row)
+		return true
+	case tcell.KeyCtrlR:
+		r.OnHide()
+		r.OnShow()
 		return true
 	}
 	switch event.Rune() {
@@ -70,6 +75,60 @@ func (r *ResourceListTable) OnHide() {
 	close(r.stopWatchCh)
 }
 
+func (r *ResourceListTable) watch(restartChan chan bool) {
+	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
+	if err != nil {
+		r.container.Status().Error(err)
+		return
+	}
+
+	go func() {
+		defer watcher.Stop()
+		for {
+			select {
+			case <-r.stopWatchCh:
+				close(restartChan)
+				return
+			case event, ok := <-watcher.ResultChan():
+				if !ok {
+					restartChan <- true
+					return
+				}
+				if event.Type == watch.Error {
+					err := apierrs.FromObject(event.Object)
+					r.container.Status().Error(fmt.Errorf("error while watching: %w", err))
+					restartChan <- true
+					return
+				}
+				var ops []commander.Operation
+				rows, err := r.extractRows(event)
+				if err != nil {
+					r.container.Status().Error(err)
+					close(restartChan)
+					return
+				}
+				switch event.Type {
+				case watch.Added:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpAdded{Row: row, SortById: true})
+					}
+				case watch.Modified:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpModified{Row: row})
+					}
+				case watch.Deleted:
+					for _, row := range rows {
+						ops = append(ops, &commander.OpDeleted{RowId: row.Id()})
+					}
+				}
+				if len(ops) > 0 {
+					r.rowProvider <- ops
+				}
+			}
+		}
+	}()
+}
+
 func (r *ResourceListTable) provideRows() {
 	r.rowProvider <- []commander.Operation{&commander.OpInitStart{}}
 
@@ -95,57 +154,21 @@ func (r *ResourceListTable) provideRows() {
 	if r.format.Has(NoWatch) {
 		return
 	}
-	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
-	if err != nil {
-		r.container.Status().Error(err)
-		return
-	}
-	go func() {
-		defer watcher.Stop()
-		for {
-			select {
-			case <-r.stopWatchCh:
+	restartWatcher := make(chan bool)
+	go r.watch(restartWatcher)
+	for {
+		select {
+		case _, ok := <-restartWatcher:
+			if !ok {
 				return
-			case event, ok := <-watcher.ResultChan():
-				if !ok {
-					// TODO: restart watcher
-					return
-				}
-				if event.Type == watch.Error {
-					err := apierrs.FromObject(event.Object)
-					r.container.Status().Error(fmt.Errorf("error while watching: %w", err))
-					return
-				}
-				var ops []commander.Operation
-				rows, err := r.extractRows(event)
-				if err != nil {
-					r.container.Status().Error(err)
-					return
-				}
-				switch event.Type {
-				case watch.Added:
-					for _, row := range rows {
-						ops = append(ops, &commander.OpAdded{Row: row})
-					}
-				case watch.Modified:
-					for _, row := range rows {
-						ops = append(ops, &commander.OpModified{Row: row})
-					}
-				case watch.Deleted:
-					for _, row := range rows {
-						ops = append(ops, &commander.OpDeleted{RowId: row.Id()})
-					}
-				}
-				if len(ops) > 0 {
-					r.rowProvider <- ops
-				}
 			}
+			go r.watch(restartWatcher)
 		}
-	}()
+	}
 }
 
-func (r *ResourceListTable) extractRows(event watch.Event) ([]commander.Row, error) {
-	var rows []commander.Row
+func (r *ResourceListTable) extractRows(event watch.Event) ([]*commander.KubernetesRow, error) {
+	var rows []*commander.KubernetesRow
 	table, ok := event.Object.(*metav1.Table)
 	if ok {
 		for _, row := range table.Rows {

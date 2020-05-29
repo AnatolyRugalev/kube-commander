@@ -2,6 +2,7 @@ package listTable
 
 import (
 	"errors"
+	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
@@ -9,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/views"
 	"github.com/mattn/go-runewidth"
 	"strings"
+	"time"
 )
 
 type (
@@ -69,6 +71,7 @@ type ListTable struct {
 
 	view       views.View
 	columns    []string
+	ageCol     int
 	rows       []commander.Row
 	rowIndex   map[string]int
 	selectedId string
@@ -125,6 +128,7 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 		Focusable: focus.NewFocusable(),
 		format:    format,
 		rowIndex:  make(map[string]int),
+		ageCol:    -1,
 
 		onKeyEvent:   DefaultRowKeyEventFunc,
 		onChange:     DefaultRowFunc,
@@ -160,6 +164,8 @@ func (lt *ListTable) OnHide() {
 }
 
 func (lt *ListTable) watch() {
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-lt.stopCh:
@@ -182,12 +188,16 @@ func (lt *ListTable) watch() {
 						lt.columns = op.Columns
 						changed = true
 					}
+					lt.setAgeCol()
 				case *commander.OpAdded:
 					index, ok := lt.rowIndex[op.Row.Id()]
 					if !ok {
 						if op.Index == nil {
-							// Append to the end if no index provided
-							index = len(lt.rows)
+							if op.SortById {
+								index = lt.getRowIndex(op.Row)
+							} else {
+								index = len(lt.rows)
+							}
 						} else {
 							index = *op.Index
 						}
@@ -241,6 +251,15 @@ func (lt *ListTable) watch() {
 			if changed {
 				lt.Render()
 				lt.reindexSelection()
+				if lt.updater != nil {
+					lt.updater.Resize()
+					lt.updater.UpdateScreen()
+				}
+			}
+		case <-ticker.C:
+			// Periodically update list to ensure that age is somewhat relevant
+			if lt.ageCol != -1 {
+				lt.Render()
 				if lt.updater != nil {
 					lt.updater.Resize()
 					lt.updater.UpdateScreen()
@@ -407,14 +426,17 @@ func (lt *ListTable) renderTable() table {
 		if !lt.matchFilter(row) {
 			continue
 		}
+		cells := row.Cells()
+		ageRow, _ := row.(commander.RowWithAge)
 		var mRow []string
 		for colId := range lt.columns {
 			var (
 				err   error
 				value string
 			)
-			cells := row.Cells()
-			if colId > len(cells)-1 {
+			if colId == lt.ageCol && ageRow != nil {
+				value = lt.renderAge(ageRow.Age())
+			} else if colId > len(cells)-1 {
 				err = errors.New("no val")
 			} else {
 				value = cells[colId]
@@ -731,4 +753,39 @@ func (lt *ListTable) Size() (int, int) {
 		h = 1
 	}
 	return w, h
+}
+
+func (lt *ListTable) getRowIndex(r commander.Row) int {
+	for i, row := range lt.rows {
+		if strings.Compare(row.Id(), r.Id()) != 1 {
+			return i
+		}
+	}
+	return len(lt.rows)
+}
+
+func (lt *ListTable) setAgeCol() {
+	for i, n := range lt.columns {
+		if n == "Age" {
+			lt.ageCol = i
+			return
+		}
+	}
+	lt.ageCol = -1
+}
+
+func (lt *ListTable) renderAge(age time.Duration) string {
+	if age > time.Hour*24 {
+		days := age.Nanoseconds() / (time.Hour * 24).Nanoseconds()
+		return fmt.Sprintf("%dd", days)
+	}
+	if age > time.Hour {
+		hours := age.Nanoseconds() / time.Hour.Nanoseconds()
+		return fmt.Sprintf("%dh", hours)
+	}
+	if age > time.Minute {
+		minutes := age.Nanoseconds() / time.Minute.Nanoseconds()
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%ds", int(age.Seconds()))
 }

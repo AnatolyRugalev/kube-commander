@@ -1,11 +1,17 @@
 package commander
 
+import "time"
+
 type RowProvider chan []Operation
 
 type Row interface {
 	Id() string
 	Cells() []string
 	Enabled() bool
+}
+
+type RowWithAge interface {
+	Age() time.Duration
 }
 
 type simpleRow struct {
