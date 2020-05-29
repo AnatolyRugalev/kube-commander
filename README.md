@@ -15,16 +15,12 @@
 |                                           | kube-commander           | kubernetes-dashboard     |
 |-------------------------------------------|--------------------------|--------------------------|
 | Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
-| Doesn't require installation into cluster | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Doesn't require deployment                | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Doesn't require web access to cluster     | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Responsiveness                            | :zap:                    | :turtle:                 |
-| Mouse support                             | :heavy_check_mark:       | :heavy_check_mark:       |
-| Keyboard-only interactions                | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Auto-refresh working properly             | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Written on Go                             | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Charts and metrics support                | :hammer: [#6](https://github.com/AnatolyRugalev/kube-commander/issues/6)|:heavy_check_mark:|
 
 ## Installation
 

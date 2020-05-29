@@ -761,7 +761,7 @@ func (lt *ListTable) getRowIndex(r commander.Row) int {
 			return i
 		}
 	}
-	return len(lt.rows)
+	return 0
 }
 
 func (lt *ListTable) setAgeCol() {
