@@ -83,12 +83,14 @@ kube-commander
 To start kube-commander with non-default kubectl context, namespace or config itself you can use this flags
 and env vars:
 
-| Flag      | Env var     | Description                        |
-|-----------|-------------|------------------------------------|
-|kubeconfig |KUBECONFIG   |Path to kubeconfig                  |
-|context    |KUBECONTEXT  |Context name                        |
-|namespace  |KUBENAMESPACE|Initial namespace to show           |
-|debug      |KUBEDEBUG    |Boolean, enables debugging to stderr|
+| Flag      | Env var     | Description                                                                                   |
+|-----------|-------------|-----------------------------------------------------------------------------------------------|
+|kubeconfig |KUBECONFIG   |Path to kubeconfig                                                                             |
+|context    |KUBECONTEXT  |Context name                                                                                   |
+|namespace  |KUBENAMESPACE|Initial namespace to show                                                                      |
+|editor     |EDITOR       |Name of the editor binary. Default: "vi". But you probably already have one defined by your OS |
+|pager      |PAGER        |Name of the pager binary. Default: "less"                                                      |
+|kubectl    |KUBECTL      |Name of kubectl binary. Default: "kubectl"                                                     |
 
 Example:
 
@@ -146,7 +148,6 @@ The most of hotkeys you can find on help dialog. Here they are:
 We play by gentleman rules. If you want to contribute a code - please file an issue describing your intentions first.
 This way we can avoid wasting time doing easy work the hard way. I'm always open to give my point of view on your ideas.
 
- 
 ## Special thanks
 
 * [tcell](https://github.com/gdamore/tcell) - TUI library
