@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"github.com/AnatolyRugalev/kube-commander/commander"
 	"os/exec"
 	"strconv"
 )
