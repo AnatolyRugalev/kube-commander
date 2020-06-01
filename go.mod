@@ -12,8 +12,8 @@ require (
 	github.com/spf13/cast v1.3.0
 	github.com/spf13/cobra v0.0.6
 	google.golang.org/appengine v1.6.1 // indirect
-	k8s.io/api v0.17.2
-	k8s.io/apimachinery v0.17.2
-	k8s.io/client-go v0.17.2
+	k8s.io/api v0.18.3
+	k8s.io/apimachinery v0.18.3
+	k8s.io/client-go v0.18.3
 	k8s.io/kubectl v0.17.2
 )
