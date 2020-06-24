@@ -40,4 +40,5 @@ snapcrafts:
       kube-commander is a TUI utility which provides an easy way to browse and manage any kubernetes cluster accessible
       by kubectl
     grade: stable
+    confinement: classic
     license: MIT
