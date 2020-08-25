@@ -13,6 +13,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type workspace struct {
@@ -153,7 +154,7 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 
 func (w *workspace) Init() error {
 	resMap := client.CoreResources()
-	w.namespaceResource = resMap["Namespace"]
+	w.namespaceResource = resMap[schema.GroupKind{Kind: "Namespace"}]
 
 	resMenu, err := resourceMenu.NewResourcesMenu(w, w.onMenuSelect, func() {
 		namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)

@@ -5,7 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type ResourceMap map[string]*Resource
+type ResourceMap map[schema.GroupKind]*Resource
 
 type ResourceProvider interface {
 	Resources() (ResourceMap, error)
@@ -14,6 +14,7 @@ type ResourceProvider interface {
 type Resource struct {
 	Namespaced bool
 	Resource   string
+	Gk         schema.GroupKind
 	Gvk        schema.GroupVersionKind
 }
 

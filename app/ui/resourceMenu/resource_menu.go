@@ -6,23 +6,20 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"strings"
 )
 
-type item interface {
-	commander.Row
-	OnSelect() bool
-}
-
 type resourceItem struct {
 	title      string
+	gk         schema.GroupKind
 	resource   *commander.Resource
 	widget     commander.Widget
 	decoration string
 }
 
 func (r resourceItem) Id() string {
-	return r.title
+	return r.gk.String()
 }
 
 func (r resourceItem) Cells() []string {
@@ -70,38 +67,38 @@ var (
 			return pod.NewPodsList(workspace, resource, format)
 		},
 	}
-	clusterKinds = []string{
-		"Namespace",
-		"Node",
-		"StorageClass",
-		"PersistentVolume",
+	clusterGKs = []schema.GroupKind{
+		{Kind: "Namespace", Group: ""},
+		{Kind: "Node", Group: ""},
+		{Kind: "StorageClass", Group: "storage.k8s.io"},
+		{Kind: "PersistentVolume", Group: ""},
 	}
-	namespacedKinds = []string{
-		"Deployment",
-		"StatefulSet",
-		"DaemonSet",
-		"ReplicaSet",
-		"Pod",
-		"CronJob",
-		"Job",
-		"PersistentVolumeClaim",
-		"ConfigMap",
-		"Secret",
-		"Service",
-		"Ingress",
-		"ServiceAccount",
+	namespacedGKs = []schema.GroupKind{
+		{Kind: "Deployment", Group: "apps"},
+		{Kind: "StatefulSet", Group: "apps"},
+		{Kind: "DaemonSet", Group: "apps"},
+		{Kind: "ReplicaSet", Group: "apps"},
+		{Kind: "Pod", Group: ""},
+		{Kind: "CronJob", Group: "batch"},
+		{Kind: "Job", Group: "batch"},
+		{Kind: "PersistentVolumeClaim", Group: ""},
+		{Kind: "ConfigMap", Group: ""},
+		{Kind: "Secret", Group: ""},
+		{Kind: "Service", Group: ""},
+		{Kind: "Ingress", Group: "networking.k8s.io"},
+		{Kind: "ServiceAccount", Group: ""},
 	}
 	knownTitles = map[string]string{
 		"Namespace":             "Namespaces",
 		"Node":                  "Nodes",
-		"StorageClass":          "Storage Classes",
-		"PersistentVolume":      "PVs",
+		"StorageClass":          "Storage",
+		"PersistentVolume":      "Volumes",
 		"Deployment":            "Deployments",
 		"StatefulSet":           "Stateful",
 		"DaemonSet":             "Daemons",
 		"ReplicaSet":            "Replicas",
 		"Pod":                   "Pods",
-		"CronJob":               "Cron",
+		"CronJob":               "Cron Jobs",
 		"Job":                   "Jobs",
 		"PersistentVolumeClaim": "PVCs",
 		"ConfigMap":             "Configs",
@@ -119,10 +116,10 @@ type SelectFunc func(itemId string, widget commander.Widget) bool
 type ResourceMenu struct {
 	*listTable.ListTable
 
-	clusterItems    []item
-	namespacedItems []item
-
-	itemIndex map[string]item
+	clusterItems         int
+	extraClusterItems    []*resourceItem
+	extraNamespacedItems []*resourceItem
+	showExtra            bool
 
 	onSelect        SelectFunc
 	selectNamespace func()
@@ -134,7 +131,7 @@ type ResourceMenu struct {
 
 func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, selectNamespace func(), resourceProvider commander.ResourceProvider) (*ResourceMenu, error) {
 	prov := make(commander.RowProvider)
-	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll, workspace.ScreenUpdater())
+	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll|listTable.WithFilter, workspace.ScreenUpdater())
 	r := &ResourceMenu{
 		ListTable:       lt,
 		onSelect:        onSelect,
@@ -148,7 +145,6 @@ func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, select
 }
 
 func (r *ResourceMenu) provideItems() {
-	defer close(r.rowProvider)
 	var ops []commander.Operation
 
 	ops = append(ops,
@@ -158,8 +154,9 @@ func (r *ResourceMenu) provideItems() {
 	)
 
 	cluster, namespaced := r.splitResources(client.CoreResources())
-	clusterItems := r.buildResourceItems(cluster, clusterKinds)
-	namespacedItems := r.buildResourceItems(namespaced, namespacedKinds)
+	clusterItems, _ := r.buildResourceItems(cluster, clusterGKs)
+	r.clusterItems = len(clusterItems)
+	namespacedItems, _ := r.buildResourceItems(namespaced, namespacedGKs)
 	for _, item := range clusterItems {
 		item.decoration = " "
 		ops = append(ops, &commander.OpAdded{Row: item})
@@ -182,8 +179,8 @@ func (r *ResourceMenu) provideItems() {
 	}
 	ops = []commander.Operation{}
 	cluster, namespaced = r.splitResources(serverResources)
-	clusterItems = r.buildResourceItems(cluster, clusterKinds)
-	namespacedItems = r.buildResourceItems(namespaced, namespacedKinds)
+	clusterItems, r.extraClusterItems = r.buildResourceItems(cluster, clusterGKs)
+	namespacedItems, r.extraNamespacedItems = r.buildResourceItems(namespaced, namespacedGKs)
 	for _, item := range clusterItems {
 		item.decoration = " "
 		ops = append(ops, &commander.OpModified{Row: item})
@@ -236,33 +233,84 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 		}
 		return true
 	}
+	if event.Key() == tcell.KeyF3 {
+		go r.toggleExtra()
+		return true
+	}
 	return false
 }
 
+func (r *ResourceMenu) toggleExtra() {
+	var ops []commander.Operation
+	if r.showExtra {
+		for _, item := range r.extraClusterItems {
+			ops = append(ops, &commander.OpDeleted{
+				RowId: item.Id(),
+			})
+		}
+		for _, item := range r.extraNamespacedItems {
+			ops = append(ops, &commander.OpDeleted{
+				RowId: item.Id(),
+			})
+		}
+	} else {
+		for i, item := range r.extraClusterItems {
+			index := r.clusterItems + i
+			ops = append(ops, &commander.OpAdded{
+				Row:   item,
+				Index: &index,
+			})
+		}
+		for _, item := range r.extraNamespacedItems {
+			ops = append(ops, &commander.OpAdded{
+				Row:      item,
+				SortById: false,
+			})
+		}
+	}
+	r.rowProvider <- ops
+	r.showExtra = !r.showExtra
+}
 func (r *ResourceMenu) SelectItem(id string) {
 	r.ListTable.SelectId(id)
 }
 
-func (r *ResourceMenu) buildResourceItems(resources commander.ResourceMap, order []string) []*resourceItem {
+func (r *ResourceMenu) buildResourceItems(resources commander.ResourceMap, gks []schema.GroupKind) ([]*resourceItem, []*resourceItem) {
 	var items []*resourceItem
-	for _, kind := range order {
-		title, ok := knownTitles[kind]
-		if !ok {
-			title = plural(kind)
+	var leftovers []*resourceItem
+	visited := make(map[string]struct{})
+	for _, gk := range gks {
+		res := resources[gk]
+		items = append(items, r.buildItem(gk, res))
+		if res != nil {
+			visited[res.Gvk.String()] = struct{}{}
 		}
-
-		item := &resourceItem{
-			title: title,
-		}
-		if res, ok := resources[kind]; ok {
-			constructor, ok := CustomWidgets[kind]
-			if !ok {
-				constructor = StandardWidget
-			}
-			item.resource = res
-			item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders|listTable.WithFilter)
-		}
-		items = append(items, item)
 	}
-	return items
+	for kind, res := range resources {
+		if _, ok := visited[res.Gvk.String()]; ok {
+			continue
+		}
+		leftovers = append(leftovers, r.buildItem(kind, res))
+	}
+	return items, leftovers
+}
+
+func (r *ResourceMenu) buildItem(gk schema.GroupKind, res *commander.Resource) *resourceItem {
+	title, ok := knownTitles[gk.Kind]
+	if !ok {
+		title = plural(gk.Kind)
+	}
+	item := &resourceItem{
+		title: title,
+		gk:    gk,
+	}
+	if res != nil {
+		constructor, ok := CustomWidgets[res.Gvk.Kind]
+		if !ok {
+			constructor = StandardWidget
+		}
+		item.resource = res
+		item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders|listTable.WithFilter)
+	}
+	return item
 }

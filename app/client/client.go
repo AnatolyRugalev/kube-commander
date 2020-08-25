@@ -101,9 +101,11 @@ func (c client) Resources() (commander.ResourceMap, error) {
 					return nil, err
 				}
 
-				resources[res.Kind] = &commander.Resource{
+				gk := schema.GroupKind{Group: gv.Group, Kind: res.Kind}
+				resources[gk] = &commander.Resource{
 					Namespaced: res.Namespaced,
 					Resource:   res.Name,
+					Gk:         gk,
 					Gvk:        schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind},
 				}
 			}
@@ -143,15 +145,13 @@ func (c client) ListAsTable(ctx context.Context, resource *commander.Resource, n
 }
 
 func (c client) List(ctx context.Context, resource *commander.Resource, namespace string, out runtime.Object) error {
-	opts := metav1.ListOptions{}
 	req, err := c.NewRequest(resource)
 	if err != nil {
 		return err
 	}
 
 	req.
-		Verb("GET").
-		VersionedParams(&opts, scheme.ParameterCodec)
+		Verb("GET")
 	switch out.(type) {
 	case *metav1.Table:
 		req.SetHeader("Accept", strings.Join([]string{
