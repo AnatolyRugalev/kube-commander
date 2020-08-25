@@ -757,7 +757,7 @@ func (lt *ListTable) Size() (int, int) {
 
 func (lt *ListTable) getRowIndex(r commander.Row) int {
 	for i, row := range lt.rows {
-		if strings.Compare(row.Id(), r.Id()) != 1 {
+		if strings.Compare(r.Id(), row.Id()) != 1 {
 			return i
 		}
 	}
