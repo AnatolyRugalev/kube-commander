@@ -1,6 +1,7 @@
 package listTable
 
 import (
+	"context"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/atotto/clipboard"
@@ -76,7 +77,7 @@ func (r *ResourceListTable) OnHide() {
 }
 
 func (r *ResourceListTable) watch(restartChan chan bool) {
-	watcher, err := r.container.Client().WatchAsTable(r.resource, r.container.CurrentNamespace())
+	watcher, err := r.container.Client().WatchAsTable(context.TODO(), r.resource, r.container.CurrentNamespace())
 	if err != nil {
 		r.container.Status().Error(err)
 		return
@@ -183,7 +184,7 @@ func (r *ResourceListTable) extractRows(event watch.Event) ([]*commander.Kuberne
 }
 
 func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error) {
-	table, err := r.container.Client().ListAsTable(r.resource, r.container.CurrentNamespace())
+	table, err := r.container.Client().ListAsTable(context.TODO(), r.resource, r.container.CurrentNamespace())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -284,7 +285,7 @@ func (r ResourceListTable) delete(row commander.Row) {
 		displayName = fmt.Sprintf("%s %s", r.resource.Gvk.Kind, metadata.Name)
 	}
 	if r.container.Status().Confirm(fmt.Sprintf("You are about to delete %s. Are you sure? (y/N)", displayName)) {
-		err := r.container.Client().Delete(r.resource, metadata.Namespace, metadata.Name)
+		err := r.container.Client().Delete(context.TODO(), r.resource, metadata.Namespace, metadata.Name)
 		if err != nil {
 			r.container.Status().Error(err)
 		} else {
