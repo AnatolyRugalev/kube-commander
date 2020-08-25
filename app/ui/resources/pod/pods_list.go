@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"context"
 	"errors"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/commander"
@@ -52,7 +53,7 @@ func (p PodsList) getPod(row commander.Row) (*v1.Pod, error) {
 		return nil, err
 	}
 	pod := v1.Pod{}
-	err = p.workspace.Client().Get(p.resource, metadata.Namespace, metadata.Name, &pod)
+	err = p.workspace.Client().Get(context.TODO(), p.resource, metadata.Namespace, metadata.Name, &pod)
 	if err != nil {
 		return nil, err
 	}

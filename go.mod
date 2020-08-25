@@ -7,13 +7,15 @@ require (
 	github.com/gdamore/tcell v1.3.1-0.20200315173632-8ec73b6fa6c5
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
-	github.com/kr/text v0.1.0
-	github.com/mattn/go-runewidth v0.0.7
-	github.com/spf13/cast v1.3.0
-	github.com/spf13/cobra v0.0.6
+	github.com/kr/text v0.2.0
+	github.com/mattn/go-runewidth v0.0.9
+	github.com/spf13/cast v1.3.1
+	github.com/spf13/cobra v0.0.7
 	google.golang.org/appengine v1.6.1 // indirect
-	k8s.io/api v0.17.2
-	k8s.io/apimachinery v0.17.2
-	k8s.io/client-go v0.17.2
-	k8s.io/kubectl v0.17.2
+	k8s.io/api v0.18.3
+	k8s.io/apimachinery v0.18.3
+	k8s.io/client-go v0.18.3
+	k8s.io/klog v1.0.0
+	k8s.io/kubectl v0.18.3
+	sigs.k8s.io/structured-merge-diff v0.0.0-20190525122527-15d366b2352e // indirect
 )

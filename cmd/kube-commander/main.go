@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app"
 	"github.com/AnatolyRugalev/kube-commander/app/builder"
@@ -8,6 +9,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/app/executor"
 	"github.com/spf13/cobra"
 	cmd "k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 	"os"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
@@ -25,6 +27,8 @@ var rootCmd = &cobra.Command{
 	RunE:    run,
 }
 
+var logFlags = flag.NewFlagSet("klog", flag.ExitOnError)
+
 var cfg = struct {
 	editor     string
 	pager      string
@@ -32,6 +36,7 @@ var cfg = struct {
 	kubeconfig string
 	context    string
 	namespace  string
+	klog       string
 }{}
 
 const (
@@ -40,6 +45,7 @@ const (
 	PagerEnv     = "PAGER"
 	ContextEnv   = "KUBECONTEXT"
 	NamespaceEnv = "KUBENAMESPACE"
+	KLogEnv      = "KUBELOG"
 )
 
 func main() {
@@ -64,9 +70,15 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.kubeconfig, "kubeconfig", "", os.Getenv(cmd.RecommendedConfigPathEnvVar), "Kubeconfig override")
 	rootCmd.Flags().StringVarP(&cfg.context, "context", "c", defaultEnv(ContextEnv, ""), "Context name (default: current context)")
 	rootCmd.Flags().StringVarP(&cfg.namespace, "namespace", "n", defaultEnv(NamespaceEnv, ""), "Namespace name to start with (default: from context)")
+	rootCmd.Flags().StringVarP(&cfg.klog, "klog", "", defaultEnv(KLogEnv, ""), "Log file for Kubernetes logging library")
+	klog.InitFlags(logFlags)
+	_ = logFlags.Set("logtostderr", "false")
+	_ = logFlags.Set("alsologtostderr", "false")
+	_ = logFlags.Set("v", "0")
 }
 
 func run(_ *cobra.Command, _ []string) error {
+	_ = logFlags.Set("log_file", cfg.klog)
 	_ = os.Setenv(cmd.RecommendedConfigPathEnvVar, cfg.kubeconfig)
 	conf := client.NewDefaultConfig(cfg.kubeconfig, cfg.context, cfg.namespace)
 	cl, err := client.NewClient(conf)

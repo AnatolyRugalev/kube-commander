@@ -1,9 +1,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/commander"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,8 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
-	"k8s.io/kubectl/pkg/describe"
-	"k8s.io/kubectl/pkg/describe/versioned"
 	"k8s.io/kubectl/pkg/scheme"
 	"strings"
 	"time"
@@ -58,7 +56,7 @@ type client struct {
 	resources commander.ResourceMap
 }
 
-func (c client) Delete(resource *commander.Resource, namespace string, name string) error {
+func (c client) Delete(ctx context.Context, resource *commander.Resource, namespace string, name string) error {
 	req, err := c.NewRequest(resource)
 	if err != nil {
 		return err
@@ -69,7 +67,7 @@ func (c client) Delete(resource *commander.Resource, namespace string, name stri
 	if resource.Namespaced {
 		req.Namespace(namespace)
 	}
-	res := req.Do()
+	res := req.Do(ctx)
 	return res.Error()
 }
 
@@ -115,7 +113,7 @@ func (c client) Resources() (commander.ResourceMap, error) {
 	return c.resources, nil
 }
 
-func (c client) Get(resource *commander.Resource, namespace string, name string, out runtime.Object) error {
+func (c client) Get(ctx context.Context, resource *commander.Resource, namespace string, name string, out runtime.Object) error {
 	opts := metav1.GetOptions{}
 	req, err := c.NewRequest(resource)
 	if err != nil {
@@ -128,23 +126,23 @@ func (c client) Get(resource *commander.Resource, namespace string, name string,
 	if resource.Namespaced {
 		req.Namespace(namespace)
 	}
-	err = req.Do().Into(out)
+	err = req.Do(ctx).Into(out)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c client) ListAsTable(resource *commander.Resource, namespace string) (*metav1.Table, error) {
+func (c client) ListAsTable(ctx context.Context, resource *commander.Resource, namespace string) (*metav1.Table, error) {
 	table := metav1.Table{}
-	err := c.List(resource, namespace, &table)
+	err := c.List(ctx, resource, namespace, &table)
 	if err != nil {
 		return nil, err
 	}
 	return &table, nil
 }
 
-func (c client) List(resource *commander.Resource, namespace string, out runtime.Object) error {
+func (c client) List(ctx context.Context, resource *commander.Resource, namespace string, out runtime.Object) error {
 	opts := metav1.ListOptions{}
 	req, err := c.NewRequest(resource)
 	if err != nil {
@@ -165,14 +163,14 @@ func (c client) List(resource *commander.Resource, namespace string, out runtime
 	if resource.Namespaced {
 		req.Namespace(namespace)
 	}
-	err = req.Do().Into(out)
+	err = req.Do(ctx).Into(out)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c client) WatchAsTable(resource *commander.Resource, namespace string) (watch.Interface, error) {
+func (c client) WatchAsTable(ctx context.Context, resource *commander.Resource, namespace string) (watch.Interface, error) {
 	opts := metav1.ListOptions{
 		Watch: true,
 	}
@@ -192,7 +190,7 @@ func (c client) WatchAsTable(resource *commander.Resource, namespace string) (wa
 	if resource.Namespaced {
 		req.Namespace(namespace)
 	}
-	return req.Watch()
+	return req.Watch(ctx)
 }
 
 func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {
@@ -204,32 +202,4 @@ func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {
 		conf.APIPath = "/apis"
 	}
 	return rest.RESTClientFor(&conf)
-}
-
-func (c client) DescribeApi(resource *commander.Resource, namespace string, name string) (string, error) {
-	mapping := meta.RESTMapping{
-		GroupVersionKind: resource.GroupVersionKind(),
-		Resource:         resource.GroupVersionResource(),
-		Scope:            resource.Scope(),
-	}
-	descr, err := c.describer(&mapping)
-	if err != nil {
-		return "", err
-	}
-	return descr.Describe(namespace, name, describe.DescriberSettings{
-		ShowEvents: true,
-	})
-}
-
-func (c client) describer(mapping *meta.RESTMapping) (describe.Describer, error) {
-	// try to get a describer
-	if describer, ok := versioned.DescriberFor(mapping.GroupVersionKind.GroupKind(), c.restConfig); ok {
-		return describer, nil
-	}
-	// if this is a kind we don't have a describer for yet, go generic if possible
-	if genericDescriber, ok := versioned.GenericDescriberFor(mapping, c.restConfig); ok {
-		return genericDescriber, nil
-	}
-	// otherwise return an unregistered error
-	return nil, fmt.Errorf("no description has been implemented for %s", mapping.GroupVersionKind.String())
 }
