@@ -1,16 +1,19 @@
 package executor
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/AnatolyRugalev/kube-commander/commander"
+	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/creack/pty"
+	"golang.org/x/crypto/ssh/terminal"
+
+	"github.com/AnatolyRugalev/kube-commander/commander"
 )
 
 type executor struct {
@@ -32,54 +35,58 @@ func (e *executor) Pipe(command ...*commander.Command) error {
 	return e.execute(commander.NewCommand(e.shell, "-c", strings.Join(strCmd, " | ")))
 }
 
+// execute runs given command in emulated PTY environment
+// This is required for cross-platform execution
 func (e *executor) execute(command *commander.Command) error {
-	e.Lock()
-	defer e.Unlock()
+	stderr := bytes.Buffer{}
 
 	_, _ = fmt.Fprintf(os.Stdout, "\n=========================\n")
 	_, _ = fmt.Fprintf(os.Stdout, "Executing command: %s\n", e.renderCommand(command))
-	stderr := bytes.Buffer{}
-	cmd := e.createCmd(command)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT)
+	cmd := command.ToCmd()
 
-	err := cmd.Start()
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return &commander.ExecErr{
-			Err:    fmt.Errorf("could not start process: %w", err),
+			Err:    fmt.Errorf("could not start terminal: %w", err),
 			Output: stderr.Bytes(),
 		}
 	}
-	commandPid := cmd.Process.Pid
-	killed := false
-	go func(cmd *exec.Cmd) {
-		_, ok := <-sigs
-		if !ok {
-			return
-		}
-		killed = true
-		_ = e.interruptProcess(commandPid)
-	}(cmd)
+	defer func() { _ = ptmx.Close() }()
 
-	err = cmd.Wait()
-	signal.Stop(sigs)
-	close(sigs)
-	if killed {
-		return nil
-	} else if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error executing command: %s\n", err.Error())
-		_, _ = fmt.Fprintf(os.Stderr, "Press Enter to continue...")
-		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-		_, _ = fmt.Fprintf(os.Stdout, "=========================\n")
-
-		return &commander.ExecErr{
-			Err:    fmt.Errorf("error executing command: %w", err),
-			Output: stderr.Bytes(),
-		}
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGWINCH)
+	defer signal.Stop(ch)
+	// syscall.SetNonBlock is a workaround, read below
+	err = syscall.SetNonblock(int(os.Stdin.Fd()), false)
+	if err != nil {
+		return err
 	}
+	go func() {
+		for range ch {
+			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
+				_, _ = fmt.Fprintf(os.Stdout, "error resizing pty: %s", err)
+			}
+		}
+	}()
+	ch <- syscall.SIGWINCH
+	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }()
+
+	// Copy stdin to the pty and the pty to stdout.
+	go func() {
+		_, err = io.Copy(ptmx, os.Stdin)
+	}()
+	_, _ = io.Copy(os.Stdout, ptmx)
+	// syscall.SetNonBlock is a workaround to stop copying from os.Stdin immediately when child ptmx is closing.
+	// This workaround is needed to prevent next os.Stdin byte to be eaten by copying to ptmx
+	err = syscall.SetNonblock(int(os.Stdin.Fd()), true)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
