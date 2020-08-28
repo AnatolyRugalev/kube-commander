@@ -1,16 +1,18 @@
 package executor
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/AnatolyRugalev/kube-commander/commander"
+	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/AnatolyRugalev/kube-commander/commander"
+	"github.com/creack/pty"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type executor struct {
@@ -33,53 +35,46 @@ func (e *executor) Pipe(command ...*commander.Command) error {
 }
 
 func (e *executor) execute(command *commander.Command) error {
-	e.Lock()
-	defer e.Unlock()
+	stderr := bytes.Buffer{}
 
 	_, _ = fmt.Fprintf(os.Stdout, "\n=========================\n")
 	_, _ = fmt.Fprintf(os.Stdout, "Executing command: %s\n", e.renderCommand(command))
-	stderr := bytes.Buffer{}
-	cmd := e.createCmd(command)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT)
+	cmd := command.ToCmd()
 
-	err := cmd.Start()
+	// Start the command with a pty.
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return &commander.ExecErr{
-			Err:    fmt.Errorf("could not start process: %w", err),
+			Err:    fmt.Errorf("could not start terminal: %w", err),
 			Output: stderr.Bytes(),
 		}
 	}
-	commandPid := cmd.Process.Pid
-	killed := false
-	go func(cmd *exec.Cmd) {
-		_, ok := <-sigs
-		if !ok {
-			return
-		}
-		killed = true
-		_ = e.interruptProcess(commandPid)
-	}(cmd)
+	// Make sure to close the pty at the end.
+	defer func() { _ = ptmx.Close() }() // Best effort.
 
-	err = cmd.Wait()
-	signal.Stop(sigs)
-	close(sigs)
-	if killed {
-		return nil
-	} else if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error executing command: %s\n", err.Error())
-		_, _ = fmt.Fprintf(os.Stderr, "Press Enter to continue...")
-		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-		_, _ = fmt.Fprintf(os.Stdout, "=========================\n")
-
-		return &commander.ExecErr{
-			Err:    fmt.Errorf("error executing command: %w", err),
-			Output: stderr.Bytes(),
+	// Handle pty size.
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGWINCH)
+	go func() {
+		for range ch {
+			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
+				_, _ = fmt.Fprintf(os.Stdout, "error resizing pty: %s", err)
+			}
 		}
+	}()
+	ch <- syscall.SIGWINCH // Initial resize.
+
+	// Set stdin in raw mode.
+	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return err
 	}
+	defer func() { _ = terminal.Restore(int(os.Stdin.Fd()), oldState) }() // Best effort.
+
+	// Copy stdin to the pty and the pty to stdout.
+	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
+	_, _ = io.Copy(os.Stdout, ptmx)
+
 	return nil
 }
