@@ -67,6 +67,6 @@ func NewStatus(updater commander.ScreenUpdater) *Status {
 		updater:   updater,
 		events:    make(chan *tcell.EventKey),
 	}
-	s.SetStyle(theme.Default)
+	s.SetStyle(theme.Default.Background(theme.ColorDisabledForeground))
 	return s
 }

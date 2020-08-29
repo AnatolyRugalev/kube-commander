@@ -41,6 +41,5 @@ func (l VerticalLine) Size() (int, int) {
 	if l.view == nil {
 		return 1, 1
 	}
-	_, h := l.view.Size()
-	return 1, h
+	return 1, 1
 }

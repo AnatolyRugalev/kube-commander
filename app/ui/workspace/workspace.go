@@ -19,6 +19,7 @@ import (
 type workspace struct {
 	*views.BoxLayout
 	focus.Focusable
+	view views.View
 
 	container commander.Container
 	focus     commander.FocusManager
@@ -31,6 +32,25 @@ type workspace struct {
 	namespaceResource *commander.Resource
 
 	selectedWidgetId string
+}
+
+func (w *workspace) Resize() {
+	w.BoxLayout.Resize()
+	if w.popup != nil {
+		w.popup.Reposition(w.view)
+		w.popup.Resize()
+	}
+}
+
+func (w *workspace) SetView(view views.View) {
+	w.view = view
+	w.BoxLayout.SetView(view)
+}
+
+// Size returns the preferred size in character cells (width, height).
+func (w *workspace) Size() (int, int) {
+	wi, h := w.BoxLayout.Size()
+	return wi, h
 }
 
 func (w *workspace) ResourceProvider() commander.ResourceProvider {
@@ -75,7 +95,7 @@ func (w *workspace) FocusManager() commander.FocusManager {
 }
 
 func (w *workspace) ShowPopup(title string, widget commander.MaxSizeWidget) {
-	w.popup = popup.NewPopup(w.container.Screen().View(), title, widget, func() {
+	w.popup = popup.NewPopup(w.view, title, widget, func() {
 		w.popup.OnHide()
 		w.popup = nil
 		w.UpdateScreen()
@@ -107,14 +127,6 @@ func (w workspace) Draw() {
 	w.BoxLayout.Draw()
 	if w.popup != nil {
 		w.popup.Draw()
-	}
-}
-
-func (w workspace) Resize() {
-	w.BoxLayout.Resize()
-	if w.popup != nil {
-		w.popup.Reposition(w.container.Screen().View())
-		w.popup.Resize()
 	}
 }
 

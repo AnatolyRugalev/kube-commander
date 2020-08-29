@@ -560,6 +560,7 @@ func (lt *ListTable) Render() {
 
 func (lt *ListTable) Resize() {
 	lt.Render()
+	lt.reindexSelection()
 }
 
 func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
@@ -690,11 +691,11 @@ func (lt *ListTable) SelectIndex(index int) {
 		row = lt.table.rows[index]
 	}
 	lt.selectedId = row.Id()
-	if lt.selectedRowIndex == index {
-		return
-	}
+	changed := lt.selectedRowIndex != index
 	lt.selectedRowIndex = index
-	lt.onChange(row)
+	if changed {
+		lt.onChange(row)
+	}
 
 	height := lt.tableHeight()
 	scrollThreshold := lt.topRow + height - 1

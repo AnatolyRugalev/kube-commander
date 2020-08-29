@@ -50,10 +50,6 @@ func (n namespaceSelector) Cells() []string {
 	return []string{"► " + namespace}
 }
 
-func (n namespaceSelector) OnSelect() bool {
-	panic("implement me")
-}
-
 func (n namespaceSelector) Enabled() bool {
 	return true
 }

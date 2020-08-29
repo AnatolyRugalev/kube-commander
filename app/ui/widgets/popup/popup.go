@@ -20,6 +20,8 @@ func (p *popup) OnBlur() {
 
 func (p *popup) Reposition(view commander.View) {
 	viewWidth, viewHeight := view.Size()
+	viewWidth -= 2
+	viewHeight -= 2
 	maxW, maxH := p.BorderedWidget.MaxSize()
 	x := float64(viewWidth)/2 - float64(maxW)/2
 	y := float64(viewHeight)/2 - float64(maxH)/2
