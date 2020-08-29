@@ -77,11 +77,13 @@ func (r *ResourceListTable) OnHide() {
 }
 
 func (r *ResourceListTable) watch(restartChan chan bool) {
-	watcher, err := r.container.Client().WatchAsTable(context.TODO(), r.resource, r.container.CurrentNamespace())
+	namespace := r.container.CurrentNamespace()
+	watcher, err := r.container.Client().WatchAsTable(context.TODO(), r.resource, namespace)
 	if err != nil {
 		r.container.Status().Error(err)
 		return
 	}
+	addNamespace := namespace == ""
 
 	go func() {
 		defer watcher.Stop()
@@ -102,7 +104,7 @@ func (r *ResourceListTable) watch(restartChan chan bool) {
 					return
 				}
 				var ops []commander.Operation
-				rows, err := r.extractRows(event)
+				rows, err := r.extractRows(addNamespace, event)
 				if err != nil {
 					r.container.Status().Error(err)
 					close(restartChan)
@@ -168,12 +170,12 @@ func (r *ResourceListTable) provideRows() {
 	}
 }
 
-func (r *ResourceListTable) extractRows(event watch.Event) ([]*commander.KubernetesRow, error) {
+func (r *ResourceListTable) extractRows(addNamespace bool, event watch.Event) ([]*commander.KubernetesRow, error) {
 	var rows []*commander.KubernetesRow
 	table, ok := event.Object.(*metav1.Table)
 	if ok {
 		for _, row := range table.Rows {
-			k8sRow, err := commander.NewKubernetesRow(row)
+			k8sRow, err := commander.NewKubernetesRow(row, addNamespace)
 			if err != nil {
 				return nil, err
 			}
@@ -184,14 +186,20 @@ func (r *ResourceListTable) extractRows(event watch.Event) ([]*commander.Kuberne
 }
 
 func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error) {
-	table, err := r.container.Client().ListAsTable(context.TODO(), r.resource, r.container.CurrentNamespace())
+	namespace := r.container.CurrentNamespace()
+	table, err := r.container.Client().ListAsTable(context.TODO(), r.resource, namespace)
 	if err != nil {
 		return nil, nil, err
 	}
+	addNamespace := namespace == ""
 
 	var cols []string
 	var rows []commander.Row
 	var colIds []int
+
+	if addNamespace {
+		cols = append(cols, "Namespace")
+	}
 
 	for colId, col := range table.ColumnDefinitions {
 		add := false
@@ -210,7 +218,7 @@ func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error
 	}
 
 	for _, row := range table.Rows {
-		k8sRow, err := commander.NewKubernetesRow(row)
+		k8sRow, err := commander.NewKubernetesRow(row, addNamespace)
 		if err != nil {
 			return nil, nil, err
 		}

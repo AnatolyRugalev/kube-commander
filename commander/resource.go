@@ -16,6 +16,7 @@ type Resource struct {
 	Resource   string
 	Gk         schema.GroupKind
 	Gvk        schema.GroupVersionKind
+	Verbs      []string
 }
 
 func (r Resource) GroupVersion() schema.GroupVersion {

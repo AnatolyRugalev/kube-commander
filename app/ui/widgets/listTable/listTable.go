@@ -389,6 +389,12 @@ func (lt *ListTable) tableHeight() int {
 
 func (lt *ListTable) MaxSize() (w int, h int) {
 	w = lt.table.dataWidth + len(lt.table.columnDataWidths) - 1
+	if lt.filterMode {
+		filterLen := len(lt.filter) + 1
+		if w < filterLen {
+			w = filterLen
+		}
+	}
 
 	h = lt.table.dataHeight
 	if lt.format.Has(WithHeaders) {
@@ -595,7 +601,7 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			return true
 		}
 		if lt.format.Has(WithFilter) {
-			if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc {
+			if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc && lt.IsFocused() {
 				lt.resetFilter()
 				return true
 			}

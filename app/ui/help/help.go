@@ -27,7 +27,7 @@ Global:
  D: Describe selected resource              ?: Shows help dialog
  E: Edit selected resource                  Q: Quit
  C: Copy resource name to the clipboard     Ctrl+N or F2: Switch namespace
- Del: Delete resource (with confirmation)
+ Del: Delete resource (with confirmation)   F3: (janky) Show all known resource types (then filter with "/")
 
 Navigation:
  ↑↓→←: List navigation            /: Filter resources

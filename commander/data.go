@@ -55,7 +55,7 @@ type KubernetesRow struct {
 	cells []string
 }
 
-func NewKubernetesRow(row metav1.TableRow) (*KubernetesRow, error) {
+func NewKubernetesRow(row metav1.TableRow, withNamespace bool) (*KubernetesRow, error) {
 	obj := row.Object
 	md := metav1.PartialObjectMetadata{}
 	err := runtime.DecodeInto(unstructured.UnstructuredJSONScheme, obj.Raw, &md)
@@ -63,6 +63,9 @@ func NewKubernetesRow(row metav1.TableRow) (*KubernetesRow, error) {
 		return nil, err
 	}
 	var cells []string
+	if withNamespace {
+		cells = append(cells, md.Namespace)
+	}
 	for _, cell := range row.Cells {
 		cells = append(cells, cast.ToString(cell))
 	}

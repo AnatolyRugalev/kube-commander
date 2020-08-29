@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"strings"
 	"time"
 
@@ -126,6 +127,7 @@ func (c client) Resources() (commander.ResourceMap, error) {
 					Resource:   res.Name,
 					Gk:         gk,
 					Gvk:        schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind},
+					Verbs:      res.Verbs,
 				}
 			}
 		}
@@ -189,27 +191,38 @@ func (c client) List(ctx context.Context, resource *commander.Resource, namespac
 	return nil
 }
 
-func (c client) WatchAsTable(ctx context.Context, resource *commander.Resource, namespace string) (watch.Interface, error) {
-	opts := metav1.ListOptions{
-		Watch: true,
+func (c client) transformRequests(req *rest.Request) {
+	req.SetHeader("Accept", strings.Join([]string{
+		fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1.SchemeGroupVersion.Version, metav1.GroupName),
+		fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1beta1.SchemeGroupVersion.Version, metav1beta1.GroupName),
+		"application/json",
+	}, ","))
+}
+
+func (c client) WatchAsTable(_ context.Context, r *commander.Resource, namespace string) (watch.Interface, error) {
+	b := c.factory.NewBuilder()
+	b.Unstructured()
+	b.ResourceTypeOrNameArgs(false, r.Resource)
+	if namespace == "" {
+		b.AllNamespaces(true)
+	} else {
+		b.NamespaceParam(namespace)
 	}
-	req, err := c.NewRequest(resource)
+	b.SingleResourceType()
+	b.SelectAllParam(true)
+	b.NamespaceParam(namespace)
+	b.Latest()
+	b.TransformRequests(c.transformRequests)
+	result := b.Do()
+	obj, err := result.Object()
 	if err != nil {
 		return nil, err
 	}
-
-	req.
-		Verb("GET").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		SetHeader("Accept", strings.Join([]string{
-			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1.SchemeGroupVersion.Version, metav1.GroupName),
-			fmt.Sprintf("application/json;as=Table;v=%s;g=%s", metav1beta1.SchemeGroupVersion.Version, metav1beta1.GroupName),
-			"application/json",
-		}, ","))
-	if resource.Namespaced {
-		req.Namespace(namespace)
+	rv, err := meta.NewAccessor().ResourceVersion(obj)
+	if err != nil {
+		return nil, err
 	}
-	return req.Watch(ctx)
+	return result.Watch(rv)
 }
 
 func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {
