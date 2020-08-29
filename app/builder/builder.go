@@ -10,6 +10,7 @@ type builder struct {
 	kubectlBin string
 	pagerBin   string
 	editorBin  string
+	tail       int
 }
 
 func NewBuilder(
@@ -17,12 +18,14 @@ func NewBuilder(
 	kubectl string,
 	pager string,
 	editor string,
+	tail int,
 ) *builder {
 	return &builder{
 		config:     config,
 		kubectlBin: kubectl,
 		pagerBin:   pager,
 		editorBin:  editor,
+		tail:       tail,
 	}
 }
 
@@ -47,13 +50,13 @@ func (b builder) Exec(namespace string, pod string, container string, command st
 	return b.kubectl(namespace, args...)
 }
 
-func (b builder) Logs(namespace string, pod string, container string, tail int, previous bool, follow bool) *commander.Command {
+func (b builder) Logs(namespace string, pod string, container string, previous bool, follow bool) *commander.Command {
 	args := []string{"logs"}
 	if container != "" {
 		args = append(args, "-c", container)
 	}
-	if tail > 0 {
-		args = append(args, "--tail", strconv.Itoa(tail))
+	if b.tail > 0 {
+		args = append(args, "--tail", strconv.Itoa(b.tail))
 	}
 	if follow {
 		args = append(args, "--follow")

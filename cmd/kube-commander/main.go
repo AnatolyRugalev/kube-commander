@@ -11,6 +11,7 @@ import (
 	cmd "k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 	"os"
+	"strconv"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -32,6 +33,7 @@ var logFlags = flag.NewFlagSet("klog", flag.ExitOnError)
 var cfg = struct {
 	editor     string
 	pager      string
+	tail       int
 	kubectl    string
 	kubeconfig string
 	context    string
@@ -43,6 +45,7 @@ const (
 	KubectlEnv   = "KUBECTL"
 	EditorEnv    = "EDITOR"
 	PagerEnv     = "PAGER"
+	TailEnv      = "KUBETAIL"
 	ContextEnv   = "KUBECONTEXT"
 	NamespaceEnv = "KUBENAMESPACE"
 	KLogEnv      = "KUBELOG"
@@ -63,10 +66,23 @@ func defaultEnv(name string, def string) string {
 	return val
 }
 
+func defaultEnvInt(name string, def int) int {
+	val := os.Getenv(name)
+	if val == "" {
+		return def
+	}
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		return def
+	}
+	return i
+}
+
 func init() {
 	rootCmd.Flags().StringVarP(&cfg.kubectl, "kubectl", "k", defaultEnv(KubectlEnv, "kubectl"), "kubectl path override")
 	rootCmd.Flags().StringVarP(&cfg.editor, "editor", "e", defaultEnv(EditorEnv, "vi"), "Editor override")
 	rootCmd.Flags().StringVarP(&cfg.pager, "pager", "p", defaultEnv(PagerEnv, "less"), "Pager override")
+	rootCmd.Flags().IntVarP(&cfg.tail, "tail", "t", defaultEnvInt(TailEnv, 1000), "Number of lines when viewing logs")
 	rootCmd.Flags().StringVarP(&cfg.kubeconfig, "kubeconfig", "", os.Getenv(cmd.RecommendedConfigPathEnvVar), "Kubeconfig override")
 	rootCmd.Flags().StringVarP(&cfg.context, "context", "c", defaultEnv(ContextEnv, ""), "Context name (default: current context)")
 	rootCmd.Flags().StringVarP(&cfg.namespace, "namespace", "n", defaultEnv(NamespaceEnv, ""), "Namespace name to start with (default: from context)")
@@ -85,7 +101,7 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor)
+	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor, cfg.tail)
 	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), conf.Namespace())
 	return application.Run()
 }
