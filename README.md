@@ -1,33 +1,35 @@
 # Kube Commander
 
 [![Build Status](https://travis-ci.org/AnatolyRugalev/kube-commander.svg?branch=master)](https://travis-ci.org/AnatolyRugalev/kube-commander)
-[![kube-commander on snap](https://snapcraft.io/kube-commander/badge.svg)](https://snapcraft.io/kube-commander)
+
+kube-commander is an easy to use tool for observing Kubernetes cluster from your terminal.
 
 ![Kube Commander](https://user-images.githubusercontent.com/1397674/83310793-ecdada00-a215-11ea-9f26-37f5fb673147.gif)
 
-## Requirements
-
-1. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) with access to Kubernetes cluster
-2. And... that's it!
-
 ## kube-commander vs. kubernetes-dashboard comparison
 
-|                                           | kube-commander           | kubernetes-dashboard     |
+|                                           | kube-commander           | kubernetes-dashboard     | 
 |-------------------------------------------|--------------------------|--------------------------|
 | Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
 | Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Doesn't require deployment                | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Doesn't require web access to cluster     | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Doesn't require http access to cluster    | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 | Responsiveness                            | :zap:                    | :turtle:                 |
 | Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Requires cluster-specific configuration   | :heavy_check_mark:       | :heavy_check_mark:       |
+
+## Requirements
+
+1. GNU/Linux, MacOS or Windows system
+2. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed and configured to access your cluster
+3. And... that's it!
 
 ## Installation
 
-1. [Install from snap](#snap)
-2. [Archlinux User Repository](#aur)
-3. [Install binary](#binary)
-4. [Install from sources](#sources)
+1. [Archlinux User Repository](#aur)
+2. [Install binary](#binary)
+3. [Install from sources](#sources)
 
 ### Snap
 
@@ -91,6 +93,8 @@ and env vars:
 |editor     |EDITOR       |Name of the editor binary. Default: "vi". But you probably already have one defined by your OS |
 |pager      |PAGER        |Name of the pager binary. Default: "less"                                                      |
 |kubectl    |KUBECTL      |Name of kubectl binary. Default: "kubectl"                                                     |
+|tail       |KUBETAIL     |Number of log lines to show with kubectl logs. Default: 1000                                   |
+|klog       |KUBELOG      |Kubernetes log file for debugging. Default: none                                               |
 
 Example:
 
