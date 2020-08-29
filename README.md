@@ -2,25 +2,28 @@
 
 [![Build Status](https://travis-ci.org/AnatolyRugalev/kube-commander.svg?branch=master)](https://travis-ci.org/AnatolyRugalev/kube-commander)
 
+kube-commander is an easy to use tool for observing Kubernetes cluster from your terminal.
+
 ![Kube Commander](https://user-images.githubusercontent.com/1397674/83310793-ecdada00-a215-11ea-9f26-37f5fb673147.gif)
+
+## kube-commander vs. kubernetes-dashboard comparison
+
+|                                           | kube-commander           | kubernetes-dashboard     | 
+|-------------------------------------------|--------------------------|--------------------------|
+| Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
+| Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Doesn't require deployment                | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Doesn't require http access to cluster    | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Responsiveness                            | :zap:                    | :turtle:                 |
+| Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
+| Requires cluster-specific configuration   | :heavy_check_mark:       | :heavy_check_mark:       |
 
 ## Requirements
 
 1. GNU/Linux, MacOS or Windows system
 2. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed and configured to access your cluster
 3. And... that's it!
-
-## kube-commander vs. kubernetes-dashboard comparison
-
-|                                           | kube-commander           | kubernetes-dashboard     |
-|-------------------------------------------|--------------------------|--------------------------|
-| Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
-| Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Doesn't require deployment                | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Doesn't require web access to cluster     | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Responsiveness                            | :zap:                    | :turtle:                 |
-| Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
 
 ## Installation
 
