@@ -7,7 +7,9 @@ pkgbase = kube-commander
 	license = MIT
 	depends = kubectl
 	source = https://github.com/AnatolyRugalev/kube-commander/releases/download/${TAG}/kubecom_${TAG}_Linux_x86_64.tar.gz
+	source = kube-commander
 	sha256sums = ${SHA256SUM}
+	sha256sums = a51f5f19cce7700895f32ab96e6cf167e184e0f7e7ebe5b228c5e9283672d459
 
 pkgname = kube-commander
 
