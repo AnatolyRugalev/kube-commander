@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app/ui"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/status"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/workspace"
@@ -111,7 +112,7 @@ func (a *app) Run() error {
 	a.screen = ui.NewScreen(a)
 	err := a.initScreen()
 	if err != nil {
-		return err
+		return fmt.Errorf("could not initialize screen: %w", err)
 	}
 	a.workspace = workspace.NewWorkspace(a, a.defaultNamespace)
 	err = a.workspace.Init()

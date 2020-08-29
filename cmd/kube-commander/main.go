@@ -99,7 +99,7 @@ func run(_ *cobra.Command, _ []string) error {
 	conf := client.NewDefaultConfig(cfg.kubeconfig, cfg.context, cfg.namespace)
 	cl, err := client.NewClient(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not initialize kubernetes client: %w", err)
 	}
 	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor, cfg.tail)
 	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), conf.Namespace())

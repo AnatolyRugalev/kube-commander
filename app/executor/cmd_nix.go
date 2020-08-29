@@ -34,7 +34,6 @@ func (e *executor) renderCommand(command *commander.Command) string {
 // execute runs given command in emulated PTY environment
 // This is required for cross-platform execution
 func (e *executor) runCmd(cmd *exec.Cmd) error {
-	cmd.SysProcAttr.Setpgid = true
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return fmt.Errorf("could not start PTY terminal: %w", err)
@@ -74,5 +73,6 @@ func (e *executor) runCmd(cmd *exec.Cmd) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	_, err = cmd.Process.Wait()
+	return err
 }
