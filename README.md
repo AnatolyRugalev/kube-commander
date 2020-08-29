@@ -1,4 +1,4 @@
-# Kube Commander
+# Kube Commander  (kubecom)
 
 [![Build Status](https://travis-ci.org/AnatolyRugalev/kube-commander.svg?branch=master)](https://travis-ci.org/AnatolyRugalev/kube-commander)
 

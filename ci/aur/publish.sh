@@ -9,6 +9,7 @@ export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChec
 
 rm -rf .pkg
 git clone aur@aur.archlinux.org:kube-commander .pkg
+cp -f kube-commander .pkg/kube-commander
 
 export TAG=$(cat .tag)
 NAME=kube-commander_${TAG}_Linux_x86_64.tar.gz
@@ -28,6 +29,6 @@ envsubst '$TAG $TAG_RELEASE $SHA256SUM' < .SRCINFO.template > .pkg/.SRCINFO
 envsubst '$TAG $TAG_RELEASE $SHA256SUM' < PKGBUILD.template > .pkg/PKGBUILD
 
 cd ${DIR}/.pkg
-git add .SRCINFO PKGBUILD
+git add kube-commander .SRCINFO PKGBUILD
 git commit -m "Updated to version ${TAG} release ${TAG_RELEASE}"
 git push origin master

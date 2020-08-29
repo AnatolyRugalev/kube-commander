@@ -2,9 +2,9 @@ before:
   hooks:
     - go mod download
 builds:
-- main: ./cmd/kube-commander/main.go
+- main: ./cmd/kubecom
   ldflags:
-    - -s -w -X main.version={{.Version}}
+    - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
   env:
   - CGO_ENABLED=0
   goos:
