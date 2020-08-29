@@ -133,7 +133,7 @@ The most of hotkeys you can find on help dialog. Here they are:
 | Esc, Backspace | Go back |
 | Q, Ctrl+C | Quit |
 | Ctrl+N, F2 | Switch namespace |
-| Ctrl+R | Force list refresh (e.g. in case connection was closed) | 
+| F3 | (experimental) Show all known resources in resource menu |
 | D | Describe selected resource with `kubectl describe` |
 | E | Edit selected resource with `kubectl edit` |
 | Delete | Delete selected resource (then press "y" to confirm) |
