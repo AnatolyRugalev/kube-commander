@@ -16,6 +16,7 @@ require (
 	google.golang.org/appengine v1.6.1 // indirect
 	k8s.io/api v0.18.3
 	k8s.io/apimachinery v0.18.3
+	k8s.io/cli-runtime v0.18.3
 	k8s.io/client-go v0.18.3
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.18.3

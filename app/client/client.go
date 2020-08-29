@@ -3,18 +3,21 @@ package client
 import (
 	"context"
 	"fmt"
-	"github.com/AnatolyRugalev/kube-commander/commander"
+	"strings"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/discovery"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
+	"k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/scheme"
-	"strings"
-	"time"
+
+	"github.com/AnatolyRugalev/kube-commander/commander"
 )
 
 const AllNamespaces = "All namespaces"
@@ -29,31 +32,47 @@ func init() {
 	)
 }
 
+func NewFactory(config commander.Config) util.Factory {
+	kubeConfigFlags := genericclioptions.NewConfigFlags(true).WithDeprecatedPasswordFlag()
+	if config.Context() != "" {
+		ctx := config.Context()
+		kubeConfigFlags.Context = &ctx
+	}
+	if config.Namespace() != "" {
+		ns := config.Namespace()
+		kubeConfigFlags.Namespace = &ns
+	}
+	if config.Kubeconfig() != "" {
+		kc := config.Kubeconfig()
+		kubeConfigFlags.KubeConfig = &kc
+	}
+	f := util.NewFactory(kubeConfigFlags)
+	return f
+}
+
 func NewClient(config commander.Config) (*client, error) {
-	c, err := config.ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-	c.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
-	r, err := rest.UnversionedRESTClientFor(c)
-	if err != nil {
-		return nil, err
-	}
+	f := NewFactory(config)
 	cl := &client{
-		config:     config,
-		restConfig: c,
-		restClient: r,
+		config:  config,
+		factory: f,
 	}
 	return cl, nil
 }
 
 type client struct {
-	config     commander.Config
-	restConfig *rest.Config
-	restClient *rest.RESTClient
-	timeout    time.Duration
+	config  commander.Config
+	timeout time.Duration
 
 	resources commander.ResourceMap
+	factory   util.Factory
+}
+
+func (c client) CurrentNamespace() (string, error) {
+	ns, _, err := c.factory.ToRawKubeConfigLoader().Namespace()
+	if err != nil {
+		return "", err
+	}
+	return ns, nil
 }
 
 func (c client) Delete(ctx context.Context, resource *commander.Resource, namespace string, name string) error {
@@ -77,18 +96,18 @@ func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) 
 		return nil, err
 	}
 	r := rest.NewRequest(restClient)
-	timeout := c.restConfig.Timeout
-	if timeout == 0 {
-		timeout = time.Second * 5
-	}
 	r.Resource(resource.Resource)
-	r.Timeout(timeout)
+	r.Timeout(time.Second * 5)
 	return r, nil
 }
 
 func (c client) Resources() (commander.ResourceMap, error) {
 	if c.resources == nil {
-		lists, err := discovery.NewDiscoveryClient(c.restClient).ServerPreferredResources()
+		discoveryClient, err := c.factory.ToDiscoveryClient()
+		if err != nil {
+			return nil, err
+		}
+		lists, err := discoveryClient.ServerPreferredResources()
 		if err != nil {
 			return nil, err
 		}
@@ -194,12 +213,16 @@ func (c client) WatchAsTable(ctx context.Context, resource *commander.Resource, 
 }
 
 func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {
-	conf := *c.restConfig
+	conf, err := c.factory.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	conf.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
 	conf.GroupVersion = &gv
 	if gv.Group == "" {
 		conf.APIPath = "/api"
 	} else {
 		conf.APIPath = "/apis"
 	}
-	return rest.RESTClientFor(&conf)
+	return rest.RESTClientFor(conf)
 }

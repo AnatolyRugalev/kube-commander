@@ -9,6 +9,7 @@ import (
 )
 
 type Client interface {
+	CurrentNamespace() (string, error)
 	NewRequest(resource *Resource) (*rest.Request, error)
 	Get(ctx context.Context, resource *Resource, namespace string, name string, out runtime.Object) error
 	Delete(ctx context.Context, resource *Resource, namespace string, name string) error

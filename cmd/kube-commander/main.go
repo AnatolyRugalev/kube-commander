@@ -13,10 +13,7 @@ import (
 	"os"
 	"strconv"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 var version = "unknown"
@@ -102,6 +99,10 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize kubernetes client: %w", err)
 	}
 	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor, cfg.tail)
-	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), conf.Namespace())
+	namespace, err := cl.CurrentNamespace()
+	if err != nil {
+		return err
+	}
+	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), namespace)
 	return application.Run()
 }
