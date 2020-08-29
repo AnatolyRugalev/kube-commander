@@ -201,7 +201,7 @@ func (c client) transformRequests(req *rest.Request) {
 
 func (c client) WatchAsTable(_ context.Context, r *commander.Resource, namespace string) (watch.Interface, error) {
 	b := c.factory.NewBuilder()
-	b.Unstructured()
+	b.WithScheme(scheme.Scheme)
 	b.ResourceTypeOrNameArgs(false, r.Resource)
 	if namespace == "" {
 		b.AllNamespaces(true)
