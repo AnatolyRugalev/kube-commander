@@ -65,7 +65,7 @@ func defaultEnv(name string, def string) string {
 
 func init() {
 	rootCmd.Flags().StringVarP(&cfg.kubectl, "kubectl", "k", defaultEnv(KubectlEnv, "kubectl"), "kubectl path override")
-	rootCmd.Flags().StringVarP(&cfg.editor, "editor", "e", defaultEnv(EditorEnv, "vi"), "Editor override")
+	rootCmd.Flags().StringVarP(&cfg.editor, "editor", "e", defaultEnv(EditorEnv, ""), "Editor override")
 	rootCmd.Flags().StringVarP(&cfg.pager, "pager", "p", defaultEnv(PagerEnv, "less"), "Pager override")
 	rootCmd.Flags().StringVarP(&cfg.kubeconfig, "kubeconfig", "", os.Getenv(cmd.RecommendedConfigPathEnvVar), "Kubeconfig override")
 	rootCmd.Flags().StringVarP(&cfg.context, "context", "c", defaultEnv(ContextEnv, ""), "Context name (default: current context)")

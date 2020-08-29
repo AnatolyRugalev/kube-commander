@@ -31,7 +31,11 @@ func (b builder) Describe(namespace string, resType string, resName string) *com
 }
 
 func (b builder) Edit(namespace string, resType string, resName string) *commander.Command {
-	return b.kubectl(namespace, "edit", resType, resName).WithEnv("EDITOR", b.editorBin)
+	cmd := b.kubectl(namespace, "edit", resType, resName)
+	if b.editorBin != "" {
+		cmd = cmd.WithEnv("EDITOR", b.editorBin)
+	}
+	return cmd
 }
 
 func (b builder) PortForward(namespace string, pod string, port int32) *commander.Command {
