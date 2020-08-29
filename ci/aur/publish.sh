@@ -12,7 +12,7 @@ git clone aur@aur.archlinux.org:kube-commander .pkg
 cp -f kube-commander .pkg/kube-commander
 
 export TAG=$(cat .tag)
-NAME=kube-commander_${TAG}_Linux_x86_64.tar.gz
+NAME=kubecom_${TAG}_Linux_x86_64.tar.gz
 ARCHIVE=$(dirname $(dirname ${DIR}))/dist/${NAME}
 export SHA256SUM=$(sha256sum ${ARCHIVE} | awk '{ print $1 }')
 
