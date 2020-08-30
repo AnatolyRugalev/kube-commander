@@ -1,6 +1,8 @@
 # Kube Commander  (kubecom)
 
-[![Build Status](https://travis-ci.org/AnatolyRugalev/kube-commander.svg?branch=master)](https://travis-ci.org/AnatolyRugalev/kube-commander)
+[![Build Status](https://img.shields.io/travis/anatolyrugalev/kube-commander?style=for-the-badge)](https://travis-ci.org/AnatolyRugalev/kube-commander)
+[![Docker Image](https://img.shields.io/docker/v/anatolyrugalev/kubecom?sort=semver&style=for-the-badge)](https://hub.docker.com/r/anatolyrugalev/kubecom)
+[![Aur](https://img.shields.io/aur/version/kube-commander?style=for-the-badge)](https://aur.archlinux.org/packages/kube-commander/)
 
 kube-commander is an easy to use tool for observing Kubernetes cluster from your terminal.
 
