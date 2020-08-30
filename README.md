@@ -104,17 +104,16 @@ Example:
 kubecom --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-config
 ```
 
-Use JQ as log pager:
-```bash
-kubecom --log-pager=jq
-```
-
-You can use pipes in `pager` an `log-pager` flags:
+This is pretty useful example:
 ```bash
 kubecom --log-pager="jq -c"
-kubecom --pager="tail -r | less"
 ```
 
+In this case kubecom will use jq as log pager so json logs will be colorized. You can pipe commands here as well:
+
+```bash
+kubecom --log-pager="jq -c | some_other_command"
+```
 
 ### Supported resource types
 
