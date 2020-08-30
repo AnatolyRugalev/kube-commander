@@ -4,6 +4,9 @@
 
 kube-commander is an easy to use tool for observing Kubernetes cluster from your terminal.
 
+> Soon `kube-commander` will change its name to `kubecom`. Please don't mind some naming inconsistency - I'm
+> trying to make the migration as seamless as possible.
+
 ![Kube Commander](https://user-images.githubusercontent.com/1397674/83310793-ecdada00-a215-11ea-9f26-37f5fb673147.gif)
 
 ## kube-commander vs. kubernetes-dashboard comparison
@@ -161,6 +164,5 @@ This way we can avoid wasting time doing easy work the hard way. I'm always open
 ## Special thanks
 
 * [tcell](https://github.com/gdamore/tcell) - TUI library
-* [termui](https://github.com/gizak/termui) - the first version of kube-commander was build around this TUI library
 * [Goreleaser](https://goreleaser.com) - helps to ship go software
 * [k9s](https://github.com/derailed/k9s) - another kubernetes TUI utility
