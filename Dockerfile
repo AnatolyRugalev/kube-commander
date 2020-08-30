@@ -11,7 +11,7 @@ ENV \
   TERM=xterm-256color \
   EDITOR=nano \
   PAGER=less \
-  LOGPAGER="jq -c"
+  LOGPAGER="jq -c -R -r '. as \$line | try fromjson catch \$line'"
 RUN apk add --no-cache ca-certificates curl jq nano \
   && curl -L "https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" > /usr/local/bin/kubectl \
   && chmod +x /usr/local/bin/kubectl \
