@@ -111,10 +111,10 @@ kubecom --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-
 
 This is pretty useful example:
 ```bash
-kubecom --log-pager="jq -c"
+kubecom --log-pager="jq -c -R -r '. as \$line | try fromjson catch \$line'"
 ```
 
-In this case kubecom will use jq as log pager so json logs will be colorized. You can pipe commands here as well:
+In this case kubecom will use `jq` to colorize JSON logs if possible. You can pipe commands here as well:
 
 ```bash
 kubecom --log-pager="jq -c | some_other_command"
