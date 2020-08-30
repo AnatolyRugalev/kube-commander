@@ -30,12 +30,7 @@ kube-commander is an easy to use tool for observing Kubernetes cluster from your
 1. [Archlinux User Repository](#aur)
 2. [Install binary](#binary)
 3. [Install from sources](#sources)
-
-### Snap
-
-```bash
-sudo snap install kube-commander
-```
+4. [Run with Docker](#run-with-docker)
 
 ### AUR
 
@@ -61,14 +56,21 @@ viewing logs and etc.*
 If you have Go environment configured you can install kube-commander easily with this command:
 
 ```bash
-go get -u github.com/AnatolyRugalev/kube-commander/cmd/kube-commander
+go get -u github.com/AnatolyRugalev/kube-commander/cmd/kubecom
 ```
 
 *NOTE: Make sure your `$PATH` has `$GOPATH/bin` in it.*
 
+### Run with Docker
+
+```bash
+alias kubecom="docker run --rm -v ~/.kube:/root/.kube -ti anatolyrugalev/kubecom:latest"
+kubecom
+```
+
 ## Usage
 
-### Launching
+### Run
  
 Before starting kube-commander make sure you have proper kubectl configuration:
 
@@ -78,8 +80,8 @@ kubectl cluster-info
 
 Then you can start kube-commander:
 
-```bash'
-kube-commander
+```bash
+kubecom
 ```
 
 To start kube-commander with non-default kubectl context, namespace or config itself you can use this flags
@@ -91,23 +93,28 @@ and env vars:
 |context    |KUBECONTEXT  |Context name                                                                                   |
 |namespace  |KUBENAMESPACE|Initial namespace to show                                                                      |
 |editor     |EDITOR       |Name of the editor binary. Default: "vi". But you probably already have one defined by your OS |
-|pager      |PAGER        |Name of the pager binary. Default: "less"                                                      |
+|pager      |PAGER        |Pager command for 'describe' command. Default: "less"                                          |
+|log-pager  |LOGPAGER     |Pager command for log output. Default: none                                                    |
 |kubectl    |KUBECTL      |Name of kubectl binary. Default: "kubectl"                                                     |
 |tail       |KUBETAIL     |Number of log lines to show with kubectl logs. Default: 1000                                   |
 |klog       |KUBELOG      |Kubernetes log file for debugging. Default: none                                               |
 
 Example:
+```bash
+kubecom --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-config
+```
 
+Use JQ as log pager:
 ```bash
-kube-commander --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-config
+kubecom --log-pager=jq
 ```
-Or:
+
+You can use pipes in `pager` an `log-pager` flags:
 ```bash
-export KUBECONFIG=$HOME/.kube/my-config
-export KUBECONTEXT=my-cluster-2
-export KUBENAMESPACE=my-namespace
-kube-commander
+kubecom --log-pager="jq -c"
+kubecom --pager="tail -r | less"
 ```
+
 
 ### Supported resource types
 

@@ -244,7 +244,10 @@ func (r ResourceListTable) describe(row commander.Row) {
 	}
 	e := r.container.CommandExecutor()
 	b := r.container.CommandBuilder()
-	err = e.Pipe(b.Describe(metadata.Namespace, r.resource.Resource, metadata.Name), b.Pager())
+	var commands []*commander.Command
+	commands = append(commands, b.Describe(metadata.Namespace, r.resource.Resource, metadata.Name))
+	commands = append(commands, b.Pager()...)
+	err = e.Pipe(commands...)
 	if err != nil {
 		r.container.Status().Error(err)
 		return

@@ -3,29 +3,33 @@ package builder
 import (
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"strconv"
+	"strings"
 )
 
 type builder struct {
-	config     commander.Config
-	kubectlBin string
-	pagerBin   string
-	editorBin  string
-	tail       int
+	config      commander.Config
+	kubectlBin  string
+	pagerBin    string
+	logPagerBin string
+	editorBin   string
+	tail        int
 }
 
 func NewBuilder(
 	config commander.Config,
 	kubectl string,
 	pager string,
+	logPager string,
 	editor string,
 	tail int,
 ) *builder {
 	return &builder{
-		config:     config,
-		kubectlBin: kubectl,
-		pagerBin:   pager,
-		editorBin:  editor,
-		tail:       tail,
+		config:      config,
+		kubectlBin:  kubectl,
+		pagerBin:    pager,
+		logPagerBin: logPager,
+		editorBin:   editor,
+		tail:        tail,
 	}
 }
 
@@ -72,8 +76,25 @@ func (b builder) Logs(namespace string, pod string, container string, previous b
 	return b.kubectl(namespace, args...)
 }
 
-func (b builder) Pager() *commander.Command {
-	return commander.NewCommand(b.pagerBin)
+func (b builder) Pager() []*commander.Command {
+	return b.binCommand(b.pagerBin)
+}
+
+func (b builder) LogPager() []*commander.Command {
+	return b.binCommand(b.logPagerBin)
+}
+
+func (b builder) binCommand(bin string) []*commander.Command {
+	if bin == "" {
+		return nil
+	}
+	commandsStr := strings.Split(bin, "|")
+	var commands []*commander.Command
+	for _, str := range commandsStr {
+		parts := strings.Fields(str)
+		commands = append(commands, commander.NewCommand(parts[0], parts[1:]...))
+	}
+	return commands
 }
 
 func (b builder) kubectl(namespace string, command ...string) *commander.Command {

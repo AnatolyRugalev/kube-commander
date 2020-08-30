@@ -70,10 +70,12 @@ func (p PodsList) logs(row commander.Row, previous bool) {
 		e := p.workspace.CommandExecutor()
 		b := p.workspace.CommandBuilder()
 		var commands []*commander.Command
-		if previous || status.State.Running == nil {
-			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, previous, false), b.Pager())
-		} else {
-			commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, previous, true))
+		follow := !previous && status.State.Running != nil
+		commands = append(commands, b.Logs(pod.Namespace, pod.Name, container.Name, previous, follow))
+		if pager := b.LogPager(); pager != nil {
+			commands = append(commands, pager...)
+		} else if !follow {
+			commands = append(commands, b.Pager()...)
 		}
 		err := e.Pipe(commands...)
 		if err != nil {

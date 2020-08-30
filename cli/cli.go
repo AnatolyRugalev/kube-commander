@@ -30,6 +30,7 @@ var logFlags = flag.NewFlagSet("klog", flag.ExitOnError)
 var cfg = struct {
 	editor     string
 	pager      string
+	logPager   string
 	tail       int
 	kubectl    string
 	kubeconfig string
@@ -42,6 +43,7 @@ const (
 	KubectlEnv   = "KUBECTL"
 	EditorEnv    = "EDITOR"
 	PagerEnv     = "PAGER"
+	LogPagerEnv  = "LOGPAGER"
 	TailEnv      = "KUBETAIL"
 	ContextEnv   = "KUBECONTEXT"
 	NamespaceEnv = "KUBENAMESPACE"
@@ -79,6 +81,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.kubectl, "kubectl", "k", defaultEnv(KubectlEnv, "kubectl"), "kubectl path override")
 	rootCmd.Flags().StringVarP(&cfg.editor, "editor", "e", defaultEnv(EditorEnv, ""), "Editor override")
 	rootCmd.Flags().StringVarP(&cfg.pager, "pager", "p", defaultEnv(PagerEnv, "less"), "Pager override")
+	rootCmd.Flags().StringVarP(&cfg.logPager, "log-pager", "l", defaultEnv(LogPagerEnv, ""), "Log pager for piping")
 	rootCmd.Flags().IntVarP(&cfg.tail, "tail", "t", defaultEnvInt(TailEnv, 1000), "Number of lines when viewing logs")
 	rootCmd.Flags().StringVarP(&cfg.kubeconfig, "kubeconfig", "", os.Getenv(cmd.RecommendedConfigPathEnvVar), "Kubeconfig override")
 	rootCmd.Flags().StringVarP(&cfg.context, "context", "c", defaultEnv(ContextEnv, ""), "Context name (default: current context)")
@@ -98,7 +101,7 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("could not initialize kubernetes client: %w", err)
 	}
-	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.editor, cfg.tail)
+	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.logPager, cfg.editor, cfg.tail)
 	namespace, err := cl.CurrentNamespace()
 	if err != nil {
 		return err
