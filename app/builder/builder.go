@@ -54,7 +54,7 @@ func (b builder) Exec(namespace string, pod string, container string, command st
 	if container != "" {
 		args = append(args, "-c", container)
 	}
-	args = append(args, pod, command)
+	args = append(args, pod, "--", command)
 	return b.kubectl(namespace, args...)
 }
 
