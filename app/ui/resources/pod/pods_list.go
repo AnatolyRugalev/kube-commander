@@ -27,7 +27,7 @@ func NewPodsList(workspace commander.Workspace, resource *commander.Resource, fo
 	return &pl
 }
 
-func (p PodsList) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
+func (p *PodsList) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	switch event.Key() {
 	default:
 		switch event.Rune() {
@@ -47,7 +47,7 @@ func (p PodsList) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
 	return false
 }
 
-func (p PodsList) getPod(row commander.Row) (*v1.Pod, error) {
+func (p *PodsList) getPod(row commander.Row) (*v1.Pod, error) {
 	metadata, err := p.RowMetadata(row)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (p PodsList) getPod(row commander.Row) (*v1.Pod, error) {
 	return &pod, nil
 }
 
-func (p PodsList) logs(row commander.Row, previous bool) {
+func (p *PodsList) logs(row commander.Row, previous bool) {
 	pod, err := p.getPod(row)
 	if err != nil {
 		p.workspace.Status().Error(err)
@@ -86,7 +86,7 @@ func (p PodsList) logs(row commander.Row, previous bool) {
 	})
 }
 
-func (p PodsList) forward(row commander.Row) {
+func (p *PodsList) forward(row commander.Row) {
 	pod, err := p.getPod(row)
 	if err != nil {
 		p.workspace.Status().Error(err)
@@ -104,7 +104,7 @@ func (p PodsList) forward(row commander.Row) {
 	})
 }
 
-func (p PodsList) shell(row commander.Row) {
+func (p *PodsList) shell(row commander.Row) {
 	pod, err := p.getPod(row)
 	if err != nil {
 		p.workspace.Status().Error(err)

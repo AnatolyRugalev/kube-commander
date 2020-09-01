@@ -703,6 +703,10 @@ func (lt *ListTable) SelectIndex(index int) {
 		lt.onChange(row)
 	}
 
+	if lt.view == nil {
+		return
+	}
+
 	height := lt.tableHeight()
 	scrollThreshold := lt.topRow + height - 1
 	if height <= 0 {
