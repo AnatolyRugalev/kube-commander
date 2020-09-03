@@ -21,3 +21,5 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.18.3
 )
+
+replace vbom.ml/util => github.com/fvbommel/util v0.0.3-0.20200828113648-063df19a25ff
