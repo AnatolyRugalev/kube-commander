@@ -2,35 +2,43 @@
 
 set -e
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-cd ${DIR}
+ROOT="$(dirname $(dirname $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )))"
 
-TAG=$1
+export VERSION=$1
+echo "Publishing to AUR as version ${VERSION}"
 
-echo "Publishing to AUR as version ${TAG}"
+cd ${ROOT}/ci/aur
 
 export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
 rm -rf .pkg
-git clone aur@aur.archlinux.org:kube-commander .pkg
+git clone aur@aur.archlinux.org:kube-commander .pkg 2>&1
 cp -f kube-commander .pkg/kube-commander
+cp -f kubectl-ui .pkg/kubectl-ui
 
-BINARY=$(dirname $(dirname ${DIR}))/dist/kubecom_linux_amd64/kubecom
-export SHA256SUM=$(sha256sum ${BINARY} | awk '{ print $1 }')
+export SHA256SUM=$(sha256sum ${ROOT}/dist/kubecom-linux_linux_amd64/kubecom | awk '{ print $1 }')
 
-CURRENT_TAG=$(cat .pkg/.SRCINFO | grep pkgver | awk '{ print $3 }')
-CURRENT_TAG_RELEASE=$(cat .pkg/.SRCINFO | grep pkgrel | awk '{ print $3 }')
+CURRENT_PKGVER=$(cat .pkg/.SRCINFO | grep pkgver | awk '{ print $3 }')
+CURRENT_RELEASE=$(cat .pkg/.SRCINFO | grep pkgrel | awk '{ print $3 }')
 
-if [[ "${CURRENT_TAG}" == "${TAG}" ]]; then
-    export TAG_RELEASE=$((CURRENT_TAG_RELEASE+1))
+export PKGVER=${VERSION/-/}
+
+if [[ "${CURRENT_PKGVER}" == "${PKGVER}" ]]; then
+    export RELEASE=$((CURRENT_RELEASE+1))
 else
-    export TAG_RELEASE=1
+    export RELEASE=1
 fi
 
-envsubst '$TAG $TAG_RELEASE $SHA256SUM' < .SRCINFO.template > .pkg/.SRCINFO
-envsubst '$TAG $TAG_RELEASE $SHA256SUM' < PKGBUILD.template > .pkg/PKGBUILD
+envsubst '$PKGVER $VERSION $RELEASE $SHA256SUM' < .SRCINFO.template > .pkg/.SRCINFO
+envsubst '$PKGVER $VERSION $RELEASE $SHA256SUM' < PKGBUILD.template > .pkg/PKGBUILD
 
-cd ${DIR}/.pkg
-git add kube-commander .SRCINFO PKGBUILD
-git commit -m "Updated to version ${TAG} release ${TAG_RELEASE}"
-#git push origin master
+cd .pkg
+git config user.name "GoReleaser"
+git config user.email "goreleaser@goreleaser.com"
+git add -A
+if [ -z "$(git status --porcelain)" ]; then
+  echo "No changes."
+else
+  git commit -m "Updated to version ${VERSION} release ${RELEASE}"
+  git push origin master
+fi

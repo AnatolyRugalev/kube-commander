@@ -1,33 +1,74 @@
 before:
   hooks:
     - go mod download
-    - ci/snap-preinstall.sh {{.Version}}
+    - ci/snap-deps.sh
 builds:
-- id: kubecom
-  main: ./cmd/kubecom
-  binary: kubecom
-  ldflags:
-    - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
-  env:
-  - CGO_ENABLED=0
-  goos:
-    - linux
-    - darwin
-    - openbsd
-    - windows
-  goarch:
-    - amd64
+  - id: kubecom-linux
+    main: ./cmd/kubecom
+    binary: kubecom
+    ldflags:
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+  - id: kubecom-darwin
+    main: ./cmd/kubecom
+    binary: kubecom
+    ldflags:
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+  - id: kubecom-windows
+    main: ./cmd/kubecom
+    binary: kubecom
+    ldflags:
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+  - id: kube-commander-linux
+    main: ./cmd/kube-commander
+    binary: kube-commander
+    ldflags:
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
 archives:
-- replacements:
-    darwin: Darwin
-    linux: Linux
-    windows: Windows
-    386: i386
-    amd64: x86_64
-  name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-  format: binary
-  builds:
-    - kubecom
+  - id: release
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - kubecom-linux
+      - kubecom-windows
+      - kubecom-darwin
+  - id: binaries
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: binary
+    builds:
+      - kubecom-linux
+      - kubecom-windows
+      - kubecom-darwin
+  - id: aur
+    name_template: "aur_{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - kubecom-linux
+release:
+  ids:
+    - release
+    - binaries
 checksum:
   name_template: 'checksums.txt'
 snapshot:
@@ -36,21 +77,21 @@ changelog:
   sort: asc
   filters:
     exclude:
-    - '^docs:'
-    - '^test:'
+      - '^docs:'
+      - '^test:'
 publishers:
   - name: aur
     ids:
-      - kubecom
+      - aur
     cmd: ci/aur/publish.sh {{ .Version }}
 snapcrafts:
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     publish: true
     builds:
-    - kubecom
+      - kube-commander-linux
     summary: Browse your kubernetes clusters in a casual way
     description: |
-      kubecom is terminal UI for easy interaction with Kubernetes
+      kube-commander (kubecom) is terminal UI for easy interaction with Kubernetes
     grade: stable
     confinement: strict
     license: MIT
@@ -61,10 +102,39 @@ snapcrafts:
         read:
           - $HOME/.kube
     apps:
-      kubecom:
+      kube-commander:
+        plugs:
+          - kubeconfig
+      kubectl:
         plugs:
           - kubeconfig
     extra_files:
       - source: kubectl
-        destination: bin/kubectl
+        destination: kubectl
         mode: 0755
+
+# .goreleaser.yml
+brews:
+  - name: kubecom
+    ids:
+      - release
+    tap:
+      owner: AnatolyRugalev
+      name: homebrew-kubecom
+
+    url_template: "https://github.com/AnatolyRugalev/kube-commander/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+
+    commit_author:
+      name: goreleaserbot
+      email: goreleaser@carlosbecker.com
+
+    folder: Formula
+
+    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+
+    description: "kubecom is terminal UI for easy interaction with Kubernetes"
+
+    skip_upload: false
+
+    dependencies:
+      - name: kubectl

@@ -1,19 +1,20 @@
 # Maintainer: Anatoly Rugalev <anatoly.rugalev gmail com>
 
 pkgname=kube-commander
-pkgver=${TAG}
-pkgrel=${TAG_RELEASE}
-pkgdesc="Browse your kubernetes clusters in a casual way"
+pkgver=${PKGVER}
+pkgrel=${RELEASE}
+pkgdesc="kubecom is terminal UI for easy interaction with Kubernetes"
 url="https://github.com/AnatolyRugalev/kube-commander"
 license=('MIT')
 arch=('x86_64')
 depends=('kubectl')
 
-source=("https://github.com/AnatolyRugalev/kube-commander/releases/download/${pkgver}/kubecom_linux_amd64" 'kubecom')
-sha256sums=('${SHA256SUM}' 'a51f5f19cce7700895f32ab96e6cf167e184e0f7e7ebe5b228c5e9283672d459')
+source=("kubecom_${VERSION}::https://github.com/AnatolyRugalev/kube-commander/releases/download/${VERSION}/kubecom_${VERSION}_linux_amd64" 'kube-commander' 'kubectl-ui')
+sha256sums=('${SHA256SUM}' 'SKIP' 'SKIP')
 package() {
   cd "$srcdir"
   install -d "$pkgdir/usr/bin"
   install -m755 kube-commander "$pkgdir/usr/bin/kube-commander"
-  install -m755 kubecom "$pkgdir/usr/bin/kubecom"
+  install -m755 kubectl-ui "$pkgdir/usr/bin/kubectl-ui"
+  install -m755 kubecom_${VERSION} "$pkgdir/usr/bin/kubecom"
 }

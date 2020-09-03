@@ -4,7 +4,7 @@
 [![Docker Image](https://img.shields.io/docker/v/anatolyrugalev/kubecom?sort=semver&style=for-the-badge)](https://hub.docker.com/r/anatolyrugalev/kubecom)
 [![Aur](https://img.shields.io/aur/version/kube-commander?style=for-the-badge)](https://aur.archlinux.org/packages/kube-commander/)
 
-kube-commander is an easy to use tool for observing Kubernetes cluster from your terminal.
+kubecom is an easy to use tool for observing Kubernetes cluster from your terminal.
 
 > Soon `kube-commander` will change its name to `kubecom`. Please don't mind some naming inconsistency - I'm
 > trying to make the migration as seamless as possible.
@@ -33,9 +33,10 @@ kube-commander is an easy to use tool for observing Kubernetes cluster from your
 ## Installation
 
 1. [Archlinux User Repository](#aur)
-2. [Install binary](#binary)
-3. [Install from sources](#sources)
-4. [Run with Docker](#run-with-docker)
+2. [Homebrew](#homebrew)
+3. [Install binary](#binary)
+4. [Install from sources](#sources)
+5. [Run with Docker](#run-with-docker)
 
 ### AUR
 
@@ -45,20 +46,26 @@ If you use Archlinux you can install kube-commander from AUR with your favorite 
 yay -S kube-commander
 ```
 
+### Homebrew
+
+To install kubecom with brew you first need to add a tap:
+
+```bash
+brew tap AnatolyRugalev/kubecom
+brew install kubecom
+```
+
+Brew formula has both Linux and MacOS binaries.
+
 ### Binary
 
 You can install kube-commander from binary release for your OS. Linux, macOS and Windows are supported. You can find 
-a package for your OS on [Releases page](https://github.com/AnatolyRugalev/kube-commander/releases).
-
-1. Untar archive on your machine
-2. Put kube-commander executable in your `$PATH`. E.g. `/usr/local/bin`
-
-*NOTE: if you use Windows make sure you have installed [Git Bash](https://gitforwindows.org/) to support editing,
-viewing logs and etc.*
+a package for your OS on [this page](https://github.com/AnatolyRugalev/kube-commander/releases/latest). Just download
+and put it to `/usr/local/bin`.
 
 ### Sources
 
-If you have Go environment configured you can install kube-commander easily with this command:
+If you have Go environment configured you can install kubecom easily with this command:
 
 ```bash
 go get -u github.com/AnatolyRugalev/kube-commander/cmd/kubecom
@@ -83,14 +90,17 @@ Before starting kube-commander make sure you have proper kubectl configuration:
 kubectl cluster-info
 ```
 
-Then you can start kube-commander:
+Then you can start kubecom:
 
 ```bash
 kubecom
 ```
 
-To start kube-commander with non-default kubectl context, namespace or config itself you can use this flags
-and env vars:
+If you installed kubecom from AUR, you can start it with `kubectl ui`. 
+
+### Configure
+
+You can easily configure kubecom with this options:
 
 | Flag      | Env var     | Description                                                                                   |
 |-----------|-------------|-----------------------------------------------------------------------------------------------|
@@ -109,12 +119,12 @@ Example:
 kubecom --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-config
 ```
 
-This is pretty useful example:
+Sometimes you want to colorify JSON logs, so here's useful `--log-pager` configuration for that:
 ```bash
 kubecom --log-pager="jq -c -R -r '. as \$line | try fromjson catch \$line'"
 ```
 
-In this case kubecom will use `jq` to colorize JSON logs if possible. You can pipe commands here as well:
+You can pipe commands here as well:
 
 ```bash
 kubecom --log-pager="jq -c | some_other_command"
@@ -122,10 +132,8 @@ kubecom --log-pager="jq -c | some_other_command"
 
 ### Supported resource types
 
-For now kube-commander shows limited number of resources, but technically, it can show anything kubectl can. On 
-kube-commander start you can see that some items in the menu are gray. This happens because kube-commander needs some
-time to discover your cluster capabilities. This behavior could be configurable in future releases. Also we could
-allow to add your custom resource types into the menu via this configuration.
+Currently kubecom supports a handful of resources as first-class citizens. You can experiment with "F3" binding
+to display all available resources on your own risk. Menu configurability is coming soon. 
 
 ### Hotkeys
 
