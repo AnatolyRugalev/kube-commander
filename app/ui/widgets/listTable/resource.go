@@ -83,7 +83,7 @@ func (r *ResourceListTable) watch(restartChan chan bool) {
 		r.container.Status().Error(err)
 		return
 	}
-	addNamespace := namespace == ""
+	addNamespace := namespace == "" && r.resource.Namespaced
 
 	go func() {
 		defer watcher.Stop()
@@ -191,7 +191,7 @@ func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error
 	if err != nil {
 		return nil, nil, err
 	}
-	addNamespace := namespace == ""
+	addNamespace := namespace == "" && r.resource.Namespaced
 
 	var cols []string
 	var rows []commander.Row
