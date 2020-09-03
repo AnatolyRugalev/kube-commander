@@ -1,8 +1,10 @@
 before:
   hooks:
     - go mod download
+    - ci/snap-preinstall.sh {{.Version}}
 builds:
-- main: ./cmd/kubecom
+- id: kubecom
+  main: ./cmd/kubecom
   binary: kubecom
   ldflags:
     - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
@@ -15,8 +17,6 @@ builds:
     - windows
   goarch:
     - amd64
-  hooks:
-    pre: ci/aur/set-tag.sh {{.Version}}
 archives:
 - replacements:
     darwin: Darwin
@@ -25,6 +25,9 @@ archives:
     386: i386
     amd64: x86_64
   name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  format: binary
+  builds:
+    - kubecom
 checksum:
   name_template: 'checksums.txt'
 snapshot:
@@ -35,12 +38,33 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+publishers:
+  - name: aur
+    ids:
+      - kubecom
+    cmd: ci/aur/publish.sh {{ .Version }}
 snapcrafts:
-  - publish: false
+  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    publish: true
+    builds:
+    - kubecom
     summary: Browse your kubernetes clusters in a casual way
     description: |
-      kube-commander is a TUI utility which provides an easy way to browse and manage any kubernetes cluster accessible
-      by kubectl
+      kubecom is terminal UI for easy interaction with Kubernetes
     grade: stable
-    confinement: classic
+    confinement: strict
     license: MIT
+    base: core20
+    plugs:
+      kubeconfig:
+        interface: personal-files
+        read:
+          - $HOME/.kube
+    apps:
+      kubecom:
+        plugs:
+          - kubeconfig
+    extra_files:
+      - source: kubectl
+        destination: bin/kubectl
+        mode: 0755

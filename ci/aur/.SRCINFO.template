@@ -1,13 +1,13 @@
 pkgbase = kube-commander
-	pkgdesc = Browse your kubernetes clusters in a casual way
+	pkgdesc = kubecom is terminal UI for easy interaction with Kubernetes
 	pkgver = ${TAG}
 	pkgrel = ${TAG_RELEASE}
 	url = https://github.com/AnatolyRugalev/kube-commander
 	arch = x86_64
 	license = MIT
 	depends = kubectl
-	source = https://github.com/AnatolyRugalev/kube-commander/releases/download/${TAG}/kubecom_${TAG}_Linux_x86_64.tar.gz
-	source = kube-commander
+	source = https://github.com/AnatolyRugalev/kube-commander/releases/download/${TAG}/kubecom_linux_amd64
+	source = kubecom
 	sha256sums = ${SHA256SUM}
 	sha256sums = a51f5f19cce7700895f32ab96e6cf167e184e0f7e7ebe5b228c5e9283672d459
 

@@ -31,9 +31,3 @@ deploy:
     on:
       tags: true
       condition: $TRAVIS_OS_NAME = linux
-  - provider: script
-    skip_cleanup: true
-    script: ci/aur/publish.sh
-    on:
-      tags: true
-      condition: $TRAVIS_OS_NAME = linux
