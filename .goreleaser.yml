@@ -112,29 +112,20 @@ snapcrafts:
       - source: kubectl
         destination: kubectl
         mode: 0755
-
-# .goreleaser.yml
 brews:
   - name: kubecom
+    folder: Formula
+    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+    description: "kubecom is terminal UI for easy interaction with Kubernetes"
+    url_template: "https://github.com/AnatolyRugalev/kube-commander/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    skip_upload: false
     ids:
       - release
     tap:
       owner: AnatolyRugalev
       name: homebrew-kubecom
-
-    url_template: "https://github.com/AnatolyRugalev/kube-commander/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-
     commit_author:
       name: goreleaserbot
       email: goreleaser@carlosbecker.com
-
-    folder: Formula
-
-    homepage: "https://github.com/AnatolyRugalev/kube-commander"
-
-    description: "kubecom is terminal UI for easy interaction with Kubernetes"
-
-    skip_upload: false
-
     dependencies:
       - name: kubectl
