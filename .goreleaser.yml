@@ -86,7 +86,7 @@ publishers:
     cmd: ci/aur/publish.sh {{ .Version }}
 snapcrafts:
   - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    publish: true
+    publish: false
     builds:
       - kube-commander-linux
     summary: Browse your kubernetes clusters in a casual way
