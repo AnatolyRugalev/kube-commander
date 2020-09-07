@@ -15,4 +15,6 @@ type Container interface {
 	CommandExecutor() CommandExecutor
 	Screen() Screen
 	StatusReporter() StatusReporter
+	ConfigUpdater() ConfigUpdater
+	Register(Configurable)
 }

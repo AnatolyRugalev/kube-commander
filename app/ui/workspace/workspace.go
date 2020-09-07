@@ -119,6 +119,14 @@ func (w *workspace) ScreenUpdater() commander.ScreenUpdater {
 	return w
 }
 
+func (w *workspace) UpdateConfig(f commander.ConfigUpdateFunc) error {
+	return w.container.ConfigUpdater().UpdateConfig(f)
+}
+
+func (w *workspace) ConfigUpdater() commander.ScreenUpdater {
+	return w
+}
+
 func (w *workspace) Status() commander.StatusReporter {
 	return w.container.StatusReporter()
 }
@@ -174,6 +182,7 @@ func (w *workspace) Init() error {
 	if err != nil {
 		return err
 	}
+	w.container.Register(resMenu)
 
 	resMenu.SetStyler(w.styler)
 	w.menu = resMenu

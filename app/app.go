@@ -6,8 +6,10 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/app/ui/status"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/workspace"
 	"github.com/AnatolyRugalev/kube-commander/commander"
+	"github.com/AnatolyRugalev/kube-commander/config"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
+	"sync"
 )
 
 type app struct {
@@ -25,14 +27,18 @@ type app struct {
 
 	defaultNamespace string
 
-	quit chan struct{}
+	configCh      chan config.Event
+	configMu      sync.Mutex
+	configurables []commander.Configurable
+	quit          chan struct{}
+	configPath    string
 }
 
-func (a app) Quit() {
+func (a *app) Quit() {
 	close(a.quit)
 }
 
-func NewApp(config commander.Config, client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, defaultNamespace string) *app {
+func NewApp(config commander.Config, client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, defaultNamespace string, configCh chan config.Event, configPath string) *app {
 	a := app{
 		config:           config,
 		client:           client,
@@ -41,45 +47,47 @@ func NewApp(config commander.Config, client commander.Client, resourceProvider c
 		commandExecutor:  commandExecutor,
 		defaultNamespace: defaultNamespace,
 
-		quit: make(chan struct{}),
+		configCh:   configCh,
+		configPath: configPath,
+		quit:       make(chan struct{}),
 	}
 	a.commandExecutor = NewAppExecutor(&a, commandExecutor)
 	return &a
 }
 
-func (a app) Config() commander.Config {
+func (a *app) Config() commander.Config {
 	return a.config
 }
 
-func (a app) Client() commander.Client {
+func (a *app) Client() commander.Client {
 	return a.client
 }
 
-func (a app) ResourceProvider() commander.ResourceProvider {
+func (a *app) ResourceProvider() commander.ResourceProvider {
 	return a.resourceProvider
 }
 
-func (a app) CommandBuilder() commander.CommandBuilder {
+func (a *app) CommandBuilder() commander.CommandBuilder {
 	return a.commandBuilder
 }
 
-func (a app) CommandExecutor() commander.CommandExecutor {
+func (a *app) CommandExecutor() commander.CommandExecutor {
 	return a.commandExecutor
 }
 
-func (a app) Screen() commander.Screen {
+func (a *app) Screen() commander.Screen {
 	return a.screen
 }
 
-func (a app) Update() {
+func (a *app) Update() {
 	a.tApp.Update()
 }
 
-func (a app) CurrentNamespace() string {
+func (a *app) CurrentNamespace() string {
 	return a.defaultNamespace
 }
 
-func (a app) StatusReporter() commander.StatusReporter {
+func (a *app) StatusReporter() commander.StatusReporter {
 	return a.status
 }
 
@@ -124,8 +132,50 @@ func (a *app) Run() error {
 	a.screen.SetStatus(a.status)
 	a.tApp.Start()
 
+	go a.watchConfig()
+
 	<-a.quit
 
 	a.tApp.Quit()
 	return a.tApp.Wait()
+}
+
+func (a *app) watchConfig() {
+	firstTime := true
+	for event := range a.configCh {
+		if event.Err != nil {
+			a.status.Error(fmt.Errorf("config: %w", event.Err))
+			continue
+		}
+		if !firstTime {
+			a.status.Info("Configuration was updated!")
+		}
+		firstTime = false
+		for _, c := range a.configurables {
+			c.ConfigUpdated(event.Config)
+		}
+	}
+}
+
+func (a *app) Register(c commander.Configurable) {
+	a.configurables = append(a.configurables, c)
+}
+
+func (a *app) ConfigUpdater() commander.ConfigUpdater {
+	return a
+}
+
+func (a *app) UpdateConfig(f commander.ConfigUpdateFunc) error {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
+	cfg, err := config.Load(a.configPath)
+	if err != nil {
+		return err
+	}
+	f(cfg)
+	err = config.Save(a.configPath, cfg)
+	if err != nil {
+		return err
+	}
+	return nil
 }

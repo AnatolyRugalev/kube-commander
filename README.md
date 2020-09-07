@@ -104,6 +104,7 @@ You can easily configure kubecom with this options:
 
 | Flag      | Env var     | Description                                                                                   |
 |-----------|-------------|-----------------------------------------------------------------------------------------------|
+|config     |KUBECOMCONFIG|Path to .kubecom.yaml                                                                          |
 |kubeconfig |KUBECONFIG   |Path to kubeconfig                                                                             |
 |context    |KUBECONTEXT  |Context name                                                                                   |
 |namespace  |KUBENAMESPACE|Initial namespace to show                                                                      |
@@ -130,10 +131,10 @@ You can pipe commands here as well:
 kubecom --log-pager="jq -c | some_other_command"
 ```
 
-### Supported resource types
+### Configuration file
 
-Currently kubecom supports a handful of resources as first-class citizens. You can experiment with "F3" binding
-to display all available resources on your own risk. Menu configurability is coming soon. 
+You can edit configuration file at `~/.kubecom.yaml` which currently stores menu configuration. Themes support is
+coming soon. Configuration schema defined as protobuf in [pb](./pb) directory.
 
 ### Hotkeys
 
@@ -164,7 +165,9 @@ The most of hotkeys you can find on help dialog. Here they are:
 | L | Show pod logs |
 | Shift+L | Show previous pod logs |
 | F | Forward pod port |
-| S | Enter to container `/bin/sh` shell | 
+| S | Enter to container `/bin/sh` shell |
+| + (plus) | Add resource type to the menu |
+| F6, F7 | Move resource type up/down in menu | 
 
 ## Contribution
 
