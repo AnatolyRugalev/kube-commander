@@ -26,9 +26,8 @@ var (
 )
 
 const (
-	columnSeparator    = '|'
+	columnSeparator    = ' '
 	columnSeparatorLen = 1
-	arrows             = "⯇⯈⯅⯆"
 )
 
 var arrowUp = '⯅'
