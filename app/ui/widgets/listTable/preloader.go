@@ -24,14 +24,14 @@ type preloader struct {
 	ticker    *time.Ticker
 	view      views.View
 	style     tcell.Style
-	updater   commander.ScreenUpdater
+	screen    commander.ScreenHandler
 	preloader *preloader
 }
 
-func NewPreloader(updater commander.ScreenUpdater) *preloader {
+func NewPreloader(screen commander.ScreenHandler) *preloader {
 	return &preloader{
-		updater: updater,
-		phase:   -1,
+		screen: screen,
+		phase:  -1,
 	}
 }
 
@@ -46,7 +46,7 @@ func (p *preloader) Start() {
 			if p.phase >= len(phases) {
 				p.phase = 0
 			}
-			p.updater.UpdateScreen()
+			p.screen.UpdateScreen()
 		}
 	}()
 }
@@ -58,14 +58,14 @@ func (p *preloader) Stop() {
 	}
 	p.Unlock()
 	p.phase = -1
-	p.updater.UpdateScreen()
+	p.screen.UpdateScreen()
 }
 
 func (p *preloader) Draw() {
 	if p.phase == -1 {
 		return
 	}
-	p.view.SetContent(0, 0, phases[p.phase], nil, tcell.StyleDefault.Background(tcell.ColorTeal).Foreground(tcell.ColorBlack))
+	p.view.SetContent(0, 0, phases[p.phase], nil, p.screen.Theme().GetStyle("loader"))
 }
 
 func (p *preloader) Resize() {

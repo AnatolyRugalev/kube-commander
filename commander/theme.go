@@ -2,29 +2,22 @@ package commander
 
 import "github.com/gdamore/tcell"
 
-type Stylable interface {
-	GetComponents() []StyleComponent
+type Style = tcell.Style
+
+type Color struct {
+	Name  string
+	Color tcell.Color
 }
 
-type StyleComponent interface {
+type ThemeComponent interface {
 	Name() string
-	Style() Style
-	SetStyle(style Style)
+	Style(name string) Style
+	SetStyle(name string, style Style)
 }
 
 type ThemeManager interface {
-	tcell.EventHandler
-	Init() error
-	DeInit()
-
-	NextComponent()
-	PrevComponent()
-
-	NextBg()
-	PrevBg()
-
-	NextFg()
-	PrevFg()
-
-	SwitchAttr(attr tcell.AttrMask)
+	Configurable
+	GetStyle(name string) Style
+	NextTheme()
+	PrevTheme()
 }

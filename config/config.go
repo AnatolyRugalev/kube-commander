@@ -86,6 +86,10 @@ func Watch(ctx context.Context, path string, ch chan<- Event) error {
 }
 
 func Save(path string, config *pb.Config) error {
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	if err != nil {
+		return fmt.Errorf("could not create configuration file directory")
+	}
 	jsonB, err := protojson.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("error marshalling config: %w", err)

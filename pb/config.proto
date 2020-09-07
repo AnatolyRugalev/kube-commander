@@ -6,6 +6,8 @@ option go_package = "github.com/AnatolyRugalev/kube-commander/pb;pb";
 
 message Config {
     repeated Resource menu = 1;
+    string currentTheme = 2;
+    repeated Theme themes = 3;
 }
 
 message Resource {
@@ -13,4 +15,41 @@ message Resource {
     string group = 2;
     string kind = 3;
     string title = 4;
+}
+
+// TODO: add Register method to theme manager
+// TODO: register components with their styles into manager
+// TODO: cycle through components and styles and edit themes through manager
+message Theme {
+    // Theme unique name
+    string name = 1;
+    // Color palette
+    repeated Color colors = 2;
+    // Components color bindings
+    repeated Style styles = 3;
+}
+
+// Color palette allows to reuse colors in theme
+message Color {
+    string name = 1;
+    oneof value {
+        string rgb = 2;
+        int32 xterm = 3;
+    }
+}
+
+enum StyleAttribute {
+    NONE = 0;
+    BOLD = 1;
+    BLINK = 2;
+    REVERSE = 3;
+    UNDERLINE = 4;
+    DIM = 5;
+}
+
+message Style {
+    string name = 1;
+    string bg = 2;
+    string fg = 3;
+    repeated StyleAttribute attrs = 4;
 }

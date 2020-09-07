@@ -19,7 +19,7 @@ func pickPodContainer(workspace commander.Workspace, pod v1.Pod, f ContainerFunc
 		f(pod, pod.Spec.Containers[0], pod.Status.ContainerStatuses[0])
 		return
 	}
-	picker := newContainerPicker(pod, func(pod v1.Pod, c v1.Container, status v1.ContainerStatus) {
+	picker := newContainerPicker(workspace.ScreenHandler(), pod, func(pod v1.Pod, c v1.Container, status v1.ContainerStatus) {
 		workspace.FocusManager().Blur()
 		f(pod, c, status)
 	})
@@ -49,7 +49,7 @@ type picker struct {
 	f   ContainerFunc
 }
 
-func newContainerPicker(pod v1.Pod, f ContainerFunc) *picker {
+func newContainerPicker(screen commander.ScreenHandler, pod v1.Pod, f ContainerFunc) *picker {
 	var items []commander.Row
 	for i, status := range pod.Status.InitContainerStatuses {
 		items = append(items, &item{
@@ -64,7 +64,7 @@ func newContainerPicker(pod v1.Pod, f ContainerFunc) *picker {
 		})
 	}
 	picker := &picker{
-		ListTable: listTable.NewStaticListTable([]string{"Container", "Status"}, items, listTable.WithHeaders),
+		ListTable: listTable.NewStaticListTable([]string{"Container", "Status"}, items, listTable.WithHeaders, screen),
 		pod:       pod,
 		f:         f,
 	}

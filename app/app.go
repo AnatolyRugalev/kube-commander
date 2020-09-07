@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app/ui"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/status"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/workspace"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/AnatolyRugalev/kube-commander/config"
@@ -123,13 +124,17 @@ func (a *app) Run() error {
 		return fmt.Errorf("could not initialize screen: %w", err)
 	}
 	a.workspace = workspace.NewWorkspace(a, a.defaultNamespace)
+	a.screen.SetWorkspace(a.workspace)
+
+	a.status = status.NewStatus(a.screen)
+	themeManager := theme.NewManager(a.screen, a.status, a)
+	a.Register(themeManager)
+
+	a.screen.Init(a.status, themeManager)
 	err = a.workspace.Init()
 	if err != nil {
 		return err
 	}
-	a.status = status.NewStatus(a.screen)
-	a.screen.SetWorkspace(a.workspace)
-	a.screen.SetStatus(a.status)
 	a.tApp.Start()
 
 	go a.watchConfig()
@@ -141,16 +146,11 @@ func (a *app) Run() error {
 }
 
 func (a *app) watchConfig() {
-	firstTime := true
 	for event := range a.configCh {
 		if event.Err != nil {
 			a.status.Error(fmt.Errorf("config: %w", event.Err))
 			continue
 		}
-		if !firstTime {
-			a.status.Info("Configuration was updated!")
-		}
-		firstTime = false
 		for _, c := range a.configurables {
 			c.ConfigUpdated(event.Config)
 		}

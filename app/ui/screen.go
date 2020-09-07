@@ -2,7 +2,7 @@ package ui
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
-	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
+	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/logo"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
@@ -17,6 +17,8 @@ type Screen struct {
 	status    commander.StatusReporter
 	view      commander.View
 	theme     commander.ThemeManager
+	title     *views.BoxLayout
+	titleBar  *views.TextBar
 }
 
 func (s *Screen) View() commander.View {
@@ -28,11 +30,13 @@ func (s *Screen) SetView(view views.View) {
 	s.Panel.SetView(view)
 }
 
-func (s *Screen) SetStatus(stat commander.StatusReporter) {
-	s.status = stat
+func (s *Screen) Init(status commander.StatusReporter, theme commander.ThemeManager) {
+	s.status = status
 	s.Panel.SetStatus(s.status)
-
-	s.theme = theme.NewManager(s.workspace.FocusManager(), s, s.status)
+	s.theme = theme
+	s.title.AddWidget(logo.NewLogo(s.theme), 0)
+	s.title.AddWidget(s.titleBar, 1.0)
+	s.SetTitle(s.title)
 }
 
 func (s *Screen) UpdateScreen() {
@@ -46,7 +50,7 @@ func (s *Screen) SetWorkspace(workspace commander.Workspace) {
 	s.SetContent(s.workspace)
 }
 
-func (s Screen) Workspace() commander.Workspace {
+func (s *Screen) Workspace() commander.Workspace {
 	return s.workspace
 }
 
@@ -55,24 +59,23 @@ func NewScreen(app commander.App) *Screen {
 		Panel:     views.NewPanel(),
 		Focusable: focus.NewFocusable(),
 		app:       app,
+		title:     views.NewBoxLayout(views.Horizontal),
+		titleBar:  views.NewTextBar(),
 	}
-
-	title := views.NewTextBar()
-	title.SetStyle(tcell.StyleDefault.
-		Background(tcell.ColorTeal).
-		Foreground(tcell.ColorWhite))
-	title.SetCenter("kube-commander", theme.Default)
-	title.SetRight(app.Config().Context(), theme.Default)
-
-	s.SetTitle(title)
-
 	return &s
 }
 
-func (s Screen) HandleEvent(e tcell.Event) bool {
-	if s.theme.HandleEvent(e) {
-		return true
-	}
+func (s *Screen) Draw() {
+	s.titleBar.SetStyle(s.theme.GetStyle("title-bar"))
+	s.Panel.SetStyle(s.theme.GetStyle("screen"))
+	s.Panel.Draw()
+}
+
+func (s *Screen) Theme() commander.ThemeManager {
+	return s.theme
+}
+
+func (s *Screen) HandleEvent(e tcell.Event) bool {
 	if s.BoxLayout.HandleEvent(e) {
 		return true
 	}
@@ -83,13 +86,12 @@ func (s Screen) HandleEvent(e tcell.Event) bool {
 			return true
 		}
 		switch ev.Key() {
-		case tcell.KeyF10:
-			err := s.theme.Init()
-			if err != nil {
-				s.status.Error(err)
-			}
 		case tcell.KeyF11:
-			s.theme.DeInit()
+			s.theme.NextTheme()
+			return true
+		case tcell.KeyF10:
+			s.theme.PrevTheme()
+			return true
 		}
 	}
 	return false

@@ -2,6 +2,7 @@ package border
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
+	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 )
@@ -11,18 +12,18 @@ type VerticalLine struct {
 	views.WidgetWatchers
 
 	view  views.View
-	style tcell.Style
+	theme commander.ThemeManager
 }
 
-func NewVerticalLine(style tcell.Style) *VerticalLine {
+func NewVerticalLine(theme commander.ThemeManager) *VerticalLine {
 	return &VerticalLine{
 		Focusable: focus.NewFocusable(),
-		style:     style,
+		theme:     theme,
 	}
 }
 
 func (l VerticalLine) Draw() {
-	l.view.Fill(vertical, l.style)
+	l.view.Fill(vertical, l.theme.GetStyle("screen"))
 }
 
 func (l VerticalLine) Resize() {

@@ -2,8 +2,8 @@ package listTable
 
 import "github.com/AnatolyRugalev/kube-commander/commander"
 
-func NewStaticListTable(columns []string, rows []commander.Row, format TableFormat) *ListTable {
-	lt := NewListTable(NewStaticRowProvider(columns, rows), format, nil)
+func NewStaticListTable(columns []string, rows []commander.Row, format TableFormat, screen commander.ScreenHandler) *ListTable {
+	lt := NewListTable(NewStaticRowProvider(columns, rows), format, screen)
 	lt.watch()
 	return lt
 }
