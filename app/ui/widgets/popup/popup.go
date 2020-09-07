@@ -2,7 +2,6 @@ package popup
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/app/ui/border"
-	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell/views"
 )
@@ -43,9 +42,9 @@ func (p *popup) Reposition(view commander.View) {
 	p.BorderedWidget.SetView(popupView)
 }
 
-func NewPopup(view commander.View, title string, widget commander.MaxSizeWidget, onBlur func()) *popup {
+func NewPopup(view commander.View, theme commander.ThemeManager, title string, widget commander.MaxSizeWidget, onBlur func()) *popup {
 	popup := popup{
-		BorderedWidget: border.NewBorderedWidget(widget, title, theme.Default, theme.Default.Underline(true), border.All),
+		BorderedWidget: border.NewBorderedWidget(widget, title, theme, "popup", "popup-title", border.All),
 		onBlur:         onBlur,
 	}
 	popup.Reposition(view)

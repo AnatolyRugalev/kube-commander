@@ -46,5 +46,5 @@ type ResourceContainer interface {
 	ResourceProvider() ResourceProvider
 	CommandBuilder() CommandBuilder
 	CommandExecutor() CommandExecutor
-	ScreenUpdater() ScreenUpdater
+	ScreenHandler() ScreenHandler
 }

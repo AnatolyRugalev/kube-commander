@@ -140,8 +140,9 @@ kubecom --log-pager="jq -c | some_other_command"
 
 ### Configuration file
 
-You can edit configuration file at `~/.kubecom.yaml` which currently stores menu configuration. Themes support is
-coming soon. Configuration schema defined as protobuf in [pb](./pb) directory.
+You can edit configuration file at `~/.kubecom.yaml` to modify resource menu titles and themes. Usually you don't need
+to edit config manually: it updates automatically when you change resource menu items or switch theme. You can get
+familiar with configuration capabilities inspecting [pb/config.proto](pb/config.proto) protobuf file.
 
 ### Hotkeys
 
@@ -175,6 +176,7 @@ The most of hotkeys you can find on help dialog. Here they are:
 | S | Enter to container `/bin/sh` shell |
 | + (plus) | Add resource type to the menu |
 | F6, F7 | Move resource type up/down in menu | 
+| F10, F11 | Cycle through themes | 
 
 ## Contribution
 

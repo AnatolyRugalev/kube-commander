@@ -1,7 +1,6 @@
 package commander
 
 import (
-	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 )
 
@@ -19,8 +18,6 @@ type MaxSizeWidget interface {
 	Widget
 	MaxSize() (int, int)
 }
-
-type Style = tcell.Style
 
 type StylableWidget interface {
 	SetStyle(style Style)

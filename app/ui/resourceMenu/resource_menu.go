@@ -135,7 +135,7 @@ func newItemFromPb(res *pb.Resource) *resourceItem {
 
 func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, selectNamespace func(), resourceProvider commander.ResourceProvider) (*ResourceMenu, error) {
 	prov := make(commander.RowProvider)
-	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll|listTable.WithFilter, workspace.ScreenUpdater())
+	lt := listTable.NewListTable(prov, listTable.NoHorizontalScroll|listTable.WithFilter, workspace.ScreenHandler())
 	r := &ResourceMenu{
 		ListTable:       lt,
 		onSelect:        onSelect,
@@ -237,7 +237,7 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 		return true
 	} else if event.Key() == tcell.KeyDelete {
 		go func() {
-			if r.workspace.Status().Confirm("Do you want to hide this resource? (y/n)") {
+			if r.workspace.Status().Confirm("Do you want to hide this resource? (y/N)") {
 				for i, item := range r.items {
 					if item.Id() == row.Id() {
 						r.items = append(r.items[:i], r.items[i+1:]...)
@@ -245,6 +245,8 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 					}
 				}
 				r.saveItems()
+			} else {
+				r.workspace.Status().Info("Cancelled.")
 			}
 		}()
 		return true

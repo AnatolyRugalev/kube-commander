@@ -13,7 +13,7 @@ import (
 type PortFunc func(pod v1.Pod, container v1.Container, port v1.ContainerPort)
 
 func pickPodPort(workspace commander.Workspace, pod v1.Pod, f PortFunc) {
-	picker, err := newPortPicker(pod, func(pod v1.Pod, c v1.Container, port v1.ContainerPort) {
+	picker, err := newPortPicker(workspace.ScreenHandler(), pod, func(pod v1.Pod, c v1.Container, port v1.ContainerPort) {
 		workspace.FocusManager().Blur()
 		f(pod, c, port)
 	})
@@ -48,7 +48,7 @@ type portPicker struct {
 	f   PortFunc
 }
 
-func newPortPicker(pod v1.Pod, f PortFunc) (*portPicker, error) {
+func newPortPicker(screen commander.ScreenHandler, pod v1.Pod, f PortFunc) (*portPicker, error) {
 	var items []commander.Row
 	for i, status := range pod.Status.ContainerStatuses {
 		container := pod.Spec.Containers[i]
@@ -64,7 +64,7 @@ func newPortPicker(pod v1.Pod, f PortFunc) (*portPicker, error) {
 		return nil, errors.New("this pod doesn't have any defined or active ports")
 	}
 	picker := &portPicker{
-		ListTable: listTable.NewStaticListTable([]string{"Container", "Status", "Port"}, items, listTable.WithHeaders),
+		ListTable: listTable.NewStaticListTable([]string{"Container", "Status", "Port"}, items, listTable.WithHeaders, screen),
 		pod:       pod,
 		f:         f,
 	}

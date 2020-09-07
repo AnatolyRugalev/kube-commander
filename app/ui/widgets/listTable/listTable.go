@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app/focus"
-	"github.com/AnatolyRugalev/kube-commander/app/ui/theme"
 	"github.com/AnatolyRugalev/kube-commander/commander"
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 	"github.com/mattn/go-runewidth"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,32 +51,18 @@ func (tf TableFormat) Has(flag TableFormat) bool {
 	return tf&flag != 0
 }
 
-var DefaultStyler commander.ListViewStyler = func(list commander.ListView, row commander.Row) commander.Style {
-	style := theme.Default
-	if row == nil {
-		style = style.Underline(true)
-	} else if row.Id() == list.SelectedRowId() {
-		if list.IsFocused() {
-			style = style.Background(theme.ColorSelectedFocusedBackground)
-		} else {
-			style = style.Background(theme.ColorSelectedUnfocusedBackground)
-		}
-	}
-	if row != nil && !row.Enabled() {
-		style = style.Foreground(theme.ColorDisabledForeground)
-	}
-	return style
-}
-
 type ListTable struct {
 	views.WidgetWatchers
 	*focus.Focusable
 
-	view       views.View
-	columns    []string
-	ageCol     int
-	rows       []commander.Row
-	rowIndex   map[string]int
+	view   views.View
+	ageCol int
+
+	rowsMu   sync.RWMutex
+	rows     []commander.Row
+	rowIndex map[string]int
+	columns  []string
+
 	selectedId string
 	format     TableFormat
 	// internal representation of table values
@@ -93,40 +79,16 @@ type ListTable struct {
 	onInitStart  InitFunc
 	onInitFinish InitFunc
 
-	styler      commander.ListViewStyler
 	preloader   *preloader
 	rowProvider commander.RowProvider
-	updater     commander.ScreenUpdater
+	screen      commander.ScreenHandler
 	stopCh      chan struct{}
 
 	filter     string
 	filterMode bool
-
-	stRow               commander.StyleComponent
-	stHeader            commander.StyleComponent
-	stSelectedFocused   commander.StyleComponent
-	stSelectedUnfocused commander.StyleComponent
-	stDisabled          commander.StyleComponent
-	stFilter            commander.StyleComponent
-	stFilterActive      commander.StyleComponent
 }
 
-func (lt *ListTable) GetComponents() []commander.StyleComponent {
-	return []commander.StyleComponent{
-		lt.stRow,
-		lt.stHeader,
-		lt.stSelectedFocused,
-		lt.stSelectedUnfocused,
-		lt.stFilter,
-		lt.stFilterActive,
-	}
-}
-
-func (lt *ListTable) Rows() []commander.Row {
-	return lt.rows
-}
-
-func NewListTable(prov commander.RowProvider, format TableFormat, updater commander.ScreenUpdater) *ListTable {
+func NewListTable(prov commander.RowProvider, format TableFormat, screen commander.ScreenHandler) *ListTable {
 	lt := &ListTable{
 		Focusable: focus.NewFocusable(),
 		format:    format,
@@ -137,18 +99,9 @@ func NewListTable(prov commander.RowProvider, format TableFormat, updater comman
 		onChange:     DefaultRowFunc,
 		onInitStart:  DefaultInit,
 		onInitFinish: DefaultInit,
-		styler:       DefaultStyler,
-		preloader:    NewPreloader(updater),
+		preloader:    NewPreloader(screen),
 		rowProvider:  prov,
-		updater:      updater,
-
-		stRow:               theme.NewComponent("row", theme.Default),
-		stHeader:            theme.NewComponent("header", theme.Default.Underline(true)),
-		stSelectedFocused:   theme.NewComponent("selected-focused", theme.Default.Background(theme.ColorSelectedFocusedBackground)),
-		stSelectedUnfocused: theme.NewComponent("selected-unfocused", theme.Default.Background(theme.ColorSelectedUnfocusedBackground)),
-		stDisabled:          theme.NewComponent("disabled", theme.Default.Foreground(theme.ColorDisabledForeground)),
-		stFilter:            theme.NewComponent("filter", theme.Default.Background(theme.ColorSelectedUnfocusedBackground)),
-		stFilterActive:      theme.NewComponent("filter-active", theme.Default.Background(theme.ColorSelectedFocusedBackground)),
+		screen:       screen,
 	}
 	lt.Render()
 	return lt
@@ -181,18 +134,23 @@ func (lt *ListTable) watch() {
 			for _, operation := range ops {
 				switch op := operation.(type) {
 				case *commander.OpClear:
+					lt.rowsMu.Lock()
 					lt.rows = []commander.Row{}
 					lt.rowIndex = make(map[string]int)
 					lt.columns = []string{}
+					lt.rowsMu.Unlock()
 					changed = true
 				case *commander.OpSetColumns:
+					lt.rowsMu.Lock()
 					// Compare columns content
 					if strings.Join(lt.columns, "|") != strings.Join(op.Columns, "|") {
 						lt.columns = op.Columns
 						changed = true
 					}
 					lt.setAgeCol()
+					lt.rowsMu.Unlock()
 				case *commander.OpAdded:
+					lt.rowsMu.Lock()
 					index, ok := lt.rowIndex[op.Row.Id()]
 					if !ok {
 						if op.Index == nil {
@@ -217,7 +175,9 @@ func (lt *ListTable) watch() {
 						lt.rows[index] = op.Row
 						// TODO: move row if new index provided?
 					}
+					lt.rowsMu.Unlock()
 				case *commander.OpDeleted:
+					lt.rowsMu.Lock()
 					index, ok := lt.rowIndex[op.RowId]
 					if ok {
 						lt.rows = append(lt.rows[:index], lt.rows[index+1:]...)
@@ -227,7 +187,9 @@ func (lt *ListTable) watch() {
 						}
 						changed = true
 					}
+					lt.rowsMu.Unlock()
 				case *commander.OpModified:
+					lt.rowsMu.Lock()
 					index, ok := lt.rowIndex[op.Row.Id()]
 					if ok {
 						// Compare cells content
@@ -240,9 +202,12 @@ func (lt *ListTable) watch() {
 							changed = true
 						}
 					} else {
+						lt.rowsMu.Lock()
 						lt.rows = append(lt.rows, op.Row)
+						lt.rowsMu.Unlock()
 						changed = true
 					}
+					lt.rowsMu.Unlock()
 				case *commander.OpInitStart:
 					lt.preloader.Start()
 					lt.onInitStart()
@@ -254,18 +219,18 @@ func (lt *ListTable) watch() {
 			if changed {
 				lt.Render()
 				lt.reindexSelection()
-				if lt.updater != nil {
-					lt.updater.Resize()
-					lt.updater.UpdateScreen()
+				if lt.screen != nil {
+					lt.screen.Resize()
+					lt.screen.UpdateScreen()
 				}
 			}
 		case <-ticker.C:
 			// Periodically update list to ensure that age is somewhat relevant
 			if lt.ageCol != -1 {
 				lt.Render()
-				if lt.updater != nil {
-					lt.updater.Resize()
-					lt.updater.UpdateScreen()
+				if lt.screen != nil {
+					lt.screen.Resize()
+					lt.screen.UpdateScreen()
 				}
 			}
 		}
@@ -301,23 +266,18 @@ func (lt *ListTable) SelectedRow() commander.Row {
 	return nil
 }
 
-// deprecated
-func (lt *ListTable) SetStyler(styler commander.ListViewStyler) {
-	lt.styler = styler
-}
-
 func (lt *ListTable) rowStyle(row commander.Row) commander.Style {
 	if row.Id() == lt.SelectedRowId() {
 		if lt.IsFocused() {
-			return lt.stSelectedFocused.Style()
+			return lt.screen.Theme().GetStyle("row-selected-focused")
 		} else {
-			return lt.stSelectedUnfocused.Style()
+			return lt.screen.Theme().GetStyle("row-selected-unfocused")
 		}
 	}
 	if row != nil && !row.Enabled() {
-		return lt.stDisabled.Style()
+		return lt.screen.Theme().GetStyle("row-disabled")
 	}
-	return lt.stRow.Style()
+	return lt.screen.Theme().GetStyle("row")
 
 }
 
@@ -355,6 +315,8 @@ func (lt *ListTable) BindOnInitStart(initFunc InitFunc) {
 }
 
 func (lt *ListTable) RowById(id string) commander.Row {
+	lt.rowsMu.RLock()
+	defer lt.rowsMu.RUnlock()
 	if index, ok := lt.rowIndex[id]; ok {
 		return lt.rows[index]
 	}
@@ -423,6 +385,8 @@ func (lt *ListTable) renderTable() table {
 	t := table{
 		rowIndex: make(map[string]int),
 	}
+	lt.rowsMu.RLock()
+	defer lt.rowsMu.RUnlock()
 	t.dataHeight = len(lt.rows)
 	t.columnDataWidths = []int{}
 	if lt.format.Has(WithHeaders) {
@@ -511,7 +475,7 @@ func (lt *ListTable) Draw() {
 	}
 	sizes := lt.getColumnSizes()
 	if lt.format.Has(WithHeaders) {
-		lt.drawRow(index, lt.table.headers, sizes, lt.stHeader.Style())
+		lt.drawRow(index, lt.table.headers, sizes, lt.screen.Theme().GetStyle("row-header"))
 		index++
 	}
 	rowIndex := 0
@@ -538,9 +502,9 @@ func (lt *ListTable) drawFilter(y int) {
 	x := 0
 	var st commander.Style
 	if lt.filterMode {
-		st = lt.stFilterActive.Style()
+		st = lt.screen.Theme().GetStyle("filter-active")
 	} else {
-		st = lt.stFilter.Style()
+		st = lt.screen.Theme().GetStyle("filter-inactive")
 	}
 	for _, ch := range str {
 		lt.view.SetContent(x, y, ch, nil, st)
@@ -549,7 +513,7 @@ func (lt *ListTable) drawFilter(y int) {
 }
 
 func (lt *ListTable) defaultStyle() tcell.Style {
-	return tcell.StyleDefault.Background(tcell.ColorTeal)
+	return lt.screen.Theme().GetStyle("screen")
 }
 
 func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style) {

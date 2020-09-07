@@ -1,10 +1,10 @@
 package commander
 
 type Screen interface {
-	ScreenUpdater
+	ScreenHandler
 	Widget
+	Init(status StatusReporter, theme ThemeManager)
 	SetWorkspace(workspace Workspace)
-	SetStatus(status StatusReporter)
 	Workspace() Workspace
 	View() View
 }
@@ -17,7 +17,8 @@ type StatusReporter interface {
 	Confirm(msg string) bool
 }
 
-type ScreenUpdater interface {
+type ScreenHandler interface {
 	UpdateScreen()
 	Resize()
+	Theme() ThemeManager
 }

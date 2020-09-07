@@ -30,7 +30,7 @@ func NewResourceListTable(container commander.ResourceContainer, resource *comma
 		rowProvider: make(commander.RowProvider),
 		format:      format,
 	}
-	resourceLt.ListTable = NewListTable(resourceLt.rowProvider, format, container.ScreenUpdater())
+	resourceLt.ListTable = NewListTable(resourceLt.rowProvider, format, container.ScreenHandler())
 	if !format.Has(NoActions) {
 		resourceLt.BindOnKeyPress(resourceLt.OnKeyPress)
 	}

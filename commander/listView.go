@@ -42,10 +42,8 @@ func NewSimpleRow(id string, cells []string, enabled bool) *simpleRow {
 
 type ListView interface {
 	MaxSizeWidget
-	Rows() []Row
 	SelectedRow() Row
 	SelectedRowId() string
-	SetStyler(styler ListViewStyler)
 	SelectId(id string)
 }
 

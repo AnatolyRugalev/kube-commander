@@ -2,7 +2,6 @@ package border
 
 import (
 	"github.com/AnatolyRugalev/kube-commander/commander"
-	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 )
 
@@ -31,8 +30,9 @@ type BorderedWidget struct {
 	commander.MaxSizeWidget
 	title      string
 	view       views.View
-	style      tcell.Style
-	titleStyle tcell.Style
+	theme      commander.ThemeManager
+	style      string
+	titleStyle string
 	borders    Borders
 }
 
@@ -40,20 +40,21 @@ func (b Borders) Has(flag Borders) bool {
 	return b&flag == flag
 }
 
-func NewBorderedWidget(widget commander.MaxSizeWidget, title string, style tcell.Style, titleStyle tcell.Style, borders Borders) *BorderedWidget {
+func NewBorderedWidget(widget commander.MaxSizeWidget, title string, theme commander.ThemeManager, style string, titleStyle string, borders Borders) *BorderedWidget {
 	if borders == 0 {
 		borders = All
 	}
 	return &BorderedWidget{
 		MaxSizeWidget: widget,
 		title:         title,
+		theme:         theme,
 		style:         style,
 		titleStyle:    titleStyle,
 		borders:       borders,
 	}
 }
 
-func (b BorderedWidget) Draw() {
+func (b *BorderedWidget) Draw() {
 	w, h := b.view.Size()
 
 	x0 := 0
@@ -65,47 +66,49 @@ func (b BorderedWidget) Draw() {
 		y0++
 	}
 
+	style := b.theme.GetStyle(b.style)
+	titleStyle := b.theme.GetStyle(b.titleStyle)
 	for y := 1; y < h-1; y++ {
 		if b.borders.Has(Left) {
-			b.view.SetContent(0, y, vertical, nil, b.style)
+			b.view.SetContent(0, y, vertical, nil, style)
 		}
 		if b.borders.Has(Right) {
-			b.view.SetContent(w-1, y, vertical, nil, b.style)
+			b.view.SetContent(w-1, y, vertical, nil, style)
 		}
 	}
 
 	for x := 1; x < w-1; x++ {
 		if b.borders.Has(Top) {
-			b.view.SetContent(x, 0, horizontal, nil, b.style)
+			b.view.SetContent(x, 0, horizontal, nil, style)
 		}
 		if b.borders.Has(Bottom) {
-			b.view.SetContent(x, h-1, horizontal, nil, b.style)
+			b.view.SetContent(x, h-1, horizontal, nil, style)
 		}
 	}
 	if b.title != "" && b.borders.Has(Top) {
-		b.view.SetContent(x0, 0, titleLeft, nil, b.style)
+		b.view.SetContent(x0, 0, titleLeft, nil, style)
 		for i, r := range b.title {
-			b.view.SetContent(i+x0+1, 0, r, nil, b.titleStyle)
+			b.view.SetContent(i+x0+1, 0, r, nil, titleStyle)
 		}
-		b.view.SetContent(x0+len(b.title)+1, 0, titleRight, nil, b.style)
+		b.view.SetContent(x0+len(b.title)+1, 0, titleRight, nil, style)
 	}
 
 	if b.borders.Has(Top | Left) {
-		b.view.SetContent(0, 0, cornerTopLeft, nil, b.style)
+		b.view.SetContent(0, 0, cornerTopLeft, nil, style)
 	}
 	if b.borders.Has(Top | Right) {
-		b.view.SetContent(w-1, 0, cornerTopRight, nil, b.style)
+		b.view.SetContent(w-1, 0, cornerTopRight, nil, style)
 	}
 	if b.borders.Has(Bottom | Left) {
-		b.view.SetContent(0, h-1, cornerBottomLeft, nil, b.style)
+		b.view.SetContent(0, h-1, cornerBottomLeft, nil, style)
 	}
 	if b.borders.Has(Bottom | Right) {
-		b.view.SetContent(w-1, h-1, cornerBottomRight, nil, b.style)
+		b.view.SetContent(w-1, h-1, cornerBottomRight, nil, style)
 	}
 	b.MaxSizeWidget.Draw()
 }
 
-func (b BorderedWidget) offsets() (int, int) {
+func (b *BorderedWidget) offsets() (int, int) {
 	offsetH := 0
 	offsetW := 0
 	if b.borders.Has(Top) {
@@ -146,7 +149,7 @@ func (b *BorderedWidget) SetView(view views.View) {
 	b.MaxSizeWidget.SetView(viewport)
 }
 
-func (b BorderedWidget) MaxSize() (int, int) {
+func (b *BorderedWidget) MaxSize() (int, int) {
 	w, h := b.MaxSizeWidget.MaxSize()
 	offsetW, offsetH := b.offsets()
 	if b.title != "" && len(b.title)+2 > w {

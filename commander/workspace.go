@@ -7,6 +7,7 @@ type Workspace interface {
 	Init() error
 	ShowPopup(title string, widget MaxSizeWidget)
 	FocusManager() FocusManager
+	Theme() ThemeManager
 }
 
 type NamespaceAccessor interface {
