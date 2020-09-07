@@ -35,4 +35,4 @@ deploy:
     skip_cleanup: true
     script: curl -sL https://git.io/goreleaser | bash -s - --snapshot
     on:
-      branch: ci-test
+      branch: master
