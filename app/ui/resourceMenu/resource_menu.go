@@ -1,37 +1,45 @@
 package resourceMenu
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/resources/pod"
 	"github.com/AnatolyRugalev/kube-commander/app/ui/widgets/listTable"
 	"github.com/AnatolyRugalev/kube-commander/commander"
+	"github.com/AnatolyRugalev/kube-commander/pb"
 	"github.com/gdamore/tcell"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"strings"
+	"sync"
 )
 
 type resourceItem struct {
 	title      string
 	gk         schema.GroupKind
+	namespaced bool
 	resource   *commander.Resource
 	widget     commander.Widget
-	decoration string
+	isLast     bool
 }
 
-func (r resourceItem) Id() string {
+func (r *resourceItem) Id() string {
 	return r.gk.String()
 }
 
-func (r resourceItem) Cells() []string {
-	return []string{r.decoration + r.title}
+func (r *resourceItem) Cells() []string {
+	var decoration string
+	if r.namespaced {
+		if r.isLast {
+			decoration = " └ "
+		} else {
+			decoration = " ├ "
+		}
+	} else {
+		decoration = " "
+	}
+	return []string{decoration + r.title}
 }
 
-func (r resourceItem) Enabled() bool {
+func (r *resourceItem) Enabled() bool {
 	return r.widget != nil
-}
-
-func (r resourceItem) OnSelect() bool {
-	panic("implement me")
 }
 
 type namespaceSelector struct {
@@ -63,45 +71,25 @@ var (
 			return pod.NewPodsList(workspace, resource, format)
 		},
 	}
-	clusterGKs = []schema.GroupKind{
-		{Kind: "Namespace", Group: ""},
-		{Kind: "Node", Group: ""},
-		{Kind: "StorageClass", Group: "storage.k8s.io"},
-		{Kind: "PersistentVolume", Group: ""},
-	}
-	namespacedGKs = []schema.GroupKind{
-		{Kind: "Deployment", Group: "apps"},
-		{Kind: "StatefulSet", Group: "apps"},
-		{Kind: "DaemonSet", Group: "apps"},
-		{Kind: "ReplicaSet", Group: "apps"},
-		{Kind: "Pod", Group: ""},
-		{Kind: "CronJob", Group: "batch"},
-		{Kind: "Job", Group: "batch"},
-		{Kind: "PersistentVolumeClaim", Group: ""},
-		{Kind: "ConfigMap", Group: ""},
-		{Kind: "Secret", Group: ""},
-		{Kind: "Service", Group: ""},
-		{Kind: "Ingress", Group: "networking.k8s.io"},
-		{Kind: "ServiceAccount", Group: ""},
-	}
-	knownTitles = map[string]string{
-		"Namespace":             "Namespaces",
-		"Node":                  "Nodes",
-		"StorageClass":          "Storage",
-		"PersistentVolume":      "Volumes",
-		"Deployment":            "Deployments",
-		"StatefulSet":           "Stateful",
-		"DaemonSet":             "Daemons",
-		"ReplicaSet":            "Replicas",
-		"Pod":                   "Pods",
-		"CronJob":               "Cron Jobs",
-		"Job":                   "Jobs",
-		"PersistentVolumeClaim": "PVCs",
-		"ConfigMap":             "Configs",
-		"Secret":                "Secrets",
-		"Service":               "Services",
-		"Ingress":               "Ingresses",
-		"ServiceAccount":        "Accounts",
+	DefaultItems = []*pb.Resource{
+		{Kind: "Namespace", Group: "", Title: "Namespaces"},
+		{Kind: "Node", Group: "", Title: "Nodes"},
+		{Kind: "StorageClass", Group: "storage.k8s.io", Title: "Storage"},
+		{Kind: "PersistentVolume", Group: "", Title: "Volumes"},
+
+		{Namespaced: true, Kind: "Deployment", Group: "apps", Title: "Deployments"},
+		{Namespaced: true, Kind: "StatefulSet", Group: "apps", Title: "Stateful"},
+		{Namespaced: true, Kind: "DaemonSet", Group: "apps", Title: "Daemons"},
+		{Namespaced: true, Kind: "ReplicaSet", Group: "apps", Title: "Replicas"},
+		{Namespaced: true, Kind: "Pod", Group: "", Title: "Pods"},
+		{Namespaced: true, Kind: "CronJob", Group: "batch", Title: "Cron Jobs"},
+		{Namespaced: true, Kind: "Job", Group: "batch", Title: "Jobs"},
+		{Namespaced: true, Kind: "PersistentVolumeClaim", Group: "", Title: "PVCs"},
+		{Namespaced: true, Kind: "ConfigMap", Group: "", Title: "Configs"},
+		{Namespaced: true, Kind: "Secret", Group: "", Title: "Secrets"},
+		{Namespaced: true, Kind: "Service", Group: "", Title: "Services"},
+		{Namespaced: true, Kind: "Ingress", Group: "networking.k8s.io", Title: "Ingresses"},
+		{Namespaced: true, Kind: "ServiceAccount", Group: "", Title: "ServiceAccounts"},
 	}
 )
 
@@ -111,11 +99,7 @@ type SelectFunc func(itemId string, widget commander.Widget) bool
 
 type ResourceMenu struct {
 	*listTable.ListTable
-
-	clusterItems         int
-	extraClusterItems    []*resourceItem
-	extraNamespacedItems []*resourceItem
-	showExtra            bool
+	sync.Mutex
 
 	onSelect        SelectFunc
 	selectNamespace func()
@@ -123,6 +107,30 @@ type ResourceMenu struct {
 	resources   commander.ResourceProvider
 	rowProvider commander.RowProvider
 	workspace   commander.Workspace
+
+	items        []*resourceItem
+	clusterItems int
+}
+
+func (r *ResourceMenu) ConfigUpdated(config *pb.Config) {
+	items := config.Menu
+	if len(items) == 0 {
+		items = DefaultItems
+	}
+	ops, err := r.UpdateMenu(items)
+	if err != nil {
+		r.workspace.Status().Error(err)
+		return
+	}
+	r.rowProvider <- ops
+}
+
+func newItemFromPb(res *pb.Resource) *resourceItem {
+	return &resourceItem{
+		gk:         schema.GroupKind{Kind: res.Kind, Group: res.Group},
+		title:      res.Title,
+		namespaced: res.Namespaced,
+	}
 }
 
 func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, selectNamespace func(), resourceProvider commander.ResourceProvider) (*ResourceMenu, error) {
@@ -140,7 +148,9 @@ func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, select
 	return r, nil
 }
 
-func (r *ResourceMenu) provideItems() {
+func (r *ResourceMenu) UpdateMenu(items []*pb.Resource) ([]commander.Operation, error) {
+	r.Lock()
+	defer r.Unlock()
 	var ops []commander.Operation
 
 	ops = append(ops,
@@ -148,49 +158,44 @@ func (r *ResourceMenu) provideItems() {
 		&commander.OpSetColumns{Columns: []string{"Title"}},
 		&commander.OpInitStart{},
 	)
-
-	cluster, namespaced := r.splitResources(client.CoreResources())
-	clusterItems, _ := r.buildResourceItems(cluster, clusterGKs)
-	r.clusterItems = len(clusterItems)
-	namespacedItems, _ := r.buildResourceItems(namespaced, namespacedGKs)
+	serverResources, err := r.resources.Resources()
+	if err != nil {
+		return nil, err
+	}
+	r.items = []*resourceItem{}
+	r.clusterItems = 0
+	var clusterItems, namespacedItems []*resourceItem
+	for _, pbItem := range items {
+		item := newItemFromPb(pbItem)
+		if pbItem.Namespaced {
+			namespacedItems = append(namespacedItems, item)
+		} else {
+			clusterItems = append(clusterItems, item)
+			r.clusterItems++
+		}
+		if item.title == "" {
+			item.title = plural(item.gk.Kind)
+		}
+		resource, ok := serverResources[item.gk]
+		if ok {
+			item.resource = resource
+			item.widget = r.createWidget(resource)
+		}
+		r.items = append(r.items, item)
+	}
+	if len(namespacedItems) > 0 {
+		namespacedItems[len(namespacedItems)-1].isLast = true
+	}
 	for _, item := range clusterItems {
-		item.decoration = " "
 		ops = append(ops, &commander.OpAdded{Row: item})
 	}
 	ops = append(ops, &commander.OpAdded{Row: &namespaceSelector{r.workspace}})
-	for i, item := range namespacedItems {
-		if i == len(namespacedItems)-1 {
-			item.decoration = " └"
-		} else {
-			item.decoration = " ├"
-		}
+	for _, item := range namespacedItems {
 		ops = append(ops, &commander.OpAdded{Row: item})
 	}
-	r.rowProvider <- ops
-	serverResources, err := r.resources.Resources()
-	if err != nil {
-		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
-		r.workspace.Status().Error(err)
-		return
-	}
-	ops = []commander.Operation{}
-	cluster, namespaced = r.splitResources(serverResources)
-	clusterItems, r.extraClusterItems = r.buildResourceItems(cluster, clusterGKs)
-	namespacedItems, r.extraNamespacedItems = r.buildResourceItems(namespaced, namespacedGKs)
-	for _, item := range clusterItems {
-		item.decoration = " "
-		ops = append(ops, &commander.OpModified{Row: item})
-	}
-	for i, item := range namespacedItems {
-		if i == len(namespacedItems)-1 {
-			item.decoration = " └"
-		} else {
-			item.decoration = " ├"
-		}
-		ops = append(ops, &commander.OpModified{Row: item})
-	}
 	ops = append(ops, &commander.OpInitFinished{})
-	r.rowProvider <- ops
+
+	return ops, nil
 }
 
 func (r *ResourceMenu) OnShow() {
@@ -220,7 +225,9 @@ func plural(s string) string {
 }
 
 func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool {
-	if event.Key() == tcell.KeyEnter {
+	r.Lock()
+	defer r.Unlock()
+	if event.Key() == tcell.KeyEnter || event.Key() == tcell.KeyRight {
 		switch i := row.(type) {
 		case *resourceItem:
 			r.onSelect(row.Id(), i.widget)
@@ -228,85 +235,117 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 			r.selectNamespace()
 		}
 		return true
-	}
-	if event.Key() == tcell.KeyF3 {
-		go r.toggleExtra()
+	} else if event.Key() == tcell.KeyDelete {
+		go func() {
+			if r.workspace.Status().Confirm("Do you want to hide this resource? (y/n)") {
+				for i, item := range r.items {
+					if item.Id() == row.Id() {
+						r.items = append(r.items[:i], r.items[i+1:]...)
+						break
+					}
+				}
+				r.saveItems()
+			}
+		}()
 		return true
+	} else if event.Rune() == '+' {
+		pickResource(r.workspace, func(res *commander.Resource) {
+			add := &resourceItem{
+				title:      plural(res.Gk.Kind),
+				gk:         res.Gk,
+				namespaced: res.Namespaced,
+				resource:   res,
+				widget:     r.createWidget(res),
+			}
+			r.Lock()
+			defer r.Unlock()
+			for _, item := range r.items {
+				if item.Id() == add.Id() {
+					return
+				}
+			}
+			if add.namespaced {
+				r.items[len(r.items)-1].isLast = false
+				add.isLast = true
+				r.items = append(r.items, add)
+			} else {
+				newItems := append(r.items[:r.clusterItems], add)
+				newItems = append(newItems, r.items[r.clusterItems:]...)
+				r.items = newItems
+			}
+			r.saveItems()
+		})
+	} else if event.Key() == tcell.KeyF6 {
+		for i, item := range r.items {
+			if item.Id() == row.Id() {
+				edge := 0
+				if item.namespaced {
+					edge = r.clusterItems
+				}
+				if i > edge {
+					r.items[i], r.items[i-1] = r.items[i-1], r.items[i]
+					r.items[i].isLast, r.items[i-1].isLast = r.items[i-1].isLast, r.items[i].isLast
+					r.saveItems()
+				}
+				break
+			}
+		}
+	} else if event.Key() == tcell.KeyF7 {
+		for i, item := range r.items {
+			if item.Id() == row.Id() {
+				edge := len(r.items) - 1
+				if !item.namespaced {
+					edge = r.clusterItems - 1
+				}
+				if i < edge {
+					r.items[i], r.items[i+1] = r.items[i+1], r.items[i]
+					r.items[i].isLast, r.items[i+1].isLast = r.items[i+1].isLast, r.items[i].isLast
+					r.saveItems()
+				}
+				break
+			}
+		}
 	}
 	return false
 }
 
-func (r *ResourceMenu) toggleExtra() {
-	var ops []commander.Operation
-	if r.showExtra {
-		for _, item := range r.extraClusterItems {
-			ops = append(ops, &commander.OpDeleted{
-				RowId: item.Id(),
-			})
-		}
-		for _, item := range r.extraNamespacedItems {
-			ops = append(ops, &commander.OpDeleted{
-				RowId: item.Id(),
-			})
-		}
-	} else {
-		for i, item := range r.extraClusterItems {
-			index := r.clusterItems + i
-			ops = append(ops, &commander.OpAdded{
-				Row:   item,
-				Index: &index,
-			})
-		}
-		for _, item := range r.extraNamespacedItems {
-			ops = append(ops, &commander.OpAdded{
-				Row:      item,
-				SortById: false,
-			})
-		}
-	}
-	r.rowProvider <- ops
-	r.showExtra = !r.showExtra
-}
 func (r *ResourceMenu) SelectItem(id string) {
 	r.ListTable.SelectId(id)
 }
 
-func (r *ResourceMenu) buildResourceItems(resources commander.ResourceMap, gks []schema.GroupKind) ([]*resourceItem, []*resourceItem) {
-	var items []*resourceItem
-	var leftovers []*resourceItem
-	visited := make(map[string]struct{})
-	for _, gk := range gks {
-		res := resources[gk]
-		items = append(items, r.buildItem(gk, res))
-		if res != nil {
-			visited[res.Gvk.String()] = struct{}{}
-		}
+func (r *ResourceMenu) createWidget(res *commander.Resource) commander.Widget {
+	constructor, ok := CustomWidgets[res.Gvk.Kind]
+	if !ok {
+		constructor = StandardWidget
 	}
-	for kind, res := range resources {
-		if _, ok := visited[res.Gvk.String()]; ok {
-			continue
-		}
-		leftovers = append(leftovers, r.buildItem(kind, res))
-	}
-	return items, leftovers
+	return constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders|listTable.WithFilter)
 }
 
-func (r *ResourceMenu) buildItem(gk schema.GroupKind, res *commander.Resource) *resourceItem {
-	title, ok := knownTitles[gk.Kind]
-	if !ok {
-		title = plural(gk.Kind)
+func (r *ResourceMenu) provideItems() {
+	ops, err := r.UpdateMenu(DefaultItems)
+	if err != nil {
+		r.rowProvider <- []commander.Operation{&commander.OpInitFinished{}}
+		r.workspace.Status().Error(err)
+		return
 	}
-	item := &resourceItem{
-		title: title,
-		gk:    gk,
+	r.rowProvider <- ops
+}
+
+func (r *ResourceMenu) saveItems() {
+	var pbItems []*pb.Resource
+	for _, item := range r.items {
+		pbItems = append(pbItems, &pb.Resource{
+			Namespaced: item.namespaced,
+			Group:      item.gk.Group,
+			Kind:       item.gk.Kind,
+			Title:      item.title,
+		})
 	}
-	if res != nil {
-		constructor, ok := CustomWidgets[res.Gvk.Kind]
-		if !ok {
-			constructor = StandardWidget
-		}
-		item.resource = res
-		item.widget = constructor(r.workspace, res, listTable.Wide|listTable.WithHeaders|listTable.WithFilter)
+	err := r.workspace.UpdateConfig(func(config *pb.Config) {
+		config.Menu = pbItems
+	})
+	if err != nil {
+		r.workspace.Status().Error(err)
+		return
 	}
-	return item
 }

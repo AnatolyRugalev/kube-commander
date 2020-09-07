@@ -28,7 +28,11 @@ var (
 const (
 	columnSeparator    = '|'
 	columnSeparatorLen = 1
+	arrows             = "⯇⯈⯅⯆"
 )
+
+var arrowUp = '⯅'
+var arrowDown = '⯆'
 
 type TableFormat uint16
 
@@ -277,6 +281,7 @@ type table struct {
 	columnDataWidths []int
 	dataWidth        int
 	dataHeight       int
+	rowIndex         map[string]int
 }
 
 func (lt *ListTable) SelectedRowIndex() int {
@@ -388,7 +393,7 @@ func (lt *ListTable) tableHeight() int {
 }
 
 func (lt *ListTable) MaxSize() (w int, h int) {
-	w = lt.table.dataWidth + len(lt.table.columnDataWidths) - 1
+	w = lt.table.dataWidth + len(lt.table.columnDataWidths)
 	if lt.filterMode {
 		filterLen := len(lt.filter) + 1
 		if w < filterLen {
@@ -416,7 +421,9 @@ func (lt *ListTable) matchFilter(row commander.Row) bool {
 }
 
 func (lt *ListTable) renderTable() table {
-	t := table{}
+	t := table{
+		rowIndex: make(map[string]int),
+	}
 	t.dataHeight = len(lt.rows)
 	t.columnDataWidths = []int{}
 	if lt.format.Has(WithHeaders) {
@@ -429,9 +436,6 @@ func (lt *ListTable) renderTable() table {
 		t.columnDataWidths = make([]int, len(lt.columns))
 	}
 	for _, row := range lt.rows {
-		if !lt.matchFilter(row) {
-			continue
-		}
 		cells := row.Cells()
 		ageRow, _ := row.(commander.RowWithAge)
 		var mRow []string
@@ -456,8 +460,11 @@ func (lt *ListTable) renderTable() table {
 			}
 			mRow = append(mRow, value)
 		}
-		t.values = append(t.values, mRow)
-		t.rows = append(t.rows, row)
+		if lt.matchFilter(row) {
+			t.values = append(t.values, mRow)
+			t.rows = append(t.rows, row)
+			t.rowIndex[row.Id()] = len(t.rows) - 1
+		}
 	}
 	t.dataWidth = 0
 	for _, width := range t.columnDataWidths {
@@ -508,9 +515,21 @@ func (lt *ListTable) Draw() {
 		lt.drawRow(index, lt.table.headers, sizes, lt.stHeader.Style())
 		index++
 	}
+	rowIndex := 0
 	for rowId := lt.topRow; rowId < lt.topRow+lt.tableHeight() && rowId < len(lt.table.rows); rowId++ {
 		lt.drawRow(index, lt.table.values[rowId], sizes, lt.rowStyle(lt.table.rows[rowId]))
+		var suffix *rune
+		if rowIndex == 0 && lt.topRow != 0 {
+			suffix = &arrowUp
+		}
+		if rowIndex == lt.tableHeight()-1 && rowId < len(lt.table.rows)-1 {
+			suffix = &arrowDown
+		}
+		if suffix != nil {
+			lt.view.SetContent(lt.viewWidth()-1, index, *suffix, nil, lt.rowStyle(lt.table.rows[rowId]))
+		}
 		index++
+		rowIndex++
 	}
 	lt.preloader.Draw()
 }
@@ -574,6 +593,16 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 		if ev.Modifiers() != tcell.ModNone {
 			return false
 		}
+		if !lt.format.Has(NoHorizontalScroll) {
+			switch ev.Key() {
+			case tcell.KeyRight:
+				lt.Right()
+				return true
+			case tcell.KeyLeft:
+				lt.Left()
+				return true
+			}
+		}
 		switch ev.Key() {
 		case tcell.KeyDown:
 			lt.Next()
@@ -592,12 +621,6 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			return true
 		case tcell.KeyEnd:
 			lt.End()
-			return true
-		case tcell.KeyRight:
-			lt.Right()
-			return true
-		case tcell.KeyLeft:
-			lt.Left()
 			return true
 		}
 		if lt.format.Has(WithFilter) {
@@ -724,7 +747,7 @@ func (lt *ListTable) SelectId(id string) {
 }
 
 func (lt *ListTable) reindexSelection() {
-	if index, ok := lt.rowIndex[lt.selectedId]; ok {
+	if index, ok := lt.table.rowIndex[lt.selectedId]; ok {
 		lt.SelectIndex(index)
 	} else {
 		lt.SelectIndex(0)

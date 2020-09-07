@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package AnatolyRugalev.kubecom.config;
+
+option go_package = "github.com/AnatolyRugalev/kube-commander/pb;pb";
+
+message Config {
+    repeated Resource menu = 1;
+}
+
+message Resource {
+    bool namespaced = 1;
+    string group = 2;
+    string kind = 3;
+    string title = 4;
+}

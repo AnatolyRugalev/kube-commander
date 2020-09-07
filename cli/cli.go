@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"github.com/AnatolyRugalev/kube-commander/app"
 	"github.com/AnatolyRugalev/kube-commander/app/builder"
 	"github.com/AnatolyRugalev/kube-commander/app/client"
 	"github.com/AnatolyRugalev/kube-commander/app/executor"
+	"github.com/AnatolyRugalev/kube-commander/config"
 	"github.com/spf13/cobra"
 	cmd "k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -28,6 +30,7 @@ var rootCmd = &cobra.Command{
 var logFlags = flag.NewFlagSet("klog", flag.ExitOnError)
 
 var cfg = struct {
+	config     string
 	editor     string
 	pager      string
 	logPager   string
@@ -40,6 +43,7 @@ var cfg = struct {
 }{}
 
 const (
+	ConfigEnv    = "KUBECOMCONFIG"
 	KubectlEnv   = "KUBECTL"
 	EditorEnv    = "EDITOR"
 	PagerEnv     = "PAGER"
@@ -78,6 +82,11 @@ func defaultEnvInt(name string, def int) int {
 }
 
 func init() {
+	defaultConfig, err := config.DefaultPath()
+	if err != nil {
+		panic(fmt.Errorf("error initializing configuration: %w", err))
+	}
+	rootCmd.Flags().StringVarP(&cfg.config, "config", "", defaultEnv(ConfigEnv, defaultConfig), "kubectl path override")
 	rootCmd.Flags().StringVarP(&cfg.kubectl, "kubectl", "k", defaultEnv(KubectlEnv, "kubectl"), "kubectl path override")
 	rootCmd.Flags().StringVarP(&cfg.editor, "editor", "e", defaultEnv(EditorEnv, ""), "Editor override")
 	rootCmd.Flags().StringVarP(&cfg.pager, "pager", "p", defaultEnv(PagerEnv, "less"), "Pager override")
@@ -106,6 +115,17 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), namespace)
+	if !config.Exists(cfg.config) {
+		err = config.Init(cfg.config)
+		if err != nil {
+			return err
+		}
+	}
+	configCh := make(chan config.Event)
+	err = config.Watch(context.Background(), cfg.config, configCh)
+	if err != nil {
+		return err
+	}
+	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), namespace, configCh, cfg.config)
 	return application.Run()
 }

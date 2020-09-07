@@ -27,15 +27,15 @@ Global:
  D: Describe selected resource              ?: Shows help dialog
  E: Edit selected resource                  Q: Quit
  C: Copy resource name to the clipboard     Ctrl+N or F2: Switch namespace
- Del: Delete resource (with confirmation)   F3: (janky) Show all known resource types (then filter with "/")
+ Del: Delete resource (with confirmation)
 
 Navigation:
  ↑↓→←: List navigation            /: Filter resources
  Enter: Select menu item          Esc, Backspace: Go back
 
-Resource types navigation:
- Ctrl+P: Pods
- Ctrl+D: Deployments              Ctrl+I: Ingresses
+Resource types:
+ +(plus): Add resource type to the menu     F6, F7: Move item up/down
+ Del: Remove resource type from menu
 
 Pods:
  L: Show logs                     Shift+L: Show previous logs
