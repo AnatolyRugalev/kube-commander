@@ -63,6 +63,13 @@ You can install kube-commander from binary release for your OS. Linux, macOS and
 a package for your OS on [this page](https://github.com/AnatolyRugalev/kube-commander/releases/latest). Just download
 and put it to `/usr/local/bin`.
 
+There's oneliner to download latest to current directory:
+
+```bash
+curl -sL https://git.io/JUneH | bash
+./kubecom --version
+```
+
 ### Sources
 
 If you have Go environment configured you can install kubecom easily with this command:
