@@ -36,8 +36,8 @@ func NewPreloader(updater commander.ScreenUpdater) *preloader {
 }
 
 func (p *preloader) Start() {
-	p.Lock()
 	p.phase = 0
+	p.Lock()
 	p.ticker = time.NewTicker(time.Millisecond * 200)
 	p.Unlock()
 	go func() {
@@ -56,6 +56,7 @@ func (p *preloader) Stop() {
 	if p.ticker != nil {
 		p.ticker.Stop()
 	}
+	p.Unlock()
 	p.phase = -1
 	p.updater.UpdateScreen()
 }
