@@ -13,7 +13,7 @@ kubecom is an easy to use tool for observing Kubernetes cluster from your termin
 
 ## kubecom vs. kubernetes-dashboard comparison
 
-|                                           | kube-commander           | kubernetes-dashboard     | 
+|                                           | kubecom                  | kubernetes-dashboard     | 
 |-------------------------------------------|--------------------------|--------------------------|
 | Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
 | Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
