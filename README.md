@@ -9,7 +9,7 @@ kubecom is an easy to use tool for observing Kubernetes cluster from your termin
 > Soon `kube-commander` will change its name to `kubecom`. Please don't mind some naming inconsistency - I'm
 > trying to make the migration as seamless as possible.
 
-![Kube Commander](https://user-images.githubusercontent.com/1397674/83310793-ecdada00-a215-11ea-9f26-37f5fb673147.gif)
+![Kube Commander](https://user-images.githubusercontent.com/1397674/93024273-dbb7ac80-f5fd-11ea-92b2-9df0d50d8b2f.gif)
 
 ## kube-commander vs. kubernetes-dashboard comparison
 
