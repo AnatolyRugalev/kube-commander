@@ -40,7 +40,7 @@ kubecom is an easy to use tool for observing Kubernetes cluster from your termin
 
 ### AUR
 
-If you use Archlinux you can install kube-commander from AUR with your favorite AUR helper:
+If you use Archlinux you can install kubecom from AUR with your favorite AUR helper:
 
 ```bash
 yay -S kube-commander
@@ -59,7 +59,7 @@ Brew formula has both Linux and MacOS binaries.
 
 ### Binary
 
-You can install kube-commander from binary release for your OS. Linux, macOS and Windows are supported. You can find 
+You can install kubecom from binary release for your OS. Linux, macOS and Windows are supported. You can find 
 a package for your OS on [this page](https://github.com/AnatolyRugalev/kube-commander/releases/latest). Just download
 and put it to `/usr/local/bin`.
 
@@ -91,7 +91,7 @@ kubecom
 
 ### Run
  
-Before starting kube-commander make sure you have proper kubectl configuration:
+Before starting kubecom make sure you have proper kubectl configuration:
 
 ```bash
 kubectl cluster-info
@@ -149,8 +149,9 @@ familiar with configuration capabilities inspecting [pb/config.proto](pb/config.
 
 The first thing you need to press is "?". This will show help dialog in case you missed it on start screen.
 
-The initial version of kube-commander had a refresh key which updated list of resources. Now you don't have to do that:
-kube-commander watches changes dynamically, so you can relax and take a sip of your coffee while waiting for a deployment.
+Official Kubernetes Dashboard has a refresh key which updates items on page. With kubecom you don't have to do that:
+kubecom watches changes and updates screen in real time, so you can relax and take a sip of your fresh coffee while
+monitoring your deployment rolling out.
 
 The most of hotkeys you can find on help dialog. Here they are:
 
