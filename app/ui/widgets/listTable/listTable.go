@@ -603,16 +603,19 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 					}
 					return true
 				case tcell.KeyEnter:
-					lt.filterMode = false
-					lt.Render()
-					lt.reindexSelection()
-					return true
-				}
-				if ev.Rune() != 0 {
-					lt.filter += string(ev.Rune())
-					lt.Render()
-					lt.reindexSelection()
-					return true
+					if !lt.format.Has(StartFilter) {
+						lt.filterMode = false
+						lt.Render()
+						lt.reindexSelection()
+						return true
+					}
+				default:
+					if ev.Rune() != 0 {
+						lt.filter += string(ev.Rune())
+						lt.Render()
+						lt.reindexSelection()
+						return true
+					}
 				}
 			} else {
 				if ev.Rune() == '/' {
@@ -620,7 +623,6 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 					return true
 				}
 			}
-
 		}
 		return lt.onKeyEvent(lt.SelectedRow(), ev)
 	})
