@@ -115,6 +115,7 @@ You can easily configure kubecom with this options:
 |kubeconfig |KUBECONFIG   |Path to kubeconfig                                                                             |
 |context    |KUBECONTEXT  |Context name                                                                                   |
 |namespace  |KUBENAMESPACE|Initial namespace to show                                                                      |
+|timeout    |             |Connection timeout (default: "5s")                                                             |
 |editor     |EDITOR       |Name of the editor binary. Default: "vi". But you probably already have one defined by your OS |
 |pager      |PAGER        |Pager command for 'describe' command. Default: "less"                                          |
 |log-pager  |LOGPAGER     |Pager command for log output. Default: none                                                    |
@@ -185,6 +186,8 @@ This way we can avoid wasting time doing easy work the hard way. I'm always open
 
 ## Special thanks
 
+* [terminal.sexy](https://terminal.sexy) - great terminal color scheme configurator
 * [tcell](https://github.com/gdamore/tcell) - TUI library
-* [Goreleaser](https://goreleaser.com) - helps to ship go software
-* [k9s](https://github.com/derailed/k9s) - another kubernetes TUI utility
+* [Goreleaser](https://goreleaser.com) - helps to ship Go software
+* [k9s](https://github.com/derailed/k9s) - another Kubernetes TUI utility
+
