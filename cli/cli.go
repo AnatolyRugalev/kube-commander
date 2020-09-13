@@ -105,16 +105,15 @@ func init() {
 func run(_ *cobra.Command, _ []string) error {
 	_ = logFlags.Set("log_file", cfg.klog)
 	_ = os.Setenv(cmd.RecommendedConfigPathEnvVar, cfg.kubeconfig)
-	conf := client.NewDefaultConfig(cfg.kubeconfig, cfg.context, cfg.namespace)
+	conf, err := client.NewConfig(cfg.kubeconfig, cfg.context, cfg.namespace)
+	if err != nil {
+		return fmt.Errorf("error initializing configuration: %w", err)
+	}
 	cl, err := client.NewClient(conf)
 	if err != nil {
 		return fmt.Errorf("could not initialize kubernetes client: %w", err)
 	}
 	b := builder.NewBuilder(conf, cfg.kubectl, cfg.pager, cfg.logPager, cfg.editor, cfg.tail)
-	namespace, err := cl.CurrentNamespace()
-	if err != nil {
-		return err
-	}
 	if !config.Exists(cfg.config) {
 		err = config.Init(cfg.config)
 		if err != nil {
@@ -126,6 +125,6 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), namespace, configCh, cfg.config)
+	application := app.NewApp(conf, cl, cl, b, executor.NewOsExecutor(), configCh, cfg.config)
 	return application.Run()
 }

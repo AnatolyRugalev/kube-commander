@@ -39,14 +39,14 @@ func (a *app) Quit() {
 	close(a.quit)
 }
 
-func NewApp(config commander.Config, client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, defaultNamespace string, configCh chan config.Event, configPath string) *app {
+func NewApp(config commander.Config, client commander.Client, resourceProvider commander.ResourceProvider, commandBuilder commander.CommandBuilder, commandExecutor commander.CommandExecutor, configCh chan config.Event, configPath string) *app {
 	a := app{
 		config:           config,
 		client:           client,
 		resourceProvider: resourceProvider,
 		commandBuilder:   commandBuilder,
 		commandExecutor:  commandExecutor,
-		defaultNamespace: defaultNamespace,
+		defaultNamespace: config.Namespace(),
 
 		configCh:   configCh,
 		configPath: configPath,

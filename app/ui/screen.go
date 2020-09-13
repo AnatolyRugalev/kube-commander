@@ -67,6 +67,7 @@ func NewScreen(app commander.App) *Screen {
 
 func (s *Screen) Draw() {
 	s.titleBar.SetStyle(s.theme.GetStyle("title-bar"))
+	s.titleBar.SetRight(s.app.Config().Context(), s.theme.GetStyle("title-context"))
 	s.Panel.SetStyle(s.theme.GetStyle("screen"))
 	s.Panel.Draw()
 }

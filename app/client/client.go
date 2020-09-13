@@ -13,15 +13,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
-	"k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/scheme"
 
 	"github.com/AnatolyRugalev/kube-commander/commander"
 )
-
-const AllNamespaces = "All namespaces"
 
 func init() {
 	scheme.Scheme.AddKnownTypeWithName(
@@ -33,29 +29,9 @@ func init() {
 	)
 }
 
-func NewFactory(config commander.Config) util.Factory {
-	kubeConfigFlags := genericclioptions.NewConfigFlags(true).WithDeprecatedPasswordFlag()
-	if config.Context() != "" {
-		ctx := config.Context()
-		kubeConfigFlags.Context = &ctx
-	}
-	if config.Namespace() != "" {
-		ns := config.Namespace()
-		kubeConfigFlags.Namespace = &ns
-	}
-	if config.Kubeconfig() != "" {
-		kc := config.Kubeconfig()
-		kubeConfigFlags.KubeConfig = &kc
-	}
-	f := util.NewFactory(kubeConfigFlags)
-	return f
-}
-
 func NewClient(config commander.Config) (*client, error) {
-	f := NewFactory(config)
 	cl := &client{
-		config:  config,
-		factory: f,
+		config: config,
 	}
 	return cl, nil
 }
@@ -63,16 +39,6 @@ func NewClient(config commander.Config) (*client, error) {
 type client struct {
 	config  commander.Config
 	timeout time.Duration
-
-	factory util.Factory
-}
-
-func (c client) CurrentNamespace() (string, error) {
-	ns, _, err := c.factory.ToRawKubeConfigLoader().Namespace()
-	if err != nil {
-		return "", err
-	}
-	return ns, nil
 }
 
 func (c client) Delete(ctx context.Context, resource *commander.Resource, namespace string, name string) error {
@@ -102,7 +68,7 @@ func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) 
 }
 
 func (c client) Resources() (commander.ResourceMap, error) {
-	discoveryClient, err := c.factory.ToDiscoveryClient()
+	discoveryClient, err := c.config.Factory().ToDiscoveryClient()
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +163,7 @@ func (c client) transformRequests(req *rest.Request) {
 }
 
 func (c client) WatchAsTable(_ context.Context, r *commander.Resource, namespace string) (watch.Interface, error) {
-	b := c.factory.NewBuilder()
+	b := c.config.Factory().NewBuilder()
 	b.WithScheme(scheme.Scheme)
 	b.ResourceTypeOrNameArgs(false, r.Resource)
 	if namespace == "" {
@@ -223,7 +189,7 @@ func (c client) WatchAsTable(_ context.Context, r *commander.Resource, namespace
 }
 
 func (c client) rest(gv schema.GroupVersion) (*rest.RESTClient, error) {
-	conf, err := c.factory.ToRESTConfig()
+	conf, err := c.config.Factory().ToRESTConfig()
 	if err != nil {
 		return nil, err
 	}

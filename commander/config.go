@@ -1,11 +1,17 @@
 package commander
 
-import "github.com/AnatolyRugalev/kube-commander/pb"
+import (
+	"github.com/AnatolyRugalev/kube-commander/pb"
+	"k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/kubectl/pkg/cmd/util"
+)
 
 type Config interface {
 	Context() string
-	Kubeconfig() string
 	Namespace() string
+	Kubeconfig() string
+	Factory() util.Factory
+	Raw() api.Config
 }
 
 type ConfigAccessor func() Config

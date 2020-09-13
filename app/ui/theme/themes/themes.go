@@ -45,6 +45,11 @@ func BaseStyles() []*pb.Style {
 			Bg:   "title-bg",
 		},
 		{
+			Name: "title-context",
+			Fg:   "title-fg",
+			Bg:   "title-bg",
+		},
+		{
 			Name:  "logo-icon",
 			Fg:    "title-fg",
 			Bg:    "title-bg",
