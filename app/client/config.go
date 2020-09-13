@@ -15,7 +15,7 @@ type config struct {
 	kubeconfig string
 }
 
-func NewConfig(kubeconfig string, context string, namespace string) (*config, error) {
+func NewConfig(kubeconfig string, context string, namespace string, timeout string) (*config, error) {
 	kubeConfigFlags := genericclioptions.NewConfigFlags(true).WithDeprecatedPasswordFlag()
 	if context != "" {
 		kubeConfigFlags.Context = &context
@@ -26,6 +26,7 @@ func NewConfig(kubeconfig string, context string, namespace string) (*config, er
 	if kubeconfig != "" {
 		kubeConfigFlags.KubeConfig = &kubeconfig
 	}
+	kubeConfigFlags.Timeout = &timeout
 	f := util.NewFactory(kubeConfigFlags)
 	loader := f.ToRawKubeConfigLoader()
 	if kubeconfig == "" {

@@ -37,8 +37,7 @@ func NewClient(config commander.Config) (*client, error) {
 }
 
 type client struct {
-	config  commander.Config
-	timeout time.Duration
+	config commander.Config
 }
 
 func (c client) Delete(ctx context.Context, resource *commander.Resource, namespace string, name string) error {

@@ -39,6 +39,7 @@ var cfg = struct {
 	kubeconfig string
 	context    string
 	namespace  string
+	timeout    string
 	klog       string
 }{}
 
@@ -95,6 +96,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.kubeconfig, "kubeconfig", "", os.Getenv(cmd.RecommendedConfigPathEnvVar), "Kubeconfig override")
 	rootCmd.Flags().StringVarP(&cfg.context, "context", "c", defaultEnv(ContextEnv, ""), "Context name (default: current context)")
 	rootCmd.Flags().StringVarP(&cfg.namespace, "namespace", "n", defaultEnv(NamespaceEnv, ""), "Namespace name to start with (default: from context)")
+	rootCmd.Flags().StringVarP(&cfg.timeout, "timeout", "", "5s", "Connection timeout")
 	rootCmd.Flags().StringVarP(&cfg.klog, "klog", "", defaultEnv(KLogEnv, ""), "Log file for Kubernetes logging library")
 	klog.InitFlags(logFlags)
 	_ = logFlags.Set("logtostderr", "false")
@@ -105,7 +107,7 @@ func init() {
 func run(_ *cobra.Command, _ []string) error {
 	_ = logFlags.Set("log_file", cfg.klog)
 	_ = os.Setenv(cmd.RecommendedConfigPathEnvVar, cfg.kubeconfig)
-	conf, err := client.NewConfig(cfg.kubeconfig, cfg.context, cfg.namespace)
+	conf, err := client.NewConfig(cfg.kubeconfig, cfg.context, cfg.namespace, cfg.timeout)
 	if err != nil {
 		return fmt.Errorf("error initializing configuration: %w", err)
 	}
