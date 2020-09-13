@@ -149,8 +149,6 @@ func NewResourcesMenu(workspace commander.Workspace, onSelect SelectFunc, select
 }
 
 func (r *ResourceMenu) UpdateMenu(items []*pb.Resource) ([]commander.Operation, error) {
-	r.Lock()
-	defer r.Unlock()
 	var ops []commander.Operation
 
 	ops = append(ops,
@@ -162,6 +160,8 @@ func (r *ResourceMenu) UpdateMenu(items []*pb.Resource) ([]commander.Operation, 
 	if err != nil {
 		return nil, err
 	}
+	r.Lock()
+	defer r.Unlock()
 	r.items = []*resourceItem{}
 	r.clusterItems = 0
 	var clusterItems, namespacedItems []*resourceItem
@@ -245,6 +245,7 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 					}
 				}
 				r.saveItems()
+				r.workspace.Status().Info("Deleted.")
 			} else {
 				r.workspace.Status().Info("Cancelled.")
 			}
@@ -272,7 +273,7 @@ func (r *ResourceMenu) OnKeyPress(row commander.Row, event *tcell.EventKey) bool
 				r.items = append(r.items, add)
 			} else {
 				newItems := append(r.items[:r.clusterItems], add)
-				newItems = append(newItems, r.items[r.clusterItems:]...)
+				newItems = append(newItems, r.items[r.clusterItems+1:]...)
 				r.items = newItems
 			}
 			r.saveItems()

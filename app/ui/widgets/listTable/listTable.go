@@ -45,6 +45,7 @@ const (
 	NoActions
 	NoWatch
 	WithFilter
+	StartFilter
 )
 
 func (tf TableFormat) Has(flag TableFormat) bool {
@@ -102,6 +103,7 @@ func NewListTable(prov commander.RowProvider, format TableFormat, screen command
 		preloader:    NewPreloader(screen),
 		rowProvider:  prov,
 		screen:       screen,
+		filterMode:   format.Has(StartFilter),
 	}
 	lt.Render()
 	return lt
@@ -292,7 +294,7 @@ func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
 }
 
 func (lt *ListTable) resetFilter() {
-	lt.filterMode = false
+	lt.filterMode = lt.format.Has(StartFilter)
 	lt.filter = ""
 	lt.Render()
 	lt.reindexSelection()

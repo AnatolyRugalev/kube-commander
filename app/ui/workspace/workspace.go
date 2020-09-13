@@ -151,15 +151,6 @@ func (w *workspace) HandleEvent(e tcell.Event) bool {
 		switch ev.Key() {
 		case tcell.KeyCtrlN, tcell.KeyF2:
 			namespace.PickNamespace(w, w.namespaceResource, w.SwitchNamespace)
-		case tcell.KeyCtrlP:
-			w.focus.Focus(w.menu)
-			w.menu.SelectItem(schema.GroupKind{Kind: "Pod"}.String())
-		case tcell.KeyCtrlD:
-			w.focus.Focus(w.menu)
-			w.menu.SelectItem(schema.GroupKind{Kind: "Deployment", Group: "apps"}.String())
-		case tcell.KeyCtrlI:
-			w.focus.Focus(w.menu)
-			w.menu.SelectItem(schema.GroupKind{Kind: "Ingress", Group: "networking.k8s.io"}.String())
 		default:
 			if ev.Rune() == '?' {
 				help.ShowHelpPopup(w)

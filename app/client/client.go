@@ -64,8 +64,7 @@ type client struct {
 	config  commander.Config
 	timeout time.Duration
 
-	resources commander.ResourceMap
-	factory   util.Factory
+	factory util.Factory
 }
 
 func (c client) CurrentNamespace() (string, error) {
@@ -103,37 +102,35 @@ func (c client) NewRequest(resource *commander.Resource) (*rest.Request, error) 
 }
 
 func (c client) Resources() (commander.ResourceMap, error) {
-	if c.resources == nil {
-		discoveryClient, err := c.factory.ToDiscoveryClient()
-		if err != nil {
-			return nil, err
-		}
-		lists, err := discoveryClient.ServerPreferredResources()
-		if err != nil {
-			return nil, err
-		}
-		resources := make(commander.ResourceMap)
+	discoveryClient, err := c.factory.ToDiscoveryClient()
+	if err != nil {
+		return nil, err
+	}
+	lists, err := discoveryClient.ServerPreferredResources()
+	if err != nil {
+		return nil, err
+	}
+	resources := make(commander.ResourceMap)
 
-		for _, list := range lists {
-			for _, res := range list.APIResources {
-				gv, err := schema.ParseGroupVersion(list.GroupVersion)
-				if err != nil {
-					return nil, err
-				}
+	for _, list := range lists {
+		for _, res := range list.APIResources {
+			gv, err := schema.ParseGroupVersion(list.GroupVersion)
+			if err != nil {
+				return nil, err
+			}
 
-				gk := schema.GroupKind{Group: gv.Group, Kind: res.Kind}
-				resources[gk] = &commander.Resource{
-					Namespaced: res.Namespaced,
-					Resource:   res.Name,
-					Gk:         gk,
-					Gvk:        schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind},
-					Verbs:      res.Verbs,
-				}
+			gk := schema.GroupKind{Group: gv.Group, Kind: res.Kind}
+			resources[gk] = &commander.Resource{
+				Namespaced: res.Namespaced,
+				Resource:   res.Name,
+				Gk:         gk,
+				Gvk:        schema.GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: res.Kind},
+				Verbs:      res.Verbs,
 			}
 		}
-		c.resources = resources
 	}
-	return c.resources, nil
+
+	return resources, nil
 }
 
 func (c client) Get(ctx context.Context, resource *commander.Resource, namespace string, name string, out runtime.Object) error {
