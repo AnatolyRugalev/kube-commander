@@ -56,6 +56,7 @@ type ListTable struct {
 	views.WidgetWatchers
 	*focus.Focusable
 
+	viewMu sync.RWMutex
 	view   views.View
 	ageCol int
 
@@ -67,9 +68,11 @@ type ListTable struct {
 	selectedId string
 	format     TableFormat
 	// internal representation of table values
-	table table
-	// Currently selected row
+
+	tableMu          sync.RWMutex
+	table            table
 	selectedRowIndex int
+
 	// Row to start rendering from (vertical scrolling)
 	topRow int
 	// Left cell to start rendering from (horizontal scrolling)
@@ -80,7 +83,6 @@ type ListTable struct {
 	onInitStart  InitFunc
 	onInitFinish InitFunc
 
-	preloader   *preloader
 	rowProvider commander.RowProvider
 	screen      commander.ScreenHandler
 	stopCh      chan struct{}
@@ -100,7 +102,6 @@ func NewListTable(prov commander.RowProvider, format TableFormat, screen command
 		onChange:     DefaultRowFunc,
 		onInitStart:  DefaultInit,
 		onInitFinish: DefaultInit,
-		preloader:    NewPreloader(screen),
 		rowProvider:  prov,
 		screen:       screen,
 		filterMode:   format.Has(AlwaysFilter),
@@ -211,10 +212,8 @@ func (lt *ListTable) watch() {
 					}
 					lt.rowsMu.Unlock()
 				case *commander.OpInitStart:
-					lt.preloader.Start()
 					lt.onInitStart()
 				case *commander.OpInitFinished:
-					lt.preloader.Stop()
 					lt.onInitFinish()
 				}
 			}
@@ -255,21 +254,26 @@ func (lt *ListTable) SelectedRowIndex() int {
 }
 
 func (lt *ListTable) SelectedRowId() string {
+	lt.tableMu.RLock()
+	defer lt.tableMu.RUnlock()
 	return lt.selectedId
 }
 
 func (lt *ListTable) SelectedRow() commander.Row {
-	if len(lt.table.rows) == 0 {
+	lt.tableMu.RLock()
+	table := lt.table
+	lt.tableMu.RUnlock()
+	if len(table.rows) == 0 {
 		return nil
 	}
-	if lt.selectedRowIndex < len(lt.table.rows) {
-		return lt.table.rows[lt.selectedRowIndex]
+	if lt.selectedRowIndex < len(table.rows) {
+		return table.rows[lt.selectedRowIndex]
 	}
 	return nil
 }
 
-func (lt *ListTable) rowStyle(row commander.Row) commander.Style {
-	if row.Id() == lt.SelectedRowId() {
+func (lt *ListTable) rowStyle(row commander.Row, selectedId string) commander.Style {
+	if row.Id() == selectedId {
 		if lt.IsFocused() {
 			return lt.screen.Theme().GetStyle("row-selected-focused")
 		} else {
@@ -336,16 +340,22 @@ func (lt *ListTable) BindOnKeyPress(rowKeyEventFunc RowKeyEventFunc) {
 }
 
 func (lt *ListTable) columnSeparatorsWidth() int {
+	lt.rowsMu.RLock()
+	defer lt.rowsMu.RUnlock()
 	return (len(lt.columns) - 1) * columnSeparatorLen
 }
 
 func (lt *ListTable) viewWidth() int {
+	lt.viewMu.RLock()
 	width, _ := lt.view.Size()
+	lt.viewMu.RUnlock()
 	return width
 }
 
 func (lt *ListTable) tableHeight() int {
+	lt.viewMu.RLock()
 	_, height := lt.view.Size()
+	lt.viewMu.RUnlock()
 	if lt.format.Has(WithHeaders) {
 		height -= 1
 	}
@@ -356,7 +366,10 @@ func (lt *ListTable) tableHeight() int {
 }
 
 func (lt *ListTable) MaxSize() (w int, h int) {
-	w = lt.table.dataWidth + len(lt.table.columnDataWidths)
+	lt.tableMu.RLock()
+	table := lt.table
+	lt.tableMu.RUnlock()
+	w = table.dataWidth + len(table.columnDataWidths)
 	if lt.filterMode {
 		filterLen := len(lt.filter) + 1
 		if w < filterLen {
@@ -364,7 +377,7 @@ func (lt *ListTable) MaxSize() (w int, h int) {
 		}
 	}
 
-	h = lt.table.dataHeight
+	h = table.dataHeight
 	if lt.format.Has(WithHeaders) {
 		h++
 	}
@@ -438,13 +451,12 @@ func (lt *ListTable) renderTable() table {
 	return t
 }
 
-func (lt *ListTable) getColumnSizes() []int {
-	t := lt.table
+func (lt *ListTable) getColumnSizes(t table) []int {
 	sizes := make([]int, len(t.columnDataWidths))
 	copy(sizes, t.columnDataWidths)
 
 	// If there is some additional horizontal space available - spread it in a rational way
-	viewWidth, _ := lt.view.Size()
+	viewWidth := lt.viewWidth()
 	viewWidth -= lt.columnSeparatorsWidth()
 	unusedWidth := viewWidth - t.dataWidth
 	addedWidth := 0
@@ -468,35 +480,43 @@ func (lt *ListTable) getColumnSizes() []int {
 }
 
 func (lt *ListTable) Draw() {
+	lt.tableMu.RLock()
+	table := lt.table
+	lt.tableMu.RUnlock()
 	style := lt.defaultStyle()
+	sizes := lt.getColumnSizes(table)
+	tableHeight := lt.tableHeight()
+	viewWidth := lt.viewWidth()
+	selectedId := lt.SelectedRowId()
+
+	lt.viewMu.Lock()
+	defer lt.viewMu.Unlock()
 	lt.view.Fill(' ', style)
 	index := 0
 	if lt.filterMode || lt.filter != "" {
 		lt.drawFilter(index)
 		index++
 	}
-	sizes := lt.getColumnSizes()
 	if lt.format.Has(WithHeaders) {
-		lt.drawRow(index, lt.table.headers, sizes, lt.screen.Theme().GetStyle("row-header"))
+		lt.drawRow(index, table.headers, sizes, lt.screen.Theme().GetStyle("row-header"))
 		index++
 	}
 	rowIndex := 0
-	for rowId := lt.topRow; rowId < lt.topRow+lt.tableHeight() && rowId < len(lt.table.rows); rowId++ {
-		lt.drawRow(index, lt.table.values[rowId], sizes, lt.rowStyle(lt.table.rows[rowId]))
+	for rowId := lt.topRow; rowId < lt.topRow+tableHeight && rowId < len(table.rows); rowId++ {
+		lt.drawRow(index, table.values[rowId], sizes, lt.rowStyle(table.rows[rowId], selectedId))
 		var suffix *rune
 		if rowIndex == 0 && lt.topRow != 0 {
 			suffix = &arrowUp
 		}
-		if rowIndex == lt.tableHeight()-1 && rowId < len(lt.table.rows)-1 {
+		if rowIndex == tableHeight-1 && rowId < len(table.rows)-1 {
 			suffix = &arrowDown
 		}
 		if suffix != nil {
-			lt.view.SetContent(lt.viewWidth()-1, index, *suffix, nil, lt.rowStyle(lt.table.rows[rowId]))
+			lt.view.SetContent(viewWidth-1, index, *suffix, nil, lt.rowStyle(table.rows[rowId], selectedId))
 		}
 		index++
 		rowIndex++
 	}
-	lt.preloader.Draw()
 }
 
 func (lt *ListTable) drawFilter(y int) {
@@ -545,7 +565,9 @@ func (lt *ListTable) drawRow(y int, row []string, sizes []int, style tcell.Style
 }
 
 func (lt *ListTable) Render() {
+	lt.tableMu.Lock()
 	lt.table = lt.renderTable()
+	lt.tableMu.Unlock()
 }
 
 func (lt *ListTable) Resize() {
@@ -628,20 +650,27 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 	})
 }
 
+func (lt *ListTable) selectIndexRelative(offset int) {
+	lt.tableMu.RLock()
+	selected := lt.selectedRowIndex
+	lt.tableMu.RUnlock()
+	lt.SelectIndex(selected + offset)
+}
+
 func (lt *ListTable) Next() {
-	lt.SelectIndex(lt.selectedRowIndex + 1)
+	lt.selectIndexRelative(1)
 }
 
 func (lt *ListTable) Prev() {
-	lt.SelectIndex(lt.selectedRowIndex - 1)
+	lt.selectIndexRelative(-1)
 }
 
 func (lt *ListTable) NextPage() {
-	lt.SelectIndex(lt.selectedRowIndex + lt.tableHeight())
+	lt.selectIndexRelative(lt.tableHeight())
 }
 
 func (lt *ListTable) PrevPage() {
-	lt.SelectIndex(lt.selectedRowIndex - lt.tableHeight())
+	lt.selectIndexRelative(-lt.tableHeight())
 }
 
 func (lt *ListTable) Home() {
@@ -649,7 +678,10 @@ func (lt *ListTable) Home() {
 }
 
 func (lt *ListTable) End() {
-	lt.SelectIndex(len(lt.table.rows) - 1)
+	lt.tableMu.RLock()
+	rowsLen := len(lt.table.rows)
+	lt.tableMu.RUnlock()
+	lt.SelectIndex(rowsLen - 1)
 }
 
 func (lt *ListTable) Right() {
@@ -661,41 +693,51 @@ func (lt *ListTable) Left() {
 }
 
 func (lt *ListTable) SelectIndex(index int) {
-	if len(lt.table.rows) == 0 {
+	lt.tableMu.RLock()
+	table := lt.table
+	selected := lt.selectedRowIndex
+	lt.tableMu.RUnlock()
+
+	if len(table.rows) == 0 {
 		return
 	}
 
-	if index > len(lt.table.rows)-1 {
-		index = len(lt.table.rows) - 1
+	if index > len(table.rows)-1 {
+		index = len(table.rows) - 1
 	}
 	if index < 0 {
 		index = 0
 	}
 	// Determine direction to skip disabled rows
 	var delta int
-	if lt.selectedRowIndex <= index {
+	if selected <= index {
 		delta = 1
 	} else {
 		delta = -1
 	}
-	row := lt.table.rows[index]
+	row := table.rows[index]
 	for !row.Enabled() {
 		index += delta
-		if index < 0 || index >= len(lt.table.rows) {
+		if index < 0 || index >= len(table.rows) {
 			return
 		}
-		row = lt.table.rows[index]
+		row = table.rows[index]
 	}
+	changed := selected != index
+	lt.tableMu.Lock()
 	lt.selectedId = row.Id()
-	changed := lt.selectedRowIndex != index
 	lt.selectedRowIndex = index
+	lt.tableMu.Unlock()
 	if changed {
 		lt.onChange(row)
 	}
 
+	lt.viewMu.RLock()
 	if lt.view == nil {
+		lt.viewMu.RUnlock()
 		return
 	}
+	lt.viewMu.RUnlock()
 
 	height := lt.tableHeight()
 	scrollThreshold := lt.topRow + height - 1
@@ -714,7 +756,11 @@ func (lt *ListTable) SelectId(id string) {
 }
 
 func (lt *ListTable) reindexSelection() {
-	if index, ok := lt.table.rowIndex[lt.selectedId]; ok {
+	lt.tableMu.RLock()
+	table := lt.table
+	selectedId := lt.selectedId
+	lt.tableMu.RUnlock()
+	if index, ok := table.rowIndex[selectedId]; ok {
 		lt.SelectIndex(index)
 	} else {
 		lt.SelectIndex(0)
@@ -725,7 +771,9 @@ func (lt *ListTable) SetLeft(index int) {
 	if index < 0 {
 		index = 0
 	}
+	lt.tableMu.RLock()
 	maxLeft := lt.table.dataWidth + lt.columnSeparatorsWidth() - lt.viewWidth()
+	lt.tableMu.RUnlock()
 	if maxLeft < 0 {
 		index = 0
 	} else if index > maxLeft {
@@ -735,14 +783,18 @@ func (lt *ListTable) SetLeft(index int) {
 }
 
 func (lt *ListTable) SetView(view views.View) {
+	lt.viewMu.Lock()
 	lt.view = view
-	lt.preloader.SetView(view)
+	lt.viewMu.Unlock()
 	lt.Resize()
 }
 
 // This is the minimum required size of ListTable
 func (lt *ListTable) Size() (int, int) {
-	if lt.table.dataWidth == 0 {
+	lt.tableMu.RLock()
+	table := lt.table
+	lt.tableMu.RUnlock()
+	if table.dataWidth == 0 {
 		return 1, 1
 	}
 	w, h := lt.MaxSize()

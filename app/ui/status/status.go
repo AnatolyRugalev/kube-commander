@@ -12,10 +12,13 @@ import (
 type Status struct {
 	*focus.Focusable
 	*views.Text
-	screen  commander.ScreenHandler
-	events  chan *tcell.EventKey
+	mu     sync.Mutex
+	screen commander.ScreenHandler
+	events chan *tcell.EventKey
+
+	once    sync.Once
+	clearMu sync.Mutex
 	clearIn time.Time
-	mu      sync.Mutex
 }
 
 func (s *Status) watch() {
@@ -23,48 +26,41 @@ func (s *Status) watch() {
 	for {
 		t := <-ticker.C
 		s.mu.Lock()
-		if !s.clearIn.IsZero() && s.clearIn.Before(t) {
+		clear := !s.clearIn.IsZero() && s.clearIn.Before(t)
+		s.mu.Unlock()
+		if clear {
 			s.Clear()
 		}
-		s.mu.Unlock()
 	}
 }
 
-func (s *Status) Clear() {
-	s.clearIn = time.Time{}
-	s.SetText("")
-	s.SetStyle(s.screen.Theme().GetStyle("status-bar"))
+func (s *Status) setMessage(text string, style tcell.Style, clearIn time.Duration) {
+	s.mu.Lock()
+	if clearIn == 0 {
+		s.clearIn = time.Time{}
+	} else {
+		s.clearIn = time.Now().Add(clearIn)
+	}
+	s.SetText(text)
+	s.SetStyle(style)
+	s.mu.Unlock()
 	s.screen.UpdateScreen()
 }
 
-func (s *Status) ClearIn(duration time.Duration) {
-	s.mu.Lock()
-	s.clearIn = time.Now().Add(duration)
-	s.mu.Unlock()
+func (s *Status) Clear() {
+	s.setMessage("", s.screen.Theme().GetStyle("status-bar"), 0)
 }
 
 func (s *Status) Warning(msg string) {
-	s.Clear()
-	s.SetText(msg)
-	s.SetStyle(s.screen.Theme().GetStyle("status-warning"))
-	s.screen.UpdateScreen()
-	s.ClearIn(time.Second * 5)
+	s.setMessage(msg, s.screen.Theme().GetStyle("status-warning"), time.Second*5)
 }
 
 func (s *Status) Info(msg string) {
-	s.Clear()
-	s.SetText(msg)
-	s.SetStyle(s.screen.Theme().GetStyle("status-info"))
-	s.screen.UpdateScreen()
-	s.ClearIn(time.Second * 2)
+	s.setMessage(msg, s.screen.Theme().GetStyle("status-info"), time.Second*2)
 }
 
 func (s *Status) Error(err error) {
-	s.Clear()
-	s.SetText(err.Error())
-	s.SetStyle(s.screen.Theme().GetStyle("status-error"))
-	s.screen.UpdateScreen()
-	s.ClearIn(time.Second * 10)
+	s.setMessage(err.Error(), s.screen.Theme().GetStyle("status-error"), time.Second*10)
 }
 
 func (s *Status) HandleEvent(ev tcell.Event) bool {
@@ -79,10 +75,7 @@ func (s *Status) HandleEvent(ev tcell.Event) bool {
 }
 
 func (s *Status) Confirm(msg string) bool {
-	s.Clear()
-	s.SetText(msg)
-	s.SetStyle(s.screen.Theme().GetStyle("status-confirm"))
-	s.screen.UpdateScreen()
+	s.setMessage(msg, s.screen.Theme().GetStyle("status-confirm"), 0)
 	ev := <-s.events
 	switch ev.Rune() {
 	case 'y', 'Y':
@@ -92,10 +85,14 @@ func (s *Status) Confirm(msg string) bool {
 }
 
 func (s *Status) Draw() {
-	if s.Style() == tcell.StyleDefault {
+	s.once.Do(func() {
+		s.mu.Lock()
 		s.SetStyle(s.screen.Theme().GetStyle("status-bar"))
-	}
+		s.mu.Unlock()
+	})
+	s.mu.Lock()
 	s.Text.Draw()
+	s.mu.Unlock()
 }
 
 func (s *Status) Size() (int, int) {

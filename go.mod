@@ -6,7 +6,7 @@ require (
 	github.com/atotto/clipboard v0.1.2
 	github.com/creack/pty v1.1.11
 	github.com/fsnotify/fsnotify v1.4.7
-	github.com/gdamore/tcell v1.3.1-0.20200315173632-8ec73b6fa6c5
+	github.com/gdamore/tcell v1.4.0
 	github.com/golang/protobuf v1.4.1
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
