@@ -38,7 +38,7 @@ func newResourcePicker(container commander.ResourceContainer, f GroupKindFunc) (
 		}, true))
 		resMap[res.Gk.String()] = res
 	}
-	lt := listTable.NewStaticListTable(columns, rows, listTable.NoHorizontalScroll|listTable.WithFilter|listTable.WithHeaders|listTable.StartFilter, container.ScreenHandler())
+	lt := listTable.NewStaticListTable(columns, rows, listTable.NoHorizontalScroll|listTable.WithFilter|listTable.WithHeaders|listTable.AlwaysFilter, container.ScreenHandler())
 	lt.BindOnKeyPress(func(row commander.Row, event *tcell.EventKey) bool {
 		if row == nil {
 			return false

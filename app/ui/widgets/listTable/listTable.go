@@ -45,7 +45,7 @@ const (
 	NoActions
 	NoWatch
 	WithFilter
-	StartFilter
+	AlwaysFilter
 )
 
 func (tf TableFormat) Has(flag TableFormat) bool {
@@ -103,7 +103,7 @@ func NewListTable(prov commander.RowProvider, format TableFormat, screen command
 		preloader:    NewPreloader(screen),
 		rowProvider:  prov,
 		screen:       screen,
-		filterMode:   format.Has(StartFilter),
+		filterMode:   format.Has(AlwaysFilter),
 	}
 	lt.Render()
 	return lt
@@ -294,7 +294,7 @@ func (lt *ListTable) BindOnChange(rowFunc RowFunc) {
 }
 
 func (lt *ListTable) resetFilter() {
-	lt.filterMode = lt.format.Has(StartFilter)
+	lt.filterMode = lt.format.Has(AlwaysFilter)
 	lt.filter = ""
 	lt.Render()
 	lt.reindexSelection()
@@ -589,7 +589,7 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 			return true
 		}
 		if lt.format.Has(WithFilter) {
-			if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc && lt.IsFocused() {
+			if (lt.filterMode || lt.filter != "") && ev.Key() == tcell.KeyEsc && lt.IsFocused() && !lt.format.Has(AlwaysFilter) {
 				lt.resetFilter()
 				return true
 			}
@@ -603,7 +603,7 @@ func (lt *ListTable) HandleEvent(ev tcell.Event) bool {
 					}
 					return true
 				case tcell.KeyEnter:
-					if !lt.format.Has(StartFilter) {
+					if !lt.format.Has(AlwaysFilter) {
 						lt.filterMode = false
 						lt.Render()
 						lt.reindexSelection()

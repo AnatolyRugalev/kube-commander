@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell"
 	"github.com/gdamore/tcell/views"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sync"
 )
 
 type workspace struct {
@@ -22,9 +23,10 @@ type workspace struct {
 	container commander.Container
 	focus     commander.FocusManager
 
-	popup  commander.Popup
-	menu   *resourceMenu.ResourceMenu
-	widget commander.Widget
+	popupMu sync.Mutex
+	popup   commander.Popup
+	menu    *resourceMenu.ResourceMenu
+	widget  commander.Widget
 
 	namespace         string
 	namespaceResource *commander.Resource
@@ -34,10 +36,12 @@ type workspace struct {
 
 func (w *workspace) Resize() {
 	w.BoxLayout.Resize()
+	w.popupMu.Lock()
 	if w.popup != nil {
 		w.popup.Reposition(w.view)
 		w.popup.Resize()
 	}
+	w.popupMu.Unlock()
 }
 
 func (w *workspace) SetView(view views.View) {
@@ -93,21 +97,27 @@ func (w *workspace) FocusManager() commander.FocusManager {
 }
 
 func (w *workspace) ShowPopup(title string, widget commander.MaxSizeWidget) {
+	w.popupMu.Lock()
 	w.popup = popup.NewPopup(w.view, w.Theme(), title, widget, func() {
+		w.popupMu.Lock()
 		w.popup.OnHide()
 		w.popup = nil
+		w.popupMu.Unlock()
 		w.UpdateScreen()
 	})
 	w.popup.OnShow()
 	w.focus.Focus(w.popup)
+	w.popupMu.Unlock()
 	w.UpdateScreen()
 }
 
 func (w *workspace) UpdateScreen() {
+	w.popupMu.Lock()
 	if w.popup != nil {
 		w.popup.Reposition(w.container.Screen().View())
 		w.popup.Resize()
 	}
+	w.popupMu.Unlock()
 	if screen := w.container.Screen(); screen != nil {
 		screen.UpdateScreen()
 	}
@@ -131,19 +141,24 @@ func (w *workspace) Status() commander.StatusReporter {
 
 func (w *workspace) Draw() {
 	w.BoxLayout.Draw()
+	w.popupMu.Lock()
 	if w.popup != nil {
 		w.popup.Draw()
 	}
+	w.popupMu.Unlock()
 }
 
 func (w *workspace) HandleEvent(e tcell.Event) bool {
 	if w.Status().HandleEvent(e) {
 		return true
 	}
-	if w.focus.HandleEvent(e, w.popup == nil) {
+	w.popupMu.Lock()
+	hasPopup := w.popup != nil
+	w.popupMu.Unlock()
+	if w.focus.HandleEvent(e, !hasPopup) {
 		return true
 	}
-	if w.popup != nil {
+	if hasPopup {
 		return false
 	}
 	switch ev := e.(type) {
