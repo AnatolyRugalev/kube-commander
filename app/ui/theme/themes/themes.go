@@ -135,5 +135,29 @@ func BaseStyles() []*pb.Style {
 			Fg:   "confirm-fg",
 			Bg:   "confirm-bg",
 		},
+		{
+			Name: "status-loader-idle",
+			Bg:   "status-bar",
+		},
+		{
+			Name: "status-loader-phase-0",
+			Bg:   "selection-bg",
+			Fg:   "selection-fg",
+		},
+		{
+			Name: "status-loader-phase-1",
+			Bg:   "confirm-bg",
+			Fg:   "confirm-fg",
+		},
+		{
+			Name: "status-loader-phase-2",
+			Bg:   "error-bg",
+			Fg:   "error-fg",
+		},
+		{
+			Name: "status-loader-phase-3",
+			Bg:   "unfocused-bg",
+			Fg:   "unfocused-fg",
+		},
 	}
 }

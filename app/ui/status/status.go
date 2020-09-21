@@ -10,9 +10,16 @@ import (
 )
 
 type Status struct {
+	views.WidgetWatchers
 	*focus.Focusable
-	*views.Text
-	mu     sync.Mutex
+	mu sync.Mutex
+
+	view    views.View
+	loaderV *views.ViewPort
+	loader  *loader
+	textV   *views.ViewPort
+	text    *views.Text
+
 	screen commander.ScreenHandler
 	events chan *tcell.EventKey
 
@@ -21,8 +28,33 @@ type Status struct {
 	clearIn time.Time
 }
 
+func (s *Status) LoadingStarted() {
+	s.loader.Start()
+}
+
+func (s *Status) LoadingFinished() {
+	s.loader.Finish()
+}
+
+func (s *Status) Resize() {
+	w, h := s.view.Size()
+	s.loaderV.Resize(0, 0, 2, h)
+	s.textV.Resize(2, 0, w-2, h)
+}
+
+func (s *Status) SetView(view views.View) {
+	s.mu.Lock()
+	s.view = view
+	w, h := view.Size()
+	s.loaderV = views.NewViewPort(view, 0, 0, 2, h)
+	s.loader.SetView(s.loaderV)
+	s.textV = views.NewViewPort(view, 2, 0, w-2, h)
+	s.text.SetView(s.textV)
+	s.mu.Unlock()
+}
+
 func (s *Status) watch() {
-	ticker := time.NewTicker(time.Millisecond * 100)
+	ticker := time.NewTicker(time.Millisecond * 200)
 	for {
 		t := <-ticker.C
 		s.mu.Lock()
@@ -31,6 +63,7 @@ func (s *Status) watch() {
 		if clear {
 			s.Clear()
 		}
+		s.loader.Tick()
 	}
 }
 
@@ -41,8 +74,8 @@ func (s *Status) setMessage(text string, style tcell.Style, clearIn time.Duratio
 	} else {
 		s.clearIn = time.Now().Add(clearIn)
 	}
-	s.SetText(text)
-	s.SetStyle(style)
+	s.text.SetStyle(style)
+	s.text.SetText(text)
 	s.mu.Unlock()
 	s.screen.UpdateScreen()
 }
@@ -87,11 +120,12 @@ func (s *Status) Confirm(msg string) bool {
 func (s *Status) Draw() {
 	s.once.Do(func() {
 		s.mu.Lock()
-		s.SetStyle(s.screen.Theme().GetStyle("status-bar"))
+		s.text.SetStyle(s.screen.Theme().GetStyle("status-bar"))
 		s.mu.Unlock()
 	})
 	s.mu.Lock()
-	s.Text.Draw()
+	s.loader.Draw()
+	s.text.Draw()
 	s.mu.Unlock()
 }
 
@@ -102,7 +136,8 @@ func (s *Status) Size() (int, int) {
 func NewStatus(screen commander.ScreenHandler) *Status {
 	s := &Status{
 		Focusable: focus.NewFocusable(),
-		Text:      views.NewText(),
+		loader:    NewLoader(screen),
+		text:      views.NewText(),
 		screen:    screen,
 		events:    make(chan *tcell.EventKey),
 	}

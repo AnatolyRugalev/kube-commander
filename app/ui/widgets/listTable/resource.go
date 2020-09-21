@@ -186,6 +186,9 @@ func (r *ResourceListTable) extractRows(addNamespace bool, event watch.Event) ([
 }
 
 func (r *ResourceListTable) loadResourceRows() ([]string, []commander.Row, error) {
+	r.screen.Status().LoadingStarted()
+	defer r.screen.Status().LoadingFinished()
+
 	namespace := r.container.CurrentNamespace()
 	table, err := r.container.Client().ListAsTable(context.TODO(), r.resource, namespace)
 	if err != nil {

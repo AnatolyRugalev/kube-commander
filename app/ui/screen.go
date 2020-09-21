@@ -17,8 +17,9 @@ type Screen struct {
 	status    commander.StatusReporter
 	view      commander.View
 	theme     commander.ThemeManager
-	title     *views.BoxLayout
-	titleBar  *views.TextBar
+	// TODO: separate title widget
+	title    *views.BoxLayout
+	titleBar *views.TextBar
 }
 
 func (s *Screen) View() commander.View {
@@ -37,6 +38,10 @@ func (s *Screen) Init(status commander.StatusReporter, theme commander.ThemeMana
 	s.title.AddWidget(logo.NewLogo(s.theme), 0)
 	s.title.AddWidget(s.titleBar, 1.0)
 	s.SetTitle(s.title)
+}
+
+func (s *Screen) Status() commander.StatusReporter {
+	return s.status
 }
 
 func (s *Screen) UpdateScreen() {

@@ -14,6 +14,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.9
 	github.com/spf13/cast v1.3.1
 	github.com/spf13/cobra v0.0.7
+	go.uber.org/atomic v1.4.0
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 	google.golang.org/appengine v1.6.1 // indirect
 	google.golang.org/protobuf v1.25.0

@@ -15,9 +15,12 @@ type StatusReporter interface {
 	Warning(msg string)
 	Info(msg string)
 	Confirm(msg string) bool
+	LoadingStarted()
+	LoadingFinished()
 }
 
 type ScreenHandler interface {
+	Status() StatusReporter
 	UpdateScreen()
 	Resize()
 	Theme() ThemeManager
