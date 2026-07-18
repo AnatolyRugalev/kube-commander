@@ -427,3 +427,47 @@ the whole kube layer builds on. **Choices:**
   errors; a dummy `&rest.Config{Host:...}` exercises client wiring — no fake
   clients or network needed. No new dependencies (all `k8s.io/client-go`
   sub-packages already vendored via M1-00).
+
+### D32 — Executing M1-04: on-disk cached discovery via kubectl's diskcached client; per-host dir; TTL + explicit Invalidate; memory fallback
+**2026-07-18.** M1-04 landed `internal/kube/cache.go` and rewired `NewClients`
+(client.go): the discovery client is now
+`k8s.io/client-go/discovery/cached/disk`'s `CachedDiscoveryClient` — the same
+on-disk cache kubectl uses — completing the "cache discovery on disk" half of D8.
+**Choices:**
+- **Reuse kubectl's `diskcached` client, don't hand-roll a cache.** It already
+  does everything M1-04 needs — TTL-gated JSON docs on disk, an internal memcache
+  delegate, `Invalidate()`/`Fresh()` (the `CachedDiscoveryInterface`) — and is the
+  exact code kubectl runs, so kubecom's cache behavior matches the tool users know.
+  It replaces the M1-02/D29 `memory.NewMemCacheClient` wrapper as the base of the
+  deferred RESTMapper, so **discovery and mapping now share one on-disk cache**.
+- **Cache dir = `os.UserCacheDir()/kubecom`, per-host subdir.** Caches are
+  disposable, so they live under the **cache** dir (`~/.cache/kubecom` on Linux,
+  `~/Library/Caches/kubecom` on macOS), deliberately *separate* from the config
+  dir (D20 — config is user data, cache is not). Discovery docs go under
+  `.../discovery/<host-slug>/` and the HTTP response cache under `.../http/`. The
+  host is slugged (scheme stripped, non-`[\w/.]` → `_`, mirroring kubectl) because
+  **the discovery cache must be unique per host:port** — two clusters share
+  group/version names but not resource sets, so a shared dir would cross-serve.
+- **TTL 6h + explicit `Clients.Invalidate()`.** 6h matches kubectl's default:
+  long enough the steady state never re-hits the server, short enough a new API
+  group is picked up within a session. `Invalidate()` bypasses the TTL for a
+  user-forced refresh or after a CRD install; it clears **both** the discovery
+  cache and the deferred RESTMapper (`Reset()`), which is retained on `Clients`
+  (`deferredMapper`) for exactly this. The static seed mapper (M1-02) is left
+  untouched — its core mappings are authoritative and can't go stale.
+- **Degrade, don't crash (principle 3).** If no cache dir resolves (e.g. `HOME`
+  unset), `newCachedDiscovery` falls back to the in-memory `memcache` client —
+  discovery still works, it just isn't persisted across runs. Both paths return a
+  `CachedDiscoveryInterface`, so the RESTMapper and `Invalidate` are identical
+  either way. Construction still does **no network I/O** (docs read/written lazily,
+  dirs created on first write), so fast cold start (D8) holds.
+- **New transitive deps:** `github.com/gregjones/httpcache`,
+  `github.com/peterbourgon/diskv`, `github.com/google/btree` — pulled by the
+  diskcached package, added via `go mod tidy`. No direct-dep change.
+- **`Clients.Discovery` field type widened** `DiscoveryInterface` →
+  `CachedDiscoveryInterface` (a superset) so callers can `Invalidate/Fresh`
+  directly; existing `StartDiscovery` (needs only `ServerPreferredResources`) is
+  unaffected. Tests stay hermetic (dummy `rest.Config`): they cover host-slugging,
+  per-host uniqueness, the interface contract, and `Invalidate` no-panic without a
+  server. **"Lazy group detail on first open" split out to M1-04b** — it needs the
+  M2 menu open interaction that doesn't exist yet, so it isn't actionable now.

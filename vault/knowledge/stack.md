@@ -33,8 +33,14 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **k8s.io/client-go** (target **v0.31**), apimachinery, cli-runtime as needed.
 - **k8s.io/client-go/dynamic** — generic typed-free access; server-side Table
   printing via `Accept: application/json;as=Table` for kubectl-identical columns.
-- **discovery** + **restmapper** — GVK↔GVR, namespaced?, verbs; async + cached
-  (cached discovery client with disk cache + invalidation).
+- **discovery** + **restmapper** — GVK↔GVR, namespaced?, verbs; async + cached.
+  On-disk cache landed M1-04 (D32): `discovery/cached/disk`'s `CachedDiscoveryClient`
+  (kubectl's own), base of the deferred RESTMapper. Cache dir
+  `os.UserCacheDir()/kubecom/{discovery/<host-slug>,http}` (per host:port —
+  distinct clusters must not share a dir); TTL 6h; `Clients.Invalidate()` forces a
+  refetch (clears the disk cache *and* Resets the deferred mapper). No cache dir
+  resolvable → degrade to in-memory `memcache`. New transitive deps:
+  `gregjones/httpcache`, `peterbourgon/diskv`, `google/btree`.
 - **client-go/tools/remotecommand** — exec/attach (interactive; suspend + raw PTY).
 - **client-go/tools/portforward** + SPDY/websocket dialer — background port-forward.
 - **k8s.io/kubectl/pkg/describe** — in-process describe output.

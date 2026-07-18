@@ -6,7 +6,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
-	memcache "k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -31,7 +30,10 @@ type ClientConfig struct {
 //
 //   - Clientset  — typed access to built-in (core/apps/…) resources.
 //   - Dynamic    — untyped access to any resource, including CRDs.
-//   - Discovery  — server API discovery (groups, versions, resources).
+//   - Discovery  — server API discovery (groups, versions, resources), backed by
+//     an on-disk cache keyed per host with a TTL (M1-04), so warm starts read the
+//     discovery documents from disk with no network round-trip and repeated runs
+//     share the cache. Call Invalidate to force a refetch.
 //   - RESTMapper — resolves GVK↔GVR and the scope (namespaced vs cluster) of a
 //     resource. It composes a static seed mapper (core GVKs, resolved instantly
 //     with no network I/O — M1-02) ahead of a *deferred* discovery mapper (does no
@@ -45,8 +47,12 @@ type Clients struct {
 	Config     *rest.Config
 	Clientset  kubernetes.Interface
 	Dynamic    dynamic.Interface
-	Discovery  discovery.DiscoveryInterface
+	Discovery  discovery.CachedDiscoveryInterface
 	RESTMapper meta.RESTMapper
+
+	// deferredMapper is the discovery-backed half of RESTMapper, retained so
+	// Invalidate can Reset it in lockstep with the discovery cache.
+	deferredMapper *restmapper.DeferredDiscoveryRESTMapper
 }
 
 // RESTConfig resolves a *rest.Config from the given ClientConfig using client-go's
@@ -85,13 +91,16 @@ func NewClients(cfg *rest.Config) (*Clients, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kube: building dynamic client: %w", err)
 	}
-	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
+	// On-disk cached discovery (M1-04): documents persist under the user cache dir,
+	// keyed per host, with a TTL — warm starts skip the network. Construction does
+	// no network I/O; the cache dirs are created lazily on first write.
+	dc, err := newCachedDiscovery(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("kube: building discovery client: %w", err)
 	}
-	// Deferred + memory-cached: no discovery round-trip until the first mapping
-	// is requested, and results are cached thereafter.
-	deferred := restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(dc))
+	// Deferred: no discovery round-trip until the first mapping is requested; the
+	// on-disk cache above then serves subsequent lookups.
+	deferred := restmapper.NewDeferredDiscoveryRESTMapper(dc)
 	// Compose a static seed mapper ahead of discovery: core GVKs resolve instantly
 	// with zero network I/O (the seed short-circuits, discovery is never consulted
 	// for them), while unknown kinds — CRDs, less-common groups — fall through to
@@ -101,12 +110,29 @@ func NewClients(cfg *rest.Config) (*Clients, error) {
 		MultiRESTMapper: meta.MultiRESTMapper{newSeedRESTMapper(), deferred},
 	}
 	return &Clients{
-		Config:     cfg,
-		Clientset:  clientset,
-		Dynamic:    dyn,
-		Discovery:  dc,
-		RESTMapper: mapper,
+		Config:         cfg,
+		Clientset:      clientset,
+		Dynamic:        dyn,
+		Discovery:      dc,
+		RESTMapper:     mapper,
+		deferredMapper: deferred,
 	}, nil
+}
+
+// Invalidate forces the next discovery pass and the next unseeded RESTMapping to
+// refetch from the server instead of trusting the on-disk cache. Use it for a
+// user-triggered refresh, or after an operation that changes the API surface
+// (e.g. installing a CRD) so the freshly-added group appears without waiting for
+// the cache TTL to lapse. It clears both the discovery cache and the lazily-built
+// discovery RESTMapper; the static seed mapper (M1-02) is unaffected — its core
+// mappings are authoritative and never stale.
+func (c *Clients) Invalidate() {
+	if c.Discovery != nil {
+		c.Discovery.Invalidate()
+	}
+	if c.deferredMapper != nil {
+		c.deferredMapper.Reset()
+	}
 }
 
 // Connect is the one-call convenience: resolve the rest.Config from cc and build
