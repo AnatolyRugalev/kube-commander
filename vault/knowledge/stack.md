@@ -53,6 +53,14 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   refetch (clears the disk cache *and* Resets the deferred mapper). No cache dir
   resolvable → degrade to in-memory `memcache`. New transitive deps:
   `gregjones/httpcache`, `peterbourgon/diskv`, `google/btree`.
+- **In-process action set** (M1-06, D2): mutating actions target objects
+  **generically through the dynamic client**, addressed by GVR + scope (from the
+  discovery `Resource`) and namespace/name (from a row `ObjectRef`) via the shared
+  `resourceInterface(r, ns)` helper — one path for built-ins and CRDs, no per-kind
+  typed clients. **Delete** (M1-06a, D35) adds a **UID precondition** from the row
+  when present, so acting on a table snapshot never hits a recreated same-named
+  object. 06b scale+rollout-restart / 06c cordon+drain / 06d cronjob-suspend build
+  on this.
 - **client-go/tools/remotecommand** — exec/attach (interactive; suspend + raw PTY).
 - **client-go/tools/portforward** + SPDY/websocket dialer — background port-forward.
 - **k8s.io/kubectl/pkg/describe** — in-process describe output.
@@ -81,6 +89,15 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 ## Testing (D18)
 - Default: **client-go fake clients** (`fake.Clientset`, fake dynamic + fake
   discovery) — hermetic, no network, runs in any sandbox/CI.
+  - **Gotcha (D35):** the **fake dynamic client discards `DeleteOptions`** — its
+    `Delete` builds `testing.NewDeleteAction` (no options variant), so a recorded
+    action's `GetDeleteOptions()` is always zero. It cannot verify propagation of
+    delete preconditions / propagation policy. Keep option-shaping logic in a
+    **pure helper** and unit-test that directly (e.g. `withUIDPrecondition` in
+    `actions.go`); use the fake only for the round-trip (object removed, namespace
+    routing, wrapped errors). Build it with
+    `NewSimpleDynamicClientWithCustomListKinds` + an explicit GVR→listKind map so
+    it never guesses list kinds for unstructured seed objects.
 - **envtest** (real kube-apiserver via `setup-envtest`) is opt-in behind
   `KUBECOM_TEST_ENVTEST=1`. **Harness landed in M1-00** (D28):
   `internal/kube/envtest_test.go` — `requireEnvtest(t)` skips unless the gate is

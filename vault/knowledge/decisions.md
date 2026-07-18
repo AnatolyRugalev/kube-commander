@@ -547,3 +547,41 @@ server-side Table deltas to a bounded channel. **Choices:**
   `streamTableWatch` from byte streams (deltas, bookmark, 410→`errExpired`,
   generic error) and the full `watchLoop` over a `rest/fake` transport that answers
   List vs `watch=true` differently (asserts `RESET`-then-delta with carried columns).
+
+### D35 — Executing M1-06a: generic delete via the dynamic client; UID precondition guards the row-snapshot race; M1-06 split into 06a–06d
+**2026-07-18.** M1-06 ("Actions: delete/scale/rollout-restart/cordon/drain/
+cronjob-suspend") is six actions — too big for one green ≤300-line leg — so it was
+split (cf. D33's M1-05 split): **06a delete** (this leg), **06b scale +
+rollout-restart**, **06c cordon/drain**, **06d cronjob suspend/resume** (back to
+Backlog). M1-06a landed `internal/kube/actions.go` — the first slice of the
+in-process action set (D2). **Choices:**
+- **Delete addresses objects through the *dynamic* client, not typed clients.**
+  `Clients.Delete(ctx, r Resource, ref ObjectRef, opts)` mirrors `List`'s shape:
+  the GVR + scope come from the discovery `Resource`, the namespace/name from the
+  row's `ObjectRef`. One code path deletes **any** resource — built-in or CRD —
+  with zero per-kind wiring, exactly as the Table List/Watch path is generic. A
+  shared `resourceInterface(r, ns)` helper (namespaces the dynamic client iff
+  `r.Namespaced`) is the addressing primitive 06b–06d will reuse.
+- **UID precondition guards the snapshot race.** A table row is a point-in-time
+  snapshot; between listing and acting the named object can be deleted and a new
+  one recreated under the same name. When `ObjectRef.UID` is present, Delete sets
+  it as a `metav1.Preconditions{UID}` so the server only removes *that* object
+  (else Conflict) — it never deletes the wrong same-named object. A row with no
+  UID (degraded metadata, principle 3) deletes by name alone; a caller that set
+  its own preconditions keeps them (the guard is layered only when `opts` has
+  none). The logic is a pure `withUIDPrecondition(ref, opts)` helper so 06b–06d
+  can reuse it and it is unit-testable directly.
+- **Testing shape forced by a fake-client limitation.** The client-go **fake
+  dynamic client discards `DeleteOptions`** — its `Delete` calls
+  `testing.NewDeleteAction` (no options variant), so a recorded action's
+  `GetDeleteOptions()` is always zero. Therefore the precondition contract is
+  proven against `withUIDPrecondition` as a pure function, and the fake
+  (`dynamic/fake.NewSimpleDynamicClientWithCustomListKinds`, custom list kinds so
+  it never guesses) is used only for the round-trip: object actually removed,
+  namespace routing (namespaced vs cluster-scoped — a namespace on a node ref is
+  dropped), empty-name rejected, and NotFound surfaced **wrapped** (`errors.Is` →
+  `apierrors.IsNotFound` still true, #86). **Knowledge:** the fake-client quirk +
+  the action-set pattern are recorded in [`stack.md`](stack.md) so 06b–06d don't
+  rediscover them.
+- **New dep:** `go mod tidy` pulled `gopkg.in/evanphx/json-patch.v4` (indirect,
+  via the dynamic fake). No direct-dep change.
