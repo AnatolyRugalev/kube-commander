@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — PROC-04 done: cloud runs set the maintainer's git identity before committing._
+_Last updated: 2026-07-18 — REVIEW-02: M0-07 execution reviewed (clean); M0-08 added for legacy files the tree-based deletion missed._
 
 ## In Progress
 
@@ -21,6 +21,8 @@ _(none)_
 - [ ] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS (D17)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-05** Test harness: teatest (tui) smoke test — envtest moved to M1 (D18)
+      status: todo | owner: — | added: 2026-07-18
+- [ ] **M0-08** Sweep remaining legacy files missed by M0-07's tree-based deletion: `Dockerfile` (golang:1.15 + baked-in kubectl, contradicts D2), `get.sh`, `ci/aur/` (old binary names; incl. `id_rsa.enc` encrypted SSH key), `ci/terminalizer/` (vhs replaces it). Delete; anything still wanted gets rebuilt in M0-06/M5.
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-06** goreleaser skeleton (Linux+macOS)
       status: todo | owner: — | added: 2026-07-18
