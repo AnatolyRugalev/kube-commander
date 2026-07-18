@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M0-06 done: goreleaser skeleton → Linux+macOS ×
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
@@ -19,8 +20,6 @@ _(none)_
 _(none — M0 complete)_
 
 ### M1 — Kube layer
-- [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
-      status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-01** Client bootstrap: clientset + dynamic + discovery + RESTMapper from kubeconfig/context
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-02** Seed-set core GVKs with static REST mapping for instant start
