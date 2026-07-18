@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — PROC-02 done: scheduled runs self-prime `v1` in fresh cloud checkouts (default branch is `master`)._
+_Last updated: 2026-07-18 — M0-07 claimed: deleting legacy trees._
 
 ## In Progress
 
-_(none yet)_
+- [ ] **M0-07** Delete legacy trees from `v1`: `app/`, `cli/`, `commander/`, `config/`, `pb/`, `cmd/kube-commander/`, Windows sources, Travis/snap CI; prune `go.mod`; drop `.golangci.yml` path excludes. Absorbs M0-03. (D14)
+      status: in-progress | owner: claude | added: 2026-07-18
 
 ## Blocked
 
@@ -16,8 +17,6 @@ _(none)_
 ## Backlog
 
 ### M0 — Groundwork (ordered top-to-bottom; ids are stable, list order is priority)
-- [ ] **M0-07** Delete legacy trees from `v1`: `app/`, `cli/`, `commander/`, `config/`, `pb/`, `cmd/kube-commander/`, Windows sources, Travis/snap CI; prune `go.mod`; drop `.golangci.yml` path excludes. Absorbs M0-03. (D14)
-      status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra (wire `cmd/kubecom` onto cobra); drop `ioutil` (trivial after M0-07)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS (D17)
