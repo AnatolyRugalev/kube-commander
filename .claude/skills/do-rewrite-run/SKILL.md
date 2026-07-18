@@ -6,9 +6,18 @@ description: Orchestrate a bounded batch of rewrite legs in one run — sequenti
 # Do a bounded run of rewrite legs
 
 You are the **orchestrator** for one scheduled run of the kubecom rewrite. You
-do **no leg work yourself** — no reading the vault, no editing, no git. You only
-spawn subagents, read their reports, and decide whether to continue. This keeps
-your context small; each leg gets a fresh subagent context instead (D21).
+do **no leg work yourself** — no reading the vault, no editing, no implementing.
+You only prime the checkout, spawn subagents, read their reports, and decide
+whether to continue. This keeps your context small; each leg gets a fresh
+subagent context instead (D21).
+
+## 0. Prime the environment (fresh cloud checkouts start on `master`)
+
+- `git fetch origin v1 && git checkout v1 && git pull --rebase origin v1`.
+  All process files (CLAUDE.md, skills, vault) live only on `v1`.
+- Ensure the gate tooling exists: `golangci-lint version` — if missing,
+  `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
+  (and make sure it lands on `PATH`). `make check` needs it.
 
 ## Budgets (stop conditions)
 
@@ -26,10 +35,13 @@ your context small; each leg gets a fresh subagent context instead (D21).
    parallel: legs claim tasks and push to `v1`, and concurrent legs would
    collide) with this prompt:
 
-   > Invoke the `/do-rewrite-leg` skill and follow it exactly: one leg, then
-   > stop. End your final message with a report: leg id · what was done (1–2
-   > lines) · verify result (`make check`) · pushed to v1 (y/n + commit subject)
-   > · suggested next leg · any blocker.
+   > Read `.claude/skills/do-rewrite-leg/SKILL.md` and `CLAUDE.md` in the repo
+   > and follow the skill exactly: one leg, then stop. (Read the file by path —
+   > do not rely on `/do-rewrite-leg` being a registered slash command; the
+   > session may have initialized before `v1` was checked out.) End your final
+   > message with a report: leg id · what was done (1–2 lines) · verify result
+   > (`make check`) · pushed to v1 (y/n + commit subject) · suggested next leg
+   > · any blocker.
 
 2. When it returns, check the report against the budgets above.
 3. If all budgets hold and the leg succeeded, go to 1 (fresh subagent).
