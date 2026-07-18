@@ -23,6 +23,9 @@ set, killing nearly all kubectl shell-outs.
 - **Exec shell**: `tea.ExecProcess` suspend → raw PTY via `remotecommand`
   (fallback `kubectl exec`). Linux/macOS only.
 - **Edit**: suspend to `$EDITOR`, apply on save.
+- **Finalize action keymap** off the reserved nav keys (no `h j k l n g G /`) —
+  actions behind a leader / actions menu; update [`../knowledge/keybindings.md`](../knowledge/keybindings.md)
+  and generate the help/keybindings doc from it.
 
 ## Exit criteria
 

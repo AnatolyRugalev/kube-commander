@@ -54,3 +54,15 @@ API group into a total failure (**#87**, **#76**, **#86**).
 **2026-07-18.** `master` = original code, untouched for now. `v1` = rewrite
 branch, holds this vault and all rewrite work. A `main` branch becomes the final
 destination when the rewrite is ready to be default. Push `v1` to origin.
+
+### D10 — Vim-style navigation first-class; arrows/classic as fallback
+**2026-07-18.** Navigation is **vim-first**: `hjkl`, `gg`/`G`, `Ctrl+u`/`Ctrl+d`,
+`/` search + `n`/`N`, `l`/`Enter` to drill in, `h`/`Esc` to go back. Arrow keys,
+`PgUp`/`PgDn`, `Home`/`End`, `Enter`/`Esc` work as an equivalent **fallback** so
+non-vim users are never stranded. **Why:** the target user is a terminal-native
+hacker; muscle-memory navigation is a core UX value, not an add-on.
+**Consequence / rule:** `h j k l n` (and `g`, `G`) are **reserved for
+navigation** — single-letter *action* bindings must not collide with them. This
+supersedes the legacy pod bindings where they clash (legacy used `l` for logs,
+`s` shell, `f` port-forward): rebind actions off the reserved keys (e.g. behind a
+leader or an actions menu). See [`keybindings.md`](keybindings.md).

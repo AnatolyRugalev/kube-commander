@@ -11,7 +11,10 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 
 ## Scope
 
-- Root `tea.Model` with view routing and global keybindings (`bubbles/key` + help).
+- Root `tea.Model` with view routing and **vim-first global keybindings**
+  (`bubbles/key` + help): `hjkl`, `gg`/`G`, `/` + `n`/`N`, `Ctrl+u/d`, with
+  arrows/`PgUp`/`PgDn`/`Home`/`End`/`Enter`/`Esc` as equivalent fallbacks. Reserve
+  `h j k l n g G /` for navigation. See [`../knowledge/keybindings.md`](../knowledge/keybindings.md).
 - **Browse view**: resource-menu sidebar + live table pane.
 - Table component: consumes `kube` add/modify/delete msgs; horizontal/vertical
   scroll, Home/End, selection. (Likely a **custom table** — see risks.)
@@ -30,6 +33,7 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 - [ ] Browse, select a resource, see live-updating rows for any discovered kind.
 - [ ] Menu customization persists across restarts; async discovery reconciles menu without disturbing selection/scroll.
 - [ ] Namespace + filter work; scrolling and Home/End behave.
+- [ ] Vim keys and their fallbacks both navigate every list/table; help overlay shows both.
 - [ ] Old config migrates cleanly; malformed/legacy files handled gracefully.
 - [ ] teatest coverage for update loop, menu reconcile, and modal flows.
 - [ ] No mutex-guarded UI state; concurrency is message-driven only.

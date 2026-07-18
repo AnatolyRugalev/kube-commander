@@ -23,6 +23,7 @@ high-value capabilities the original lacked.
 - [ ] Core actions in-process: delete, scale, rollout restart, cordon/drain, port-forward (background), view secrets.
 - [ ] Exec shell + `$EDITOR` edit (the only sanctioned TUI-suspending actions).
 - [ ] Context/cluster switcher; namespace switcher; filter; sort by column.
+- [ ] **Vim-first navigation** (`hjkl`, `gg`/`G`, `/`, `n`/`N`) with arrows/classic keys as an equivalent fallback.
 - [ ] **Cold start is responsive** — UI renders immediately; discovery is async and cached.
 - [ ] No `kubectl` binary required for anything except the exec fallback.
 - [ ] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
@@ -48,6 +49,9 @@ high-value capabilities the original lacked.
 4. **Fast cold start.** Never block first paint on discovery or network round-trips.
 5. **Discoverable process.** Knowledge and state live in the vault, not in an
    agent's head or a chat log.
+6. **Vim-first, never vim-only.** `hjkl` and friends are the primary path; arrows
+   and classic keys are always an equivalent fallback. See
+   [`knowledge/keybindings.md`](knowledge/keybindings.md).
 
 See [`REWRITE_PLAN.md`](REWRITE_PLAN.md) for the full architecture and
 rationale, and [`knowledge/decisions.md`](knowledge/decisions.md) for the locked

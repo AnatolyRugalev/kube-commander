@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — vault bootstrap._
+_Last updated: 2026-07-18 — vault bootstrap; added vim-first navigation (D10)._
 
 ## In Progress
 
