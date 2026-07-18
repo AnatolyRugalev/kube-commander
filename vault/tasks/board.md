@@ -7,7 +7,10 @@ _Last updated: 2026-07-18 — M1-06b done: **scale + rollout-restart** actions (
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-06c** Actions: **cordon/uncordon** (node scheduling toggle)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+      notes: narrowed from "cordon/uncordon + drain" — drain (eviction API, pod
+      filtering, PDB-aware retry) split out to M1-06e as it exceeds one green leg.
 
 ## Blocked
 
@@ -22,12 +25,13 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-06c** Actions: **cordon/uncordon** + **drain** (node actions; eviction API)
-      status: todo | owner: — | added: 2026-07-18
-      notes: split from M1-06.
 - [ ] **M1-06d** Action: **cronjob suspend/resume**
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-06.
+- [ ] **M1-06e** Action: **drain** (node; eviction API — evict pods, skip DaemonSet/mirror/completed, PDB-aware retry)
+      status: todo | owner: — | added: 2026-07-18
+      notes: split from M1-06c (cordon/uncordon landed there). Drains after a cordon;
+      exceeds one green leg on its own. Reuses resourceInterface + the M1-06c cordon.
 - [ ] **M1-07** Streaming: logs; describe (kubectl/pkg/describe); get-as-YAML
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-08** Background port-forward (start/stop)
