@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M1-02 done: static seed RESTMapper (`internal/kube
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-03** Async full discovery → reconcile signal; per-group fault isolation (#87, #76)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
@@ -19,8 +20,6 @@ _(none)_
 _(none — M0 complete)_
 
 ### M1 — Kube layer
-- [ ] **M1-03** Async full discovery → reconcile signal; per-group fault isolation (#87, #76)
-      status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-04** On-disk discovery cache + invalidation; lazy group detail
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-05** Server-side Table List+Watch → event channel; reconnect/resync
