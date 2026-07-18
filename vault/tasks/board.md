@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M0-02 done: Go 1.23 floor + cobra v1.10.2 root (D2
 
 ## In Progress
 
-_(none)_
+- [ ] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS (D17)
+      status: in-progress | owner: claude | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
@@ -16,8 +17,6 @@ _(none)_
 ## Backlog
 
 ### M0 — Groundwork (ordered top-to-bottom; ids are stable, list order is priority)
-- [ ] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS (D17)
-      status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-05** Test harness: teatest (tui) smoke test — envtest moved to M1 (D18)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-08** Sweep remaining legacy files missed by M0-07's tree-based deletion: `Dockerfile` (golang:1.15 + baked-in kubectl, contradicts D2), `get.sh`, `ci/aur/` (old binary names; incl. `id_rsa.enc` encrypted SSH key), `ci/terminalizer/` (vhs replaces it). Delete; anything still wanted gets rebuilt in M0-06/M5.
