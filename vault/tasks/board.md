@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M1-05b done: server-side Table **Watch** (`interna
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-06a** Action: generic **delete** — `Clients.Delete(ctx, Resource, ObjectRef, DeleteOptions)` via the dynamic client (GVR + scope from discovery `Resource`, ns/name from the row `ObjectRef`), UID precondition when present so a recreated-same-name object is not deleted by mistake. First slice of M1-06; establishes `internal/kube/actions.go`.
+      status: in-progress | owner: claude-opus | added: 2026-07-18
 
 ## Blocked
 
@@ -22,8 +23,15 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-06** Actions: delete/scale/rollout-restart/cordon/drain/cronjob-suspend
+- [ ] **M1-06b** Actions: **scale** + **rollout-restart** (workload actions; apps/batch)
       status: todo | owner: — | added: 2026-07-18
+      notes: split from M1-06 (too big for one green leg, cf. D33 M1-05 split). Build on M1-06a's action layer.
+- [ ] **M1-06c** Actions: **cordon/uncordon** + **drain** (node actions; eviction API)
+      status: todo | owner: — | added: 2026-07-18
+      notes: split from M1-06.
+- [ ] **M1-06d** Action: **cronjob suspend/resume**
+      status: todo | owner: — | added: 2026-07-18
+      notes: split from M1-06.
 - [ ] **M1-07** Streaming: logs; describe (kubectl/pkg/describe); get-as-YAML
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-08** Background port-forward (start/stop)
