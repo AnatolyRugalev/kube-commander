@@ -1,5 +1,16 @@
 # Kube Commander  (kubecom)
 
+> ## 🚧 kube-commander is being rewritten as `kubecom`
+>
+> This `master` branch is the original 2020 codebase. Active development has moved
+> to a ground-up rewrite on a modern stack (Bubble Tea + in-process client-go):
+> faster cold starts, in-TUI logs/describe/YAML, background port-forward, generic
+> CRD support, vim-first + fully configurable keybindings, and no hard dependency
+> on the `kubectl` binary.
+>
+> - Follow progress: **[#90 — the rewrite tracking issue](https://github.com/AnatolyRugalev/kube-commander/issues/90)** (pinned)
+> - Work in progress: the **[`v1`](https://github.com/AnatolyRugalev/kube-commander/tree/v1)** branch (see [`vault/`](https://github.com/AnatolyRugalev/kube-commander/tree/v1/vault) for the plan, milestones, and journal)
+
 [![Build Status](https://img.shields.io/travis/anatolyrugalev/kube-commander?style=for-the-badge)](https://travis-ci.org/AnatolyRugalev/kube-commander)
 [![Docker Image](https://img.shields.io/docker/v/anatolyrugalev/kubecom?sort=semver&style=for-the-badge)](https://hub.docker.com/r/anatolyrugalev/kubecom)
 [![Aur](https://img.shields.io/aur/version/kube-commander?style=for-the-badge)](https://aur.archlinux.org/packages/kube-commander/)
