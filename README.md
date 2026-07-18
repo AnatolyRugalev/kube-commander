@@ -6,6 +6,26 @@
 
 kubecom is an easy to use tool for observing Kubernetes cluster from your terminal.
 
+> ### 🚧 `v1` is a ground-up rewrite in progress
+>
+> This branch (`v1`) is a from-scratch rewrite of the 2020 codebase into a modern,
+> vim-friendly, zero-deploy Kubernetes TUI (Bubble Tea + client-go, no `kubectl`
+> binary required). The original 2020 code lives on the
+> [`master`](https://github.com/AnatolyRugalev/kube-commander/tree/master) branch,
+> and **the rest of this README still describes that version** — it is rewritten as
+> the new code reaches parity.
+>
+> The rewrite is driven autonomously and documents itself in the
+> **[`vault/`](vault/)**, which is the single source of truth for goals, plan, and
+> progress:
+> - [`vault/goals.md`](vault/goals.md) — vision, definition of done, non-goals, principles
+> - [`vault/milestones/`](vault/milestones/) — milestones M0–M5, scope and exit criteria
+> - [`vault/tasks/board.md`](vault/tasks/board.md) — the live task board
+> - [`vault/knowledge/decisions.md`](vault/knowledge/decisions.md) — the decision log (append-only, `Dn`-numbered)
+> - [`vault/journal/`](vault/journal/) — execution journal, one entry per unit of work
+>
+> See [`CLAUDE.md`](CLAUDE.md) for the operating model behind the rewrite.
+
 > Soon `kube-commander` will change its name to `kubecom`. Please don't mind some naming inconsistency - I'm
 > trying to make the migration as seamless as possible.
 

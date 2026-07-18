@@ -33,7 +33,7 @@ old code isolated for staged removal and a single `kubecom` binary.
 - [x] CI is green on `v1` for `make check` (build/test/vet/lint). *(M0-04, D24 — `.github/workflows/ci.yml`; first live run triggers on this push)*
 - [x] `kubecom version` runs *(✓ M0-01)*; second binary removed *(✓ M0-07)*.
 - [x] teatest has one passing smoke test (envtest moved to M1, D18). *(M0-05, D26 — `internal/tui/tui_test.go`)*
-- [ ] Decision log + vault referenced from the repo README.
+- [x] Decision log + vault referenced from the repo README. *(M0-09 — rewrite-in-progress banner atop `README.md` links `vault/`, goals, milestones, board, `decisions.md`, journal, and `CLAUDE.md`; full README rewrite deferred to M5)*
 
 ## Notes / open questions
 
