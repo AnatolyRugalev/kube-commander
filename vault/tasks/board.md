@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-08 done: legacy-file sweep + goreleaser de-referenced (D25)._
+_Last updated: 2026-07-18 — M0-05 done: teatest (tui) smoke test; bubbletea v2 adopted, Go floor → 1.24.2 (D26)._
 
 ## In Progress
 
-- [ ] **M0-05** Test harness: teatest (tui) smoke test — envtest moved to M1 (D18)
-      status: in-progress | owner: claude | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -51,9 +50,10 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M0-05** Test harness: teatest (tui) smoke test — bubbletea v2 (`charm.land/bubbletea/v2` v2.0.2) + teatest/v2; placeholder root model; Go floor → 1.24.2 (D26)
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-08** Sweep remaining legacy files M0-07 missed: `Dockerfile`, `get.sh`, `ci/aur/` (incl. `id_rsa.enc`), `ci/terminalizer/`, empty `ci/`; `.goreleaser.yml` de-referenced from `ci/aur/` (D25)
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
-
 - [x] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS matrix (D24)
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-02** Toolchain: bump to Go 1.23 (go.mod directive), wire `cmd/kubecom` onto cobra v1.10.2; `ioutil` already gone via M0-07 (D23)

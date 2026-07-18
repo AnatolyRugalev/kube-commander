@@ -251,3 +251,31 @@ leg only removed references the deletion itself broke, exactly as D22 scoped
 M0-07. The AUR badge + install section in `README.md` are docs, not file refs,
 and are M0-06/M5's to revise. `make check` unaffected (goreleaser isn't part of
 the gate); `.goreleaser.yml` re-validated as well-formed YAML.
+
+### D26 — Executing M0-05: bubbletea v2 adopted; Go floor bumped to 1.24.2; placeholder root model
+**2026-07-18.** M0-05 landed the teatest smoke harness, which required the first
+real TUI dependencies. **Choices:**
+- **bubbletea `charm.land/bubbletea/v2 v2.0.2`** (not the newest v2.0.8). The v2
+  module was **rebranded** from `github.com/charmbracelet/bubbletea/v2` to
+  **`charm.land/bubbletea/v2`** — the github path no longer resolves at stable v2
+  tags. Import path is now `charm.land/bubbletea/v2`. teatest v2 stays at
+  `github.com/charmbracelet/x/exp/teatest/v2`.
+- **Go floor 1.23 → 1.24.2** (supersedes the go-directive part of D23). bubbletea
+  v2 *forces* a bump — D23 itself reserved this ("bump only if a dependency forces
+  it"). v2.0.0–v2.0.2 require `go 1.24.2`; **v2.0.3+ jump to `go 1.25.0`**. Pinned
+  **v2.0.2** — the newest v2 that keeps the floor at **1.24.2**, the minimal bump
+  (widest toolchain range) — rather than chasing v2.0.8/1.25. Bump further only
+  when a dependency forces it. No `toolchain` directive is added, so CI's
+  `setup-go` (`go-version-file: go.mod`, `check-latest`) installs the latest
+  1.24.x (D24 unaffected).
+- **Placeholder root model** (`internal/tui/tui.go`): renders a static splash,
+  records `WindowSizeMsg`, and **matches no key literals** — input must flow
+  through the M2 action registry (D11), so the smoke test stops the program via
+  `tea.Quit`, not a keystroke. It exists solely to give teatest a real program to
+  drive; M2 replaces it with the action-registry-driven root model.
+- **bubbletea v2 API notes:** `Init() tea.Cmd`, `Update(tea.Msg) (tea.Model,
+  tea.Cmd)`, and **`View() tea.View`** (not `string`) — build views with
+  `tea.NewView("...")`. Key presses arrive as `tea.KeyPressMsg` (v1's `KeyMsg`
+  split into press/release). teatest v2: `teatest.NewTestModel(t, m,
+  teatest.WithInitialTermSize(w,h))`, then `WaitFor(t, tm.Output(), cond,
+  WithDuration(...))` and `tm.WaitFinished(t, WithFinalTimeout(...))`.

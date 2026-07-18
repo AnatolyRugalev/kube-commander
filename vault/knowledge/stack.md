@@ -15,6 +15,13 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **bubbletea v2** (D19) — Elm-architecture runtime (Model/Update/View, `tea.Msg`,
   `tea.Cmd`). Pin v2 with **matching bubbles/lipgloss releases**; write all TUI
   code against the v2 API. Beware v1-era examples/snippets — APIs differ.
+  - **Import path rebranded** to **`charm.land/bubbletea/v2`** (was
+    `github.com/charmbracelet/bubbletea/v2`); pinned **v2.0.2** (D26) — v2.0.3+
+    require Go 1.25, v2.0.2 holds the floor at Go 1.24.2. `teatest` stays at
+    `github.com/charmbracelet/x/exp/teatest/v2`.
+  - v2 API shape: `Init() tea.Cmd`, `Update(tea.Msg) (tea.Model, tea.Cmd)`,
+    **`View() tea.View`** (not `string`; build with `tea.NewView("...")`). Keys
+    arrive as **`tea.KeyPressMsg`** (v1's `KeyMsg` split into press/release).
 - **bubbles** — components: `table`, `list`, `textinput`, `viewport`, `help`,
   `key`, `spinner`. NOTE: `bubbles/table` is basic — expect a **custom table**
   for sorting + large row counts.
