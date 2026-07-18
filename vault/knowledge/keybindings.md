@@ -1,16 +1,60 @@
 # Keybindings
 
-Per [decision D10](decisions.md#d10--vim-style-navigation-first-class-arrowsclassic-as-fallback):
-**vim-style navigation is first-class; arrows/classic keys are an equivalent
-fallback.** This file is the reference map. Implement with `bubbles/key` so every
-action carries both its vim binding and its fallback, and both show up in the
-help overlay.
+Two decisions govern this file:
+- [D10](decisions.md#d10--vim-style-navigation-first-class-arrowsclassic-as-fallback):
+  **vim-first navigation, arrows/classic as fallback.**
+- [D11](decisions.md#d11--fully-configurable-keybindings-zero-hard-coded-keys):
+  **fully configurable, zero hard-coded keys.**
 
-## Reserved navigation keys (do not rebind to actions)
+Everything below (the vim scheme included) is the **default keymap**. Users can
+rebind any action via config. Implement with `bubbles/key`, but build the
+`Binding`s *from the resolved keymap*, never from literals.
+
+## Architecture: action registry (the "zero hard-coded keys" rule)
+
+- Every user-triggerable behavior is a named **`Action`** (a stable string id,
+  e.g. `nav.down`, `list.drillIn`, `res.describe`, `pod.logs`).
+- A **default keymap** — one data table in code — maps `Action → []key`,
+  expressing the vim-first defaults + fallbacks.
+- At startup: `resolved = merge(defaultKeymap, config.Keys)` then **validate**.
+- Every view resolves input as `keymap.Action(keyMsg)` and switches on the
+  `Action`. **No view ever matches a raw key.** (`case KeyRune 'l'` is banned.)
+- The help overlay and the generated keybindings doc are produced **from the
+  registry**, so they can't drift from reality.
+
+### Key syntax (config + defaults)
+Human-readable tokens: `j`, `k`, `up`, `down`, `enter`, `esc`, `pgup`, `pgdn`,
+`home`, `end`, `ctrl+d`, `ctrl+u`, `space`, `/`. Multi-key sequences allowed
+(`gg`). An action may bind multiple keys (vim + fallback).
+
+### Validation at load
+- Unknown action id → error (typo protection).
+- Two actions bound to the same key **in the same context** → error with both names.
+- Binding an action over a default navigation key → allowed, but **warn** (D10).
+- Empty binding → action becomes unavailable (allowed; user opt-out).
+
+## Config format
+
+Lives in the plain-YAML config (see [`stack.md`](stack.md)) under `keys:`.
+Overrides are merged onto defaults — you only list what you change:
+
+```yaml
+keys:
+  # action id: list of keys (replaces that action's default binding)
+  res.describe: [d, f3]
+  pod.logs:     [L]
+  nav.down:     [j, down]     # redundant with default; shown for shape
+  res.delete:   [x, delete]
+```
+
+Omitted actions keep their defaults. `kubecom keys` (planned) prints the fully
+resolved map and any warnings.
+
+## Default navigation keys
+
+These are defaults (overridable), but action **defaults** must not collide with them:
 
 `h` `j` `k` `l` · `g` `G` · `n` `N` · `/` · `Ctrl+u` `Ctrl+d` `Ctrl+f` `Ctrl+b`
-
-Single-letter **action** bindings must avoid these.
 
 ## Navigation
 

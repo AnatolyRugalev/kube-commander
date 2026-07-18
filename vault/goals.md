@@ -24,6 +24,7 @@ high-value capabilities the original lacked.
 - [ ] Exec shell + `$EDITOR` edit (the only sanctioned TUI-suspending actions).
 - [ ] Context/cluster switcher; namespace switcher; filter; sort by column.
 - [ ] **Vim-first navigation** (`hjkl`, `gg`/`G`, `/`, `n`/`N`) with arrows/classic keys as an equivalent fallback.
+- [ ] **Fully configurable keybindings** — every action rebindable via config; zero hard-coded keys in view code.
 - [ ] **Cold start is responsive** — UI renders immediately; discovery is async and cached.
 - [ ] No `kubectl` binary required for anything except the exec fallback.
 - [ ] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
@@ -52,6 +53,8 @@ high-value capabilities the original lacked.
 6. **Vim-first, never vim-only.** `hjkl` and friends are the primary path; arrows
    and classic keys are always an equivalent fallback. See
    [`knowledge/keybindings.md`](knowledge/keybindings.md).
+7. **Zero hard-coded keys.** All input flows through a configurable action
+   registry; no view matches a raw key. Every binding is rebindable via config.
 
 See [`REWRITE_PLAN.md`](REWRITE_PLAN.md) for the full architecture and
 rationale, and [`knowledge/decisions.md`](knowledge/decisions.md) for the locked

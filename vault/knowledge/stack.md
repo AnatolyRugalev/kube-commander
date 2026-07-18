@@ -40,3 +40,14 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 ## Config
 - Plain typed struct → YAML at `~/.kube/kubecom.yaml` (path TBD). Migration shim
   reads the legacy protobuf-yaml file once.
+- Includes a **`keys:`** section (`action id → [keys]`) merged onto the default
+  keymap — the single source of key bindings. No key literal lives in view code
+  (see [D11](decisions.md#d11--fully-configurable-keybindings-zero-hard-coded-keys)
+  and [`keybindings.md`](keybindings.md)).
+
+## Keymap / input
+- **Action registry**: named `Action` ids; a default keymap (one data table)
+  expressing the vim-first scheme; `merge(default, config.Keys)` at load with
+  validation (unknown-action, collision, nav-shadow warning).
+- Views resolve `tea.KeyMsg → Action` via the keymap and switch on `Action`;
+  `bubbles/key.Binding`s and the help/keybindings doc are generated from it.

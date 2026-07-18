@@ -49,7 +49,12 @@ _(none)_
 - [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
       status: todo | owner: — | added: 2026-07-18
 
-_M2–M5 items to be expanded when those milestones open. See milestone files for scope._
+### M2 — Core TUI (partial seed)
+- [ ] **M2-01** Action registry + configurable keymap: Action ids, default (vim-first) keymap, merge(default, config.Keys) + validation; `KeyMsg → Action` resolution; generate bindings/help from registry (D10, D11)
+      status: todo | owner: — | added: 2026-07-18
+      notes: foundational — land before other input handling; no raw-key matching in views
+
+_Remaining M2–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
 
