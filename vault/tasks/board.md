@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-02 claimed: toolchain bump (Go 1.23, cobra)._
+_Last updated: 2026-07-18 — M0-02 done: Go 1.23 floor + cobra v1.10.2 root (D23)._
 
 ## In Progress
 
-- [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra (wire `cmd/kubecom` onto cobra); drop `ioutil` (trivial after M0-07)
-      status: in-progress | owner: claude | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -57,6 +56,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M0-02** Toolchain: bump to Go 1.23 (go.mod directive), wire `cmd/kubecom` onto cobra v1.10.2; `ioutil` already gone via M0-07 (D23)
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **PROC-04** Cloud runs set repo-local git identity (maintainer) in routine bootstrap + skill step 0
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **PROC-03** Model split: routine session on Sonnet (orchestration), leg subagents pinned to Opus in `/do-rewrite-run`; cron corrected to UTC

@@ -196,3 +196,21 @@ release matrix into the Linux+macOS-only shape (D7) is M0-06's job, not this
 leg's; this decision only covers unblocking what the deletion itself broke.
 **Why not fold into M0-06 now:** keeping M0-07 to "delete + keep buildable" is a
 smaller, safer diff than also redesigning the release config in the same leg.
+
+### D23 — Executing M0-02: Go 1.23 floor, cobra v1.10.2 root command
+**2026-07-18.** Toolchain bump landed (M0-02): `go.mod` `go` directive set to
+**1.23** (the stack floor, not the local 1.24.x — a `go 1.23` module still builds
+on newer toolchains), and `cmd/kubecom` rewired from the hand-rolled `run(out,
+args)` dispatch onto **cobra v1.10.2** (D13's planned replacement). Shape:
+`newRootCmd()` (a constructor, not a package var, so tests get isolated I/O +
+args) with a `version` subcommand; `--version`/`-v` are cobra's built-in version
+flag with a custom `SetVersionTemplate("{{.Version}}\n")` so it prints
+`version.Info()` verbatim instead of cobra's `"<name> version <version>"` line
+(Info() already leads with "kubecom"). `SilenceUsage: true` keeps runtime/arg
+errors terse (no usage dump). Behavior parity + extras: `version` prints Info();
+no-args prints help (exit 0); unknown command errors on stderr (exit 1); cobra
+adds `help` + `completion` subcommands for free. `ioutil` was already gone
+(M0-07), so that clause was a no-op. New root subcommands / the default TUI run
+hang off this root in M2+. **Why 1.23 not 1.24:** pin the minimum the stack
+commits to (D5-adjacent), keeping the module buildable on the widest toolchain
+range; bump only if a dependency forces it.

@@ -1,45 +1,55 @@
 // Command kubecom is a fast, keyboard-driven terminal UI for Kubernetes.
 //
-// This is the M0 groundwork skeleton: it wires the binary entrypoint and a
+// This is the M0 groundwork skeleton: it wires the cobra command tree and a
 // `version` subcommand. The Bubble Tea UI and the in-process kube layer land in
-// later milestones; cobra replaces this hand-rolled dispatch in M0-02. The
-// legacy 2020 app remains reachable via cmd/kube-commander until it is ported.
+// later milestones, hanging new subcommands / the default TUI run off this root.
 package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/version"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-	if err := run(os.Stdout, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "kubecom:", err)
+	if err := newRootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-const usage = `kubecom — a Kubernetes terminal UI (groundwork build)
+// newRootCmd builds the kubecom command tree. It is a function (not a package
+// var) so tests can construct an isolated command with its own I/O and args.
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "kubecom",
+		Short: "A fast, keyboard-driven terminal UI for Kubernetes",
+		Long: `kubecom is a fast, vim-friendly, zero-deploy Kubernetes terminal UI.
 
-Usage:
-  kubecom version    print build information
-  kubecom help       show this message`
-
-func run(out io.Writer, args []string) error {
-	cmd := ""
-	if len(args) > 0 {
-		cmd = args[0]
+This is the M0 groundwork build: it wires the binary entrypoint and a version
+subcommand. The Bubble Tea UI and the in-process kube layer land in later
+milestones.`,
+		Version: version.Info(),
+		// Errors are surfaced by Execute; don't also dump usage on a runtime
+		// error, and keep args-validation errors terse.
+		SilenceUsage: true,
 	}
-	switch cmd {
-	case "version", "--version", "-v":
-		_, err := fmt.Fprintln(out, version.Info())
-		return err
-	case "", "help", "--help", "-h":
-		_, err := fmt.Fprintln(out, usage)
-		return err
-	default:
-		return fmt.Errorf("unknown command %q (try \"kubecom help\")", cmd)
+	// --version prints the build summary verbatim (Info() already leads with
+	// "kubecom"), not cobra's default "<name> version <version>" line.
+	root.SetVersionTemplate("{{.Version}}\n")
+	root.AddCommand(newVersionCmd())
+	return root
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print build information",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), version.Info())
+			return err
+		},
 	}
 }
