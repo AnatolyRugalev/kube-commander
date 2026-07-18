@@ -26,7 +26,8 @@ skill. Each invocation does exactly one leg and stops so progress stays reviewab
 - [`vault/milestones/`](vault/milestones/) — M0–M5, scope + exit criteria. Work them in order.
 - [`vault/tasks/board.md`](vault/tasks/board.md) — the live task board; source of legs.
 - [`vault/knowledge/`](vault/knowledge/) — decisions log, target stack, keybindings, legacy findings.
-- [`vault/journal.md`](vault/journal.md) — append-only execution journal (one entry per leg).
+- [`vault/journal/`](vault/journal/) — execution journal: one file per leg,
+  named `YYYY-MM-DD.N.md` (see [`vault/journal/README.md`](vault/journal/README.md)).
 - [`vault/REWRITE_PLAN.md`](vault/REWRITE_PLAN.md) — the strategic plan narrative.
 
 ## The leg loop (what `/do-rewrite-leg` does)
@@ -36,14 +37,18 @@ skill. Each invocation does exactly one leg and stops so progress stays reviewab
 2. **Pick** the next small, unblocked leg from the board (respect milestone order).
    If the top item is too big, split it and take the first slice. If the active
    milestone's board section is thin, expanding it *is* a valid leg.
-3. **Claim** it on the board (`in-progress`, your id, date).
+3. **Claim** it on the board (`in-progress`, your id, date) — and **commit + push
+   the claim immediately** (`chore(board): claim <leg-id>`) so it acts as a lock
+   for concurrent agents (D16).
 4. **Implement** — small. Make decisions yourself (see below).
-5. **Verify** — the tree must stay green: `go build ./...`, `go test ./...`,
-   `go vet ./...`, lint. Scope the leg so this is achievable in one leg.
+5. **Verify** — the tree must stay green: `make check` (= `go build ./...`,
+   `go test ./...`, `go vet ./...`, lint). Scope the leg so this is achievable.
 6. **Record** — capture durable learnings in `vault/knowledge/`; append any
    decision to `vault/knowledge/decisions.md`.
-7. **Journal + board** — append a journal entry; move the task to `done` (or split
-   the remainder back to Backlog).
+7. **Journal + board + milestone** — add a journal entry file
+   (`vault/journal/YYYY-MM-DD.N.md`); move the task to `done` (or split the
+   remainder back to Backlog); tick any milestone exit criteria now met and keep
+   the milestone's `Status:` line current.
 8. **Commit + push** to `v1` with a clear message. Stop; report the next suggested leg.
 
 ## Decision authority
@@ -74,10 +79,7 @@ You decide everything. There is no one to ask. Therefore:
 ## Toolchain (as it lands in M0)
 
 ```
-go build ./...      # must pass
-go test ./...       # must pass
-go vet ./...        # must pass
-golangci-lint run   # should pass (config lands in M0)
+make check          # canonical gate: build + test + vet + lint (D17)
 ```
 
 Git identity for commits: `Anatoly Rugalev <anatoly.rugalev@gmail.com>` (set

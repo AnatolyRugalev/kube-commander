@@ -1,6 +1,6 @@
 # M0 — Groundwork
 
-**Status:** `todo`
+**Status:** `in-progress` (started 2026-07-18)
 **Phase:** REWRITE_PLAN Phase 0
 
 ## Goal
@@ -17,15 +17,22 @@ old code isolated for staged removal and a single `kubecom` binary.
 - **Linux + macOS only** build matrix; remove Windows sources; README notes WSL2.
 - GitHub Actions: build, `go test`, `go vet`, `golangci-lint`. Drop Travis.
 - goreleaser config for Linux+macOS artifacts (wire fully in M5).
-- Test harness: `envtest` (kube-apiserver) for `kube`; teatest for TUI models.
-- Keep old `commander/`, `app/`, `pb/` compiling in parallel until ported; delete per-tree as M1–M3 land.
+- Test harness: teatest smoke test for TUI models. envtest is **opt-in and moved
+  to M1** (D18) — fake clients are the default test strategy.
+- **Delete the legacy trees up-front** (`app/`, `cli/`, `commander/`, `config/`,
+  `pb/`, `cmd/kube-commander/`, Windows sources, Travis/snap CI) and prune
+  `go.mod` (D14). `master` is the permanent reference; the old "keep compiling
+  in parallel" plan is superseded — one module cannot hold k8s.io v0.18 and
+  client-go v0.31 at once.
+- `Makefile` with `check` = build + test + vet + lint as the canonical gate (D17).
 
 ## Exit criteria
 
-- [ ] `go build ./...` and `go test ./...` pass on a bare skeleton.
-- [ ] CI is green on `v1` for build/test/vet/lint.
-- [ ] `kubecom version` runs; second binary removed.
-- [ ] envtest and teatest each have one passing smoke test.
+- [x] `go build ./...` and `go test ./...` pass on a bare skeleton. *(M0-01)*
+- [ ] Legacy trees deleted; `go.mod` pruned; lint excludes dropped (D14).
+- [ ] CI is green on `v1` for `make check` (build/test/vet/lint).
+- [ ] `kubecom version` runs *(✓ M0-01)*; second binary removed *(with M0-07)*.
+- [ ] teatest has one passing smoke test (envtest moved to M1, D18).
 - [ ] Decision log + vault referenced from the repo README.
 
 ## Notes / open questions

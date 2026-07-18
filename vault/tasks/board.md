@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-01 done: new module skeleton + lint scoped to new code (D12, D13)._
+_Last updated: 2026-07-18 — REVIEW-01 done: maintainer setup review applied (D14–D20); M0 reordered, legacy-deletion leg added._
 
 ## In Progress
 
@@ -15,19 +15,21 @@ _(none)_
 
 ## Backlog
 
-### M0 — Groundwork
-- [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra (wire `cmd/kubecom` onto cobra); drop `ioutil`
+### M0 — Groundwork (ordered top-to-bottom; ids are stable, list order is priority)
+- [ ] **M0-07** Delete legacy trees from `v1`: `app/`, `cli/`, `commander/`, `config/`, `pb/`, `cmd/kube-commander/`, Windows sources, Travis/snap CI; prune `go.mod`; drop `.golangci.yml` path excludes. Absorbs M0-03. (D14)
       status: todo | owner: — | added: 2026-07-18
-- [ ] **M0-03** Single `kubecom` binary; remove duplicate `kube-commander` entrypoint
+- [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra (wire `cmd/kubecom` onto cobra); drop `ioutil` (trivial after M0-07)
       status: todo | owner: — | added: 2026-07-18
-- [ ] **M0-04** GitHub Actions CI: build/test/vet/golangci-lint (Linux+macOS); drop Travis
+- [ ] **M0-04** GitHub Actions CI: `make check` (build/test/vet/golangci-lint) on Linux+macOS (D17)
       status: todo | owner: — | added: 2026-07-18
-- [ ] **M0-05** Test harness: envtest (kube) + teatest (tui) smoke tests
+- [ ] **M0-05** Test harness: teatest (tui) smoke test — envtest moved to M1 (D18)
       status: todo | owner: — | added: 2026-07-18
-- [ ] **M0-06** goreleaser skeleton (Linux+macOS); remove Windows sources
+- [ ] **M0-06** goreleaser skeleton (Linux+macOS)
       status: todo | owner: — | added: 2026-07-18
 
 ### M1 — Kube layer
+- [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
+      status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-01** Client bootstrap: clientset + dynamic + discovery + RESTMapper from kubeconfig/context
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-02** Seed-set core GVKs with static REST mapping for instant start
@@ -56,6 +58,10 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **REVIEW-01** Maintainer setup review applied: legacy deletion planned, journal split to per-entry files, claim-push, `make check` + CI-early, fakes-default tests, Bubble Tea v2, XDG config path
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18 (D14–D20)
+- [x] **M0-03** Single `kubecom` binary — absorbed into M0-07 (D14)
+      status: done (absorbed) | owner: — | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-01** Scaffold new module layout (`cmd/kubecom`, `internal/{kube,tui,config,version}`) + `.golangci.yml` scoped to new code
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18 (D12, D13)
 - [x] **BOOT-01** Bootstrap vault, goals, milestones, task board on `v1`

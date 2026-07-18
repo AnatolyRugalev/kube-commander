@@ -89,11 +89,15 @@ app blocked the whole UI on `ServerPreferredResources()`. Instead:
 ## Phased plan
 
 ### Phase 0 — Groundwork
-- New Go module layout, Go 1.23+, latest cobra; delete `commander/`, `pb/`, `app/` old tree once ported.
-- Retire duplicate `kube-commander` binary; single `kubecom`.
+- New Go module layout, Go 1.23+, latest cobra; **delete the legacy trees
+  up-front** (`app/`, `cli/`, `commander/`, `config/`, `pb/`,
+  `cmd/kube-commander/`) — `master` is the permanent reference (D14; one module
+  cannot hold k8s.io v0.18 and client-go v0.31 simultaneously).
+- Retire duplicate `kube-commander` binary; single `kubecom` (part of the deletion).
 - **Linux + macOS build matrix only**; drop Windows/`cmd_windows.go`. README documents WSL2 as the Windows path.
-- CI: GitHub Actions (build/test/lint/`go vet`/`golangci-lint`), goreleaser for Linux+macOS release artifacts (**#28**); drop Travis.
-- Test harness with `envtest` (kube-apiserver) for the `kube` layer; teatest for the TUI.
+- CI: GitHub Actions running `make check` (build/test/`go vet`/`golangci-lint`), goreleaser for Linux+macOS release artifacts (**#28**); drop Travis.
+- Test harness: teatest for the TUI. Kube-layer tests use **fake clients by
+  default**; `envtest` is opt-in and lands in Phase 1 (D18).
 
 ### Phase 1 — kube layer (in-process)
 - clientset + dynamic + discovery + RESTMapper; robust discovery that tolerates partial API group failures (**#87**, **#76**).

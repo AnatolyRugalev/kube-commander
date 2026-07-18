@@ -22,6 +22,9 @@ all in-process via client-go, fault-tolerant, and fast to start.
 - Watch reconnect/resync on expiry; bounded buffering.
 - Actions (in-process): delete, scale, rollout restart, cordon/drain, cronjob suspend, get-logs stream, port-forward, describe (kubectl/pkg/describe), get object as YAML.
 - Graceful, typed errors — never panic on bad namespace/context (**#86**, old #55).
+- Test strategy (D18): client-go **fake clients** (incl. fake discovery) by
+  default — hermetic, runs anywhere. **envtest** integration tests opt-in behind
+  `KUBECOM_TEST_ENVTEST=1`; harness lands here (M1-00), not M0.
 
 ## Exit criteria
 
@@ -30,7 +33,8 @@ all in-process via client-go, fault-tolerant, and fast to start.
 - [ ] A denied/broken API group is isolated (integration test with restricted RBAC).
 - [ ] Logs stream, describe, and YAML-get return correct output in-process.
 - [ ] Port-forward runs in a background goroutine and can be stopped.
-- [ ] envtest integration tests cover discovery, watch reconnect, and the action set.
+- [ ] Tests cover discovery, watch reconnect, and the action set — fakes by
+      default, envtest opt-in (D18).
 - [ ] Zero TUI imports in `internal/kube`.
 
 ## Depends on

@@ -29,13 +29,14 @@ under version control, and is discoverable without external context.
 | [`milestones/`](milestones/) | Large milestone definitions (M0–M5) with exit criteria |
 | [`tasks/`](tasks/) | Task board + workflow conventions |
 | [`knowledge/`](knowledge/) | Durable knowledge: decisions, target stack, legacy findings |
-| [`journal.md`](journal.md) | Append-only execution journal (one entry per leg) |
+| [`journal/`](journal/) | Execution journal: one file per leg, `YYYY-MM-DD.N.md` |
 | [`REWRITE_PLAN.md`](REWRITE_PLAN.md) | The strategic plan narrative (architecture, phases, risks) |
 
 The rewrite runs **autonomously**: agents self-assign work and progress one small
 **leg** at a time via the [`/do-rewrite-leg`](../.claude/skills/do-rewrite-leg/SKILL.md)
-skill, pushing directly to `v1`. A human reviews periodically via this vault and
-the journal. See [`../CLAUDE.md`](../CLAUDE.md) for the full operating model.
+skill, pushing directly to `v1`. A claim on the board is committed and pushed
+**before** implementation so it acts as a lock (D16). A human reviews
+periodically via this vault and the journal. See [`../CLAUDE.md`](../CLAUDE.md) for the full operating model.
 
 ## How agents use the vault
 

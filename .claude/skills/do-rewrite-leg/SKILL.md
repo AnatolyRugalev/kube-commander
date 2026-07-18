@@ -20,7 +20,8 @@ if not already in context. Follow these steps in order.
 - Ensure a clean tree (`git status`). If dirty from an interrupted leg, assess:
   finish or revert it — never build on an unknown dirty state.
 - Read: `vault/goals.md`, the **active milestone** in `vault/milestones/`, the top
-  of `vault/tasks/board.md`, and the **last 3 journal entries** in `vault/journal.md`.
+  of `vault/tasks/board.md`, and the **3 newest entry files** in `vault/journal/`
+  (named `YYYY-MM-DD.N.md`; filename sort == chronological order).
   Skim `vault/knowledge/decisions.md` for anything relevant.
 
 ## 2. Pick a leg
@@ -34,10 +35,14 @@ if not already in context. Follow these steps in order.
   concrete small tasks is itself a valid leg** — do that and stop.
 - A leg is one logical change, diff roughly ≤ ~300 lines.
 
-## 3. Claim it
+## 3. Claim it (and push the claim)
 
 - Move the chosen item to **In Progress** in `board.md` with `owner: <your id>` and
   today's date (`YYYY-MM-DD`).
+- **Commit and push the claim immediately** — a board-only commit
+  (`chore(board): claim <leg-id>`), then `git pull --rebase` + `git push origin v1`.
+  The pushed claim is the lock that stops a concurrent agent taking the same leg
+  (D16). If the rebase reveals someone else claimed it first, pick the next item.
 
 ## 4. Implement
 
@@ -50,8 +55,8 @@ if not already in context. Follow these steps in order.
 
 ## 5. Verify (green or revert)
 
-- Run what applies: `go build ./...`, `go test ./...`, `go vet ./...`, and lint if
-  configured. The tree **must** be green.
+- Run `make check` (= `go build ./...`, `go test ./...`, `go vet ./...`,
+  `golangci-lint run`) — the canonical gate (D17). The tree **must** be green.
 - If you cannot get green within this leg, **reduce the leg's scope** until you can,
   or revert and pick a smaller leg. Never push red.
 - For UI/behavior changes with a runtime surface, sanity-check the behavior, not
@@ -64,11 +69,14 @@ if not already in context. Follow these steps in order.
 - Add durable learnings (API quirks, legacy behavior, gotchas) to the relevant
   `vault/knowledge/` file so the next agent doesn't re-derive them.
 
-## 7. Journal & board
+## 7. Journal, board & milestone
 
-- Move the task to **Done** in `board.md` (date + commit ref). If part remains,
+- Move the task to **Done** in `board.md` (with the date). If part remains,
   split the remainder back into Backlog as new small items.
-- Append one entry to `vault/journal.md` using the template below.
+- Write one new journal file `vault/journal/YYYY-MM-DD.N.md` (`N` = next unused
+  sequence number for today) using the template below.
+- Update the active **milestone file**: tick exit criteria now met; keep its
+  `Status:` line current (`todo`/`in-progress`/`done`) (D15).
 
 ## 8. Commit & push
 
@@ -88,17 +96,18 @@ Print a short summary: what the leg did, verification result, commit hash, and t
 
 ## Journal entry template
 
-Append to `vault/journal.md` (newest at the bottom):
+Write to `vault/journal/YYYY-MM-DD.N.md`. No `Commit:` field — the leg id in the
+commit message is the join key (D15):
 
 ```
-## YYYY-MM-DD — <leg-id>: <short title>
+# YYYY-MM-DD — <leg-id>: <short title>
+
 - Agent: <model/id>
 - Milestone: M<x>
 - Did: <1–3 lines on what changed and why>
 - Decisions: <Dnn one-liner, or "none">
 - Files: <key paths touched>
 - Verify: build ✓ · test ✓ · vet ✓ · lint ✓  (note any N/A)
-- Commit: <short hash>
 - Next: <suggested next leg id + one line>
 ```
 

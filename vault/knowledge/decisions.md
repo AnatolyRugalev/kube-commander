@@ -107,3 +107,63 @@ skeleton uses a **stdlib** command dispatch for now; **cobra** replaces it in
 M0-02 (kept out of this leg to avoid a premature go.mod/dependency bump).
 **Why:** makes `kubecom` the single forward binary immediately while keeping the
 old code compiling in parallel, per the M0 plan.
+
+### D14 — Legacy trees are deleted from `v1` up-front, not kept compiling
+**2026-07-18.** Maintainer-approved (setup review). Delete `app/`, `cli/`,
+`commander/`, `config/`, `pb/`, and `cmd/kube-commander/` (plus Windows sources
+and dead Travis/snap CI) from `v1` in an early M0 leg, pruning `go.mod`.
+**Why:** the original "keep old trees compiling until ported" plan is unworkable
+in a single Go module — the legacy code imports `k8s.io/*@v0.18` while the new
+kube layer needs client-go v0.31, and one module cannot hold both. The clean
+break (D6) means zero code reuse, and `master` preserves the old code forever.
+**Consequence:** legacy behavior reference = `master` + `git show master:<path>`
++ [`legacy-architecture.md`](legacy-architecture.md). Supersedes the "compiling
+in parallel" parts of D12/D13: `.golangci.yml` drops the path excludes once the
+trees are gone (the `standard` ruleset stays), and M0-03 (remove duplicate
+binary) is absorbed by the deletion leg.
+
+### D15 — Journal format: one file per entry; no Commit field; milestones kept current
+**2026-07-18.** Maintainer-approved. The journal is a directory,
+`vault/journal/`, with one file per leg named `YYYY-MM-DD.N.md` (`N` = sequence
+within the day; filename sort == chronological order). The `Commit:` field is
+dropped — the entry is written before the commit exists; the **leg id in the
+commit message** is the join key between journal, board, and git history. Every
+leg also keeps the active **milestone file** current: tick exit criteria as they
+are met and flip its `Status:` line.
+
+### D16 — Board claims are committed and pushed immediately
+**2026-07-18.** Maintainer-approved. Claiming a task (step 3 of the leg loop) is
+its own commit (`chore(board): claim <leg-id>`) pushed to `v1` **before**
+implementation starts. **Why:** a claim that lands only with the finished leg is
+invisible to concurrent agents and locks nothing; pushing it first makes the
+board a real mutex.
+
+### D17 — `make check` is the canonical gate; CI lands early in M0
+**2026-07-18.** Maintainer-approved. A `Makefile` with `check` (= build + test +
+vet + lint) is the single verify gate used by agents and CI, so "green" means
+the same thing everywhere. M0 is reordered: legacy deletion → toolchain bump →
+**CI (M0-04)**, before any further feature legs — for an autonomous process
+pushing straight to `v1`, CI is the only independent green check a reviewer has.
+
+### D18 — Tests: fake clients by default; envtest opt-in, deferred to M1
+**2026-07-18.** Maintainer-approved. Kube-layer tests use client-go **fake
+clients** (incl. fake discovery) by default so `go test ./...` is hermetic and
+runs anywhere. **envtest** integration tests are opt-in behind an env var
+(`KUBECOM_TEST_ENVTEST=1`) because envtest downloads control-plane binaries —
+fragile in sandboxed agent environments and costly in CI. The envtest harness
+moves from M0-05 to M1 (where there is a kube layer to integration-test);
+M0-05 keeps only the teatest smoke test.
+
+### D19 — Bubble Tea v2
+**2026-07-18.** Maintainer-approved. Prefer **bubbletea v2** (with matching
+bubbles/lipgloss releases) when dependencies land (M0-02/M2). Pin v2 and write
+all TUI code against its API; fall back to v1 only if v2 proves unusable in
+practice, recorded as a superseding decision. **Why:** avoids building parity UI
+on an API that is being replaced, and avoids mixing v1 examples with v2 code.
+
+### D20 — Config path: `os.UserConfigDir()/kubecom/config.yaml`
+**2026-07-18.** Maintainer-approved. The config lives at
+`os.UserConfigDir()/kubecom/config.yaml` (`~/.config/kubecom/config.yaml` on
+Linux, `~/Library/Application Support/kubecom/config.yaml` on macOS) — not
+inside `~/.kube/`, which other tooling treats as kubeconfig-shaped. The one-shot
+migration (D6) reads the legacy config from its old location once.

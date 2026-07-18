@@ -1,5 +1,18 @@
-# travis runs `make`, but we don't want to generate anything in CI
-all:
+# Canonical verification gate for kubecom (D17). Agents and CI run `make check`;
+# "green" means exactly this passing.
+# (Replaces the legacy Travis/protoc Makefile; pb/ codegen is gone per D3/D14.)
+.PHONY: check build test vet lint
 
-generate:
-	protoc -I ./pb --go_out=paths=source_relative:./pb config.proto
+check: build test vet lint
+
+build:
+	go build ./...
+
+test:
+	go test ./...
+
+vet:
+	go vet ./...
+
+lint:
+	golangci-lint run
