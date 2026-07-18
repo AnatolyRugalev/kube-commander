@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `todo`
+**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete, envtest harness landed M1-00)
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal

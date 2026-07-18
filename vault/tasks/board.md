@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-06 done: goreleaser skeleton → Linux+macOS × amd64+arm64, publishers deferred to M5 (D27). With M0-09 (README→vault), all M0 exit criteria met; M0 complete. Active milestone: M1._
+_Last updated: 2026-07-18 — M1-00 done: envtest harness (opt-in `KUBECOM_TEST_ENVTEST=1`) + first kube deps (client-go v0.31 / controller-runtime v0.19), D28. Active milestone: M1; next up M1-01 (client bootstrap)._
 
 ## In Progress
 
-- [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -48,6 +47,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-00** envtest harness: `internal/kube/envtest_test.go` — opt-in behind `KUBECOM_TEST_ENVTEST=1` (`requireEnvtest(t)` skips by default so `make check` stays hermetic), smoke test starts a real control plane and GETs the `default` namespace. Added the first kube deps (client-go + apimachinery v0.31.4, controller-runtime v0.19.4) and `make test-envtest` (fetches binaries via `setup-envtest`). D28.
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-06** goreleaser skeleton (Linux+macOS): `.goreleaser.yml` reshaped to v2 syntax, single build × `goos:[linux,darwin]` × `goarch:[amd64,arm64]`; Windows dropped (D7), publishers (Homebrew/AUR/Docker) deferred to M5, `kubectl` brew dep removed (D2). `goreleaser check` + `--snapshot` verified (D27)
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-09** README references the vault + decision log: rewrite-in-progress banner atop `README.md` linking `vault/`, goals, milestones, board, `decisions.md`, journal, and `CLAUDE.md`. Closes the last open M0 exit criterion; full README rewrite deferred to M5.

@@ -307,3 +307,27 @@ the `brews`/`kubecom-windows`/amd64-only parts of the M0-07/M0-08 stopgap config
   split into press/release). teatest v2: `teatest.NewTestModel(t, m,
   teatest.WithInitialTermSize(w,h))`, then `WaitFor(t, tm.Output(), cond,
   WithDuration(...))` and `tm.WaitFinished(t, WithFinalTimeout(...))`.
+
+### D28 — Executing M1-00: envtest harness lands the kube dependency graph; pinned client-go v0.31 / controller-runtime v0.19
+**2026-07-18.** M1-00 added the opt-in envtest integration harness (D18) and, with
+it, the first client-go dependencies (the kube layer's foundation). **Choices:**
+- **Versions pinned: `k8s.io/client-go` + `k8s.io/apimachinery` v0.31.4,
+  `sigs.k8s.io/controller-runtime` v0.19.4.** client-go v0.31 is the D5 target
+  (K8s 1.31); controller-runtime **v0.19.x is the release paired with client-go
+  v0.31** (v0.20+ jumps to v0.32), so v0.19.4 keeps envtest and client-go on the
+  same minor. All compatible with the Go 1.24.2 floor (D26). These are the first
+  `k8s.io/*` deps on `v1`; later M1 legs build the real `internal/kube` on them.
+- **Gate = `KUBECOM_TEST_ENVTEST=1` (const `envtestGateEnv`), guard = one
+  `requireEnvtest(t)` helper every envtest test calls first.** With the gate unset,
+  `go test ./...` (so `make check`, D17) **skips** — the default suite stays
+  hermetic and needs no control-plane binaries. Verified both paths: gate off →
+  `SKIP`/green; gate on without binaries → clean `t.Fatalf` (no panic), pointing at
+  the missing etcd binary. envtest is **never** in `make check`.
+- **Binaries via `setup-envtest`, run via `make test-envtest`.** envtest needs a
+  real kube-apiserver + etcd on disk (`KUBEBUILDER_ASSETS`); the new Makefile target
+  fetches them (`ENVTEST_K8S_VERSION ?= 1.31.x`) and runs the gated suite. Not
+  wired into CI here — an M1/M5 leg adds an envtest CI job once the kube layer has
+  integration tests worth running there.
+- **Smoke test = start control plane → clientset → GET the `default` namespace.**
+  Minimal end-to-end proof the apiserver is reachable; later M1 legs reuse this
+  bootstrap to integration-test discovery, watch reconnect, and actions.

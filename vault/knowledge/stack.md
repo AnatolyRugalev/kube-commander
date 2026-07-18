@@ -61,8 +61,14 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - Default: **client-go fake clients** (`fake.Clientset`, fake dynamic + fake
   discovery) — hermetic, no network, runs in any sandbox/CI.
 - **envtest** (real kube-apiserver via `setup-envtest`) is opt-in behind
-  `KUBECOM_TEST_ENVTEST=1`; lands in M1. It downloads binaries — do not make
-  `go test ./...` depend on it.
+  `KUBECOM_TEST_ENVTEST=1`. **Harness landed in M1-00** (D28):
+  `internal/kube/envtest_test.go` — `requireEnvtest(t)` skips unless the gate is
+  set (so `make check` stays hermetic), `make test-envtest` fetches binaries via
+  `setup-envtest` (`ENVTEST_K8S_VERSION ?= 1.31.x`) and runs the gated suite. It
+  downloads binaries — do not make `go test ./...` depend on it.
+  - Deps that arrived with it: `k8s.io/client-go` + `k8s.io/apimachinery` v0.31.4,
+    `sigs.k8s.io/controller-runtime` v0.19.4 (the release paired with client-go
+    v0.31). These are the kube layer's foundation for M1-01+.
 - **teatest** for TUI model tests.
 
 ## Config
