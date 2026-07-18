@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M0-05 done: teatest (tui) smoke test; bubbletea v2
 
 ## In Progress
 
-_(none)_
+- [ ] **M0-06** goreleaser skeleton (Linux+macOS)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
@@ -16,8 +17,7 @@ _(none)_
 ## Backlog
 
 ### M0 — Groundwork (ordered top-to-bottom; ids are stable, list order is priority)
-- [ ] **M0-06** goreleaser skeleton (Linux+macOS)
-      status: todo | owner: — | added: 2026-07-18
+_(none — M0-06 in progress)_
 
 ### M1 — Kube layer
 - [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
