@@ -7,7 +7,9 @@ _Last updated: 2026-07-18 — M1-06a done: generic **delete** action (`internal/
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-06b** Actions: **scale** + **rollout-restart** (workload actions; apps/batch)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+      notes: split from M1-06 (too big for one green leg, cf. D33 M1-05 split). Build on M1-06a's action layer.
 
 ## Blocked
 
@@ -22,9 +24,6 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-06b** Actions: **scale** + **rollout-restart** (workload actions; apps/batch)
-      status: todo | owner: — | added: 2026-07-18
-      notes: split from M1-06 (too big for one green leg, cf. D33 M1-05 split). Build on M1-06a's action layer.
 - [ ] **M1-06c** Actions: **cordon/uncordon** + **drain** (node actions; eviction API)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-06.
