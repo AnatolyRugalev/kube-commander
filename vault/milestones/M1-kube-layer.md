@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a landed)
+**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a + Watch M1-05b landed — List+watch exit criterion met; next M1-06 actions)
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal
@@ -28,8 +28,8 @@ all in-process via client-go, fault-tolerant, and fast to start.
 
 ## Exit criteria
 
-- [ ] List+watch any discovered resource, columns matching `kubectl get`.
-      _(M1-05a: **List** landed — `Clients.List` server-prints any resource as a Table (`Accept: as=Table`), columns kubectl-identical for built-ins + CRDs (`internal/kube/table.go`, D33). **Watch** is M1-05b — flip this to done once the live event channel lands.)_
+- [x] List+watch any discovered resource, columns matching `kubectl get`.
+      _(M1-05a: **List** — `Clients.List` server-prints any resource as a Table (`Accept: as=Table`), columns kubectl-identical for built-ins + CRDs (`internal/kube/table.go`, D33). M1-05b: **Watch** — `Clients.Watch` streams `ADDED/MODIFIED/DELETED/RESET/ERROR` deltas on a bounded channel via a reconnecting List→Watch goroutine (`internal/kube/watch.go`, D34); resumes off resourceVersion, re-Lists on 410 Gone, caches columns per connection. Reconnect/resync + fault paths covered by hermetic tests; live-server exercise is envtest territory.)_
 - [x] Discovery never blocks a caller; seed resources usable before full discovery finishes.
       _(M1-02: seed RESTMapper resolves core GVKs instantly with no network I/O; M1-03: `StartDiscovery` runs the full pass in a background goroutine and delivers a one-shot reconcile signal, never blocking the caller. M1-04: discovery is now on-disk cached (kubectl's `discovery/cached/disk`, per-host dir under `os.UserCacheDir()/kubecom`, TTL 6h, `Clients.Invalidate()` to force a refetch) so warm starts skip the network; still zero network I/O at construction. Lazy group-detail-on-open → M1-04b, deferred to M2.)_
 - [ ] A denied/broken API group is isolated (integration test with restricted RBAC).

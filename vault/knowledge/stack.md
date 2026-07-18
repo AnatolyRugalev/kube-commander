@@ -40,7 +40,11 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   `decodeTable` flattens the `metav1.Table` JSON into a TUI-facing
   `Table{Columns,Rows}` (no apimachinery in the TUI); per-row identity
   (`ObjectRef`) comes from the row's embedded `PartialObjectMetadata`
-  (`IncludeObject=Metadata`, the Table default). Watch (M1-05b) reuses both.
+  (`IncludeObject=Metadata`, the Table default). Watch (M1-05b, `internal/kube/watch.go`,
+  D34) reuses both: `Clients.Watch` runs a reconnecting List→Watch goroutine that
+  streams `WatchEvent{ADDED/MODIFIED/DELETED/RESET/ERROR}` on a bounded channel;
+  it opens the same request with `watch=true` via `.Stream()` and decodes the
+  `metav1.WatchEvent` stream with `decodeTableRV`.
 - **discovery** + **restmapper** — GVK↔GVR, namespaced?, verbs; async + cached.
   On-disk cache landed M1-04 (D32): `discovery/cached/disk`'s `CachedDiscoveryClient`
   (kubectl's own), base of the deferred RESTMapper. Cache dir
@@ -56,13 +60,16 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **metrics.k8s.io** client — optional CPU/mem columns when metrics-server present.
 
 ## Key API patterns
-- **Server-side Table watch gotchas** (design M1-05 around these):
+- **Server-side Table watch gotchas** (all handled in M1-05b, `watch.go`, D34):
   - Request `includeObject=Metadata` (or `Object`) — without it Table rows carry
-    no per-row object identity (name/namespace/uid), which actions need.
+    no per-row object identity (name/namespace/uid), which actions need. _(Table
+    default is `IncludeObject=Metadata`; List/Watch rely on it.)_
   - **Column definitions are only guaranteed on the first Table response**;
-    subsequent watch chunks may omit them. Cache columns per resource and reuse.
-  - Use **bookmark events** (`allowWatchBookmarks`) + `resourceVersion` handling
-    for cheap resyncs; handle `410 Gone` by re-listing.
+    subsequent watch chunks may omit them. `streamTableWatch` caches columns per
+    connection and stamps every emitted event with the current set.
+  - Uses **bookmark events** (`allowWatchBookmarks=true`) + `resourceVersion` to
+    resume cheaply; `410 Gone`/`Expired` (sentinel `*errExpired`) forces a full
+    re-List + `RESET`, resumable drops reconnect from the last RV with no re-List.
 - **Watch → messages:** a `kube` goroutine runs List+Watch and pushes events onto
   a Go channel; a `tea.Cmd` reads one and returns it as a `tea.Msg`. UI state is
   only ever mutated inside `Update`.

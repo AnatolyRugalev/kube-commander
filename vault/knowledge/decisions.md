@@ -505,3 +505,45 @@ back to Backlog). M1-05a landed `internal/kube/table.go`. **Choices:**
   suite (columns/priority, object refs, degrade-on-bad-row, invalid JSON). The
   M1-05b watch leg reuses `decodeTable` (Table watch chunks are `metav1.Table`
   deltas) and the per-GV REST client (watch is the same request with `watch=true`).
+
+### D34 — Executing M1-05b: reconnecting List→Watch driver streaming Table deltas on a channel; RESET-on-resync
+**2026-07-18.** M1-05b landed `internal/kube/watch.go` — `Clients.Watch(ctx, r, ns,
+opts) (<-chan WatchEvent, error)` starts a background goroutine that streams
+server-side Table deltas to a bounded channel. **Choices:**
+- **Raw `Stream()`, not `rest.Request.Watch()`.** A Table watch's stream is a
+  sequence of `metav1.WatchEvent` JSON objects whose `.Object.Raw` is a
+  `metav1.Table` delta. `Request.Watch()` would need a scheme/decoder wired for
+  Table objects; instead the loop opens `tableRequest(...).Stream(ctx)` (same
+  endpoint + `Accept` header as List, `watch=true`, `allowWatchBookmarks=true`,
+  `resourceVersion=rv`) and `streamTableWatch` decodes the `WatchEvent` stream
+  with a plain `json.Decoder`, reusing `decodeTableRV` for each delta. This keeps
+  the whole path apimachinery-free at the TUI boundary and hermetically testable
+  from a byte stream.
+- **`RESET` is a kubecom-level event, not a k8s verb.** The event vocabulary is
+  `ADDED/MODIFIED/DELETED` (one row each, mirroring the watch verbs) plus **`RESET`**
+  (full current row set from a fresh List — consumer replaces its whole set) and
+  **`ERROR`** (terminal failure in `Err`; the loop keeps retrying). Every
+  (re)connection begins with a List → `RESET`, so a consumer that treats each
+  `RESET` as a full replace is correct across reconnects without knowing they
+  happened.
+- **RetryWatcher-style reconnect keyed off resourceVersion.** `decodeTableRV`
+  (added to `table.go`, `decodeTable` now delegates) surfaces the Table's
+  `ListMeta.ResourceVersion`; the loop resumes the watch from the last RV seen
+  (advanced by deltas *and* bookmark events). A clean stream end or a resumable
+  drop reconnects from `rv` with **no** re-List (no spurious `RESET`); a **410
+  Gone / `StatusReasonExpired`** — detected in `watchStatusError`, tagged as a
+  sentinel `*errExpired` — forces a full re-List because the server can no longer
+  replay from `rv`.
+- **Columns cached across the connection.** The API server only guarantees column
+  definitions on the **first** Table response; later chunks omit them.
+  `streamTableWatch` carries the columns in/out and stamps every emitted event
+  with the current set, so a consumer can always read columns off any event.
+- **Bounded buffering + context-owned lifecycle.** The channel is buffered
+  (`watchChanBuffer=64`) so a briefly slow consumer never stalls the watch;
+  reconnects are paced by `watchRetryBackoff=2s` (cancellable) so a server that
+  instantly closes every watch can't spin the loop. The goroutine owns all sends
+  and `close`s the channel on `ctx` cancellation — UI state mutates only in the
+  consumer's `Update` (principle 1). No new deps; hermetic tests drive
+  `streamTableWatch` from byte streams (deltas, bookmark, 410→`errExpired`,
+  generic error) and the full `watchLoop` over a `rest/fake` transport that answers
+  List vs `watch=true` differently (asserts `RESET`-then-delta with carried columns).

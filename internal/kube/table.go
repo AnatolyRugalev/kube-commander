@@ -69,9 +69,18 @@ type Table struct {
 // absent or unparsable is kept with a zero ObjectRef rather than dropped
 // (degrade, don't crash — principle 3), so a single odd row never blanks a list.
 func decodeTable(raw []byte) (*Table, error) {
+	t, _, err := decodeTableRV(raw)
+	return t, err
+}
+
+// decodeTableRV is decodeTable plus the Table's resourceVersion (from the
+// embedded ListMeta). The watch layer (M1-05b) needs the resourceVersion to open
+// a watch that resumes exactly after the listed state, and to advance it on each
+// delta / bookmark so a reconnect resyncs cheaply instead of re-listing.
+func decodeTableRV(raw []byte) (*Table, string, error) {
 	var mt metav1.Table
 	if err := json.Unmarshal(raw, &mt); err != nil {
-		return nil, fmt.Errorf("kube: decoding table: %w", err)
+		return nil, "", fmt.Errorf("kube: decoding table: %w", err)
 	}
 
 	t := &Table{
@@ -101,15 +110,34 @@ func decodeTable(raw []byte) (*Table, error) {
 		}
 		t.Rows = append(t.Rows, row)
 	}
-	return t, nil
+	return t, mt.ResourceVersion, nil
+}
+
+// tableRequest builds the GET that negotiates server-side Table printing for a
+// resource. It is shared by the List path (`getTable`, `.Do`) and the Watch path
+// (`openTableWatch`, `.Stream` with `watch=true`) so both hit the exact same
+// endpoint with the same Accept header — the only difference is the verb tail and
+// the opts (Watch/ResourceVersion). namespaced selects whether the request is
+// scoped to namespace; opts carries the usual list/watch controls
+// (label/field selectors, limit, resourceVersion, watch).
+func tableRequest(
+	client rest.Interface,
+	gvr schema.GroupVersionResource,
+	namespaced bool,
+	namespace string,
+	opts metav1.ListOptions,
+) *rest.Request {
+	return client.Get().
+		NamespaceIfScoped(namespace, namespaced).
+		Resource(gvr.Resource).
+		VersionedParams(&opts, scheme.ParameterCodec).
+		SetHeader("Accept", tableAcceptHeader)
 }
 
 // getTable performs one server-side Table GET against the given REST client and
 // decodes the result. It is the injectable core of List: a rest.Interface (real
 // or fake) is passed in so the request/decode path is exercised hermetically
-// (D18) without a live server. namespaced selects whether the request is scoped
-// to namespace; opts carries the usual list controls (label/field selectors,
-// limit, resourceVersion).
+// (D18) without a live server.
 func getTable(
 	ctx context.Context,
 	client rest.Interface,
@@ -118,13 +146,7 @@ func getTable(
 	namespace string,
 	opts metav1.ListOptions,
 ) (*Table, error) {
-	raw, err := client.Get().
-		NamespaceIfScoped(namespace, namespaced).
-		Resource(gvr.Resource).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		SetHeader("Accept", tableAcceptHeader).
-		Do(ctx).
-		Raw()
+	raw, err := tableRequest(client, gvr, namespaced, namespace, opts).Do(ctx).Raw()
 	if err != nil {
 		return nil, fmt.Errorf("kube: listing %s: %w", gvr.Resource, err)
 	}
