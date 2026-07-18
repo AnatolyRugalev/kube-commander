@@ -37,3 +37,23 @@ Entry template:
 - Next: **M0-01** — scaffold the new module layout
   (`cmd/kubecom`, `internal/{kube,tui,config,version}`) with a compiling skeleton
   and one passing test, so `go build ./...` / `go test ./...` are green.
+
+## 2026-07-18 — M0-01: new module skeleton + lint scoped to new code
+- Agent: claude (Opus 4.8)
+- Milestone: M0
+- Did: Scaffolded the rewrite layout — `internal/{version,kube,tui,config}` and a
+  new `cmd/kubecom` skeleton with a stdlib `version`/`help` dispatch (repointed
+  from the legacy `cli.Run()`; the old app stays reachable via
+  `cmd/kube-commander`). Added `.golangci.yml` that lints only the new code and
+  excludes the legacy 2020 trees. `internal/version` + `cmd/kubecom` have passing
+  tests; `kubecom version` prints build info.
+- Decisions: D12 golangci-lint scoped to new code (relative-path-mode gomod +
+  anchored legacy excludes, standard ruleset) · D13 kubecom = new skeleton, legacy
+  via kube-commander, cobra deferred to M0-02.
+- Files: `cmd/kubecom/main.go`, `cmd/kubecom/main_test.go`,
+  `internal/version/{version.go,version_test.go}`,
+  `internal/{kube,tui,config}/doc.go`, `.golangci.yml`, vault board/journal/decisions.
+- Verify: build ✓ · test ✓ · vet ✓ · lint ✓ (0 issues) · gofmt ✓ · `kubecom version` runs ✓
+- Commit: (this leg on v1)
+- Next: **M0-02** — bump go.mod to Go 1.23+, add latest cobra and wire
+  `cmd/kubecom` onto it, drop `ioutil`.

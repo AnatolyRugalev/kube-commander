@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — vault bootstrap; added vim-first navigation (D10)._
+_Last updated: 2026-07-18 — M0-01 done: new module skeleton + lint scoped to new code (D12, D13)._
 
 ## In Progress
 
@@ -16,9 +16,7 @@ _(none)_
 ## Backlog
 
 ### M0 — Groundwork
-- [ ] **M0-01** Scaffold new module layout (`cmd/kubecom`, `internal/{kube,tui,config,version}`)
-      status: todo | owner: — | added: 2026-07-18
-- [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra; drop `ioutil`
+- [ ] **M0-02** Toolchain: bump to Go 1.23+, latest cobra (wire `cmd/kubecom` onto cobra); drop `ioutil`
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M0-03** Single `kubecom` binary; remove duplicate `kube-commander` entrypoint
       status: todo | owner: — | added: 2026-07-18
@@ -58,5 +56,7 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M0-01** Scaffold new module layout (`cmd/kubecom`, `internal/{kube,tui,config,version}`) + `.golangci.yml` scoped to new code
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18 (D12, D13)
 - [x] **BOOT-01** Bootstrap vault, goals, milestones, task board on `v1`
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18

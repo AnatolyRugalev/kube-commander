@@ -85,3 +85,25 @@ scattered `case 'l':`-style handling is exactly what made the old code rigid.
 - The help overlay and the generated keybindings doc are **derived from the
   registry**, so they can never drift from actual bindings.
 See [`keybindings.md`](keybindings.md).
+
+### D12 — golangci-lint scoped to new code only
+**2026-07-18.** `.golangci.yml` lints **only** the rewrite (`cmd/kubecom`,
+`internal/...`); the legacy 2020 trees (`app/`, `cli/`, `commander/`, `config/`,
+`pb/`, `cmd/kube-commander/`) are excluded. **Why:** those trees are deleted
+tree-by-tree across M1–M3 — linting dead code is pure noise, and the maintainer
+asked for lint to apply to new code only. **How:** golangci-lint **v2** with
+`run.relative-path-mode: gomod` (normalizes match paths to module-relative so the
+`^`-anchored excludes hit only the top-level legacy dirs — `^config/` excludes
+legacy `config/` but not `internal/config/`) and `linters.default: standard`
+(lenient ruleset per M0; tighten later). **Consequence:** remove an exclude entry
+when its tree is deleted; new packages are linted by default.
+
+### D13 — `kubecom` binary is the new skeleton; legacy reachable via `kube-commander`
+**2026-07-18.** `cmd/kubecom` now builds the **new** binary (M0 skeleton:
+`version`/`help`); the legacy 2020 app stays reachable **only** via
+`cmd/kube-commander` until it is ported (M1–M3), after which M0-03 deletes it.
+Both were identical `cli.Run()` entrypoints (the duplicate D4 flagged). The M0
+skeleton uses a **stdlib** command dispatch for now; **cobra** replaces it in
+M0-02 (kept out of this leg to avoid a premature go.mod/dependency bump).
+**Why:** makes `kubecom` the single forward binary immediately while keeping the
+old code compiling in parallel, per the M0 plan.

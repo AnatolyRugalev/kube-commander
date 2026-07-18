@@ -1,0 +1,26 @@
+# golangci-lint configuration for kubecom.
+#
+# The rewrite lints ONLY the new code (cmd/kubecom, internal/...). The legacy
+# 2020 trees below are excluded: they are being deleted tree-by-tree across
+# M1–M3, so linting them adds noise for no benefit. Remove an entry when its
+# tree is deleted. Ruleset starts lenient (the standard linters) per M0 and is
+# tightened later.
+#
+# relative-path-mode: gomod normalizes match paths to module-relative so the
+# `^`-anchored excludes below hit only the top-level legacy dirs (e.g. `^config/`
+# excludes the legacy config package but NOT internal/config).
+version: "2"
+
+run:
+  relative-path-mode: gomod
+
+linters:
+  default: standard
+  exclusions:
+    paths:
+      - '^app/'
+      - '^cli/'
+      - '^commander/'
+      - '^config/'
+      - '^pb/'
+      - '^cmd/kube-commander/'
