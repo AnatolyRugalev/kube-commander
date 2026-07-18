@@ -33,7 +33,8 @@ subagent context instead (D21).
 
 1. Spawn **one** subagent (`general-purpose`, **synchronously** — never in
    parallel: legs claim tasks and push to `v1`, and concurrent legs would
-   collide) with this prompt:
+   collide) with **`model: "opus"`** — the routine session runs a cheaper model
+   for orchestration, but legs always execute on Opus — and this prompt:
 
    > Read `.claude/skills/do-rewrite-leg/SKILL.md` and `CLAUDE.md` in the repo
    > and follow the skill exactly: one leg, then stop. (Read the file by path —

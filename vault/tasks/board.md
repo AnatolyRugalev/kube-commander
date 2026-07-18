@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-07 done: legacy trees deleted; `go.mod`/`go.sum` and `.golangci.yml` pruned._
+_Last updated: 2026-07-18 — M0-07 done (legacy trees deleted) · PROC-03 done (Sonnet orchestrates, Opus executes legs)._
 
 ## In Progress
 
@@ -56,6 +56,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **PROC-03** Model split: routine session on Sonnet (orchestration), leg subagents pinned to Opus in `/do-rewrite-run`; cron corrected to UTC
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-07** Delete legacy trees from `v1`: `app/`, `cli/`, `commander/`, `config/`, `pb/`, `cmd/kube-commander/`, Windows sources, Travis/snap CI; prune `go.mod`; drop `.golangci.yml` path excludes. Absorbs M0-03. (D14, D22)
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **PROC-02** Scheduled runs self-prime: checkout `v1` + lint tooling in step 0; legs read the skill by file path (cloud clones start on `master`)
