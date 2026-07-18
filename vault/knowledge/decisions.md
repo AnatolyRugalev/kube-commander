@@ -623,3 +623,35 @@ generic-dynamic-client posture (D2, D35). Landed `Clients.Scale` and
   set, restartedAt added without clobbering a seeded sibling annotation, empty
   name / negative replicas / wrapped NotFound. No new deps. (Fake-patch behavior
   recorded in `stack.md`.)
+
+### D37 — Executing M1-06c: cordon/uncordon as a generic `spec.unschedulable` merge patch; M1-06c narrowed, drain split to M1-06e
+**2026-07-18.** Third slice of the M1-06 action set (after 06a delete D35, 06b
+scale/restart D36). **M1-06c was narrowed from "cordon/uncordon + drain" to
+cordon/uncordon; drain moved to a new M1-06e** — drain (list a node's pods, skip
+DaemonSet/mirror/completed pods, evict each via the policy/v1 Eviction API, honor
+PDBs through 429-retry, and wait for deletion) is its own logical change that
+would blow the ≤300-line green-leg budget together with cordon. This mirrors the
+D33 (M1-05) and D35 (M1-06) split precedent. Landed `Clients.Cordon` /
+`Clients.Uncordon` in `internal/kube/actions.go`. **Choices:**
+- **Cordon/uncordon merge-patch `spec.unschedulable` through the dynamic client**,
+  exactly as `kubectl cordon`/`uncordon` do — Cordon sets it true, Uncordon sets
+  it false. Same generic-dynamic-client posture as Scale/RolloutRestart (D36): no
+  typed node client, addressed by the discovery `Resource`'s GVR via the shared
+  `resourceInterface(r, ns)` helper. Nodes are cluster-scoped, so a namespace on
+  the ref is ignored (r.Namespaced == false), just like node Delete (D35).
+- **Uncordon writes the concrete value `false`, not `null`.** RFC 7386 merge patch
+  only *removes* a key when its value is null; an explicit `false` keeps the field
+  present and reads identically to the scheduler. (kubectl uncordon does the same.)
+- **Cordon ≠ drain.** Cordon only stops *new* pods landing; existing pods keep
+  running. Evicting them is drain's job (M1-06e), which cordons first then evicts.
+  Documented on `Cordon` so a caller doesn't mistake it for drain.
+- **No UID precondition (like Scale/RolloutRestart, unlike Delete).** PatchOptions
+  carries none and the toggle is idempotent, so the snapshot-race guard doesn't
+  apply. Empty name rejected locally; NotFound wrapped (#86). Shared body
+  `setUnschedulable(ctx, r, ref, bool)`; the error verb tracks the flag
+  (cordoning/uncordoning) via tiny pure `cordonNoun`/`cordonVerb` helpers.
+- **Testing:** pure `unschedulablePatch(bool)` asserts the wire format; the fake
+  dynamic client (which round-trips a merge patch, per D36) exercises the apply —
+  cordon sets unschedulable true (namespace dropped for the cluster-scoped node),
+  uncordon flips a seeded-true node to false, empty-name rejected for both,
+  NotFound wrapped. No new deps.

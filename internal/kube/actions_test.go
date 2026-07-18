@@ -301,6 +301,100 @@ func TestRolloutRestartEmptyName(t *testing.T) {
 	}
 }
 
+// unschedulablePatch owns the cordon/uncordon wire format; assert it directly, the
+// round-trip through the fake dynamic client is exercised below.
+func TestUnschedulablePatch(t *testing.T) {
+	if got, want := string(unschedulablePatch(true)), `{"spec":{"unschedulable":true}}`; got != want {
+		t.Errorf("unschedulablePatch(true) = %s, want %s", got, want)
+	}
+	if got, want := string(unschedulablePatch(false)), `{"spec":{"unschedulable":false}}`; got != want {
+		t.Errorf("unschedulablePatch(false) = %s, want %s", got, want)
+	}
+}
+
+// nodeObj builds an unstructured Node with an (optional) pre-set unschedulable
+// flag so the cordon/uncordon round-trips have something realistic to patch.
+func nodeObj(name string, unschedulable bool) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Node",
+		"metadata":   map[string]any{"name": name},
+		"spec":       map[string]any{"unschedulable": unschedulable},
+	}}
+}
+
+func nodeUnschedulable(t *testing.T, dc *dynamicfake.FakeDynamicClient, name string) bool {
+	t.Helper()
+	obj, err := dc.Resource(nodesResource.GVR).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get node %s: %v", name, err)
+	}
+	u, found, err := unstructured.NestedBool(obj.Object, "spec", "unschedulable")
+	if err != nil || !found {
+		t.Fatalf("spec.unschedulable missing on node %s (found=%v err=%v)", name, found, err)
+	}
+	return u
+}
+
+func TestCordonMarksUnschedulable(t *testing.T) {
+	dc := newDynamicFake(nodeObj("node-1", false))
+
+	var captured clienttesting.Action
+	dc.PrependReactor("patch", "nodes", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		captured = a
+		return false, nil, nil // observe only; let the tracker apply the patch
+	})
+
+	c := &Clients{Dynamic: dc}
+	// A namespace on the ref must be ignored for a cluster-scoped node.
+	ref := ObjectRef{Namespace: "ignored", Name: "node-1"}
+	if err := c.Cordon(context.Background(), nodesResource, ref); err != nil {
+		t.Fatalf("Cordon: %v", err)
+	}
+	if !nodeUnschedulable(t, dc, "node-1") {
+		t.Error("spec.unschedulable = false after Cordon, want true")
+	}
+	if captured == nil {
+		t.Fatal("no patch action recorded")
+	}
+	if got := captured.GetNamespace(); got != "" {
+		t.Errorf("namespace = %q, want empty (cluster-scoped)", got)
+	}
+}
+
+func TestUncordonMarksSchedulable(t *testing.T) {
+	dc := newDynamicFake(nodeObj("node-1", true))
+
+	c := &Clients{Dynamic: dc}
+	if err := c.Uncordon(context.Background(), nodesResource, ObjectRef{Name: "node-1"}); err != nil {
+		t.Fatalf("Uncordon: %v", err)
+	}
+	if nodeUnschedulable(t, dc, "node-1") {
+		t.Error("spec.unschedulable = true after Uncordon, want false")
+	}
+}
+
+func TestCordonEmptyName(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	if err := c.Cordon(context.Background(), nodesResource, ObjectRef{}); err == nil {
+		t.Fatal("Cordon(empty name): want error, got nil")
+	}
+	if err := c.Uncordon(context.Background(), nodesResource, ObjectRef{}); err == nil {
+		t.Fatal("Uncordon(empty name): want error, got nil")
+	}
+}
+
+func TestCordonNotFoundWrapped(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	err := c.Cordon(context.Background(), nodesResource, ObjectRef{Name: "ghost"})
+	if err == nil {
+		t.Fatal("Cordon(missing): want error, got nil")
+	}
+	if !apierrors.IsNotFound(err) {
+		t.Errorf("error = %v, want a wrapped NotFound", err)
+	}
+}
+
 func getDeployment(t *testing.T, dc *dynamicfake.FakeDynamicClient, ns, name string) *unstructured.Unstructured {
 	t.Helper()
 	obj, err := dc.Resource(deploymentsResource.GVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})

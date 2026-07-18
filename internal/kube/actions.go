@@ -128,6 +128,70 @@ func (c *Clients) RolloutRestart(ctx context.Context, r Resource, ref ObjectRef)
 	return nil
 }
 
+// Cordon marks a node unschedulable so the scheduler places no *new* pods on it
+// (existing pods keep running — evicting them is drain's job, M1-06e). It is the
+// same operation as `kubectl cordon`: a merge patch setting `spec.unschedulable`
+// to true. Like the other actions it goes through the dynamic client so it needs
+// no typed node client; nodes are cluster-scoped, so the ref's namespace is
+// ignored (r.Namespaced == false). Empty name is rejected; errors are wrapped,
+// never panicked; a NotFound (node gone since the row was listed) surfaces for the
+// caller (#86). Cordoning is idempotent, so — like Scale — there is no UID guard.
+func (c *Clients) Cordon(ctx context.Context, r Resource, ref ObjectRef) error {
+	return c.setUnschedulable(ctx, r, ref, true)
+}
+
+// Uncordon reverses Cordon: it marks a node schedulable again by merge-patching
+// `spec.unschedulable` to false, matching `kubectl uncordon`. Setting the field to
+// the concrete value false (not null) is deliberate — a merge patch only removes a
+// key when the value is null, and an explicit false reads the same to the
+// scheduler while keeping the field present. Same generic dynamic-client path,
+// name check, wrapped errors, and idempotence as Cordon.
+func (c *Clients) Uncordon(ctx context.Context, r Resource, ref ObjectRef) error {
+	return c.setUnschedulable(ctx, r, ref, false)
+}
+
+// setUnschedulable is the shared body of Cordon/Uncordon: it merge-patches a
+// node's `spec.unschedulable` flag through the dynamic client. Factoring it out
+// keeps the two public actions to a single line each and the wire format in one
+// place (unschedulablePatch). The verb in error messages tracks the flag so a
+// failure reads naturally ("cordoning"/"uncordoning").
+func (c *Clients) setUnschedulable(ctx context.Context, r Resource, ref ObjectRef, unschedulable bool) error {
+	if ref.Name == "" {
+		return fmt.Errorf("kube: %s %s: empty object name", cordonNoun(unschedulable), r.GVR.Resource)
+	}
+	if _, err := c.resourceInterface(r, ref.Namespace).Patch(
+		ctx, ref.Name, types.MergePatchType, unschedulablePatch(unschedulable), metav1.PatchOptions{},
+	); err != nil {
+		return fmt.Errorf("kube: %s %s %q: %w", cordonVerb(unschedulable), r.GVR.Resource, ref.Name, err)
+	}
+	return nil
+}
+
+// cordonNoun / cordonVerb name the operation for error messages, keyed off the
+// target flag: unschedulable=true is a cordon, false is an uncordon.
+func cordonNoun(unschedulable bool) string {
+	if unschedulable {
+		return "cordon"
+	}
+	return "uncordon"
+}
+
+func cordonVerb(unschedulable bool) string {
+	if unschedulable {
+		return "cordoning"
+	}
+	return "uncordoning"
+}
+
+// unschedulablePatch builds the RFC 7386 merge patch that toggles a node's
+// spec.unschedulable flag — the wire format kubectl cordon/uncordon send. Pure and
+// side-effect free so it is unit-testable without a client (the fake dynamic
+// client applies the merge patch to the whole tracked object, exercising the
+// round-trip in the Cordon/Uncordon tests).
+func unschedulablePatch(unschedulable bool) []byte {
+	return []byte(fmt.Sprintf(`{"spec":{"unschedulable":%t}}`, unschedulable))
+}
+
 // scalePatch builds the RFC 7386 merge patch that sets a scale subresource's
 // replica count. Pure and side-effect free so the wire format is unit-testable
 // without a client (the fake dynamic client applies the patch to the whole

@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a + Watch M1-05b landed — List+watch exit criterion met; action set started — M1-06a generic **delete** (D35) + M1-06b **scale**+**rollout-restart** (D36) landed; next M1-06c cordon/drain)
+**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a + Watch M1-05b landed — List+watch exit criterion met; action set started — M1-06a generic **delete** (D35) + M1-06b **scale**+**rollout-restart** (D36) + M1-06c **cordon/uncordon** (D37) landed; next M1-06d cronjob-suspend, M1-06e drain)
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal
