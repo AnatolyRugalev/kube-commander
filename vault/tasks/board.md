@@ -7,7 +7,9 @@ _Last updated: 2026-07-18 — M1-03 done: async full discovery (`internal/kube/d
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-04** On-disk discovery cache + invalidation
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+      notes: lazy group detail split to M1-04b (M2-coupled; needs the menu open interaction)
 
 ## Blocked
 
@@ -19,8 +21,9 @@ _(none)_
 _(none — M0 complete)_
 
 ### M1 — Kube layer
-- [ ] **M1-04** On-disk discovery cache + invalidation; lazy group detail
+- [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
+      notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
 - [ ] **M1-05** Server-side Table List+Watch → event channel; reconnect/resync
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-06** Actions: delete/scale/rollout-restart/cordon/drain/cronjob-suspend
