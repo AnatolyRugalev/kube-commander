@@ -33,10 +33,11 @@ type ClientConfig struct {
 //   - Dynamic    — untyped access to any resource, including CRDs.
 //   - Discovery  — server API discovery (groups, versions, resources).
 //   - RESTMapper — resolves GVK↔GVR and the scope (namespaced vs cluster) of a
-//     resource. This is a *deferred* discovery mapper: it does no network I/O at
-//     construction and populates lazily on first use, so building Clients never
-//     blocks first paint (D8). M1-02/M1-03 layer static seeding and async
-//     discovery on top of this.
+//     resource. It composes a static seed mapper (core GVKs, resolved instantly
+//     with no network I/O — M1-02) ahead of a *deferred* discovery mapper (does no
+//     network I/O at construction, populates lazily on first use), so building
+//     Clients never blocks first paint and core resources are mappable before
+//     discovery finishes (D8). M1-03 layers async full discovery on top.
 //
 // Config is the resolved *rest.Config the handles were built from, retained so
 // callers (e.g. port-forward, which needs the transport) can derive more.
@@ -90,7 +91,15 @@ func NewClients(cfg *rest.Config) (*Clients, error) {
 	}
 	// Deferred + memory-cached: no discovery round-trip until the first mapping
 	// is requested, and results are cached thereafter.
-	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(dc))
+	deferred := restmapper.NewDeferredDiscoveryRESTMapper(memcache.NewMemCacheClient(dc))
+	// Compose a static seed mapper ahead of discovery: core GVKs resolve instantly
+	// with zero network I/O (the seed short-circuits, discovery is never consulted
+	// for them), while unknown kinds — CRDs, less-common groups — fall through to
+	// the deferred discovery mapper once it warms (D8, M1-02). FirstHitRESTMapper
+	// returns the first mapper that resolves, so the seed always wins for its kinds.
+	mapper := meta.FirstHitRESTMapper{
+		MultiRESTMapper: meta.MultiRESTMapper{newSeedRESTMapper(), deferred},
+	}
 	return &Clients{
 		Config:     cfg,
 		Clientset:  clientset,

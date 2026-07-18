@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M1-01 done: client-go bootstrap (`internal/kube/client.go`) — `RESTConfig`/`NewClients`/`Connect`, deferred RESTMapper, no network at construction, D29. Active milestone: M1; next up M1-02 (static seed-set REST mapping)._
+_Last updated: 2026-07-18 — M1-02 done: static seed RESTMapper (`internal/kube/seed.go`) — ~28 core GVKs with exact GVRs, composed ahead of the deferred discovery mapper (`FirstHitRESTMapper`) so core resources map instantly with no network I/O, D30. Active milestone: M1; next up M1-03 (async full discovery → reconcile signal; per-group fault isolation)._
 
 ## In Progress
 
-- [ ] **M1-02** Seed-set core GVKs with static REST mapping for instant start
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -44,6 +43,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-02** Seed-set core GVKs with static REST mapping for instant start: `internal/kube/seed.go` — a static `meta.DefaultRESTMapper` seeded with ~28 core GVKs (core/v1, apps/v1, batch/v1, networking/v1, rbac/v1, storage/v1), each with its exact plural/singular resource + scope via `AddSpecific` (irregular plurals kubectl-identical). `NewClients` composes it ahead of the D29 deferred discovery mapper via `meta.FirstHitRESTMapper` — seeded kinds resolve instantly with zero network I/O; unknown kinds fall through to discovery. Instant-start half of D8; M1-03 adds async full-discovery reconcile. D30.
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-01** Client bootstrap: `internal/kube/client.go` — `ClientConfig{Kubeconfig,Context}` → `RESTConfig` (clientcmd default rules + context override, non-interactive, wrapped errors) → `NewClients` (clientset + dynamic + discovery + deferred discovery RESTMapper) + `Connect` convenience. No network I/O at construction; RESTMapper deferred/mem-cached so bootstrap never blocks first paint (D8). Hermetic tests (temp kubeconfig + dummy rest.Config, D18); no new deps. D29.
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-00** envtest harness: `internal/kube/envtest_test.go` — opt-in behind `KUBECOM_TEST_ENVTEST=1` (`requireEnvtest(t)` skips by default so `make check` stays hermetic), smoke test starts a real control plane and GETs the `default` namespace. Added the first kube deps (client-go + apimachinery v0.31.4, controller-runtime v0.19.4) and `make test-envtest` (fetches binaries via `setup-envtest`). D28.

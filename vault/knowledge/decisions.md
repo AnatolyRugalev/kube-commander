@@ -332,6 +332,31 @@ it, the first client-go dependencies (the kube layer's foundation). **Choices:**
   Minimal end-to-end proof the apiserver is reachable; later M1 legs reuse this
   bootstrap to integration-test discovery, watch reconnect, and actions.
 
+### D30 — Executing M1-02: static seed RESTMapper composed ahead of discovery
+**2026-07-18.** M1-02 landed `internal/kube/seed.go`: a static `meta.DefaultRESTMapper`
+seeded with ~28 core, high-traffic GVKs (core/v1, apps/v1, batch/v1,
+networking.k8s.io/v1, rbac.../v1, storage.k8s.io/v1) and composed **ahead of** the
+deferred discovery mapper from D29 via
+`meta.FirstHitRESTMapper{MultiRESTMapper: {seed, deferred}}`. **Choices:**
+- **Exact GVRs, hard-coded — not heuristic pluralization.** Each seed entry carries
+  its literal plural/singular resource name and scope, added via
+  `DefaultRESTMapper.AddSpecific`. `DefaultRESTMapper.Add`'s built-in pluralizer
+  would mangle the irregulars (Endpoints→"endpointses", NetworkPolicy→
+  "networkpolicys"); AddSpecific sidesteps that and keeps mappings kubectl-identical.
+- **Seed first, discovery fallback.** `FirstHitRESTMapper` returns the first mapper
+  that resolves, so for seeded kinds the seed short-circuits and discovery is **never
+  consulted → zero network I/O** — the "instant start" half of D8. Unknown kinds
+  (CRDs, uncommon groups) fall through to the deferred discovery mapper, which warms
+  lazily. A composed-mapper test proves `RESTMapping(Pod)` succeeds against an
+  unreachable dummy config (no server round-trip).
+- **Curated, not exhaustive.** The seed covers the resources a user browses first;
+  the long tail is discovery's job. Every seeded mapping is a long-stable GA
+  relationship, so the static copy cannot drift from the server for those kinds.
+- **Permanent layer, not a warm-up cache.** The seed mapper stays in the chain for
+  the process lifetime (it is cheap and authoritative for its kinds); M1-03 adds the
+  **async full discovery → reconcile signal** that surfaces the rest of the menu, it
+  does not replace the seed.
+
 ### D29 — Executing M1-01: client bootstrap shape; deferred RESTMapper; no network at construction
 **2026-07-18.** M1-01 landed `internal/kube/client.go`: the client-go bootstrap
 the whole kube layer builds on. **Choices:**

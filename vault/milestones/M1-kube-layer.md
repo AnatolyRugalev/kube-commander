@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete, envtest harness landed M1-00)
+**Status:** `in-progress` (2026-07-18 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02 landed)
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal
@@ -30,6 +30,7 @@ all in-process via client-go, fault-tolerant, and fast to start.
 
 - [ ] List+watch any discovered resource, columns matching `kubectl get`.
 - [ ] Discovery never blocks a caller; seed resources usable before full discovery finishes.
+      _(M1-02: seed RESTMapper resolves core GVKs instantly with no network I/O; async non-blocking discovery is M1-03.)_
 - [ ] A denied/broken API group is isolated (integration test with restricted RBAC).
 - [ ] Logs stream, describe, and YAML-get return correct output in-process.
 - [ ] Port-forward runs in a background goroutine and can be stopped.
