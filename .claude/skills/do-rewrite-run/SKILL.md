@@ -15,6 +15,10 @@ subagent context instead (D21).
 
 - `git fetch origin v1 && git checkout v1 && git pull --rebase origin v1`.
   All process files (CLAUDE.md, skills, vault) live only on `v1`.
+- Set the repo-local git identity — cloud checkouts default to a Claude
+  identity, but commits must be authored by the maintainer (per CLAUDE.md):
+  `git config user.name "Anatoly Rugalev" && git config user.email "anatoly.rugalev@gmail.com"`.
+  Repo-local config persists in the shared checkout, so leg subagents inherit it.
 - Ensure the gate tooling exists: `golangci-lint version` — if missing,
   `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
   (and make sure it lands on `PATH`). `make check` needs it.
