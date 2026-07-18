@@ -471,3 +471,37 @@ on-disk cache kubectl uses — completing the "cache discovery on disk" half of 
   per-host uniqueness, the interface contract, and `Invalidate` no-panic without a
   server. **"Lazy group detail on first open" split out to M1-04b** — it needs the
   M2 menu open interaction that doesn't exist yet, so it isn't actionable now.
+
+### D33 — Executing M1-05a: server-side Table List via a per-GroupVersion REST client (dynamic can't negotiate Table per call); M1-05 split into List + Watch
+**2026-07-18.** M1-05 ("server-side Table List+Watch → event channel;
+reconnect/resync") was too big for one ≤300-line green leg, so it was split:
+**M1-05a = List** (this leg), **M1-05b = Watch** (event channel + reconnect/resync,
+back to Backlog). M1-05a landed `internal/kube/table.go`. **Choices:**
+- **List talks to the REST layer directly, not through the dynamic client.** The
+  stack note (D8-adjacent) pointed at "server-side Table via the dynamic client",
+  but `dynamic.Interface`'s `List` gives no hook to set the `Accept` header per
+  call — it always negotiates the plain object list. To request server-side
+  printing you must set `Accept: application/json;as=Table;v=v1;g=meta.k8s.io,application/json`
+  on the request yourself. So `List` builds a `rest.Interface` scoped to the
+  resource's GroupVersion (`restClientForGV`: `rest.CopyConfig` + `GroupVersion` +
+  `/api` for the core group else `/apis` + `scheme.Codecs.WithoutConversion()`),
+  then `Get().NamespaceIfScoped(ns, namespaced).Resource(gvr.Resource).VersionedParams(&opts, scheme.ParameterCodec).SetHeader("Accept", tableAcceptHeader).Do(ctx).Raw()`.
+  Columns come entirely from the server (incl. a CRD's `additionalPrinterColumns`),
+  so columns are kubectl-identical for **every** resource with zero hard-coding.
+- **TUI-facing `Table{Columns,Rows}` decoupled from `metav1.Table`.** `decodeTable`
+  flattens the server's JSON `metav1.Table` into `Column`/`Row`/`ObjectRef` so the
+  TUI never imports apimachinery. Row identity (`ObjectRef{Namespace,Name,UID}`)
+  is pulled from each row's embedded `PartialObjectMetadata` — server-side Table
+  defaults to `IncludeObject=Metadata`, so it's present without asking. A row with
+  missing/malformed object metadata is **kept with a zero ObjectRef, not dropped**
+  (principle 3), so one odd row never blanks a list.
+- **`List` takes a discovery `Resource`** (from M1-03) — it already carries GVR +
+  `Namespaced`, so `List` needs no separate scope lookup. `namespace` is dropped
+  for cluster-scoped resources by `NamespaceIfScoped`.
+- **No new deps.** `rest`, `rest/fake`, and `kubernetes/scheme` are all already
+  vendored via client-go. Hermetic tests (D18) use `rest/fake.RESTClient`
+  (canned Table body + recorded request) to assert the `Accept` header, the
+  namespaced vs cluster-scoped URL path, and the decode — plus a pure `decodeTable`
+  suite (columns/priority, object refs, degrade-on-bad-row, invalid JSON). The
+  M1-05b watch leg reuses `decodeTable` (Table watch chunks are `metav1.Table`
+  deltas) and the per-GV REST client (watch is the same request with `watch=true`).

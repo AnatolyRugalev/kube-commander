@@ -31,8 +31,16 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 
 ## Kubernetes
 - **k8s.io/client-go** (target **v0.31**), apimachinery, cli-runtime as needed.
-- **k8s.io/client-go/dynamic** — generic typed-free access; server-side Table
-  printing via `Accept: application/json;as=Table` for kubectl-identical columns.
+- **k8s.io/client-go/dynamic** — generic typed-free access (CRDs, unstructured).
+- **Server-side Table** printing via `Accept: application/json;as=Table;v=v1;g=meta.k8s.io,application/json`
+  for kubectl-identical columns. **Gotcha (D33):** the dynamic client can *not*
+  set this Accept header per call — its `List` always returns the plain object
+  list. `List` (M1-05a, `internal/kube/table.go`) instead builds a per-GroupVersion
+  `rest.Interface` (`restClientForGV`) and sets the header on the raw request, then
+  `decodeTable` flattens the `metav1.Table` JSON into a TUI-facing
+  `Table{Columns,Rows}` (no apimachinery in the TUI); per-row identity
+  (`ObjectRef`) comes from the row's embedded `PartialObjectMetadata`
+  (`IncludeObject=Metadata`, the Table default). Watch (M1-05b) reuses both.
 - **discovery** + **restmapper** — GVK↔GVR, namespaced?, verbs; async + cached.
   On-disk cache landed M1-04 (D32): `discovery/cached/disk`'s `CachedDiscoveryClient`
   (kubectl's own), base of the deferred RESTMapper. Cache dir

@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M1-04 done: on-disk discovery cache (`internal/kube/cache.go`) — kubectl's `discovery/cached/disk.CachedDiscoveryClient` backs discovery+RESTMapper; per-host cache dir under `os.UserCacheDir()/kubecom`, TTL 6h; `Clients.Invalidate()` forces refetch; degrades to in-memory when no cache dir; zero network I/O at construction; D32. Active milestone: M1; next up M1-05 (server-side Table List+Watch → event channel; reconnect/resync). M1-04b (lazy group detail) parked until the M2 menu exists._
+_Last updated: 2026-07-18 — M1-05a done: server-side Table **List** (`internal/kube/table.go`) — `Clients.List` fetches any discovered resource as a server-printed Table (`Accept: as=Table`) for kubectl-identical columns (built-ins + CRDs); dynamic client can't set the Table Accept header per call, so List builds a per-GV `rest.Interface` + `decodeTable` flattens `metav1.Table` → TUI-facing `Table{Columns,Rows}` with per-row `ObjectRef` from embedded metadata; no new deps; D33. M1-05 split into 05a (List, done) + 05b (Watch, backlog). Active milestone: M1; next up M1-05b (Table Watch → event channel; reconnect/resync). M1-04b (lazy group detail) parked until the M2 menu exists._
 
 ## In Progress
 
-- [ ] **M1-05a** Server-side Table **List** (`Accept: as=Table`) → typed `Table{Columns,Rows}`, generic over any resource incl. CRDs (namespaced + cluster-scoped)
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
-      notes: first slice of M1-05 (List half); watch → event channel with reconnect/resync is M1-05b
+_(none)_
 
 ## Blocked
 
@@ -45,6 +43,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-05a** Server-side Table **List** → typed `Table{Columns,Rows}`: `internal/kube/table.go` — `Clients.List(ctx, Resource, ns, opts)` fetches any discovered resource as a server-printed Table (`Accept: application/json;as=Table;v=v1;g=meta.k8s.io,application/json`) so columns are kubectl-identical for built-ins and CRDs with zero hard-coding. The dynamic client can't set the Table Accept header per call, so List builds a per-GroupVersion `rest.Interface` (`restClientForGV`) and sets it on the raw request; `decodeTable` flattens the `metav1.Table` JSON into a TUI-facing `Table`/`Column`/`Row` (no apimachinery in the TUI), with per-row `ObjectRef{Namespace,Name,UID}` from each row's embedded `PartialObjectMetadata` (Table default `IncludeObject=Metadata`). Bad/missing row metadata degrades to a zero ObjectRef, row kept. No new deps (rest, rest/fake, kubernetes/scheme already vendored). Hermetic tests via `rest/fake.RESTClient` + pure `decodeTable`. First slice of M1-05; Watch is M1-05b. D33.
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-04** On-disk discovery cache + invalidation: `internal/kube/cache.go` + rewired `NewClients` — discovery is now backed by kubectl's on-disk `discovery/cached/disk.CachedDiscoveryClient` (replaces the M1-02 in-memory memcache as the base of the deferred RESTMapper, so discovery+mapping share one on-disk cache). Cache dir `os.UserCacheDir()/kubecom/{discovery/<host-slug>,http}` — per host:port (distinct clusters must not cross-serve), disposable, separate from the D20 config dir; TTL 6h. `Clients.Invalidate()` forces a refetch (clears disk cache + Resets the retained deferred mapper); seed mapper untouched. Degrades to in-memory `memcache` when no cache dir resolves; still zero network I/O at construction (fast cold start holds). `Discovery` field widened to `CachedDiscoveryInterface`. New transitive deps: httpcache, diskv, btree. Lazy group detail → M1-04b. D32.
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-03** Async full discovery → reconcile signal; per-group fault isolation: `internal/kube/discovery.go` — `discoverResources` runs one `ServerPreferredResources` pass and flattens it into a sorted `[]Resource` (GVK/GVR/scope/verbs/short-names/categories) of listable, non-subresource kinds. Partial `*discovery.ErrGroupDiscoveryFailed` keeps healthy resources and isolates each broken/denied group into `DiscoveryResult.Failed` (#87, #76); total failure → `.Err`, empty results. `StartDiscovery(ctx,d) <-chan DiscoveryResult` runs the pass in a goroutine, delivers once on a cap-1 buffered channel (the "discovery ready" reconcile signal), returns immediately — never blocks first paint. `(*Clients).StartDiscovery` convenience; zero TUI imports. Cache/re-discovery deferred to M1-04. D31.
