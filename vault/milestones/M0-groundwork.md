@@ -1,6 +1,6 @@
 # M0 — Groundwork
 
-**Status:** `in-progress` (started 2026-07-18)
+**Status:** `done` (2026-07-18) — all exit criteria met (M0-06 + M0-09 closed the last two)
 **Phase:** REWRITE_PLAN Phase 0
 
 ## Goal
@@ -37,5 +37,9 @@ old code isolated for staged removal and a single `kubecom` binary.
 
 ## Notes / open questions
 
+- **M0 complete.** goreleaser skeleton done (M0-06, D27): `.goreleaser.yml` is v2,
+  Linux+macOS × amd64+arm64, no Windows; `goreleaser check` + `--snapshot` verified;
+  publishers (Homebrew/AUR/Docker) deferred to M5. README→vault pointer done (M0-09).
+  Full README rewrite for kubecom stays M5; the M0 pointer banner is enough here.
 - Confirm golangci-lint ruleset (start lenient, tighten later).
 - Decide logging library (slog stdlib is the default choice).

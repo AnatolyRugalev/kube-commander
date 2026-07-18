@@ -268,6 +268,34 @@ real TUI dependencies. **Choices:**
   when a dependency forces it. No `toolchain` directive is added, so CI's
   `setup-go` (`go-version-file: go.mod`, `check-latest`) installs the latest
   1.24.x (D24 unaffected).
+
+### D27 — Executing M0-06: goreleaser skeleton is artifact-only; publishers deferred to M5; Linux+macOS × amd64+arm64
+**2026-07-18.** M0-06 reshaped `.goreleaser.yml` into the release **skeleton** D22
+and D25 deferred to this leg. **Choices:**
+- **`version: 2`** header + v2 syntax throughout (the config was still v1-shaped):
+  `archives[].builds` → `ids`, `archives[].format` → `formats: [...]`,
+  `snapshot.name_template` → `version_template`. Validated with `goreleaser check`
+  (v2.17.0) — clean, no deprecations.
+- **Windows dropped** (D7): the three per-OS build blocks (incl. `kubecom-windows`)
+  collapse into a **single `kubecom` build** with `goos: [linux, darwin]` ×
+  `goarch: [amd64, arm64]`. `goreleaser release --snapshot` produces exactly four
+  artifacts (linux/darwin × amd64/arm64) as `tar.gz` + raw binary + `checksums.txt`.
+- **arm64 added** (was amd64-only). Apple Silicon is arm64 and arm64 Linux servers
+  are common; a modern Linux+macOS skeleton must cover it. Cheap, cross-compiled,
+  `CGO_ENABLED=0`.
+- **All publishers removed from the skeleton — deferred uniformly to M5.** The
+  `brews` block (with its `kubectl` dependency, which contradicts **D2**) is
+  **deprecated** in goreleaser v2 in favour of Homebrew **casks**; rather than
+  migrate a publisher M5 must verify anyway (it needs the `homebrew-kubecom` tap to
+  exist), the block was dropped. M5 owns *all* distribution (`#28`: Homebrew, AUR,
+  Docker) per its milestone scope, so the skeleton stays purely artifact-building
+  (builds/archives/checksum/release/changelog). A comment in the file points to M5.
+- **README not touched.** Its Travis/AUR/Docker badges and install section are docs,
+  not release-config refs; revising them is M5's job (README rewrite is M5 scope).
+  Keeping M0-06 to the `.goreleaser.yml` skeleton keeps the leg one logical change.
+**Why not fold publishers in now:** a publisher that can't run (no tap/registry) is
+not a working skeleton, and `goreleaser check` green is the leg's gate. Supersedes
+the `brews`/`kubecom-windows`/amd64-only parts of the M0-07/M0-08 stopgap config.
 - **Placeholder root model** (`internal/tui/tui.go`): renders a static splash,
   records `WindowSizeMsg`, and **matches no key literals** — input must flow
   through the M2 action registry (D11), so the smoke test stops the program via

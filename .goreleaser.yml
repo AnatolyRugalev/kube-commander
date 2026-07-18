@@ -1,82 +1,61 @@
+# goreleaser config for kubecom — Linux + macOS only (D7); no kubectl runtime
+# dependency (D2). M0-06 is the release skeleton; distribution (Homebrew tap,
+# AUR, Docker) is wired and verified in M5.
+version: 2
+
 before:
   hooks:
     - go mod download
+
 builds:
-  - id: kubecom-linux
+  - id: kubecom
     main: ./cmd/kubecom
     binary: kubecom
-    ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{ .Version }}
     goos:
       - linux
-    goarch:
-      - amd64
-  - id: kubecom-darwin
-    main: ./cmd/kubecom
-    binary: kubecom
-    ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
       - darwin
     goarch:
       - amd64
-  - id: kubecom-windows
-    main: ./cmd/kubecom
-    binary: kubecom
-    ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      - amd64
+      - arm64
+
 archives:
   - id: release
+    ids:
+      - kubecom
     name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    builds:
-      - kubecom-linux
-      - kubecom-windows
-      - kubecom-darwin
+    formats:
+      - tar.gz
   - id: binaries
+    ids:
+      - kubecom
     name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: binary
-    builds:
-      - kubecom-linux
-      - kubecom-windows
-      - kubecom-darwin
+    formats:
+      - binary
+
 release:
   ids:
     - release
     - binaries
+
 checksum:
   name_template: 'checksums.txt'
+
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-next"
+
 changelog:
   sort: asc
   filters:
     exclude:
       - '^docs:'
       - '^test:'
-brews:
-  - name: kubecom
-    folder: Formula
-    homepage: "https://github.com/AnatolyRugalev/kube-commander"
-    description: "kubecom is terminal UI for easy interaction with Kubernetes"
-    url_template: "https://github.com/AnatolyRugalev/kube-commander/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    skip_upload: false
-    ids:
-      - release
-    tap:
-      owner: AnatolyRugalev
-      name: homebrew-kubecom
-    commit_author:
-      name: goreleaserbot
-      email: goreleaser@carlosbecker.com
-    dependencies:
-      - name: kubectl
+      - '^chore:'
+
+# Publishers (Homebrew, AUR, Docker) are added and verified in M5 — see
+# vault/milestones/M5-release.md. This skeleton only builds the Linux+macOS
+# artifacts; `brews` is deprecated in goreleaser v2 in favour of Homebrew casks,
+# chosen at M5 alongside the tap it needs.

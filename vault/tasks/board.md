@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M0-09 done: README references the vault + decision log (last open M0 exit criterion met; M0-06 goreleaser still in progress)._
+_Last updated: 2026-07-18 — M0-06 done: goreleaser skeleton → Linux+macOS × amd64+arm64, publishers deferred to M5 (D27). With M0-09 (README→vault), all M0 exit criteria met; M0 complete. Active milestone: M1._
 
 ## In Progress
 
-- [ ] **M0-06** goreleaser skeleton (Linux+macOS)
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -16,8 +15,8 @@ _(none)_
 
 ## Backlog
 
-### M0 — Groundwork (ordered top-to-bottom; ids are stable, list order is priority)
-_(none — M0-06 in progress)_
+### M0 — Groundwork
+_(none — M0 complete)_
 
 ### M1 — Kube layer
 - [ ] **M1-00** envtest harness: opt-in via `KUBECOM_TEST_ENVTEST=1`, one passing smoke test (moved from M0-05, D18)
@@ -50,6 +49,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M0-06** goreleaser skeleton (Linux+macOS): `.goreleaser.yml` reshaped to v2 syntax, single build × `goos:[linux,darwin]` × `goarch:[amd64,arm64]`; Windows dropped (D7), publishers (Homebrew/AUR/Docker) deferred to M5, `kubectl` brew dep removed (D2). `goreleaser check` + `--snapshot` verified (D27)
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-09** README references the vault + decision log: rewrite-in-progress banner atop `README.md` linking `vault/`, goals, milestones, board, `decisions.md`, journal, and `CLAUDE.md`. Closes the last open M0 exit criterion; full README rewrite deferred to M5.
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-05** Test harness: teatest (tui) smoke test — bubbletea v2 (`charm.land/bubbletea/v2` v2.0.2) + teatest/v2; placeholder root model; Go floor → 1.24.2 (D26)
