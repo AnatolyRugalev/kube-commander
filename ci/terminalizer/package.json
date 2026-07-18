@@ -1,9 +1,0 @@
-{
-  "scripts": {
-    "record": "terminalizer record kube-commander --config config.yml",
-    "render": "terminalizer render kube-commander --output kube-commander.gif"
-  },
-  "dependencies": {
-    "terminalizer": "~0.7.2"
-  }
-}

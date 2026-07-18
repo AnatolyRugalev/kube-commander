@@ -49,10 +49,6 @@ archives:
       - kubecom-linux
       - kubecom-windows
       - kubecom-darwin
-  - id: aur
-    name_template: "aur_{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    builds:
-      - kubecom-linux
 release:
   ids:
     - release
@@ -67,11 +63,6 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
-publishers:
-  - name: aur
-    ids:
-      - aur
-    cmd: ci/aur/publish.sh {{ .Version }}
 brews:
   - name: kubecom
     folder: Formula

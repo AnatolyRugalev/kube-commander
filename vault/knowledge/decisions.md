@@ -232,3 +232,22 @@ pull_request on `v1`/`main`; `concurrency` cancels superseded runs;
 **Consequence:** bumping golangci-lint means updating both the local tool and
 `GOLANGCI_LINT_VERSION`; the setup-go build cache is the only caching (no lint
 cache from the action) — acceptable while the tree is tiny, revisit if CI slows.
+
+### D25 — Executing M0-08: legacy-file sweep; `.goreleaser.yml` de-referenced from deleted `ci/aur/`
+**2026-07-18.** M0-08 deleted the legacy files M0-07's tree-based deletion
+missed: `Dockerfile` (golang:1.15 + baked-in kubectl, contradicts D2), `get.sh`,
+`ci/aur/` (old binary names `kube-commander`/`kubectl-ui`, `PKGBUILD`/`.SRCINFO`
+templates, `publish.sh`, and the encrypted deploy key `id_rsa.enc`), and
+`ci/terminalizer/` (asciicast recorder — vhs replaces it in M5). The now-empty
+`ci/` directory went too, including its stale `ci/.gitignore` (`/snap.login`, a
+leftover from the snap CI already removed in M0-07/D22). Following **D22's
+precedent** (keep config consistent, defer the redesign), `.goreleaser.yml` was
+minimally patched to drop the two blocks that *exclusively* referenced the
+deleted `ci/aur/`: the `aur` archive and the `publishers:` section (its only
+entry ran `ci/aur/publish.sh`). Everything else in the release config — the
+`kubecom-windows` build target, the `brews` tap, the `kubectl` dependency — is
+**left as-is for M0-06** to reshape into the Linux+macOS-only matrix (D7); this
+leg only removed references the deletion itself broke, exactly as D22 scoped
+M0-07. The AUR badge + install section in `README.md` are docs, not file refs,
+and are M0-06/M5's to revise. `make check` unaffected (goreleaser isn't part of
+the gate); `.goreleaser.yml` re-validated as well-formed YAML.
