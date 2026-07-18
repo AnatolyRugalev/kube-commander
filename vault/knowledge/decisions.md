@@ -331,3 +331,35 @@ it, the first client-go dependencies (the kube layer's foundation). **Choices:**
 - **Smoke test = start control plane → clientset → GET the `default` namespace.**
   Minimal end-to-end proof the apiserver is reachable; later M1 legs reuse this
   bootstrap to integration-test discovery, watch reconnect, and actions.
+
+### D29 — Executing M1-01: client bootstrap shape; deferred RESTMapper; no network at construction
+**2026-07-18.** M1-01 landed `internal/kube/client.go`: the client-go bootstrap
+the whole kube layer builds on. **Choices:**
+- **API shape:** `ClientConfig{Kubeconfig, Context}` (both optional; zero value =
+  standard rules + current-context) → `RESTConfig(cc) (*rest.Config, error)` →
+  `NewClients(cfg) (*Clients, error)`, plus a `Connect(cc)` convenience that
+  chains them. `Clients` bundles `Config`, `Clientset` (typed), `Dynamic`
+  (untyped/CRDs), `Discovery`, and `RESTMapper`. Split RESTConfig from NewClients
+  so callers can inject a config (e.g. envtest's `*rest.Config`, tests) without
+  going through kubeconfig files.
+- **Loading:** `clientcmd.NewDefaultClientConfigLoadingRules()` (honors
+  `KUBECONFIG` then `~/.kube/config`) with `ExplicitPath` set when `Kubeconfig` is
+  given, and `ConfigOverrides.CurrentContext` for context selection —
+  `NewNonInteractiveDeferredLoadingClientConfig(...).ClientConfig()`. The
+  "NonInteractive" variant never prompts (auth prompts would hang an autonomous
+  TUI). Errors are wrapped (`kube: loading kubeconfig: %w`), never panicked — bad
+  path / unknown context degrade gracefully (#86; full typed-error taxonomy is
+  M1-09).
+- **RESTMapper = `restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))`.**
+  Deferred + memory-cached: **zero network I/O at construction**, so building
+  `Clients` never blocks first paint (D8/goal "fast cold start"); it populates
+  lazily on first mapping and caches. M1-02 (static seed set) and M1-03 (async
+  full discovery) layer on top of this; this leg deliberately does not seed or
+  pre-warm.
+- **`NewForConfig` does no server call**, so construction succeeds against an
+  unreachable/dummy apiserver — connection failures surface on first request, not
+  at bootstrap. This makes the unit tests hermetic (D18): a two-context temp
+  kubeconfig exercises current-context vs override vs unknown-context/missing-file
+  errors; a dummy `&rest.Config{Host:...}` exercises client wiring — no fake
+  clients or network needed. No new dependencies (all `k8s.io/client-go`
+  sub-packages already vendored via M1-00).

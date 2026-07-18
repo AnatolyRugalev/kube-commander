@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M1-00 done: envtest harness (opt-in `KUBECOM_TEST_ENVTEST=1`) + first kube deps (client-go v0.31 / controller-runtime v0.19), D28. Active milestone: M1; next up M1-01 (client bootstrap)._
+_Last updated: 2026-07-18 — M1-01 done: client-go bootstrap (`internal/kube/client.go`) — `RESTConfig`/`NewClients`/`Connect`, deferred RESTMapper, no network at construction, D29. Active milestone: M1; next up M1-02 (static seed-set REST mapping)._
 
 ## In Progress
 
-- [ ] **M1-01** Client bootstrap: clientset + dynamic + discovery + RESTMapper from kubeconfig/context
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -46,6 +45,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-01** Client bootstrap: `internal/kube/client.go` — `ClientConfig{Kubeconfig,Context}` → `RESTConfig` (clientcmd default rules + context override, non-interactive, wrapped errors) → `NewClients` (clientset + dynamic + discovery + deferred discovery RESTMapper) + `Connect` convenience. No network I/O at construction; RESTMapper deferred/mem-cached so bootstrap never blocks first paint (D8). Hermetic tests (temp kubeconfig + dummy rest.Config, D18); no new deps. D29.
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-00** envtest harness: `internal/kube/envtest_test.go` — opt-in behind `KUBECOM_TEST_ENVTEST=1` (`requireEnvtest(t)` skips by default so `make check` stays hermetic), smoke test starts a real control plane and GETs the `default` namespace. Added the first kube deps (client-go + apimachinery v0.31.4, controller-runtime v0.19.4) and `make test-envtest` (fetches binaries via `setup-envtest`). D28.
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M0-06** goreleaser skeleton (Linux+macOS): `.goreleaser.yml` reshaped to v2 syntax, single build × `goos:[linux,darwin]` × `goarch:[amd64,arm64]`; Windows dropped (D7), publishers (Homebrew/AUR/Docker) deferred to M5, `kubectl` brew dep removed (D2). `goreleaser check` + `--snapshot` verified (D27)
