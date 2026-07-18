@@ -585,3 +585,41 @@ in-process action set (D2). **Choices:**
   rediscover them.
 - **New dep:** `go mod tidy` pulled `gopkg.in/evanphx/json-patch.v4` (indirect,
   via the dynamic fake). No direct-dep change.
+
+---
+
+### D36 — Executing M1-06b: scale + rollout-restart as generic merge patches through the dynamic client
+**2026-07-18.** Second slice of the M1-06 action set (after 06a delete, D35), same
+generic-dynamic-client posture (D2, D35). Landed `Clients.Scale` and
+`Clients.RolloutRestart` in `internal/kube/actions.go`. **Choices:**
+- **Scale merge-patches the `scale` subresource, not the object body.**
+  `Scale(ctx, r, ref, replicas)` sends a `types.MergePatchType` patch
+  `{"spec":{"replicas":N}}` to `.Patch(..., "scale")`. Every scalable kind
+  (Deployment/ReplicaSet/StatefulSet/ReplicationController and any CRD exposing a
+  scale subresource) stores replicas at `scale.spec.replicas` regardless of its
+  own schema, so one code path scales built-ins **and** CRDs with no per-kind
+  wiring — exactly like Delete/List. Negative replicas rejected locally (clear
+  error, no needless round-trip); empty name rejected; NotFound wrapped (#86).
+- **Rollout-restart stamps kubectl's exact annotation key.**
+  `RolloutRestart(ctx, r, ref)` merge-patches
+  `spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"]` with a
+  UTC RFC3339 timestamp — byte-identical to what `kubectl rollout restart` does.
+  Mutating the pod template is what the controller observes as a change, so it
+  rolls all pods. Reusing **kubectl's** key (not a kubecom-specific one) makes the
+  two tools interoperable and stops the annotation proliferating across repeated
+  restarts.
+- **Merge patch, not strategic merge.** Strategic merge needs a per-type schema
+  and does not work on unstructured objects / CRDs; a plain RFC 7386 merge patch
+  is schema-free and, for an annotation *add*, has identical effect (merges the
+  annotations map, leaving siblings intact). So both actions stay generic over the
+  dynamic client.
+- **No UID precondition (unlike Delete).** `metav1.PatchOptions` carries no
+  preconditions, and scale/restart are idempotent — re-issuing converges rather
+  than destroying a wrongly-matched object — so the snapshot-race guard Delete
+  needs does not apply here.
+- **Testing:** wire format proven against pure `scalePatch`/`restartPatch`
+  helpers; the fake dynamic client (which, unlike for Delete, *does* round-trip a
+  merge patch and ignores the subresource) exercises the apply — `spec.replicas`
+  set, restartedAt added without clobbering a seeded sibling annotation, empty
+  name / negative replicas / wrapped NotFound. No new deps. (Fake-patch behavior
+  recorded in `stack.md`.)

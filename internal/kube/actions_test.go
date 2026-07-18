@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"testing"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +23,30 @@ var (
 		GVR:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"},
 		Namespaced: false,
 	}
+	deploymentsResource = Resource{
+		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		Namespaced: true,
+	}
 )
+
+// deploymentObj builds an unstructured Deployment with a replica count and an
+// (optional) pre-existing pod-template annotation, so the scale/restart
+// round-trips have something realistic to patch.
+func deploymentObj(namespace, name string, replicas int64, tmplAnnotations map[string]any) *unstructured.Unstructured {
+	tmplMeta := map[string]any{}
+	if tmplAnnotations != nil {
+		tmplMeta["annotations"] = tmplAnnotations
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "apps/v1",
+		"kind":       "Deployment",
+		"metadata":   map[string]any{"namespace": namespace, "name": name},
+		"spec": map[string]any{
+			"replicas": replicas,
+			"template": map[string]any{"metadata": tmplMeta},
+		},
+	}}
+}
 
 func unstructuredObj(apiVersion, kind, namespace, name, uid string) *unstructured.Unstructured {
 	meta := map[string]any{"name": name, "uid": uid}
@@ -41,8 +65,9 @@ func unstructuredObj(apiVersion, kind, namespace, name, uid string) *unstructure
 // explicitly so the fake never has to guess them from a scheme.
 func newDynamicFake(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	listKinds := map[schema.GroupVersionResource]string{
-		podsResource.GVR:  "PodList",
-		nodesResource.GVR: "NodeList",
+		podsResource.GVR:        "PodList",
+		nodesResource.GVR:       "NodeList",
+		deploymentsResource.GVR: "DeploymentList",
 	}
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds, objs...)
 }
@@ -162,4 +187,125 @@ func TestDeleteNotFoundWrapped(t *testing.T) {
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("error = %v, want a wrapped NotFound", err)
 	}
+}
+
+// scalePatch/restartPatch own the wire format; assert it directly since the fake
+// dynamic client applies a merge patch to the whole tracked object, which the
+// round-trip tests below then exercise.
+func TestScalePatch(t *testing.T) {
+	if got, want := string(scalePatch(3)), `{"spec":{"replicas":3}}`; got != want {
+		t.Errorf("scalePatch(3) = %s, want %s", got, want)
+	}
+	if got, want := string(scalePatch(0)), `{"spec":{"replicas":0}}`; got != want {
+		t.Errorf("scalePatch(0) = %s, want %s", got, want)
+	}
+}
+
+func TestRestartPatch(t *testing.T) {
+	now := time.Date(2026, 7, 18, 9, 30, 0, 0, time.FixedZone("CEST", 2*3600))
+	want := `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"2026-07-18T07:30:00Z"}}}}}`
+	if got := string(restartPatch(now)); got != want {
+		t.Errorf("restartPatch = %s, want %s (UTC RFC3339, kubectl's key)", got, want)
+	}
+}
+
+func TestScaleUpdatesReplicas(t *testing.T) {
+	dc := newDynamicFake(deploymentObj("web", "api", 1, nil))
+
+	var captured clienttesting.Action
+	dc.PrependReactor("patch", "deployments", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		captured = a
+		return false, nil, nil // observe only; let the tracker apply the patch
+	})
+
+	c := &Clients{Dynamic: dc}
+	ref := ObjectRef{Namespace: "web", Name: "api"}
+	if err := c.Scale(context.Background(), deploymentsResource, ref, 3); err != nil {
+		t.Fatalf("Scale: %v", err)
+	}
+
+	got := getDeployment(t, dc, "web", "api")
+	replicas, found, err := unstructured.NestedInt64(got.Object, "spec", "replicas")
+	if err != nil || !found {
+		t.Fatalf("spec.replicas missing after Scale (found=%v err=%v)", found, err)
+	}
+	if replicas != 3 {
+		t.Errorf("spec.replicas = %d, want 3", replicas)
+	}
+	if pa, ok := captured.(clienttesting.PatchAction); !ok || pa.GetSubresource() != "scale" {
+		t.Errorf("patch subresource = %q, want scale", captured.GetSubresource())
+	}
+}
+
+func TestScaleEmptyName(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	if err := c.Scale(context.Background(), deploymentsResource, ObjectRef{Namespace: "web"}, 3); err == nil {
+		t.Fatal("Scale(empty name): want error, got nil")
+	}
+}
+
+func TestScaleNegativeReplicas(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake(deploymentObj("web", "api", 1, nil))}
+	if err := c.Scale(context.Background(), deploymentsResource, ObjectRef{Namespace: "web", Name: "api"}, -1); err == nil {
+		t.Fatal("Scale(-1): want error, got nil")
+	}
+}
+
+func TestScaleNotFoundWrapped(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	err := c.Scale(context.Background(), deploymentsResource, ObjectRef{Namespace: "web", Name: "ghost"}, 2)
+	if err == nil {
+		t.Fatal("Scale(missing): want error, got nil")
+	}
+	if !apierrors.IsNotFound(err) {
+		t.Errorf("error = %v, want a wrapped NotFound", err)
+	}
+}
+
+func TestRolloutRestartStampsAnnotation(t *testing.T) {
+	// Seed a pre-existing template annotation to prove the merge patch adds
+	// restartedAt without clobbering siblings.
+	dc := newDynamicFake(deploymentObj("web", "api", 2, map[string]any{"team": "core"}))
+
+	c := &Clients{Dynamic: dc}
+	before := time.Now().Add(-time.Second)
+	if err := c.RolloutRestart(context.Background(), deploymentsResource, ObjectRef{Namespace: "web", Name: "api"}); err != nil {
+		t.Fatalf("RolloutRestart: %v", err)
+	}
+
+	got := getDeployment(t, dc, "web", "api")
+	anns, found, err := unstructured.NestedStringMap(got.Object, "spec", "template", "metadata", "annotations")
+	if err != nil || !found {
+		t.Fatalf("template annotations missing after RolloutRestart (found=%v err=%v)", found, err)
+	}
+	if anns["team"] != "core" {
+		t.Errorf("sibling annotation clobbered: team = %q, want core", anns["team"])
+	}
+	stamp, ok := anns["kubectl.kubernetes.io/restartedAt"]
+	if !ok {
+		t.Fatalf("restartedAt annotation not set; got %v", anns)
+	}
+	ts, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t.Fatalf("restartedAt %q not RFC3339: %v", stamp, err)
+	}
+	if ts.Before(before) {
+		t.Errorf("restartedAt %v older than call time %v", ts, before)
+	}
+}
+
+func TestRolloutRestartEmptyName(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	if err := c.RolloutRestart(context.Background(), deploymentsResource, ObjectRef{Namespace: "web"}); err == nil {
+		t.Fatal("RolloutRestart(empty name): want error, got nil")
+	}
+}
+
+func getDeployment(t *testing.T, dc *dynamicfake.FakeDynamicClient, ns, name string) *unstructured.Unstructured {
+	t.Helper()
+	obj, err := dc.Resource(deploymentsResource.GVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get deployment %s/%s: %v", ns, name, err)
+	}
+	return obj
 }

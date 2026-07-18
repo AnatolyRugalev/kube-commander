@@ -59,8 +59,16 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   `resourceInterface(r, ns)` helper — one path for built-ins and CRDs, no per-kind
   typed clients. **Delete** (M1-06a, D35) adds a **UID precondition** from the row
   when present, so acting on a table snapshot never hits a recreated same-named
-  object. 06b scale+rollout-restart / 06c cordon+drain / 06d cronjob-suspend build
-  on this.
+  object. **Scale + RolloutRestart** (M1-06b, D36) are **merge patches** through
+  the same `resourceInterface` helper — scale merge-patches the `scale`
+  subresource (`.Patch(..., "scale")`, replicas live at `scale.spec.replicas` for
+  every scalable kind), rollout-restart merge-patches
+  `spec.template.metadata.annotations["kubectl.kubernetes.io/restartedAt"]` with a
+  UTC RFC3339 timestamp (kubectl's exact key, so the two tools interoperate). A
+  merge patch (not strategic) keeps it schema-free → works on unstructured/CRDs,
+  and only adds restartedAt without clobbering sibling annotations. No UID guard:
+  `PatchOptions` carries no preconditions and these actions are idempotent.
+  06c cordon+drain / 06d cronjob-suspend build on this.
 - **client-go/tools/remotecommand** — exec/attach (interactive; suspend + raw PTY).
 - **client-go/tools/portforward** + SPDY/websocket dialer — background port-forward.
 - **k8s.io/kubectl/pkg/describe** — in-process describe output.
@@ -98,6 +106,15 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
     routing, wrapped errors). Build it with
     `NewSimpleDynamicClientWithCustomListKinds` + an explicit GVR→listKind map so
     it never guesses list kinds for unstructured seed objects.
+  - **Patch does round-trip (D36):** unlike Delete, the fake dynamic client
+    *applies* a merge patch to the whole tracked object and **ignores the
+    subresource**, so a `scale`-subresource merge patch (`{"spec":{"replicas":N}}`)
+    lands as `spec.replicas` on the seed object and is directly assertable via
+    `unstructured.NestedInt64`. Merge-patch semantics let a rollout-restart test
+    prove restartedAt is added without clobbering sibling annotations. Still keep
+    the wire format in a pure helper (`scalePatch`/`restartPatch`) so key + format
+    are testable without a client; the subresource itself is asserted off the
+    captured `PatchAction.GetSubresource()`.
 - **envtest** (real kube-apiserver via `setup-envtest`) is opt-in behind
   `KUBECOM_TEST_ENVTEST=1`. **Harness landed in M1-00** (D28):
   `internal/kube/envtest_test.go` — `requireEnvtest(t)` skips unless the gate is

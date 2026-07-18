@@ -3,11 +3,18 @@ package kube
 import (
 	"context"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
+
+// restartedAtAnnotation is the pod-template annotation kubectl stamps on a
+// `rollout restart`. Reusing kubectl's exact key means a kubecom restart and a
+// `kubectl rollout restart` are interchangeable — both mutate the same field, so
+// neither surprises the other and a restart is visible in `kubectl describe`.
+const restartedAtAnnotation = "kubectl.kubernetes.io/restartedAt"
 
 // resourceInterface returns the dynamic client scoped to a resource: namespaced
 // to ns when the resource is namespaced, cluster-scoped otherwise. It is the
@@ -63,4 +70,79 @@ func withUIDPrecondition(ref ObjectRef, opts metav1.DeleteOptions) metav1.Delete
 		opts.Preconditions = &metav1.Preconditions{UID: &uid}
 	}
 	return opts
+}
+
+// Scale sets the desired replica count of a scalable workload — Deployment,
+// ReplicaSet, StatefulSet, ReplicationController, or any CRD that exposes a
+// `scale` subresource. Like Delete it stays generic by going through the dynamic
+// client: it merge-patches the object's `scale` subresource, so the same one code
+// path scales built-ins and CRDs with no per-kind wiring. Patching the scale
+// subresource (not the object body) is what makes it uniform — every scalable
+// kind stores replicas at `scale.spec.replicas` regardless of where it lives in
+// the object's own schema.
+//
+// A negative replica count is rejected locally (the server would reject it too,
+// but a clear local error avoids a needless round-trip). Empty name is rejected.
+// Errors are wrapped, never panicked; a NotFound (object gone since the row was
+// listed) surfaces for the caller to display (#86). Unlike Delete there is no UID
+// precondition: PatchOptions carries none, and a scale is idempotent — re-issuing
+// it converges rather than destroying a wrongly-matched object.
+func (c *Clients) Scale(ctx context.Context, r Resource, ref ObjectRef, replicas int32) error {
+	if ref.Name == "" {
+		return fmt.Errorf("kube: scale %s: empty object name", r.GVR.Resource)
+	}
+	if replicas < 0 {
+		return fmt.Errorf("kube: scale %s %q: replicas must be >= 0, got %d", r.GVR.Resource, ref.Name, replicas)
+	}
+	if _, err := c.resourceInterface(r, ref.Namespace).Patch(
+		ctx, ref.Name, types.MergePatchType, scalePatch(replicas), metav1.PatchOptions{}, "scale",
+	); err != nil {
+		return fmt.Errorf("kube: scaling %s %q to %d: %w", r.GVR.Resource, ref.Name, replicas, err)
+	}
+	return nil
+}
+
+// RolloutRestart triggers a rolling restart of a pod-template workload —
+// Deployment, DaemonSet, or StatefulSet — the same way `kubectl rollout restart`
+// does: it stamps the current time into the pod template's restartedAt annotation
+// (`kubectl.kubernetes.io/restartedAt`). Mutating the template is what the
+// controller observes as a change, so it rolls all pods; reusing kubectl's exact
+// annotation key keeps kubecom and kubectl restarts interchangeable and stops the
+// annotation from proliferating across repeated restarts.
+//
+// It merge-patches through the dynamic client, so it is generic over the workload
+// kinds (and any CRD with a pod template at the same path) with no per-kind
+// wiring. A merge patch on the annotations map only sets restartedAt and leaves
+// other annotations intact — identical in effect to kubectl's strategic merge for
+// this add, but without needing a per-type schema, so it works on unstructured
+// objects and CRDs. Empty name is rejected; errors are wrapped, never panicked.
+func (c *Clients) RolloutRestart(ctx context.Context, r Resource, ref ObjectRef) error {
+	if ref.Name == "" {
+		return fmt.Errorf("kube: rollout restart %s: empty object name", r.GVR.Resource)
+	}
+	if _, err := c.resourceInterface(r, ref.Namespace).Patch(
+		ctx, ref.Name, types.MergePatchType, restartPatch(time.Now()), metav1.PatchOptions{},
+	); err != nil {
+		return fmt.Errorf("kube: restarting %s %q: %w", r.GVR.Resource, ref.Name, err)
+	}
+	return nil
+}
+
+// scalePatch builds the RFC 7386 merge patch that sets a scale subresource's
+// replica count. Pure and side-effect free so the wire format is unit-testable
+// without a client (the fake dynamic client applies the patch to the whole
+// tracked object, so the round-trip is exercised there).
+func scalePatch(replicas int32) []byte {
+	return []byte(fmt.Sprintf(`{"spec":{"replicas":%d}}`, replicas))
+}
+
+// restartPatch builds the merge patch that stamps restartedAt into a workload's
+// pod-template annotations, mirroring kubectl's rollout restart. The timestamp is
+// UTC RFC 3339 (kubectl's format). Pure, so both the annotation key and the
+// timestamp format are unit-testable without a client or a real clock.
+func restartPatch(now time.Time) []byte {
+	return []byte(fmt.Sprintf(
+		`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`,
+		restartedAtAnnotation, now.UTC().Format(time.RFC3339),
+	))
 }
