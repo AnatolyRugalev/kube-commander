@@ -179,3 +179,20 @@ whole window; per-leg subagents keep context from accumulating across legs —
 the alternative (`/loop` in one session) grows context unboundedly.
 **Consequence:** legs must stay strictly sequential — claims + pushes to `v1`
 would collide if parallelized.
+
+### D22 — Executing D14: legacy trees gone; `.goreleaser.yml` patched to keep working, not redesigned
+**2026-07-18.** M0-07 deleted `app/`, `cli/`, `commander/`, `config/`, `pb/`,
+`cmd/kube-commander/`, `.travis.yml`, and the snap CI files (`ci/snap-deps.sh`,
+`ci/snap.login.enc`); pruned `go.mod`/`go.sum` to empty via `go mod tidy` (no
+external import remains until M0-02/M1 reintroduce cobra/client-go); and dropped
+the now-unneeded `.golangci.yml` path excludes (D12's exclusion list has no
+targets left). `.goreleaser.yml` referenced the deleted `cli.version` symbol and
+the deleted `cmd/kube-commander` binary/snap craft — fixed the ldflags to target
+`internal/version.Version` (the var already designed for this) and removed the
+`kube-commander-linux` build id and the `snapcrafts:` block, since both only
+existed to package the now-gone legacy binary. **Scope note:** the `kubecom-windows`
+build target and the `aur`/`brews` publishers were left as-is — untangling the
+release matrix into the Linux+macOS-only shape (D7) is M0-06's job, not this
+leg's; this decision only covers unblocking what the deletion itself broke.
+**Why not fold into M0-06 now:** keeping M0-07 to "delete + keep buildable" is a
+smaller, safer diff than also redesigning the release config in the same leg.

@@ -1,13 +1,12 @@
 before:
   hooks:
     - go mod download
-    - ci/snap-deps.sh
 builds:
   - id: kubecom-linux
     main: ./cmd/kubecom
     binary: kubecom
     ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
@@ -18,7 +17,7 @@ builds:
     main: ./cmd/kubecom
     binary: kubecom
     ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
@@ -29,22 +28,11 @@ builds:
     main: ./cmd/kubecom
     binary: kubecom
     ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
+      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
       - windows
-    goarch:
-      - amd64
-  - id: kube-commander-linux
-    main: ./cmd/kube-commander
-    binary: kube-commander
-    ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/cli.version={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
     goarch:
       - amd64
 archives:
@@ -84,34 +72,6 @@ publishers:
     ids:
       - aur
     cmd: ci/aur/publish.sh {{ .Version }}
-snapcrafts:
-  - name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    publish: false
-    builds:
-      - kube-commander-linux
-    summary: Browse your kubernetes clusters in a casual way
-    description: |
-      kube-commander (kubecom) is terminal UI for easy interaction with Kubernetes
-    grade: stable
-    confinement: strict
-    license: MIT
-    base: core20
-    plugs:
-      kubeconfig:
-        interface: personal-files
-        read:
-          - $HOME/.kube
-    apps:
-      kube-commander:
-        plugs:
-          - kubeconfig
-      kubectl:
-        plugs:
-          - kubeconfig
-    extra_files:
-      - source: kubectl
-        destination: kubectl
-        mode: 0755
 brews:
   - name: kubecom
     folder: Formula
