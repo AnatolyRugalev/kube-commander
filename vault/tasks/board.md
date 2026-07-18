@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — REVIEW-01 done: maintainer setup review applied (D14–D20); M0 reordered, legacy-deletion leg added._
+_Last updated: 2026-07-18 — PROC-01 done: `/do-rewrite-run` orchestrator for scheduled multi-leg runs (D21)._
 
 ## In Progress
 
@@ -58,6 +58,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **PROC-01** `/do-rewrite-run` orchestrator skill: fresh subagent per leg, sequential, 4-leg/90-min budgets — for the scheduled routine
+      status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18 (D21)
 - [x] **REVIEW-01** Maintainer setup review applied: legacy deletion planned, journal split to per-entry files, claim-push, `make check` + CI-early, fakes-default tests, Bubble Tea v2, XDG config path
       status: done | owner: claude | added: 2026-07-18 | done: 2026-07-18 (D14–D20)
 - [x] **M0-03** Single `kubecom` binary — absorbed into M0-07 (D14)

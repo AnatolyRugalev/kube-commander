@@ -11,6 +11,8 @@ forward, one small **leg** at a time, safely and legibly.
 Work proceeds in **legs**: small, self-contained units that leave the tree green,
 are recorded, and are pushed to `v1`. Run one leg with the **`/do-rewrite-leg`**
 skill. Each invocation does exactly one leg and stops so progress stays reviewable.
+Scheduled routines invoke **`/do-rewrite-run`** instead: it batches several legs
+in one run, each in a fresh subagent, within time/leg budgets (D21).
 
 ## Branch model
 

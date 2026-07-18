@@ -167,3 +167,15 @@ on an API that is being replaced, and avoids mixing v1 examples with v2 code.
 Linux, `~/Library/Application Support/kubecom/config.yaml` on macOS) — not
 inside `~/.kube/`, which other tooling treats as kubeconfig-shaped. The one-shot
 migration (D6) reads the legacy config from its old location once.
+
+### D21 — Scheduled runs batch legs via fresh subagents (`/do-rewrite-run`)
+**2026-07-18.** Maintainer-approved. The scheduled routine invokes
+**`/do-rewrite-run`**, an orchestrator that sequentially spawns a **fresh
+subagent per leg**, each executing exactly one `/do-rewrite-leg`. Budgets: max
+4 legs per run; no new leg after 90 minutes (runs occupy the last ~2h of the
+5-hour usage window); stop on any failure without retrying. **Why:** one leg
+per invocation stays the rule (reviewability), while a routine run can use its
+whole window; per-leg subagents keep context from accumulating across legs —
+the alternative (`/loop` in one session) grows context unboundedly.
+**Consequence:** legs must stay strictly sequential — claims + pushes to `v1`
+would collide if parallelized.
