@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-18 — M1-02 done: static seed RESTMapper (`internal/kube/seed.go`) — ~28 core GVKs with exact GVRs, composed ahead of the deferred discovery mapper (`FirstHitRESTMapper`) so core resources map instantly with no network I/O, D30. Active milestone: M1; next up M1-03 (async full discovery → reconcile signal; per-group fault isolation)._
+_Last updated: 2026-07-18 — M1-03 done: async full discovery (`internal/kube/discovery.go`) — `ServerPreferredResources` → sorted `[]Resource`; per-group `ErrGroupDiscoveryFailed` isolated into `.Failed` (#87, #76); one-shot buffered `StartDiscovery` channel is the "discovery ready" reconcile signal; zero TUI imports, D31. Active milestone: M1; next up M1-04 (on-disk discovery cache + invalidation; lazy group detail)._
 
 ## In Progress
 
-- [ ] **M1-03** Async full discovery → reconcile signal; per-group fault isolation (#87, #76)
-      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+_(none)_
 
 ## Blocked
 
@@ -42,6 +41,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-03** Async full discovery → reconcile signal; per-group fault isolation: `internal/kube/discovery.go` — `discoverResources` runs one `ServerPreferredResources` pass and flattens it into a sorted `[]Resource` (GVK/GVR/scope/verbs/short-names/categories) of listable, non-subresource kinds. Partial `*discovery.ErrGroupDiscoveryFailed` keeps healthy resources and isolates each broken/denied group into `DiscoveryResult.Failed` (#87, #76); total failure → `.Err`, empty results. `StartDiscovery(ctx,d) <-chan DiscoveryResult` runs the pass in a goroutine, delivers once on a cap-1 buffered channel (the "discovery ready" reconcile signal), returns immediately — never blocks first paint. `(*Clients).StartDiscovery` convenience; zero TUI imports. Cache/re-discovery deferred to M1-04. D31.
+      status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-02** Seed-set core GVKs with static REST mapping for instant start: `internal/kube/seed.go` — a static `meta.DefaultRESTMapper` seeded with ~28 core GVKs (core/v1, apps/v1, batch/v1, networking/v1, rbac/v1, storage/v1), each with its exact plural/singular resource + scope via `AddSpecific` (irregular plurals kubectl-identical). `NewClients` composes it ahead of the D29 deferred discovery mapper via `meta.FirstHitRESTMapper` — seeded kinds resolve instantly with zero network I/O; unknown kinds fall through to discovery. Instant-start half of D8; M1-03 adds async full-discovery reconcile. D30.
       status: done | owner: claude-opus | added: 2026-07-18 | done: 2026-07-18
 - [x] **M1-01** Client bootstrap: `internal/kube/client.go` — `ClientConfig{Kubeconfig,Context}` → `RESTConfig` (clientcmd default rules + context override, non-interactive, wrapped errors) → `NewClients` (clientset + dynamic + discovery + deferred discovery RESTMapper) + `Connect` convenience. No network I/O at construction; RESTMapper deferred/mem-cached so bootstrap never blocks first paint (D8). Hermetic tests (temp kubeconfig + dummy rest.Config, D18); no new deps. D29.

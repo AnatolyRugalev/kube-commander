@@ -332,6 +332,45 @@ it, the first client-go dependencies (the kube layer's foundation). **Choices:**
   Minimal end-to-end proof the apiserver is reachable; later M1 legs reuse this
   bootstrap to integration-test discovery, watch reconnect, and actions.
 
+### D31 — Executing M1-03: async full discovery delivers a one-shot reconcile signal; per-group failures isolated
+**2026-07-18.** M1-03 landed `internal/kube/discovery.go`: the background-discovery
+half of D8. **Choices:**
+- **`ServerPreferredResources`, not `ServerGroupsAndResources`.** The menu wants one
+  entry per resource at its server-preferred version (`deployments` once, not per
+  served version), which is exactly what `ServerPreferredResources` returns. The
+  original blocked the whole UI on this same call; here it runs off the caller's
+  path.
+- **Per-group fault isolation via `*discovery.ErrGroupDiscoveryFailed` (#87, #76).**
+  That call returns the resources it *could* load **together with** an
+  `ErrGroupDiscoveryFailed{Groups: map[GV]error}` for the ones it couldn't. We
+  `errors.As` it, keep the partial `lists`, and record each failed group in
+  `DiscoveryResult.Failed` — so a broken/denied aggregated API (the classic
+  metrics-server outage) degrades only itself instead of blanking the menu, the
+  original's central bug. Any *other* error (unreachable server, auth) is a total
+  failure surfaced in `DiscoveryResult.Err` with empty results, so the caller
+  retries rather than reconciling an empty menu. A malformed `GroupVersion` string
+  isolates that one list, not the pass.
+- **One-shot buffered channel = the "discovery ready" reconcile signal.**
+  `StartDiscovery(ctx, d) <-chan DiscoveryResult` runs the pass in a goroutine and
+  delivers the snapshot exactly once on a cap-1 channel, returning immediately —
+  never blocks the caller (fast cold start; the seed mapper already covers core
+  kinds). The channel is buffered so the sender never leaks if the caller stops
+  listening, and a cancelled ctx drops the send. **Repeated/periodic re-discovery
+  and the on-disk cache are M1-04**, not this leg. The TUI (M2) turns the received
+  `DiscoveryResult` into a reconcile `tea.Msg`; the kube layer keeps **zero TUI
+  imports**.
+- **Menu filter: listable, non-subresource only.** Subresources (`pods/log`) and
+  create-only resources (`tokenreviews`, `subjectaccessreviews` — no `list` verb)
+  are dropped; you browse what you can list. Each `Resource` carries GVK, GVR,
+  scope, verbs, short names, and categories so the table/menu layers never
+  re-derive them.
+- **Narrow `preferredResourceDiscoverer` interface (one method)** so the core is
+  hermetically fakeable with a tiny stub (D18) — no fake-discovery plumbing or
+  server needed to exercise happy-path, partial-failure, total-failure, and
+  malformed-GV branches. Discovery does **not** feed the RESTMapper here: the D29
+  deferred discovery mapper already resolves non-seed kinds lazily, so wiring
+  discovered mappings into it would be redundant scope.
+
 ### D30 — Executing M1-02: static seed RESTMapper composed ahead of discovery
 **2026-07-18.** M1-02 landed `internal/kube/seed.go`: a static `meta.DefaultRESTMapper`
 seeded with ~28 core, high-traffic GVKs (core/v1, apps/v1, batch/v1,
