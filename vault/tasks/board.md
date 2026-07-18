@@ -7,7 +7,8 @@ _Last updated: 2026-07-18 — M1-01 done: client-go bootstrap (`internal/kube/cl
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-02** Seed-set core GVKs with static REST mapping for instant start
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
@@ -19,8 +20,6 @@ _(none)_
 _(none — M0 complete)_
 
 ### M1 — Kube layer
-- [ ] **M1-02** Seed-set core GVKs with static REST mapping for instant start
-      status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-03** Async full discovery → reconcile signal; per-group fault isolation (#87, #76)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-04** On-disk discovery cache + invalidation; lazy group detail
