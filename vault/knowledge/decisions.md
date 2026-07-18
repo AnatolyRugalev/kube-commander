@@ -214,3 +214,21 @@ adds `help` + `completion` subcommands for free. `ioutil` was already gone
 hang off this root in M2+. **Why 1.23 not 1.24:** pin the minimum the stack
 commits to (D5-adjacent), keeping the module buildable on the widest toolchain
 range; bump only if a dependency forces it.
+
+### D24 — CI runs `make check` verbatim; golangci-lint installed, not action-run
+**2026-07-18.** M0-04 landed `.github/workflows/ci.yml`: a single `check` job on a
+`[ubuntu-latest, macos-latest]` matrix (D7) that runs **`make check`** as one
+step — the same gate agents run locally (D17), so "green" is identical in both
+places. golangci-lint is installed via the project's official `install.sh`
+pinned to `GOLANGCI_LINT_VERSION` (v2.5.0, matching the local tool) and added to
+`PATH`, **instead of** `golangci-lint-action`. **Why not the action:** the action
+runs the linter *itself* and would split verification into "action lints + make
+does the rest", so CI would no longer be `make check` end-to-end — the whole
+point of D17 is one gate with one meaning. Go comes from `setup-go` with
+`go-version-file: go.mod` so the floor has a single source of truth (D23);
+`check-latest: true` takes the newest patch of that minor. Triggers: push +
+pull_request on `v1`/`main`; `concurrency` cancels superseded runs;
+`permissions: contents: read` (least privilege — CI only reads the tree).
+**Consequence:** bumping golangci-lint means updating both the local tool and
+`GOLANGCI_LINT_VERSION`; the setup-go build cache is the only caching (no lint
+cache from the action) — acceptable while the tree is tiny, revisit if CI slows.

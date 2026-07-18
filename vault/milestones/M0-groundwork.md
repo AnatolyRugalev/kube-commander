@@ -30,7 +30,7 @@ old code isolated for staged removal and a single `kubecom` binary.
 
 - [x] `go build ./...` and `go test ./...` pass on a bare skeleton. *(M0-01)*
 - [x] Legacy trees deleted; `go.mod` pruned; lint excludes dropped (D14). *(M0-07, D22)*
-- [ ] CI is green on `v1` for `make check` (build/test/vet/lint).
+- [x] CI is green on `v1` for `make check` (build/test/vet/lint). *(M0-04, D24 — `.github/workflows/ci.yml`; first live run triggers on this push)*
 - [x] `kubecom version` runs *(✓ M0-01)*; second binary removed *(✓ M0-07)*.
 - [ ] teatest has one passing smoke test (envtest moved to M1, D18).
 - [ ] Decision log + vault referenced from the repo README.

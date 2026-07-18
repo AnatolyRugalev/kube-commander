@@ -1,0 +1,49 @@
+# CI: the canonical `make check` gate (D17) run on Linux + macOS (D7).
+# "Green" in CI means exactly what `make check` means locally: build + test +
+# vet + golangci-lint all pass. golangci-lint is pinned to match the version
+# agents run locally so lint results never diverge between CI and a leg.
+name: CI
+
+on:
+  push:
+    branches: [v1, main]
+  pull_request:
+    branches: [v1, main]
+
+# Cancel superseded runs on the same ref so a fast follow-up push doesn't queue.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in sync with the golangci-lint version agents run locally.
+  GOLANGCI_LINT_VERSION: v2.5.0
+
+jobs:
+  check:
+    name: make check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Single source of truth for the Go floor: the go.mod directive (D23).
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "${GOLANGCI_LINT_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: make check
+        run: make check
