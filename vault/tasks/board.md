@@ -9,6 +9,8 @@ _Last updated: 2026-07-18 — M0-05 done: teatest (tui) smoke test; bubbletea v2
 
 - [ ] **M0-06** goreleaser skeleton (Linux+macOS)
       status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-18
+- [ ] **M0-09** README references the vault + decision log (closes the last open M0 exit criterion)
+      status: in-progress | owner: claude | added: 2026-07-18 | claimed: 2026-07-18
 
 ## Blocked
 
