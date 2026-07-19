@@ -927,3 +927,56 @@ core, D43) into a reconnecting loop à la watch (D34). **Choices:**
   (asserting the 2nd open's `SinceTime`), clean-end-stops, first-open-error
   terminal, retried-reconnect-open (silent), and ctx-cancel-mid-backoff. All
   hermetic; a live follow-across-a-real-drop is envtest territory.
+
+### D45 — Executing M1-08: background port-forward over an SPDY dialer; channel-based handle, no mutex-guarded result
+**2026-07-19.** Landed `Clients.PortForward(ctx, ref ObjectRef, ports []string)
+(*PortForward, error)` + the `PortForward` handle in a new
+`internal/kube/portforward.go` — the in-process equivalent of `kubectl
+port-forward` (D2: no kubectl binary), completing the M1-06/M1-07 in-process
+action/viewer set's remaining M1-08 exit criterion. **Choices:**
+- **SPDY dialer to the pod's `portforward` subresource, built from the retained
+  `*rest.Config`.** `portForwardDialer` does `spdy.RoundTripperFor(c.Config)` →
+  `(transport, upgrader)`, then `spdy.NewDialer(upgrader, &http.Client{transport},
+  "POST", url)` where `url` is `Clientset.CoreV1().RESTClient().Post().
+  Resource("pods").Namespace(ns).Name(name).SubResource("portforward").URL()` —
+  exactly what kubectl upgrades. The `Clients` doc already reserved `Config` "for
+  callers (e.g. port-forward, which needs the transport)", so no new plumbing. This
+  is the **typed-clientset REST client**, a deliberate departure from the generic
+  dynamic path (like drain D39 / logs D43): port-forward is pod-only, so genericity
+  over CRDs is moot, and the subresource has no dynamic route.
+- **`portforward.PortForwarder` does the forwarding; kubecom wraps it in a
+  channel-based `PortForward` handle.** `New(dialer, ports, stopCh, readyCh,
+  io.Discard, io.Discard)` then `go ForwardPorts()`. The handle exposes `Ready()`
+  (closed when listeners are up — the forwarder closes readyCh), `Done()` (closed
+  when `ForwardPorts` returns), `Err()` (the fatal error, or nil for a clean stop),
+  `Ports()` (bound local:remote pairs — needed when a local port was requested as
+  `0`/`":<remote>"` and the OS assigned it), and `Stop()` (idempotent, via
+  `sync.Once` closing stopCh). out/errOut are discarded — the TUI reads ports via
+  `Ports()` and fatal state via `Err()`, not kubectl's "Forwarding from …" text.
+- **Result handed off through a channel close, not a mutex (principle 1).** The
+  forward goroutine writes `pf.err` **before** closing `doneCh`; `Err()` reads it
+  only after observing `doneCh` closed (a `select` with a `default` returns nil
+  early). That happens-before makes it race-free with no mutex — the kube layer's
+  established discipline (watch/logs use channels + goroutines, zero mutexes). The
+  only `sync` primitive is `sync.Once` for idempotent stop (a double-close guard,
+  not shared mutable state).
+- **ctx cancellation stops the forward, mirroring Logs/Watch.** A small bridge
+  goroutine does `select { case <-ctx.Done(): pf.Stop(); case <-pf.doneCh: }`, so
+  cancelling the ctx passed to `PortForward` tears the forward down; the bridge
+  exits on its own once forwarding ends, never outliving the handle.
+- **Own `ForwardedPort{Local, Remote uint16}` type**, converted from
+  `portforward.ForwardedPort`, keeping the TUI boundary free of client-go tooling
+  types (the same decoupling as `ObjectRef`/`Table`, D33).
+- **Testability via an injected `forwarderFactory`.** The real SPDY forward dials
+  the API server (network → envtest territory). `newPortForward(ctx, factory)` is
+  split from the exported method and driven by a `fakeForwarder` (closes readyCh,
+  blocks on stopCh, returns a scripted error) covering: ready→ports→clean-stop,
+  fatal-error→`Err`, ctx-cancel-stops, factory-error→nil-handle, idempotent Stop,
+  and wrapped `Ports` error. Empty pod name / empty port list rejected by the
+  exported method before any dial (#86). `-race` clean.
+- **Deps:** `go mod tidy` added three indirect transitives pulled by
+  portforward/spdy — `github.com/gorilla/websocket v1.5.0`,
+  `github.com/moby/spdystream v0.4.0`,
+  `github.com/mxk/go-flowrate` — all satisfied within the pinned k8s.io v0.31.4
+  graph; **no direct-dep or version change** (the tidy did not drift any existing
+  module, unlike the kubectl-dep trap D42 warned about).
