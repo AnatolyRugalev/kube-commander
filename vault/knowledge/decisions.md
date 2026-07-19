@@ -724,3 +724,41 @@ fully-testable unit that the eviction half consumes. Landed `Clients.DrainCandid
   06e-2's eviction loop needs (namespace/name/UID per pod). Empty node name
   rejected; list error wrapped (#86). `k8s.io/api` moves indirect→direct in go.mod
   (corev1 now imported); no new module version.
+
+### D40 — M1-06e-2: drain eviction loop (policy/v1 Eviction API, PDB-aware 429-retry, wait-for-deletion); candidates-before-cordon ordering
+**2026-07-19.** Sixth and final slice of the M1-06 action set, completing drain
+(06e-1 selection D39 + this eviction loop). Landed `Clients.Drain(ctx, nodeRes
+Resource, node ObjectRef, opts DrainOptions)` plus unexported `evictPod` /
+`waitPodDeleted` in `internal/kube/drain.go`. **Choices:**
+- **Candidates computed *before* cordon.** `Drain` calls `DrainCandidates` first
+  (which refuses upfront on any blocking pod) and only cordons once the pod set is
+  settled. A drain that will be refused therefore never leaves the node cordoned —
+  a small divergence from `kubectl drain` (which cordons first) that avoids the
+  "cordoned but not drained" state. Sequence: candidates → cordon (reuse M1-06c
+  `Cordon`, dynamic client) → evict all → wait for all deleted.
+- **Eviction via the typed policy/v1 Eviction API** (`Clientset.PolicyV1().
+  Evictions(ns).Evict`), not a dynamic delete — the same subresource `kubectl
+  drain` posts to, so PodDisruptionBudgets are honored server-side. Continues D39's
+  "drain uses the typed clientset, not the generic dynamic path" posture.
+- **PDB-aware retry.** A PDB with no allowed disruptions makes Evict return `429
+  TooManyRequests`; `evictPod` waits `evictionRetryInterval` and retries, because
+  the budget frees up as other pods reschedule. `NotFound` (pod already gone) is
+  treated as success. The overall budget is the caller's **ctx deadline**, not a
+  fixed attempt count (mirrors `kubectl drain --timeout`); ctx cancellation ends
+  the retry with a wrapped `ctx.Err()`.
+- **Two-pass evict-then-wait.** All evictions are requested first, then all pods
+  waited on, so grace periods overlap rather than serialize. `waitPodDeleted` polls
+  every `drainPollInterval` until the pod is `NotFound` **or the name resolves to a
+  different UID** (a pod recreated under the same name ⇒ the original is gone) — the
+  same row-snapshot identity guard the UID-precondition delete uses (D35).
+- **Timing knobs are package `var`s** (`evictionRetryInterval` 5s,
+  `drainPollInterval` 2s), not consts, so tests shrink them to 1ms — the same
+  pattern that keeps the retry/wait loops hermetic and instant.
+- **Testing:** the fake clientset's `Evict` posts a `create` on `pods` subresource
+  `eviction`; tests intercept it with a reactor to inject 429/NotFound/success and,
+  in the full `Drain` test, delete the pod from the tracker so the wait observes it
+  disappear. Cordon runs against a fake dynamic client (node), eviction/list/wait
+  against the fake typed clientset (pod). `TestDrainRefusesBeforeCordon` asserts the
+  candidates-before-cordon ordering (blocked drain leaves the node uncordoned). No
+  new deps: `k8s.io/api/policy/v1` and `apimachinery/api/errors` were already in the
+  graph.

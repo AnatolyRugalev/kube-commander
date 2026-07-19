@@ -6,10 +6,14 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -223,5 +227,174 @@ func TestDrainCandidatesListError(t *testing.T) {
 	_, err := c.DrainCandidates(context.Background(), ObjectRef{Name: "node-1"}, DrainOptions{})
 	if err == nil || !strings.Contains(err.Error(), "listing pods") {
 		t.Fatalf("list error = %v, want it wrapped with \"listing pods\"", err)
+	}
+}
+
+var podsGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+
+// fastDrainTiming shrinks the eviction-retry and deletion-poll intervals to a
+// millisecond for the duration of a test so the retry/wait loops run instantly,
+// restoring them afterward.
+func fastDrainTiming(t *testing.T) {
+	t.Helper()
+	oldEvict, oldPoll := evictionRetryInterval, drainPollInterval
+	evictionRetryInterval = time.Millisecond
+	drainPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		evictionRetryInterval = oldEvict
+		drainPollInterval = oldPoll
+	})
+}
+
+// evictReactor intercepts the eviction subresource create the typed client posts
+// (Resource pods, Subresource "eviction") and runs fn against the target pod's
+// ObjectRef, so a test can decide per-attempt what the Eviction API returns.
+// Non-eviction pod creates fall through to the tracker.
+func evictReactor(fn func(pod ObjectRef) (bool, error)) clienttesting.ReactionFunc {
+	return func(a clienttesting.Action) (bool, runtime.Object, error) {
+		ca, ok := a.(clienttesting.CreateAction)
+		if !ok || ca.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		ev := ca.GetObject().(*policyv1.Eviction)
+		handled, err := fn(ObjectRef{Namespace: ev.Namespace, Name: ev.Name})
+		return handled, nil, err
+	}
+}
+
+func TestEvictPodRetriesOn429ThenSucceeds(t *testing.T) {
+	fastDrainTiming(t)
+	cs := k8sfake.NewSimpleClientset()
+	attempts := 0
+	cs.PrependReactor("create", "pods", evictReactor(func(ObjectRef) (bool, error) {
+		attempts++
+		if attempts < 3 {
+			return true, apierrors.NewTooManyRequests("pdb: no disruptions allowed", 1)
+		}
+		return true, nil
+	}))
+
+	c := &Clients{Clientset: cs}
+	if err := c.evictPod(context.Background(), ObjectRef{Namespace: "ns", Name: "web"}); err != nil {
+		t.Fatalf("evictPod: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("attempts = %d, want 3 (two 429 retries then success)", attempts)
+	}
+}
+
+func TestEvictPodNotFoundIsSuccess(t *testing.T) {
+	cs := k8sfake.NewSimpleClientset()
+	cs.PrependReactor("create", "pods", evictReactor(func(ObjectRef) (bool, error) {
+		return true, apierrors.NewNotFound(podsGVR.GroupResource(), "web")
+	}))
+
+	c := &Clients{Clientset: cs}
+	if err := c.evictPod(context.Background(), ObjectRef{Namespace: "ns", Name: "web"}); err != nil {
+		t.Errorf("evictPod on an already-gone pod = %v, want nil", err)
+	}
+}
+
+func TestEvictPodOtherErrorWrapped(t *testing.T) {
+	cs := k8sfake.NewSimpleClientset()
+	cs.PrependReactor("create", "pods", evictReactor(func(ObjectRef) (bool, error) {
+		return true, errors.New("boom")
+	}))
+
+	c := &Clients{Clientset: cs}
+	err := c.evictPod(context.Background(), ObjectRef{Namespace: "ns", Name: "web"})
+	if err == nil || !strings.Contains(err.Error(), "evicting pod ns/web") {
+		t.Fatalf("evictPod error = %v, want it wrapped with \"evicting pod ns/web\"", err)
+	}
+}
+
+func TestEvictPodContextCancelledDuringRetry(t *testing.T) {
+	fastDrainTiming(t)
+	cs := k8sfake.NewSimpleClientset()
+	cs.PrependReactor("create", "pods", evictReactor(func(ObjectRef) (bool, error) {
+		return true, apierrors.NewTooManyRequests("pdb: no disruptions allowed", 1)
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled: the first 429 lands, then the retry wait aborts
+
+	c := &Clients{Clientset: cs}
+	err := c.evictPod(ctx, ObjectRef{Namespace: "ns", Name: "web"})
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("evictPod error = %v, want a wrapped context.Canceled", err)
+	}
+}
+
+func TestWaitPodDeletedReturnsWhenGone(t *testing.T) {
+	cs := k8sfake.NewSimpleClientset() // empty tracker: Get → NotFound
+	c := &Clients{Clientset: cs}
+	if err := c.waitPodDeleted(context.Background(), ObjectRef{Namespace: "ns", Name: "web", UID: "web-uid"}); err != nil {
+		t.Errorf("waitPodDeleted on a gone pod = %v, want nil", err)
+	}
+}
+
+func TestWaitPodDeletedReturnsOnUIDChange(t *testing.T) {
+	// Same name, different UID: the original pod is gone; a new one took its place.
+	cs := k8sfake.NewSimpleClientset(pod("ns", "web"))
+	c := &Clients{Clientset: cs}
+	if err := c.waitPodDeleted(context.Background(), ObjectRef{Namespace: "ns", Name: "web", UID: "old-uid"}); err != nil {
+		t.Errorf("waitPodDeleted with a recreated pod = %v, want nil", err)
+	}
+}
+
+func TestWaitPodDeletedGetErrorWrapped(t *testing.T) {
+	cs := k8sfake.NewSimpleClientset()
+	cs.PrependReactor("get", "pods", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("boom")
+	})
+	c := &Clients{Clientset: cs}
+	err := c.waitPodDeleted(context.Background(), ObjectRef{Namespace: "ns", Name: "web"})
+	if err == nil || !strings.Contains(err.Error(), "waiting for pod ns/web to delete") {
+		t.Fatalf("waitPodDeleted error = %v, want it wrapped with \"waiting for pod ns/web to delete\"", err)
+	}
+}
+
+// TestDrain exercises the full sequence: candidates → cordon → evict → wait. The
+// node lives in the dynamic fake (cordon patches through the dynamic client); the
+// pod lives in the typed clientset (list/evict/wait). The eviction reactor deletes
+// the pod from the tracker so the deletion wait observes it disappear.
+func TestDrain(t *testing.T) {
+	fastDrainTiming(t)
+	dc := newDynamicFake(nodeObj("node-1", false))
+	cs := k8sfake.NewSimpleClientset(pod("ns", "web", controlledBy("ReplicaSet")))
+	cs.PrependReactor("create", "pods", evictReactor(func(p ObjectRef) (bool, error) {
+		if err := cs.Tracker().Delete(podsGVR, p.Namespace, p.Name); err != nil {
+			return true, err
+		}
+		return true, nil
+	}))
+
+	c := &Clients{Dynamic: dc, Clientset: cs}
+	node := ObjectRef{Name: "node-1"}
+	if err := c.Drain(context.Background(), nodesResource, node, DrainOptions{}); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if !nodeUnschedulable(t, dc, "node-1") {
+		t.Error("node not cordoned after Drain")
+	}
+	if _, err := cs.CoreV1().Pods("ns").Get(context.Background(), "web", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("pod still present after Drain (get err = %v), want NotFound", err)
+	}
+}
+
+// TestDrainRefusesBeforeCordon proves the ordering guarantee: a drain that would
+// be refused (a DaemonSet pod without IgnoreDaemonSets) errors out *without*
+// cordoning the node, so no cordon is left behind.
+func TestDrainRefusesBeforeCordon(t *testing.T) {
+	dc := newDynamicFake(nodeObj("node-1", false))
+	cs := k8sfake.NewSimpleClientset(pod("ns", "agent", controlledBy("DaemonSet")))
+
+	c := &Clients{Dynamic: dc, Clientset: cs}
+	err := c.Drain(context.Background(), nodesResource, ObjectRef{Name: "node-1"}, DrainOptions{})
+	if err == nil || !strings.Contains(err.Error(), "agent") {
+		t.Fatalf("Drain error = %v, want a refusal naming the blocking pod", err)
+	}
+	if nodeUnschedulable(t, dc, "node-1") {
+		t.Error("node cordoned despite the drain being refused; candidates must be computed before cordon")
 	}
 }

@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `in-progress` (2026-07-19 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a + Watch M1-05b landed — List+watch exit criterion met; action set — M1-06a generic **delete** (D35) + M1-06b **scale**+**rollout-restart** (D36) + M1-06c **cordon/uncordon** (D37) + M1-06d **cronjob suspend/resume** (D38) landed; M1-06e drain split into 06e-1 **pod selection** (D39, landed) + 06e-2 **eviction loop** (remaining), then M1-07 logs/describe/YAML, M1-08 port-forward, M1-09 typed errors)
+**Status:** `in-progress` (2026-07-19 — active milestone; M0 complete; envtest harness M1-00, client bootstrap M1-01, static seed RESTMapper M1-02, async full discovery M1-03, on-disk discovery cache M1-04, server-side Table List M1-05a + Watch M1-05b landed — List+watch exit criterion met; **action set M1-06 complete** — generic **delete** (D35), **scale**+**rollout-restart** (D36), **cordon/uncordon** (D37), **cronjob suspend/resume** (D38), and **drain** — 06e-1 **pod selection** (D39) + 06e-2 **eviction loop** `Clients.Drain` (D40, policy/v1 Eviction API, PDB-aware 429-retry, cordon-first, wait-for-deletion) — all landed; next M1-07 logs/describe/YAML, M1-08 port-forward, M1-09 typed errors)
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal

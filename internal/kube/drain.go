@@ -4,10 +4,27 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+)
+
+// Drain timing knobs. Package vars (not consts) so tests can shrink them; in
+// production they pace the eviction retry and the deletion poll without a busy
+// loop. The overall time budget is the caller's ctx deadline, not a fixed count
+// of attempts — mirroring `kubectl drain --timeout`.
+var (
+	// evictionRetryInterval is the wait between eviction attempts that a
+	// PodDisruptionBudget is currently refusing (HTTP 429 TooManyRequests). The
+	// budget frees up as other pods reschedule, so a later attempt succeeds.
+	evictionRetryInterval = 5 * time.Second
+	// drainPollInterval is the wait between polls while waiting for an evicted
+	// pod to actually disappear from the API.
+	drainPollInterval = 2 * time.Second
 )
 
 // mirrorPodAnnotation marks a static (mirror) pod the kubelet manages directly
@@ -141,4 +158,105 @@ func hasLocalStorage(p *corev1.Pod) bool {
 // drain-refusal error.
 func podReason(p *corev1.Pod, why string) string {
 	return fmt.Sprintf("%s/%s (%s)", p.Namespace, p.Name, why)
+}
+
+// Drain empties a node so it can be taken out of service: it cordons the node,
+// evicts every pod DrainCandidates selected through the policy/v1 Eviction API
+// (which honors PodDisruptionBudgets), and waits for each to disappear — the
+// same sequence as `kubectl drain`. nodeRes is the discovered `nodes` Resource
+// (its GVR drives the cordon patch), node is the row ObjectRef, and opts gates
+// which pods are drainable (see DrainCandidates / DrainOptions).
+//
+// Order is deliberate: candidates are computed *first*, so a drain that would be
+// refused (a blocking pod, opts too strict) fails before the node is cordoned —
+// a cordon is never left behind on a node that then refuses to drain. Only once
+// the pod set is settled does Drain cordon (reusing M1-06c, so the scheduler
+// places no new pods during the drain) and begin evicting.
+//
+// Eviction is PDB-aware: the Eviction API returns 429 TooManyRequests while a
+// PodDisruptionBudget has no disruptions left, so evictPod retries with backoff
+// until the budget frees up or ctx expires. After all evictions are requested,
+// Drain waits for every pod to actually be deleted (an eviction only *requests*
+// graceful termination). Pods are evicted then waited on in two passes so their
+// grace periods overlap rather than serialize. The overall deadline is ctx's;
+// errors are wrapped, never panicked (#86).
+func (c *Clients) Drain(ctx context.Context, nodeRes Resource, node ObjectRef, opts DrainOptions) error {
+	candidates, err := c.DrainCandidates(ctx, node, opts)
+	if err != nil {
+		return err // already wrapped, names the node and the blocking pods
+	}
+	if err := c.Cordon(ctx, nodeRes, node); err != nil {
+		return fmt.Errorf("kube: draining node %q: cordon: %w", node.Name, err)
+	}
+	for _, pod := range candidates {
+		if err := c.evictPod(ctx, pod); err != nil {
+			return fmt.Errorf("kube: draining node %q: %w", node.Name, err)
+		}
+	}
+	for _, pod := range candidates {
+		if err := c.waitPodDeleted(ctx, pod); err != nil {
+			return fmt.Errorf("kube: draining node %q: %w", node.Name, err)
+		}
+	}
+	return nil
+}
+
+// evictPod requests eviction of one pod through the policy/v1 Eviction API — the
+// same subresource `kubectl drain` posts to, so eviction is checked against any
+// PodDisruptionBudget guarding the pod rather than a blind delete. A 429
+// TooManyRequests means a PDB is momentarily out of allowed disruptions; evictPod
+// waits evictionRetryInterval and retries, because the budget frees up as other
+// pods reschedule. A NotFound means the pod already went away (raced with its
+// controller or a prior drain) — nothing to do, treated as success. Any other
+// error is wrapped and returned. Retrying respects ctx: a cancelled or timed-out
+// context ends the loop with ctx's error.
+func (c *Clients) evictPod(ctx context.Context, pod ObjectRef) error {
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name},
+	}
+	for {
+		err := c.Clientset.PolicyV1().Evictions(pod.Namespace).Evict(ctx, eviction)
+		switch {
+		case err == nil:
+			return nil
+		case apierrors.IsNotFound(err):
+			return nil // already gone
+		case apierrors.IsTooManyRequests(err):
+			// PDB currently disallows the disruption; wait and retry.
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("evicting pod %s/%s: %w", pod.Namespace, pod.Name, ctx.Err())
+			case <-time.After(evictionRetryInterval):
+			}
+		default:
+			return fmt.Errorf("evicting pod %s/%s: %w", pod.Namespace, pod.Name, err)
+		}
+	}
+}
+
+// waitPodDeleted blocks until a pod evicted by evictPod has actually left the
+// API — an eviction only *requests* graceful termination, so the object lingers
+// through its grace period. It polls every drainPollInterval and returns once the
+// pod is NotFound, or once the name resolves to a *different* object (a new pod
+// recreated under the same name — identified by a changed UID — means the
+// original is gone). A poll error other than NotFound is wrapped; ctx expiry ends
+// the wait with a wrapped deadline error. When the ref carries no UID (degraded
+// metadata) only disappearance counts as deletion.
+func (c *Clients) waitPodDeleted(ctx context.Context, pod ObjectRef) error {
+	for {
+		got, err := c.Clientset.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+		switch {
+		case apierrors.IsNotFound(err):
+			return nil
+		case err != nil:
+			return fmt.Errorf("waiting for pod %s/%s to delete: %w", pod.Namespace, pod.Name, err)
+		case pod.UID != "" && string(got.UID) != pod.UID:
+			return nil // a new object took the name; the original is gone
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for pod %s/%s to delete: %w", pod.Namespace, pod.Name, ctx.Err())
+		case <-time.After(drainPollInterval):
+		}
+	}
 }
