@@ -879,3 +879,51 @@ in-process viewer (D2: no external pager, no kubectl binary). **Choices:**
   open-error → terminal event, already-cancelled ctx → no event). A **live** log
   stream dials the API server → **envtest territory** (opt-in, like the watch
   live-server exercise), not a hermetic unit test.
+
+### D44 — Executing M1-07d: reconnecting/resuming follow logs — force wire timestamps, resume by SinceTime, dedup the re-served second
+**2026-07-19.** Hardened `Clients.Logs` so a **Follow** stream survives a transient
+transport drop, extending `internal/kube/logs.go` (the M1-07c single-connection
+core, D43) into a reconnecting loop à la watch (D34). **Choices:**
+- **EOF = stop, any other read error = reconnect.** `bufio.Scanner` reports `nil`
+  at `io.EOF`, so a clean stream end (the container's log ended, exactly when
+  `kubectl logs -f` exits) returns nil from the pump → the follow loop stops. Any
+  other error is treated as a transient drop → back off and reopen. This is the
+  one reliable byte-stream signal that distinguishes "container done" from "network
+  blip" without inspecting error strings; an abruptly-closed HTTP/2 log stream
+  surfaces as a non-EOF error, a graceful container-end as clean EOF.
+- **Resume by SinceTime, not resourceVersion.** Logs have no resourceVersion; the
+  only resume anchor is a timestamp. So Follow **forces `Timestamps` on the wire**
+  regardless of the caller's choice (every raw line becomes `"<RFC3339Nano>
+  <content>"`), records the last-seen line's timestamp, and on reconnect sets
+  `SinceTime` to it (`SinceSeconds`/`TailLines` cleared — they only govern the
+  initial read). Timestamps are **stripped before delivery unless the caller asked
+  for them** (`opts.Timestamps`); an unparseable prefix degrades to verbatim
+  delivery, never a dropped line.
+- **Dedup the re-served second.** `SinceTime` is **second-granular** (metav1.Time
+  serializes to RFC3339 seconds), so resuming from the last line's second makes the
+  server re-serve every line already shown in that second. The `logResumer` keeps
+  the set of raw timestamped lines delivered within the current second; right after
+  a reconnect it drops any incoming line already in that set, delivering only the
+  genuinely-new lines (including ones missed *during* the drop, same second) — then
+  clears the dedup window once the stream advances to a later second. Raw lines
+  carry the full nanosecond timestamp, so the match is exact.
+- **First open error terminal; reconnect errors silent.** Never connecting surfaces
+  one terminal `LogEvent{Err}` (like the non-follow path). A *reconnect* open/read
+  failure is transient: back off (`logRetryBackoff`, the log twin of
+  `watchRetryBackoff`, a package **var** so tests shrink it, D40) and retry, bounded
+  by ctx — it is **not** surfaced, because a `LogEvent` with `Err` set is the
+  terminal event by contract (a mid-stream reconnect must not look like the end).
+  A permanently-failing reconnect (e.g. pod deleted) therefore retries until ctx is
+  cancelled, matching watch; surfacing transient reconnect state to the consumer is
+  future work.
+- **Non-follow path unchanged.** No timestamp forcing, no resume, single connection,
+  verbatim lines — exactly M1-07c. The two pumps share `newLogScanner` (the raised
+  1 MiB max line, #86); `runLogStream` now dispatches on `follow`.
+- **Testing (D18):** `parseLogTimestamp` and `logResumer.process`
+  (strip/keep-timestamp, dedup-the-resumed-second, window-clears-on-next-second)
+  are pure table/sequence tests; `followLogStream` is driven through
+  `runLogStream` with a **resumable fake opener** + a `scriptReader` that ends a
+  connection with a chosen error (drop) or clean EOF — covering reconnect+dedup
+  (asserting the 2nd open's `SinceTime`), clean-end-stops, first-open-error
+  terminal, retried-reconnect-open (silent), and ctx-cancel-mid-backoff. All
+  hermetic; a live follow-across-a-real-drop is envtest territory.
