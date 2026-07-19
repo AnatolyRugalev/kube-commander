@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-PLAN** Expand the M2 app-shell into concrete, ordered backlog slices (the M2-01 action-registry group is done; the rest of M2 is currently a prose seed with no pickable items). Turn the milestone scope + exit criteria into leg-sized tasks (msg types, theme, status bar, menu, custom table, root app shell, pickers, filter, modal, config persistence + legacy migration, sort, teatest) with dependency notes, so the next agent has a top-unblocked item to take.
+      status: in-progress | owner: claude-opus | added: 2026-07-19
 
 ## Blocked
 
