@@ -762,3 +762,34 @@ Resource, node ObjectRef, opts DrainOptions)` plus unexported `evictPod` /
   candidates-before-cordon ordering (blocked drain leaves the node uncordoned). No
   new deps: `k8s.io/api/policy/v1` and `apimachinery/api/errors` were already in the
   graph.
+
+### D41 — Executing M1-07a: get-object-as-YAML via the dynamic client; managedFields stripped; M1-07 split into 07a/07b/07c
+**2026-07-19.** M1-07 ("streaming: logs; describe; get-as-YAML") is three distinct
+viewers — too big for one ≤300-line green leg — so it was split (cf. the D33/D35/
+D37/D39 split precedent): **07a get-as-YAML** (this leg), **07b describe**
+(kubectl/pkg/describe — pulls the big `k8s.io/kubectl` dep), **07c pod logs**
+(reconnecting stream, watch-shaped) back to Backlog. Landed `Clients.GetYAML` +
+pure `marshalYAML` in `internal/kube/yaml.go` — the first in-process viewer (D2:
+no external pager, no kubectl binary). **Choices:**
+- **GetYAML addresses the object through the *dynamic* client, reusing the shared
+  `resourceInterface(r, ns)` helper** the action set (M1-06) is built on — a plain
+  `Get` by GVR (from the discovery `Resource`) + namespace/name (from the row's
+  `ObjectRef`). One code path renders **any** resource — built-in or CRD — with zero
+  per-kind wiring, exactly like Delete/List. The ref's namespace is dropped for
+  cluster-scoped resources (`r.Namespaced == false`), same as node Delete/Cordon.
+- **managedFields are stripped before rendering.** They are server-side-apply
+  bookkeeping — large and never useful to read — so kubectl itself has hidden them
+  from `get`/`describe` output **by default since v1.21**. Stripping them makes
+  `GetYAML` match what a user sees from `kubectl get -o yaml` today. The strip is on
+  a `DeepCopy` (`unstructured.RemoveNestedField` mutates), so the caller's object is
+  untouched — `marshalYAML` stays pure and directly unit-testable.
+- **Rendered with `sigs.k8s.io/yaml`, not `gopkg.in/yaml`.** sigs.k8s.io/yaml
+  marshals by round-tripping through `encoding/json`, so it honors the API types'
+  `json` tags and orders map keys deterministically — byte-for-byte what kubectl
+  emits. It was already in the module graph (client-go transitive); this leg only
+  promotes it indirect→direct in go.mod (`go mod tidy`), no new module version.
+- **Testing (D18):** pure `marshalYAML` asserts managedFields-stripping + that the
+  caller's object is not mutated; the fake dynamic client round-trips `GetYAML` for
+  a namespaced object, a cluster-scoped node (stray ref namespace ignored), empty
+  name (rejected), and a missing object (NotFound surfaced **wrapped** —
+  `apierrors.IsNotFound` still holds through the `%w` chain, #86). No new deps.
