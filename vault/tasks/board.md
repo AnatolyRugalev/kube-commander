@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-07d** Reconnecting/resuming follow logs à la watch (`Clients.Logs` follow)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+      notes: split from M1-07c. On a transient drop while Follow, reopen the stream from the last-seen timestamp (force internal Timestamps to track the resume point, set `SinceTime` on reconnect) and dedup already-delivered lines within the resumed second (SinceTime is second-granularity). Deliver lines with the ts stripped unless opts.Timestamps. Backoff like watchRetryBackoff. Hermetic: extend `runLogStream` to a retry loop with a resumable fake opener + pure ts-parse/dedup tests.
 
 ## Blocked
 
@@ -28,9 +30,6 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-07d** Reconnecting/resuming follow logs à la watch (`Clients.Logs` follow)
-      status: todo | owner: — | added: 2026-07-19
-      notes: split from M1-07c. On a transient drop while Follow, reopen the stream from the last-seen timestamp (force internal Timestamps to track the resume point, set `SinceTime` on reconnect) and dedup already-delivered lines within the resumed second (SinceTime is second-granularity). Deliver lines with the ts stripped unless opts.Timestamps. Backoff like watchRetryBackoff. Hermetic: extend `runLogStream` to a retry loop with a resumable fake opener + pure ts-parse/dedup tests.
 - [ ] **M1-08** Background port-forward (start/stop)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
