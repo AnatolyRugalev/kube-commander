@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-03** Lipgloss theme + style set (`internal/tui/styles`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -38,13 +39,6 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
-
-- [ ] **M2-03** Lipgloss theme + style set (`internal/tui/styles`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: A `Theme` struct of named colors + a derived `Styles` set (selection,
-      table header, status bar, borders, error/warn, spinner) and one default theme.
-      Pure values, no state. Foundation the components render through. No new dep
-      (lipgloss v2 already indirect via bubbles, D50 — promote to direct).
 
 - [ ] **M2-04** Status bar component (`internal/tui/components/statusbar`)
       status: todo | owner: — | added: 2026-07-19
