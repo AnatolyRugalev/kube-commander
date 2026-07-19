@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-19 — M1-06d done: **cronjob suspend/resume** actions (`internal/kube/actions.go`) — `Clients.Suspend`/`Clients.Resume(ctx, r, ref)` merge-patch a CronJob's `spec.suspend` (true/false) through the dynamic client, as `kubectl patch cronjob` does; namespaced (ref ns honored); resume writes concrete `false` not null; idempotent → no UID guard; NotFound wrapped (#86); a near-exact mirror of D37 cordon/uncordon; D38. M1-06 progress: 06a delete + 06b scale/restart + 06c cordon/uncordon + 06d cronjob-suspend done; only **06e drain** remains (eviction API is its own green leg). Active milestone: M1; next up **M1-06e** (drain), then **M1-07** (logs/describe/YAML). M1-04b (lazy group detail) parked until the M2 menu exists._
+_Last updated: 2026-07-19 — M1-06e split into **06e-1 (pod selection)** + **06e-2 (eviction loop)**; claiming **M1-06e-1**. Drain as a whole (list a node's pods, classify, evict via policy/v1 Eviction, PDB-aware 429-retry, wait) exceeds one green leg (D37), so the selection/classification half lands first: a pure `classifyDrainPods` + `Clients.DrainCandidates` returning the []ObjectRef the eviction step will act on. M1-06 progress: 06a delete + 06b scale/restart + 06c cordon/uncordon + 06d cronjob-suspend done; 06e drain in progress (06e-1 selection, then 06e-2 eviction). Active milestone: M1; after 06e, **M1-07** (logs/describe/YAML). M1-04b (lazy group detail) parked until the M2 menu exists._
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-06e-1** Drain: pod **selection** (`internal/kube/drain.go`) — list a node's pods + classify which are drain-eligible vs blocking (skip mirror/terminated/DaemonSet pods; block unmanaged w/o Force, DaemonSet w/o IgnoreDaemonSets, emptyDir w/o DeleteEmptyDirData)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -22,10 +23,10 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-06e** Action: **drain** (node; eviction API — evict pods, skip DaemonSet/mirror/completed, PDB-aware retry)
-      status: todo | owner: — | added: 2026-07-18
-      notes: split from M1-06c (cordon/uncordon landed there). Drains after a cordon;
-      exceeds one green leg on its own. Reuses resourceInterface + the M1-06c cordon.
+- [ ] **M1-06e-2** Drain: **eviction loop** (`internal/kube/drain.go`) — evict the M1-06e-1 selected pods via the policy/v1 Eviction API, PDB-aware 429-retry with backoff, wait for deletion; cordon first (reuses M1-06c). Public `Clients.Drain`.
+      status: todo | owner: — | added: 2026-07-19
+      notes: split from M1-06e. Consumes the []ObjectRef from M1-06e-1's
+      DrainCandidates; the eviction/retry/wait half is its own green leg.
 - [ ] **M1-07** Streaming: logs; describe (kubectl/pkg/describe); get-as-YAML
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-08** Background port-forward (start/stop)
