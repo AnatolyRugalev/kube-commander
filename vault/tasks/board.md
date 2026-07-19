@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-05a** Static seed resource-menu sidebar (`internal/tui/components/menu`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19
 
 ## Blocked
 
