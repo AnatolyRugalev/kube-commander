@@ -1,11 +1,14 @@
 package menu
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -172,6 +175,125 @@ func TestViewRendersTitlesAndFocusChangesFrame(t *testing.T) {
 	focused := m.View()
 	if focused == blurred {
 		t.Fatal("focused view is identical to blurred view (border should change)")
+	}
+}
+
+// findItem returns the index of the seed item with the given resource name.
+func findItem(m Model, resource string) int {
+	for i, it := range m.items {
+		if it.Resource.GVR.Resource == resource {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestReconcileFillsTwinAndAppendsExtras(t *testing.T) {
+	m := newTestModel()
+	seedLen := len(m.items)
+
+	// A discovered twin for the seed's "pods" (fills verbs/short-names) and a CRD
+	// the seed does not carry.
+	pods := kube.Resource{
+		GVK:        schema.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		GVR:        schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Verbs:      []string{"get", "list", "watch"},
+		ShortNames: []string{"po"},
+	}
+	crd := kube.Resource{
+		GVK:        schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		Namespaced: true,
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{pods, crd}})
+
+	// The seed grew by exactly the one unknown resource, appended after the seed.
+	if len(m.items) != seedLen+1 {
+		t.Fatalf("item count = %d, want %d", len(m.items), seedLen+1)
+	}
+	last := m.items[len(m.items)-1]
+	if last.Resource.GVR.Resource != "widgets" || last.Title != "Widget" || !last.Available {
+		t.Fatalf("appended item = %+v, want available Widget/widgets", last)
+	}
+
+	// The pods twin metadata was merged in, keeping the seed position.
+	pi := findItem(m, "pods")
+	if pi < 0 {
+		t.Fatal("pods item missing after reconcile")
+	}
+	if got := m.items[pi].Resource.ShortNames; len(got) != 1 || got[0] != "po" {
+		t.Fatalf("pods short names = %v, want [po]", got)
+	}
+	if !m.items[pi].Available {
+		t.Error("pods should stay available after reconcile")
+	}
+}
+
+func TestReconcileMarksFailedGroupUnavailable(t *testing.T) {
+	m := newTestModel()
+	// networking.k8s.io failed discovery; core loaded fine (a pods twin).
+	pods := kube.Resource{
+		GVK: schema.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		GVR: schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+	}
+	m.Reconcile(kube.DiscoveryResult{
+		Resources: []kube.Resource{pods},
+		Failed:    []kube.FailedGroup{{GroupVersion: "networking.k8s.io/v1"}},
+	})
+
+	ii := findItem(m, "ingresses")
+	if ii < 0 {
+		t.Fatal("ingresses item missing")
+	}
+	if m.items[ii].Available {
+		t.Error("ingresses (failed group, no twin) should be unavailable")
+	}
+	// A seed item with neither a twin nor a failed group is left untouched.
+	if si := findItem(m, "services"); si < 0 || !m.items[si].Available {
+		t.Error("services (not failed, no twin) should stay available")
+	}
+}
+
+func TestReconcilePreservesSelectionAndScroll(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(20, 6) // small window so scroll matters
+	// Select "pods" and note the offset.
+	target := findItem(m, "pods")
+	for i := 0; i < target; i++ {
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	if m.cursor != target {
+		t.Fatalf("setup: cursor = %d, want %d", m.cursor, target)
+	}
+	offBefore := m.offset
+
+	// Reconcile appends a CRD; selection must still point at pods.
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{crd}})
+
+	if sel, _ := m.Selected(); sel.Resource.GVR.Resource != "pods" {
+		t.Fatalf("selection moved to %q, want pods", sel.Resource.GVR.Resource)
+	}
+	if m.offset != offBefore {
+		t.Fatalf("scroll offset changed from %d to %d", offBefore, m.offset)
+	}
+}
+
+func TestReconcileTotalFailureLeavesSeedUntouched(t *testing.T) {
+	m := newTestModel()
+	before := append([]Item(nil), m.items...)
+	m.Reconcile(kube.DiscoveryResult{Err: context.DeadlineExceeded})
+	if len(m.items) != len(before) {
+		t.Fatalf("item count changed on total failure: %d → %d", len(before), len(m.items))
+	}
+	for i := range before {
+		if !m.items[i].Available {
+			t.Errorf("item %q marked unavailable on total failure", m.items[i].Title)
+		}
 	}
 }
 

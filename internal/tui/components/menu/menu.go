@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
@@ -90,6 +91,92 @@ func (m Model) Selected() (Item, bool) {
 		return Item{}, false
 	}
 	return m.items[m.cursor], true
+}
+
+// Reconcile merges an async discovery result into the seed menu without
+// disturbing the current selection or scroll — the M2 risk item (D57). It:
+//
+//   - fills each seed item that has a discovered twin (matched by GVR) with the
+//     discovery metadata (verbs/short-names/categories), keeping the seed's title
+//     and its curated order, and marks it available;
+//   - marks a seed item unavailable (Item.Available = false — rendered muted, a
+//     no-op on drill-in) when it has no twin and its API group failed discovery;
+//   - appends the discovered resources the seed does not already list (CRDs and
+//     extra groups), in discovery's stable sorted order, after the seed.
+//
+// A total discovery failure (Result.Err != nil) leaves the menu untouched so it
+// stays navigable on the seed alone (principle 3): degrade, don't blank. Merging
+// into the ordered seed rather than replacing it wholesale means a partial failure
+// likewise never costs the user a working menu. Selection is preserved by
+// resolving the highlighted item's GVR back to its post-merge index, and the
+// scroll offset is re-clamped so nothing jumps.
+func (m *Model) Reconcile(result kube.DiscoveryResult) {
+	if result.Err != nil {
+		return
+	}
+
+	// Remember the highlighted resource so we can restore the cursor to it after
+	// the item slice changes.
+	var selectedGVR schema.GroupVersionResource
+	haveSelection := len(m.items) > 0
+	if haveSelection {
+		selectedGVR = m.items[m.cursor].Resource.GVR
+	}
+
+	// Index the discovered resources by GVR (twin lookup) and collect the groups
+	// that failed discovery (the mark-unavailable signal). Failures are per
+	// group/version; we key on the group so a seed item pinned to a version that
+	// differs from the failed one is still recognised as unreachable.
+	twin := make(map[schema.GroupVersionResource]kube.Resource, len(result.Resources))
+	for _, r := range result.Resources {
+		twin[r.GVR] = r
+	}
+	failedGroups := make(map[string]bool, len(result.Failed))
+	for _, f := range result.Failed {
+		if gv, err := schema.ParseGroupVersion(f.GroupVersion); err == nil {
+			failedGroups[gv.Group] = true
+		}
+	}
+
+	// Reconcile the seed items in place, preserving their order and title.
+	seen := make(map[schema.GroupVersionResource]bool, len(m.items))
+	for i := range m.items {
+		gvr := m.items[i].Resource.GVR
+		seen[gvr] = true
+		if d, ok := twin[gvr]; ok {
+			// A loaded twin: fill the discovery metadata and confirm availability.
+			m.items[i].Resource = d
+			m.items[i].Available = true
+		} else if failedGroups[gvr.Group] {
+			m.items[i].Available = false
+		}
+	}
+
+	// Append discovered resources the seed does not already list (CRDs, extra
+	// groups), in discovery's stable order, after the curated seed.
+	for _, r := range result.Resources {
+		if seen[r.GVR] {
+			continue
+		}
+		m.items = append(m.items, Item{
+			Resource:  r,
+			Title:     r.GVK.Kind,
+			Available: true,
+		})
+	}
+
+	// Restore the selection to the same resource and re-clamp the scroll. The seed
+	// is never reordered or prepended to, so the index is stable; resolving by GVR
+	// keeps the guarantee robust regardless.
+	if haveSelection {
+		for i := range m.items {
+			if m.items[i].Resource.GVR == selectedGVR {
+				m.cursor = i
+				break
+			}
+		}
+	}
+	m.clampOffset()
 }
 
 // Update handles a resolved keymap action. Navigation actions (up/down/top/

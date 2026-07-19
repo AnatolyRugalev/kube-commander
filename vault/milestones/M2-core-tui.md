@@ -26,8 +26,11 @@ gated on discovering, D55). **M2-05a** landed the second, the resource-menu
 sidebar (`internal/tui/components/menu`: a static seed of core resource kinds,
 navigated through keymap actions, emitting its own `menu.ResourceSelectedMsg` on
 drill-in — the emitter owns the message type to avoid a component→`tui` import
-cycle, D56); top-unblocked next is **M2-05b** (reconcile the seed with
-`DiscoveryReadyMsg` without disturbing selection/scroll)._
+cycle, D56). **M2-05b** added `(*Model).Reconcile(kube.DiscoveryResult)`, folding
+the async discovery result into the seed — twins fill metadata, failed-group
+entries go unavailable, CRDs/extra groups append — **without disturbing selection
+or scroll**, degrading to the navigable seed on total/partial failure (D57);
+top-unblocked next is **M2-06** (custom table component)._
 
 ## Goal
 

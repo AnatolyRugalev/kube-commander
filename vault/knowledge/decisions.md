@@ -1344,3 +1344,33 @@ actions, that emits a selection message when the user drills in. Locked choices:
   `Selection` (D54); returns `""` until sized. No shared mutable state (principle 1).
 - **Deps:** none new. Imports `kube` (Resource) + `apimachinery/.../schema` (to
   build the seed GVK/GVR) + `keymap` + `styles` + `bubbletea/v2` (Cmd).
+
+### D57 — M2-05b: menu reconcile merges into the ordered seed; append extras, never blank
+**2026-07-19 (M2-05b).** `(*Model).Reconcile(kube.DiscoveryResult)` folds the async
+discovery result into the M2-05a static seed. Locked choices:
+- **Merge, never replace.** Reconcile mutates the seed *in place* and appends —
+  it never rebuilds the item slice from discovery. So a **total failure**
+  (`Result.Err != nil`) is a no-op (the seed stays fully navigable), and a partial
+  failure still leaves the user a working menu (principle 3: degrade, don't blank).
+  This is the fix for the original's central bug (a broken aggregated API blanking
+  the whole menu).
+- **Twin match by exact GVR.** A seed item with a discovered twin (same GVR) takes
+  the twin's discovery metadata (verbs/short-names/categories) and is confirmed
+  `Available`; the seed's curated **title and order are kept** (discovery order is
+  used only for appended extras).
+- **Unavailable = failed group AND no twin.** A seed item is marked
+  `Available = false` (rendered muted, a no-op on drill-in) only when its API
+  **group** appears in `Result.Failed` and it has no twin. Match on group (not
+  group/version) so a seed item pinned to a version differing from the failed one
+  is still caught. A seed item with neither a twin nor a failed group is left
+  untouched (conservative — absence alone is not proof of unavailability).
+- **Extras appended after the seed**, in discovery's stable sorted order — CRDs and
+  extra groups the curated seed omits. Keeps the familiar core kinds at the top;
+  reorder/customization is M2-11's job, not reconcile's.
+- **Selection & scroll preserved (the M2 risk item).** The highlighted item's GVR
+  is resolved back to its post-merge index and the scroll offset re-clamped, so
+  reconcile never moves the cursor or jumps the view. Append-only makes the index
+  stable anyway; the GVR re-resolve keeps the guarantee robust against future
+  reordering.
+- **Deps:** none new. Adds an `apimachinery/.../schema` import to `menu.go` (already
+  used in `seed.go`).
