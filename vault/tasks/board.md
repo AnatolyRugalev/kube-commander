@@ -13,7 +13,13 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-02** TUI message types + channel→msg pumps (`internal/tui/msg.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+      notes: Typed `tea.Msg`s for the app (resource watch delta bridged from
+      `kube.WatchEvent`; `DiscoveryReadyMsg` from `kube.DiscoveryResult`; a generic
+      `ErrorMsg` carrying `kube.ErrorKind` for graceful degrade; selection/size).
+      Plus the `tea.Cmd` adapters that read **one** item from a `kube` channel and
+      return it as a msg (the watch/discovery pumps). Pure, hermetically testable.
 
 ## Blocked
 
@@ -38,16 +44,6 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
-
-- [ ] **M2-02** TUI message types + channel→msg pumps (`internal/tui/msg.go`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: Typed `tea.Msg`s for the app (resource watch delta bridged from
-      `kube.WatchEvent`; `DiscoveryReadyMsg` from `kube.DiscoveryResult`; a generic
-      `ErrorMsg` carrying `kube.ErrorKind` for graceful degrade; selection/size).
-      Plus the `tea.Cmd` adapters that read **one** item from a `kube` channel and
-      return it as a msg (the watch/discovery pumps — goroutine→channel→Cmd→Msg, no
-      UI touch). Pure, hermetically testable with fake channels. No UI yet.
-      Depends on: M1 (`kube.Watch`/`StartDiscovery`/`Classify`) — done.
 
 - [ ] **M2-03** Lipgloss theme + style set (`internal/tui/styles`)
       status: todo | owner: — | added: 2026-07-19
