@@ -3,7 +3,10 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_Started 2026-07-19 with M2-01a (keymap core: `internal/tui/keymap`)._
+_Started 2026-07-19 with M2-01a (keymap core: `internal/tui/keymap`); M2-01b
+adds multi-key sequences (`gg`→`nav.top`) + a stateful, model-timed `Sequencer`.
+Remaining M2-01 slices: M2-01c (YAML `keys:` config wiring), M2-01d
+(bubbles/key.Binding + help overlay from the registry)._
 
 ## Goal
 

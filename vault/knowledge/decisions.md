@@ -1063,3 +1063,44 @@ keypress to a named `Action` and never match a raw key.
   action-menu set (describe/yaml/delete/…) is an M3 deliverable per keybindings.md
   and is not registered here. No new deps (`tea` already vendored). Hermetic,
   pure-logic tests only — no goroutines, no runtime surface yet.
+
+### D48 — M2-01b: multi-key sequences + timeout-driven resolution; timer lives in the model, not the keymap
+**2026-07-19.** Second slice of the M2 action registry (D10/D11): the vim `gg` →
+`nav.top` case and the general multi-key mechanism, built on M2-01a's canonical
+chord model.
+
+- **Sequences unify with single chords.** A binding is now a `seq` (`[]chord`,
+  length ≥ 1); a single key is just a length-1 sequence, so `DefaultKeymap`,
+  `Merge`, collision detection, and `Keys()` all operate on one model.
+  `parseSequence` accepts a lone chord (`j`, `up`, `ctrl+d`), the vim concatenated
+  form (`gg` → `g`,`g`), and a space-separated form (`g g`, `ctrl+w k`) for
+  sequences that mix modified/special chords. A `+`-token that fails to parse is a
+  real error, never silently re-read rune-by-rune (so `shift+g`/`ctrl+` keep their
+  M2-01a error), and `seq.String()` round-trips (`gg` stays `gg`) for help gen.
+- **Stateful matching is a separate `Sequencer`, keymap stays immutable.** The
+  `Keymap` gains two derived indexes (`prefix`: is this a prefix of a binding;
+  `extends`: does a longer binding extend it) alongside the exact `bySeq` map. A
+  `Sequencer` holds the only mutable input state — the buffered prefix — and the
+  model owns one, driving it from the update loop, so there is no shared mutable
+  state (principle 1). `Input(key)` returns `ResultAction` (resolved),
+  `ResultPending` (buffered, a longer binding may still complete), or `ResultNone`
+  (inert; a non-continuing key abandons the buffer and is retried alone).
+- **The keymap package never runs a timer.** `Input` returning `ResultPending`
+  tells the model to schedule a `tea.Tick(SequenceTimeout)`; when it fires the
+  model calls `Sequencer.Timeout()`, which fires the buffered prefix iff it is
+  itself a complete binding, else drops it. This keeps the package pure/hermetic
+  (no goroutines, no clock) — the M0-05/logs pattern. `SequenceTimeout` is an
+  exported package var (default 500ms, vim's timeoutlen is 1000ms; snappier) so
+  the model reads one source and tests can shrink it.
+- **A prefix that is also a complete binding pends, then fires on timeout.** So
+  binding an action to bare `g` while `gg` stays bound keeps `gg` reachable (vim
+  semantics), rather than forbidding the overlap.
+- **`Keymap.Action(key)` stays** as the single-key resolver (ignores sequences)
+  for views that never buffer (modals/pickers); `nav.top` is reachable through it
+  via the `home` fallback even though its vim binding is the `gg` sequence.
+- **pgdn/pgup stay half-page only.** The board's M2-01b note floated wiring pgdn/
+  pgup as full-page fallbacks too; they can't fall back to both half- and
+  full-page in one flat context without colliding (the exact reason D47 put them
+  on half-page). Full-page keeps `ctrl+f`/`ctrl+b`; revisit only if full-page gets
+  a context where pgdn is free. No new deps. Splits remaining: M2-01c YAML `keys:`
+  wiring, M2-01d bubbles/key + help gen.
