@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-01e** Generated keybindings doc from the registry + drift check
+      status: in-progress | owner: claude-opus | added: 2026-07-19
 
 ## Blocked
 
@@ -30,10 +31,7 @@ _(none — M0 complete)_
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
 
 ### M2 — Core TUI (partial seed)
-M2-01 (action registry + configurable keymap, D10/D11) split into slices; M2-01a/M2-01b are Done. Remaining:
-- [ ] **M2-01e** Generated keybindings doc from the registry + drift check (markdown table emitted from the default keymap; a test/`make` target keeps the committed doc honest so it can't drift, D11)
-      status: todo | owner: — | added: 2026-07-19
-      notes: split from M2-01d; the standalone doc-file + drift guard is a separable concern from the in-app bubbles bindings/overlay. Reuses `keymap.Bindings()`/`Keys()`/`Describe()`.
+M2-01 (action registry + configurable keymap, D10/D11) split into slices; M2-01a–M2-01d are Done, M2-01e is In Progress. Remaining after M2-01e: the M2 app shell (root model, browse view, table, pickers, config load/save + legacy migration).
 
 _Remaining M2–M5 items to be expanded when those milestones open. See milestone files for scope._
 
