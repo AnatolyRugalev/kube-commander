@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-01d** Help/keybindings generation from the registry: `bubbles/key.Binding`s + help overlay derived from the keymap (D11 "can't drift")
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+      notes: adds bubbles dep; builds on M2-01a `Keys`/`Actions`/descriptions. Scoped to the bubbles bridge + help overlay component; standalone generated markdown doc + drift check split to M2-01e.
 
 ## Blocked
 
@@ -31,9 +33,9 @@ _(none — M0 complete)_
 
 ### M2 — Core TUI (partial seed)
 M2-01 (action registry + configurable keymap, D10/D11) split into slices; M2-01a/M2-01b are Done. Remaining:
-- [ ] **M2-01d** Help/keybindings generation from the registry: `bubbles/key.Binding`s + help overlay + generated keybindings doc, all derived from the keymap (D11 "can't drift")
+- [ ] **M2-01e** Generated keybindings doc from the registry + drift check (markdown table emitted from the default keymap; a test/`make` target keeps the committed doc honest so it can't drift, D11)
       status: todo | owner: — | added: 2026-07-19
-      notes: adds bubbles dep; builds on M2-01a `Keys`/`Actions`/descriptions
+      notes: split from M2-01d; the standalone doc-file + drift guard is a separable concern from the in-app bubbles bindings/overlay. Reuses `keymap.Bindings()`/`Keys()`/`Describe()`.
 
 _Remaining M2–M5 items to be expanded when those milestones open. See milestone files for scope._
 
