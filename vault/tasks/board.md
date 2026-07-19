@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-01c** Config `keys:` wiring: plain-YAML `keys: {action: [tokens]}` → `Merge`, surfaced through the config package; `kubecom keys` prints the resolved map + warnings
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+      notes: depends on the M2 config struct (config package migration) + M2-01a Merge
 
 ## Blocked
 
@@ -31,9 +33,6 @@ _(none — M0 complete)_
 
 ### M2 — Core TUI (partial seed)
 M2-01 (action registry + configurable keymap, D10/D11) split into slices; M2-01a/M2-01b are Done. Remaining:
-- [ ] **M2-01c** Config `keys:` wiring: plain-YAML `keys: {action: [tokens]}` → `Merge`, surfaced through the config package; `kubecom keys` prints the resolved map + warnings
-      status: todo | owner: — | added: 2026-07-19
-      notes: depends on the M2 config struct (config package migration) + M2-01a Merge
 - [ ] **M2-01d** Help/keybindings generation from the registry: `bubbles/key.Binding`s + help overlay + generated keybindings doc, all derived from the keymap (D11 "can't drift")
       status: todo | owner: — | added: 2026-07-19
       notes: adds bubbles dep; builds on M2-01a `Keys`/`Actions`/descriptions
