@@ -17,7 +17,9 @@ keymap/sequencer and embed the M2-01d help overlay. The app shell is now
 decomposed into ordered, leg-sized slices **M2-02 … M2-14** on the
 [board](../tasks/board.md) (D52). **M2-02** landed the `kube`-channels → Bubble
 Tea `tea.Msg` boundary (`internal/tui/msg.go`: msg types + one-item `watchPump`/
-`discoveryPump`, D53); top-unblocked next is **M2-03** (lipgloss theme + styles)._
+`discoveryPump`, D53). **M2-03** landed the styles foundation (`internal/tui/styles`:
+a named-color `Theme` → derived `Styles`, `DefaultTheme`/`Default`; lipgloss v2
+promoted to a direct dep, D54); top-unblocked next is **M2-04** (status bar)._
 
 ## Goal
 

@@ -1255,3 +1255,32 @@ more than a single receive. Concrete choices:
   Cross-component selection msgs (`ResourceSelectedMsg` from the menu,
   `RowSelectedMsg` from the table) live here so producer and consumer share one
   type. No new deps; pure, hermetically fake-channel tested; `-race` clean.
+
+### D54 — M2-03: styles package = Theme (named colors) → Styles (derived lipgloss); lipgloss v2 promoted to direct
+**2026-07-19 (M2-03).** `internal/tui/styles` is the single source of visual
+truth: a **`Theme`** (a struct of named, semantic `color.Color` fields — no
+styling) and a **`Styles`** (the `lipgloss.Style` values every component renders
+through), with `New(Theme) Styles` the one place a color becomes a style.
+Rationale and locked choices:
+- **Named roles, not literals.** Components ask for a role (`s.Selection`,
+  `s.Error`, `s.PaneFocus`) and never call `lipgloss.Color`/`NewStyle`
+  themselves, so re-theming (M4 theme picker, D6's ported monokai/solarized) is a
+  matter of building a `Styles` from a different `Theme`. `Styles.Theme` is
+  retained so a component that needs a raw `color.Color` (e.g. a bubbles widget
+  that wants a color, not a Style) can reach one without a second palette.
+- **Pure, immutable, copyable.** A `Theme` is plain data; `lipgloss.Style` is an
+  immutable value type (every setter returns a copy), so a `Styles` is safe to
+  copy into any model and read concurrently — no shared mutable UI state
+  (principle 1, D1). `New` touches no global (lipgloss v2 dropped the global
+  renderer), so it is deterministic: same Theme in, equal styles out (tested).
+- **DefaultTheme** is a dark-friendly truecolor palette with a blue accent (a nod
+  to the original kube-commander). Terminals without truecolor downsample at
+  write time via the Bubble Tea renderer, so the theme carries no per-terminal
+  branching (v2 has no `AdaptiveColor`; downsampling is a write-time concern).
+- **`Default()`** = `New(DefaultTheme())`, the set the app uses until a theme is
+  chosen. Roles shipped: App/Subtle/Selection/Header/Pane/PaneFocus (rounded
+  border, accent when focused)/StatusBar/Error/Warn/Success/Spinner — the surfaces
+  M2-04…M2-10 render (status bar, menu, table, modal, spinner).
+- **Dep:** `charm.land/lipgloss/v2` v2.0.0 **promoted indirect→direct** (was
+  transitive via bubbles, D50). No version change, `go.sum` untouched — MVS
+  already had it; this is a go.mod require-block move only.

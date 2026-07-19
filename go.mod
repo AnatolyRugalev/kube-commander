@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.2
+	charm.land/lipgloss/v2 v2.0.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260713092006-0d683c34c74b
 	github.com/spf13/cobra v1.10.2
 	k8s.io/api v0.31.4
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	charm.land/lipgloss/v2 v2.0.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/aymanbagabas/go-udiff v0.4.0 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
