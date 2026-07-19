@@ -15,8 +15,9 @@ resolved keymap so it can't drift (D50); M2-01e generates the committed
 load/save + legacy migration) is the rest of M2 — it will route input through the
 keymap/sequencer and embed the M2-01d help overlay. The app shell is now
 decomposed into ordered, leg-sized slices **M2-02 … M2-14** on the
-[board](../tasks/board.md) (D52); top-unblocked next is **M2-02** (msg types +
-channel→msg pumps)._
+[board](../tasks/board.md) (D52). **M2-02** landed the `kube`-channels → Bubble
+Tea `tea.Msg` boundary (`internal/tui/msg.go`: msg types + one-item `watchPump`/
+`discoveryPump`, D53); top-unblocked next is **M2-03** (lipgloss theme + styles)._
 
 ## Goal
 

@@ -1226,3 +1226,32 @@ slice preserves zero shared mutable UI state (principle 1, D1). The custom table
 constraint are carried from the M2 milestone's risks. Ordering is a default, not a
 contract — a later agent may re-split a slice that proves too big (the skill's
 split-and-take rule still applies per leg). Board-only; no code, `make check` green.
+
+### D53 — TUI msg boundary: one-item channel→msg pumps; errors bridged, discovery kept whole
+**2026-07-19 (M2-02).** `internal/tui/msg.go` is the single boundary between the
+concurrent `kube` layer and the single-threaded Bubble Tea update loop. The kube
+layer returns work on channels (watch deltas, the cap-1 discovery-ready signal);
+Bubble Tea consumes `tea.Msg`. The pumps are `tea.Cmd` adapters that read
+**exactly one** item from a kube channel and return it as a message — the only
+sanctioned crossing of the goroutine boundary, so no UI state is shared/mutated
+across goroutines (principle 1, D1). One-receive-per-Cmd means the model re-issues
+the pump after each delivered msg to pull the next, and `Update` never blocks on
+more than a single receive. Concrete choices:
+- **`watchPump`** maps a data delta → `ResourceEventMsg` (event carried verbatim),
+  a watch `ERROR` event → a classified `ErrorMsg` (`NewErrorMsg("watch", err)` →
+  `kube.Classify`), and a **closed** channel → the terminal `WatchClosedMsg`. The
+  closed case is an explicit message (not a nil) precisely so the model stops
+  re-issuing the pump — re-receiving from a closed channel would busy-loop.
+- **`discoveryPump`** always returns **`DiscoveryReadyMsg`** carrying the whole
+  `kube.DiscoveryResult`, **including a total failure** (`Result.Err`) and the
+  isolated per-group failures (`Result.Failed`). A total failure is *not* swapped
+  for a generic `ErrorMsg`: discovery is a reconcile signal and the model wants the
+  err + isolated detail together, classifying `Result.Err` itself when rendering. A
+  closed-with-no-value channel → nil msg (ignored), never a panic.
+- **`ErrorMsg`** is the generic degrade-one-feature carrier (#86, principle 3):
+  `{Context, Err, Kind}` with `Kind = kube.Classify(Err)` fixed at construction via
+  `NewErrorMsg` so it can never drift from `Err`.
+- **Size** uses Bubble Tea's own `tea.WindowSizeMsg`; kubecom defines no size msg.
+  Cross-component selection msgs (`ResourceSelectedMsg` from the menu,
+  `RowSelectedMsg` from the table) live here so producer and consumer share one
+  type. No new deps; pure, hermetically fake-channel tested; `-race` clean.
