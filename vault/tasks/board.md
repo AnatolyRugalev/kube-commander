@@ -7,7 +7,8 @@ _Last updated: 2026-07-19 — M1-06e-1 done: **drain pod selection** (`internal/
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-06e-2** Drain: **eviction loop** (`internal/kube/drain.go`) — evict the M1-06e-1 selected pods via the policy/v1 Eviction API, PDB-aware 429-retry with backoff, wait for deletion; cordon first (reuses M1-06c). Public `Clients.Drain`.
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -22,10 +23,6 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-06e-2** Drain: **eviction loop** (`internal/kube/drain.go`) — evict the M1-06e-1 selected pods via the policy/v1 Eviction API, PDB-aware 429-retry with backoff, wait for deletion; cordon first (reuses M1-06c). Public `Clients.Drain`.
-      status: todo | owner: — | added: 2026-07-19
-      notes: split from M1-06e. Consumes the []ObjectRef from M1-06e-1's
-      DrainCandidates; the eviction/retry/wait half is its own green leg.
 - [ ] **M1-07** Streaming: logs; describe (kubectl/pkg/describe); get-as-YAML
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-08** Background port-forward (start/stop)
