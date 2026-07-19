@@ -1,0 +1,103 @@
+package keymap
+
+import (
+	"strings"
+
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+)
+
+// This file bridges the action registry to bubbles' key.Binding / help.KeyMap so
+// help is generated from the resolved keymap and can never drift from actual
+// bindings (D11). The Binding's display text and keys come straight from Keys()
+// and Describe(); nothing here restates a literal key.
+
+// Binding builds a bubbles key.Binding for a single action from the keymap's
+// resolved bindings: WithKeys carries the canonical tokens (vim key first),
+// WithHelp carries the display text ("j/up") and the registry description. An
+// action with no bound keys (disabled, or unknown) yields a disabled binding so
+// help renderers skip it via Enabled().
+func (k *Keymap) Binding(a Action) key.Binding {
+	keys := k.Keys(a)
+	opts := []key.BindingOpt{
+		key.WithKeys(keys...),
+		key.WithHelp(strings.Join(keys, "/"), a.Describe()),
+	}
+	if len(keys) == 0 {
+		opts = append(opts, key.WithDisabled())
+	}
+	return key.NewBinding(opts...)
+}
+
+// Bindings returns a key.Binding for every registered action, in registry order.
+func (k *Keymap) Bindings() []key.Binding {
+	acts := Actions()
+	out := make([]key.Binding, len(acts))
+	for i, a := range acts {
+		out[i] = k.Binding(a)
+	}
+	return out
+}
+
+// shortHelpActions is the curated one-line status-bar subset (help.KeyMap's
+// ShortHelp): the essentials a user needs at a glance. Ordered as shown.
+var shortHelpActions = []Action{
+	ActionDown, ActionUp, ActionDrillIn, ActionBack, ActionFilter, ActionHelp, ActionQuit,
+}
+
+// HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a
+// help.Model can render both the short (status-bar) and full (overlay) views
+// straight from the registry.
+type HelpKeyMap struct{ km *Keymap }
+
+// Compile-time check that HelpKeyMap satisfies bubbles' help.KeyMap.
+var _ help.KeyMap = HelpKeyMap{}
+
+// HelpMap returns a help.KeyMap view over this keymap.
+func (k *Keymap) HelpMap() HelpKeyMap { return HelpKeyMap{km: k} }
+
+// ShortHelp returns the curated status-bar bindings, skipping any the user has
+// disabled.
+func (h HelpKeyMap) ShortHelp() []key.Binding {
+	var out []key.Binding
+	for _, a := range shortHelpActions {
+		if b := h.km.Binding(a); b.Enabled() {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// FullHelp returns every enabled binding grouped into columns by action namespace
+// (the id prefix before the first "."), each column in registry order and the
+// columns in first-seen order. Disabled actions are omitted.
+func (h HelpKeyMap) FullHelp() [][]key.Binding {
+	var order []string
+	groups := map[string][]key.Binding{}
+	for _, a := range Actions() {
+		b := h.km.Binding(a)
+		if !b.Enabled() {
+			continue
+		}
+		g := groupOf(a)
+		if _, seen := groups[g]; !seen {
+			order = append(order, g)
+		}
+		groups[g] = append(groups[g], b)
+	}
+	out := make([][]key.Binding, 0, len(order))
+	for _, g := range order {
+		out = append(out, groups[g])
+	}
+	return out
+}
+
+// groupOf is the action's namespace: the id prefix before the first ".", or the
+// whole id when there is none.
+func groupOf(a Action) string {
+	s := string(a)
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}

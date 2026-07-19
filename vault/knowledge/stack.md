@@ -25,7 +25,15 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **bubbles** — components: `table`, `list`, `textinput`, `viewport`, `help`,
   `key`, `spinner`. NOTE: `bubbles/table` is basic — expect a **custom table**
   for sorting + large row counts.
-- **lipgloss** — styling/layout; drives themes.
+  - **Pinned `charm.land/bubbles/v2` v2.0.0** (D50, added M2-01d for `help`+`key`).
+    v2.0.0's go directive is **1.24.2** and it requires bubbletea **v2.0.0** (MVS
+    keeps our pinned **v2.0.2** — no downgrade). v2.1.0 requires bubbletea v2.0.2
+    (fine) but its **go directive is 1.25.0**; v2.1.1 requires bubbletea v2.0.7.
+    So v2.0.0 is the release that pairs with our v2.0.2/Go-1.24.2 floor without a
+    toolchain bump — hold it here in lockstep with the bubbletea pin (D26).
+- **lipgloss** — styling/layout; drives themes. Pulled in as
+  **`charm.land/lipgloss/v2` v2.0.0** (indirect, via bubbles/help; go directive
+  1.24.2).
 - **teatest** — TUI model testing.
 - **vhs** — recording the README screencast (replaces terminalizer).
 

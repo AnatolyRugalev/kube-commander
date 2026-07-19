@@ -1135,3 +1135,38 @@ first config surface (M2-01c, on M2-01a's `Merge`).
   stderr**, the table to stdout; an invalid keymap fails the command (exit 1).
   `printKeys(out, errOut, km, warnings)` is split from the cobra `RunE` so it is
   testable without cobra. No new deps.
+
+### D50 — M2-01d: help generated from the registry — bubbles/key.Binding bridge + toggleable overlay; pin bubbles v2.0.0
+**2026-07-19.** Fourth slice of the M2 action registry (D10/D11): the help side
+of "zero hard-coded keys". Help is built **from the resolved keymap**, never from
+literals, so it can't drift from actual bindings.
+
+- **Registry → bubbles bridge (`internal/tui/keymap/help.go`).** `(*Keymap).Binding(a)`
+  turns one action into a `bubbles/v2/key.Binding` — `WithKeys` = the resolved
+  canonical tokens (`Keys(a)`, vim key first), `WithHelp` = display text (tokens
+  joined by `/`, e.g. `gg/home`, `ctrl+d/pgdn`) + the registry `Describe()`; an
+  action with **no bound keys** (disabled or unknown id) yields a **disabled**
+  binding (never a panic) so renderers skip it via `Enabled()`. `Bindings()` is the
+  whole registry in order. `HelpKeyMap` (from `HelpMap()`) satisfies bubbles'
+  `help.KeyMap`: `ShortHelp()` = a curated status-bar subset (`shortHelpActions`,
+  enabled-only), `FullHelp()` = every enabled binding grouped into columns by
+  action **namespace** (id prefix before the first `.`), first-seen column order,
+  registry order within a column, disabled dropped.
+- **Overlay component (`internal/tui/help`).** A small `Model` wrapping
+  `bubbles/help.Model` (`ShowAll=true`) + the `HelpKeyMap`: `Toggle`/`SetVisible`/
+  `Visible`, `SetWidth` (width-based short-help elision), `View()` (full overlay
+  when visible, `""` when hidden), `ShortHelpView()` (the always-on status-bar
+  hint). It **matches no raw keys** — the root model resolves `app.help` through
+  the keymap and calls `Toggle`; this component only chooses what help to show.
+  No shared mutable state (principle 1): every field is owned by the embedder.
+  It's a tested, unwired component today; the root model (later M2) embeds it.
+- **Dep pin: `charm.land/bubbles/v2` v2.0.0** (+ transitive `charm.land/lipgloss/v2`
+  v2.0.0). v2.0.0's go directive is 1.24.2 and it requires bubbletea v2.0.0 — MVS
+  keeps our pinned v2.0.2, no downgrade, no Go bump. bubbles v2.1.0 needs Go 1.25.0;
+  v2.1.1 needs bubbletea v2.0.7. Hold v2.0.0 in lockstep with the bubbletea v2.0.2
+  / Go-1.24.2 floor (D26), the D42/D45 "pin to match the stack" pattern.
+- **Split.** The item bundled a *standalone generated keybindings doc*; that's a
+  separable concern (a committed markdown file + a drift-check test/`make` target)
+  and became **M2-01e**. This leg is the in-app bindings + overlay only. With it,
+  the M2-01 action-registry group is functionally complete bar the doc file; next
+  is the M2 app shell (root model, browse view, table) — or M2-01e first.
