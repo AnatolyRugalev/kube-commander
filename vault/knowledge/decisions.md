@@ -1196,3 +1196,33 @@ structurally impossible, and a golden test makes it *loud*. **How:**
 No new deps. **Completes the M2-01 action-registry group** (01a keymap core / 01b
 sequences / 01c config wiring / 01d help overlay / 01e generated doc); next is the
 M2 app shell (root model, browse view, table).
+
+### D52 — M2 app-shell decomposed into ordered, leg-sized Backlog slices
+**2026-07-19.** With the M2-01 action-registry group complete (D47–D51), the rest
+of M2 was a single prose paragraph on the board — no pickable item for the next
+agent. **This planning leg turns the M2 milestone scope + exit criteria into a
+dependency-ordered task list** (M2-02 … M2-14), so `/do-rewrite-leg`'s "take the
+top unblocked Backlog item" has real input again. **Why a whole leg:** the skill
+sanctions "expanding a thin milestone section into concrete small tasks" as a leg
+in itself; doing it once, deliberately, beats each subsequent agent re-deriving
+the breakdown ad hoc (and risking overlap). **The slicing:**
+- **M2-02** msg types + channel→msg pumps (`internal/tui/msg.go`) — pure, the
+  first pickable slice (no UI deps); everything downstream consumes these msgs.
+- **M2-03** lipgloss theme/styles → **M2-04** status bar → **M2-05a/b** resource
+  menu (static seed, then discovery reconcile) → **M2-06a/b/c** custom table
+  (snapshot render / live watch deltas / horizontal scroll) — the components,
+  built bottom-up so each lands green and testable before the shell composes them.
+- **M2-07a/b/c/d** root app shell (`internal/tui/app.go`, replaces the M0
+  `tui.go` placeholder): keymap/sequencer-routed skeleton + help overlay + quit;
+  two-pane browse layout + focus; live table ↔ `kube.Watch` wiring; async
+  discovery reconcile.
+- **M2-08** namespace picker · **M2-09** filter · **M2-10** confirm/prompt modal ·
+  **M2-11** config menu persistence · **M2-12** legacy `~/.kubecom.yaml` migration
+  · **M2-13** column sort (#85) · **M2-14** teatest coverage.
+Package layout follows REWRITE_PLAN (`internal/tui/{app,msg}.go`,
+`internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`); every
+slice preserves zero shared mutable UI state (principle 1, D1). The custom table
+(not `bubbles/table`) and the "reconcile discovery without disturbing selection"
+constraint are carried from the M2 milestone's risks. Ordering is a default, not a
+contract — a later agent may re-split a slice that proves too big (the skill's
+split-and-take rule still applies per leg). Board-only; no code, `make check` green.

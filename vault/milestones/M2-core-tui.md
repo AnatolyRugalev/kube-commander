@@ -13,7 +13,10 @@ resolved keymap so it can't drift (D50); M2-01e generates the committed
 `make keys-doc` (D51). The action registry + configurable keymap group
 (M2-01a–e) is now **complete**. The app shell (root model, browse view, table, pickers, config
 load/save + legacy migration) is the rest of M2 — it will route input through the
-keymap/sequencer and embed the M2-01d help overlay._
+keymap/sequencer and embed the M2-01d help overlay. The app shell is now
+decomposed into ordered, leg-sized slices **M2-02 … M2-14** on the
+[board](../tasks/board.md) (D52); top-unblocked next is **M2-02** (msg types +
+channel→msg pumps)._
 
 ## Goal
 
