@@ -686,3 +686,41 @@ established toggle-a-bool-via-merge-patch shape rather than inventing anything.
   client round-trips the merge patch — suspend flips a seeded-false CronJob to true
   (namespace honored), resume flips a seeded-true one to false, empty-name rejected
   for both, NotFound wrapped. No new deps.
+
+### D39 — Executing M1-06e-1: drain pod selection (typed clientset + pure classifier); M1-06e split into 06e-1 selection + 06e-2 eviction
+**2026-07-19.** Fifth slice of the M1-06 action set (06a delete D35, 06b
+scale/restart D36, 06c cordon/uncordon D37, 06d suspend/resume D38). **M1-06e
+drain was split into 06e-1 (this: pod selection) + 06e-2 (eviction loop)** — the
+full drain (list a node's pods, classify, evict via the policy/v1 Eviction API,
+PDB-aware 429-retry, wait for deletion) blows the ≤300-line green-leg budget, as
+D37 already flagged; the selection/classification half is a clean, pure,
+fully-testable unit that the eviction half consumes. Landed `Clients.DrainCandidates`
++ pure `classifyDrainPods` in a new `internal/kube/drain.go`. **Choices:**
+- **Drain uses the typed clientset, not the dynamic client** (the departure from
+  06a–06d's generic-dynamic posture). Drain is pod-and-node specific, never generic
+  over CRDs: it lists pods by the `spec.nodeName` field selector via
+  `Clientset.CoreV1().Pods(NamespaceAll).List` and (06e-2) will evict through the
+  typed `EvictV1` subresource. That is exactly what `kubectl drain` does; a dynamic
+  path would buy nothing here and lose the typed pod fields the classifier reads.
+- **Selection is a pure `classifyDrainPods([]corev1.Pod, DrainOptions)` split from
+  the client call**, so the whole policy is unit-testable without a cluster — the
+  fake clientset does not honor field selectors (server-side; envtest territory),
+  so filtering-by-node is not asserted by the fake, only the classification is.
+- **Classification mirrors `kubectl drain`.** Skipped silently (not evicted, not
+  blocking): mirror pods (annotation `kubernetes.io/config.mirror`, inlined — we do
+  not depend on k8s.io/kubernetes), already-terminated pods (Succeeded/Failed), and
+  DaemonSet-managed pods when `IgnoreDaemonSets`. Blocking (collected into one
+  refusal error naming each pod, drain refuses as a whole → nil slice, never a
+  partial drain): standalone/unmanaged pods without `Force`, DaemonSet pods without
+  `IgnoreDaemonSets`, emptyDir-backed pods without `DeleteEmptyDirData`. Check order
+  is load-bearing (mirror→terminated→controller→emptyDir) so each pod is reported
+  at most once; a DaemonSet pod is a DS skip/block, never an emptyDir block.
+- **DaemonSet detection is by controller owner-ref Kind == "DaemonSet"**, not by
+  confirming the DaemonSet still exists (kubectl does the extra GET to treat an
+  orphaned DS pod as unmanaged). Simplification: one fewer API call, and an orphaned
+  controller ref is rare; revisit in 06e-2 if envtest shows it matters.
+- **`DrainCandidates` returns `[]ObjectRef`, not `[]corev1.Pod`** — same
+  apimachinery-free boundary the table layer keeps (D33), and exactly the input
+  06e-2's eviction loop needs (namespace/name/UID per pod). Empty node name
+  rejected; list error wrapped (#86). `k8s.io/api` moves indirect→direct in go.mod
+  (corev1 now imported); no new module version.
