@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-05b** Resource-menu sidebar: discovery reconcile (`internal/tui/components/menu`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -38,17 +39,6 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
-
-- [ ] **M2-05b** Resource-menu sidebar: discovery reconcile (`internal/tui/components/menu`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: Reconcile the M2-05a static seed with `DiscoveryReadyMsg` — add CRDs/
-      extra groups, mark seed entries whose group is unreachable as unavailable
-      (`Item.Available = false`, already rendered muted + a no-op on drill-in),
-      fill verbs/short-names/categories on a discovered twin (match by GVR) —
-      **without disturbing the current selection or scroll** (the M2 risk item).
-      Merge into the ordered seed rather than replacing it wholesale so a total
-      discovery failure still leaves a navigable menu. Depends on: M2-05a (done),
-      M2-02 (`DiscoveryReadyMsg`).
 
 - [ ] **M2-06** Table component (`internal/tui/components/table`)
       status: todo | owner: — | added: 2026-07-19
