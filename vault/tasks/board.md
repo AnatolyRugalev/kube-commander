@@ -11,7 +11,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-07c** Streaming: pod logs (`Clients.Logs`) — single-connection stream via the typed clientset
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -26,9 +27,6 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-07c** Streaming: pod logs (`Clients.Logs`) — follow/tail via the typed clientset, stream to a channel
-      status: todo | owner: — | added: 2026-07-19
-      notes: split from M1-07. Reconnecting stream à la watch (D34); its own leg.
 - [ ] **M1-08** Background port-forward (start/stop)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
