@@ -13,7 +13,8 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-19
 
 ## Blocked
 
@@ -28,8 +29,6 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
-- [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
-      status: todo | owner: — | added: 2026-07-18
 
 ### M2 — Core TUI (partial seed)
 - [ ] **M2-01** Action registry + configurable keymap: Action ids, default (vim-first) keymap, merge(default, config.Keys) + validation; `KeyMsg → Action` resolution; generate bindings/help from registry (D10, D11)
