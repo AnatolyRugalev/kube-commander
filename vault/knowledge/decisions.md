@@ -793,3 +793,45 @@ no external pager, no kubectl binary). **Choices:**
   a namespaced object, a cluster-scoped node (stray ref namespace ignored), empty
   name (rejected), and a missing object (NotFound surfaced **wrapped** —
   `apierrors.IsNotFound` still holds through the `%w` chain, #86). No new deps.
+
+### D42 — Executing M1-07b: describe via kubectl/pkg/describe; RESTMapping built from the discovery Resource
+**2026-07-19.** Landed `Clients.Describe(r, ref)` + the pure `describerFor` /
+`restMappingFor` helpers in `internal/kube/describe.go` — the second in-process
+viewer (D2: no external pager, no kubectl binary). **Choices:**
+- **Reuse kubectl's own describe generators (`k8s.io/kubectl/pkg/describe`)** rather
+  than hand-rolling per-kind output. This is the whole point of the milestone-scope
+  wording ("describe (kubectl/pkg/describe)") — the output is byte-identical to
+  `kubectl describe`, and every built-in kind's specialized section (a Pod's
+  containers/conditions/volumes, a Deployment's rollout status, …) plus the trailing
+  "Events:" table comes for free and tracks upstream.
+- **Dep pinned to `k8s.io/kubectl v0.31.4`** to match the existing k8s stack (api/
+  apimachinery/client-go/cli-runtime all v0.31.4). `go mod tidy` *without* a pin
+  resolves kubectl to the latest (v0.36.2), which would drag the whole k8s graph to
+  v0.36 — so `go get k8s.io/kubectl@v0.31.4` first, then tidy. Footprint: kubectl
+  direct + ~12 transitive indirect (cli-runtime, kustomize api/kyaml, liggitt/
+  tabwriter, xlab/treeprint, moby/term, go-starlark, …). Acceptable for the describe
+  generators; the alternative (reimplementing describe) is far larger and would drift.
+- **Describer selection mirrors kubectl's `describe.NewDescriber`:** prefer the
+  specialized built-in describer keyed by `GVK.GroupKind()` (`describe.DescriberFor`),
+  fall back to the generic unstructured describer (`describe.GenericDescriberFor`)
+  otherwise — so **CRDs and rarer built-ins are covered** by the generic path (name/
+  namespace/labels/annotations + recursive body dump + events). Kept as a small local
+  `describerFor` (not `NewDescriber`, which wants a `genericclioptions.RESTClientGetter`
+  we'd have to synthesize) since we already hold the `*rest.Config`.
+- **The generic describer's `meta.RESTMapping` is built directly from the discovery
+  `Resource` (`restMappingFor`)**, not resolved through the RESTMapper: the `Resource`
+  already carries GVR + GVK + scope (the only fields the generic describer reads), so
+  there's no reason to make discovery re-derive them. Scope is `RESTScopeNamespace`/
+  `RESTScopeRoot` from `r.Namespaced`; the ref's namespace is honored iff namespaced.
+- **`Describe` takes no `context`** (unlike `GetYAML`): kubectl's describe package
+  exposes no context-aware entry point — it Gets the object and searches events with
+  `context.TODO()` internally — so there is nothing to thread one through. The TUI
+  runs it off the render goroutine and abandons the result if the view closes. Empty
+  name rejected; errors wrapped (NotFound/RBAC-denial surface for display, #86).
+- **Testing (D18):** describer *construction* is local (the describers build their
+  clients from the config but make no server call), so `describerFor` is tested
+  hermetically with a throwaway `rest.Config` — a built-in kind (Pod) resolves to
+  `*describe.PodDescriber`, a fictional CRD kind falls back to the generic describer;
+  `restMappingFor` is a pure table test; empty-name is rejected before any describer
+  is built. Actual describe **output** dials the API server → **envtest territory**
+  (opt-in, like the watch live-server exercise), not a hermetic unit test.
