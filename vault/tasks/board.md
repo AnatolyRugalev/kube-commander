@@ -3,7 +3,9 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-19 — M1-07b done: **describe** (`internal/kube/describe.go`) — `Clients.Describe(r, ref)` renders `kubectl describe`-identical output in-process by reusing kubectl's own describe generators (`k8s.io/kubectl/pkg/describe`, pinned v0.31.4); built-in describer keyed by GroupKind with a generic-unstructured fallback for CRDs, `RESTMapping` built straight from the discovery `Resource` (D42). Second in-process viewer. Active milestone: M1; next up **M1-07c** (pod logs), then M1-08 port-forward, M1-09 typed errors._
+_Last updated: 2026-07-19 — M1-07c done: **streaming pod logs** (`internal/kube/logs.go`) — `Clients.Logs(ctx, ref, opts)` streams a pod container's logs onto a bounded `LogEvent{Line,Err}` channel via the typed clientset `pods/log` subresource (`GetLogs(...).Stream`); `LogOptions` mirrors `kubectl logs` flags, mapped by pure `podLogOptions`; stream opened in-goroutine (never blocks first paint), lines verbatim, >1 MiB line → `ErrTooLong` event (#86). **Single connection** — reconnect/resume à la watch split to **M1-07d** (D43). Third in-process viewer. Active milestone: M1; next up **M1-07d** (reconnecting logs), then M1-08 port-forward, M1-09 typed errors._
+
+_Prev: 2026-07-19 — M1-07b done: **describe** (`internal/kube/describe.go`) — `Clients.Describe(r, ref)` renders `kubectl describe`-identical output in-process by reusing kubectl's own describe generators (`k8s.io/kubectl/pkg/describe`, pinned v0.31.4); built-in describer keyed by GroupKind with a generic-unstructured fallback for CRDs, `RESTMapping` built straight from the discovery `Resource` (D42). Second in-process viewer._
 
 _Prev: 2026-07-19 — M1-07a done: **get object as YAML** (`internal/kube/yaml.go`) — `Clients.GetYAML` renders any resource as kubectl-identical `get -o yaml` through the dynamic client (managedFields stripped, `sigs.k8s.io/yaml`, D41). First in-process viewer; M1-07 split into 07a/07b/07c._
 
@@ -11,8 +13,7 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-- [ ] **M1-07c** Streaming: pod logs (`Clients.Logs`) — single-connection stream via the typed clientset
-      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+_(none)_
 
 ## Blocked
 
@@ -27,6 +28,9 @@ _(none — M0 complete)_
 - [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
       status: todo | owner: — | added: 2026-07-18
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
+- [ ] **M1-07d** Reconnecting/resuming follow logs à la watch (`Clients.Logs` follow)
+      status: todo | owner: — | added: 2026-07-19
+      notes: split from M1-07c. On a transient drop while Follow, reopen the stream from the last-seen timestamp (force internal Timestamps to track the resume point, set `SinceTime` on reconnect) and dedup already-delivered lines within the resumed second (SinceTime is second-granularity). Deliver lines with the ts stripped unless opts.Timestamps. Backoff like watchRetryBackoff. Hermetic: extend `runLogStream` to a retry loop with a resumable fake opener + pure ts-parse/dedup tests.
 - [ ] **M1-08** Background port-forward (start/stop)
       status: todo | owner: — | added: 2026-07-18
 - [ ] **M1-09** Typed graceful errors (no panics on bad ns/context) (#86)
@@ -41,6 +45,8 @@ _Remaining M2–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M1-07c** Streaming pod logs (`internal/kube/logs.go`) — `Clients.Logs(ctx, ref, opts)` streams a pod container's logs onto a bounded `LogEvent{Line,Err}` channel (`logChanBuffer=256`) via the typed clientset's `pods/log` subresource (`CoreV1().Pods(ns).GetLogs(name, *corev1.PodLogOptions).Stream(ctx)`) — the only in-process route, since logs have no dynamic-client path (mirrors drain's deliberate typed-client use, D39). `LogOptions` mirrors `kubectl logs` flags (Container/Follow/Previous/Timestamps/TailLines/SinceSeconds/SinceTime/LimitBytes), mapped 1:1 by pure `podLogOptions` (`SinceTime *time.Time`→`*metav1.Time`). Stream opened **inside** the goroutine (like Watch) so `Logs` never blocks first paint; the goroutine owns every send + the close (principle 1). Lines forwarded verbatim (server formats per the Timestamps flag), trailing newline stripped; a >1 MiB line (`logScanMaxLine`) ends the stream with `bufio.ErrTooLong` as a terminal error event, never a silent truncation or panic (#86). **Single connection** — Follow keeps it open for live lines until the container ends or ctx is cancelled, but a transient drop ends the stream; reconnect/resume à la watch split to M1-07d. Third in-process viewer (D2). Empty pod name rejected. Hermetic: pure `podLogOptions` table test, `streamLogs` from byte streams (verbatim / no-trailing-newline / over-long / mid-stream ctx-cancel), `runLogStream` wiring via a fake `logStreamOpener` (success / open-error / already-cancelled); live stream is envtest territory. No new deps. D43.
+      status: done | owner: claude-opus | added: 2026-07-19 | done: 2026-07-19
 - [x] **M1-07b** Describe (`internal/kube/describe.go`) — `Clients.Describe(r, ref)` renders `kubectl describe`-identical output in-process by reusing kubectl's own describe generators (`k8s.io/kubectl/pkg/describe`). Selection mirrors `describe.NewDescriber`: the specialized built-in describer keyed by `GVK.GroupKind()` (`DescriberFor`) with a fallback to the generic unstructured describer (`GenericDescriberFor`) so CRDs/rarer built-ins are covered — kept as a small local `describerFor` since we already hold the `*rest.Config`. The generic describer's `meta.RESTMapping` is built directly from the discovery `Resource` (pure `restMappingFor`, only GVR/GVK/scope), not re-resolved through the RESTMapper. No context param — kubectl's describe package has no context-aware entry point (uses `context.TODO`); empty name rejected, errors wrapped (#86). Second in-process viewer (D2). Dep **pinned to k8s.io/kubectl v0.31.4** to match the k8s stack — a bare `go mod tidy` resolves it to v0.36 and drags the whole graph up; footprint is kubectl direct + ~12 transitive indirect (cli-runtime, kustomize api/kyaml, liggitt/tabwriter, treeprint, …). Hermetic tests cover describer selection (Pod→`*PodDescriber`, CRD→generic), the pure `restMappingFor`, and empty-name rejection; live describe output is envtest territory. D42.
       status: done | owner: claude-opus | added: 2026-07-19 | done: 2026-07-19
 - [x] **M1-07a** Get object as **YAML** (`internal/kube/yaml.go`) — `Clients.GetYAML(ctx, r, ref)` fetches any resource (built-in or CRD) through the dynamic client via the shared `resourceInterface` helper (ns dropped for cluster-scoped), strips `metadata.managedFields` on a DeepCopy (kubectl hides them from `get -o yaml` by default since v1.21; pure `marshalYAML` so the caller's object is untouched + directly testable), and renders with `sigs.k8s.io/yaml` (JSON round-trip → deterministic key order + json-tag-honoring, byte-identical to kubectl). First in-process viewer (D2 — no pager, no kubectl binary). Empty name rejected; NotFound wrapped (#86). Split from M1-07 (→ 07b describe, 07c logs). `sigs.k8s.io/yaml` promoted indirect→direct; no new module. Hermetic fake-dynamic-client + pure `marshalYAML` tests. D41.

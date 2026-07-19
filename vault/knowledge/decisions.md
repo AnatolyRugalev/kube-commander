@@ -835,3 +835,47 @@ viewer (D2: no external pager, no kubectl binary). **Choices:**
   `restMappingFor` is a pure table test; empty-name is rejected before any describer
   is built. Actual describe **output** dials the API server → **envtest territory**
   (opt-in, like the watch live-server exercise), not a hermetic unit test.
+
+### D43 — Executing M1-07c: streaming pod logs via the typed clientset GetLogs subresource; single connection, reconnect split to M1-07d
+**2026-07-19.** Landed `Clients.Logs(ctx, ref, opts)` + the pure `podLogOptions`
+mapper and the `streamLogs` line pump in `internal/kube/logs.go` — the third
+in-process viewer (D2: no external pager, no kubectl binary). **Choices:**
+- **Typed clientset GetLogs subresource, not the dynamic client.** Unlike the
+  action set (M1-06) and the YAML/describe viewers, logs have no dynamic-client
+  path — `pods/log` is a subresource that streams raw bytes, so `CoreV1().Pods(ns).
+  GetLogs(name, *corev1.PodLogOptions).Stream(ctx)` is the only in-process route.
+  This mirrors drain's deliberate use of the typed clientset (D39) for pod/node
+  specifics; logs are pod-only, so genericity over CRDs is moot.
+- **A `LogEvent{Line, Err}` channel, twin of the Watch channel.** One line per
+  event (trailing newline stripped; consumer re-adds it), a terminal `Err` event as
+  the last item before close. The stream is opened *inside* the goroutine (like
+  Watch) so `Logs` returns immediately and never blocks first paint on the network;
+  the goroutine owns every send and the close (principle 1 — UI state mutates only
+  in the consumer's Update). Bounded buffer `logChanBuffer=256` (logs burst on
+  connect as the container flushes a backlog).
+- **`LogOptions` mirrors `kubectl logs` flags** (Container/Follow/Previous/
+  Timestamps/TailLines/SinceSeconds/SinceTime/LimitBytes), mapped 1:1 onto
+  `corev1.PodLogOptions` by the pure `podLogOptions`; `SinceTime *time.Time` →
+  `*metav1.Time`. Timestamps is passed through verbatim (no internal
+  parsing/stripping this leg — that's only needed for resume, which is M1-07d).
+- **Single connection this leg; reconnect-on-drop is M1-07d.** Follow keeps the one
+  stream open for live lines until the container ends or ctx is cancelled, but a
+  transient transport drop ends the stream rather than resuming. The reconnecting/
+  resuming layer à la watch (D34) — which needs internal Timestamps + RFC3339Nano
+  parsing to set `SinceTime` on reconnect and dedup already-delivered lines within
+  the resumed second — is intricate enough to warrant its own focused, tested leg,
+  matching how Watch (M1-05b) and the 06/07 series were sliced. Landing the
+  single-connection core now already satisfies the "logs stream in-process" exit
+  clause; 07d hardens it.
+- **`bufio.Scanner` with a 1 MiB max line** (`logScanMaxLine`), raised well past the
+  64 KiB default because a single log line can be a stack trace or one-line JSON
+  blob. A line over the cap ends the stream with `bufio.ErrTooLong` surfaced as an
+  error event — never a silent truncation or a panic (#86, principle 3). Empty pod
+  name rejected; the open/decode errors are wrapped.
+- **Testing (D18):** `podLogOptions` is a pure table test; `streamLogs` is driven
+  directly from byte `strings.Reader`s (verbatim lines, no-trailing-newline,
+  over-long line → ErrTooLong, mid-stream ctx-cancel unblocks a full channel); the
+  wiring loop `runLogStream` is exercised with a fake `logStreamOpener` (success,
+  open-error → terminal event, already-cancelled ctx → no event). A **live** log
+  stream dials the API server → **envtest territory** (opt-in, like the watch
+  live-server exercise), not a hermetic unit test.
