@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-01a** Keymap core: `Action` ids + canonical key/chord model (parse human tokens ↔ derive from `tea.Key`) + default (vim-first) keymap + `Merge(overrides)` with validation (unknown-action / collision errors, nav-shadow warnings) + `KeyMsg → Action` resolution. No raw-key matching leaks; registry primitives (`Keys`, `Actions`) for later help/doc generation.
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-19
+      notes: first slice of M2-01 (D10/D11). Deferred to later slices: multi-key sequences (`gg`), YAML `keys:` config wiring + `kubecom keys`, `bubbles/key.Binding` + help overlay generation, view integration.
 
 ## Blocked
 
@@ -30,9 +32,16 @@ _(none — M0 complete)_
       notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
 
 ### M2 — Core TUI (partial seed)
-- [ ] **M2-01** Action registry + configurable keymap: Action ids, default (vim-first) keymap, merge(default, config.Keys) + validation; `KeyMsg → Action` resolution; generate bindings/help from registry (D10, D11)
-      status: todo | owner: — | added: 2026-07-18
-      notes: foundational — land before other input handling; no raw-key matching in views
+M2-01 (action registry + configurable keymap, D10/D11) split into slices; M2-01a is In Progress. Remaining:
+- [ ] **M2-01b** Multi-key sequences (`gg` → `nav.top`) + timeout-based sequence resolution; wire full-page `pgdn`/`pgup` fallbacks now that half/full-page collisions are understood
+      status: todo | owner: — | added: 2026-07-19
+      notes: needs stateful chord-sequence matcher on top of M2-01a's single-chord resolution
+- [ ] **M2-01c** Config `keys:` wiring: plain-YAML `keys: {action: [tokens]}` → `Merge`, surfaced through the config package; `kubecom keys` prints the resolved map + warnings
+      status: todo | owner: — | added: 2026-07-19
+      notes: depends on the M2 config struct (config package migration) + M2-01a Merge
+- [ ] **M2-01d** Help/keybindings generation from the registry: `bubbles/key.Binding`s + help overlay + generated keybindings doc, all derived from the keymap (D11 "can't drift")
+      status: todo | owner: — | added: 2026-07-19
+      notes: adds bubbles dep; builds on M2-01a `Keys`/`Actions`/descriptions
 
 _Remaining M2–M5 items to be expanded when those milestones open. See milestone files for scope._
 
