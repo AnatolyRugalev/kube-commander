@@ -167,6 +167,65 @@ func (c *Clients) setUnschedulable(ctx context.Context, r Resource, ref ObjectRe
 	return nil
 }
 
+// Suspend pauses a CronJob so its controller creates no new Jobs until it is
+// resumed — the same operation as `kubectl patch cronjob NAME -p
+// '{"spec":{"suspend":true}}'`: a merge patch setting `spec.suspend` to true.
+// Already-running Jobs a suspended CronJob spawned keep running (suspend only
+// gates *new* scheduling), the same way Cordon only stops *new* pods landing.
+// Like the other actions it goes through the dynamic client, so it needs no typed
+// batch client and works on any CronJob-shaped resource by GVR (the caller passes
+// the discovered Resource — batch/v1 CronJob); CronJobs are namespaced, so the
+// ref's namespace is honored. Empty name is rejected; errors are wrapped, never
+// panicked; a NotFound (CronJob gone since the row was listed) surfaces for the
+// caller (#86). Suspending is idempotent, so — like Cordon — there is no UID guard.
+func (c *Clients) Suspend(ctx context.Context, r Resource, ref ObjectRef) error {
+	return c.setSuspend(ctx, r, ref, true)
+}
+
+// Resume reverses Suspend: it marks a CronJob active again by merge-patching
+// `spec.suspend` to false, matching `kubectl patch cronjob NAME -p
+// '{"spec":{"suspend":false}}'`. Setting the field to the concrete value false
+// (not null) is deliberate for the same reason as Uncordon — a merge patch only
+// removes a key when the value is null, and an explicit false keeps the field
+// present and reads identically to the controller. Same generic dynamic-client
+// path, name check, wrapped errors, and idempotence as Suspend.
+func (c *Clients) Resume(ctx context.Context, r Resource, ref ObjectRef) error {
+	return c.setSuspend(ctx, r, ref, false)
+}
+
+// setSuspend is the shared body of Suspend/Resume: it merge-patches a CronJob's
+// `spec.suspend` flag through the dynamic client. Factoring it out keeps the two
+// public actions to a single line each and the wire format in one place
+// (suspendPatch). The verb in error messages tracks the flag so a failure reads
+// naturally ("suspending"/"resuming").
+func (c *Clients) setSuspend(ctx context.Context, r Resource, ref ObjectRef, suspend bool) error {
+	if ref.Name == "" {
+		return fmt.Errorf("kube: %s %s: empty object name", suspendNoun(suspend), r.GVR.Resource)
+	}
+	if _, err := c.resourceInterface(r, ref.Namespace).Patch(
+		ctx, ref.Name, types.MergePatchType, suspendPatch(suspend), metav1.PatchOptions{},
+	); err != nil {
+		return fmt.Errorf("kube: %s %s %q: %w", suspendVerb(suspend), r.GVR.Resource, ref.Name, err)
+	}
+	return nil
+}
+
+// suspendNoun / suspendVerb name the operation for error messages, keyed off the
+// target flag: suspend=true is a suspend, false is a resume.
+func suspendNoun(suspend bool) string {
+	if suspend {
+		return "suspend"
+	}
+	return "resume"
+}
+
+func suspendVerb(suspend bool) string {
+	if suspend {
+		return "suspending"
+	}
+	return "resuming"
+}
+
 // cordonNoun / cordonVerb name the operation for error messages, keyed off the
 // target flag: unschedulable=true is a cordon, false is an uncordon.
 func cordonNoun(unschedulable bool) string {
@@ -190,6 +249,15 @@ func cordonVerb(unschedulable bool) string {
 // round-trip in the Cordon/Uncordon tests).
 func unschedulablePatch(unschedulable bool) []byte {
 	return []byte(fmt.Sprintf(`{"spec":{"unschedulable":%t}}`, unschedulable))
+}
+
+// suspendPatch builds the RFC 7386 merge patch that toggles a CronJob's
+// spec.suspend flag — the wire format `kubectl patch cronjob` sends. Pure and
+// side-effect free so it is unit-testable without a client (the fake dynamic
+// client applies the merge patch to the whole tracked object, exercising the
+// round-trip in the Suspend/Resume tests).
+func suspendPatch(suspend bool) []byte {
+	return []byte(fmt.Sprintf(`{"spec":{"suspend":%t}}`, suspend))
 }
 
 // scalePatch builds the RFC 7386 merge patch that sets a scale subresource's

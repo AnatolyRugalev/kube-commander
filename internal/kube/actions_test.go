@@ -27,6 +27,10 @@ var (
 		GVR:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
 		Namespaced: true,
 	}
+	cronJobsResource = Resource{
+		GVR:        schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"},
+		Namespaced: true,
+	}
 )
 
 // deploymentObj builds an unstructured Deployment with a replica count and an
@@ -68,6 +72,7 @@ func newDynamicFake(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 		podsResource.GVR:        "PodList",
 		nodesResource.GVR:       "NodeList",
 		deploymentsResource.GVR: "DeploymentList",
+		cronJobsResource.GVR:    "CronJobList",
 	}
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds, objs...)
 }
@@ -389,6 +394,99 @@ func TestCordonNotFoundWrapped(t *testing.T) {
 	err := c.Cordon(context.Background(), nodesResource, ObjectRef{Name: "ghost"})
 	if err == nil {
 		t.Fatal("Cordon(missing): want error, got nil")
+	}
+	if !apierrors.IsNotFound(err) {
+		t.Errorf("error = %v, want a wrapped NotFound", err)
+	}
+}
+
+// suspendPatch owns the suspend/resume wire format; assert it directly, the
+// round-trip through the fake dynamic client is exercised below.
+func TestSuspendPatch(t *testing.T) {
+	if got, want := string(suspendPatch(true)), `{"spec":{"suspend":true}}`; got != want {
+		t.Errorf("suspendPatch(true) = %s, want %s", got, want)
+	}
+	if got, want := string(suspendPatch(false)), `{"spec":{"suspend":false}}`; got != want {
+		t.Errorf("suspendPatch(false) = %s, want %s", got, want)
+	}
+}
+
+// cronJobObj builds an unstructured CronJob with an (optional) pre-set suspend
+// flag so the suspend/resume round-trips have something realistic to patch.
+func cronJobObj(namespace, name string, suspend bool) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "batch/v1",
+		"kind":       "CronJob",
+		"metadata":   map[string]any{"namespace": namespace, "name": name},
+		"spec":       map[string]any{"suspend": suspend, "schedule": "* * * * *"},
+	}}
+}
+
+func cronJobSuspended(t *testing.T, dc *dynamicfake.FakeDynamicClient, ns, name string) bool {
+	t.Helper()
+	obj, err := dc.Resource(cronJobsResource.GVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get cronjob %s/%s: %v", ns, name, err)
+	}
+	s, found, err := unstructured.NestedBool(obj.Object, "spec", "suspend")
+	if err != nil || !found {
+		t.Fatalf("spec.suspend missing on cronjob %s/%s (found=%v err=%v)", ns, name, found, err)
+	}
+	return s
+}
+
+func TestSuspendMarksSuspended(t *testing.T) {
+	dc := newDynamicFake(cronJobObj("batch", "report", false))
+
+	var captured clienttesting.Action
+	dc.PrependReactor("patch", "cronjobs", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		captured = a
+		return false, nil, nil // observe only; let the tracker apply the patch
+	})
+
+	c := &Clients{Dynamic: dc}
+	ref := ObjectRef{Namespace: "batch", Name: "report"}
+	if err := c.Suspend(context.Background(), cronJobsResource, ref); err != nil {
+		t.Fatalf("Suspend: %v", err)
+	}
+	if !cronJobSuspended(t, dc, "batch", "report") {
+		t.Error("spec.suspend = false after Suspend, want true")
+	}
+	if captured == nil {
+		t.Fatal("no patch action recorded")
+	}
+	if got := captured.GetNamespace(); got != "batch" {
+		t.Errorf("namespace = %q, want batch (namespaced)", got)
+	}
+}
+
+func TestResumeMarksActive(t *testing.T) {
+	dc := newDynamicFake(cronJobObj("batch", "report", true))
+
+	c := &Clients{Dynamic: dc}
+	if err := c.Resume(context.Background(), cronJobsResource, ObjectRef{Namespace: "batch", Name: "report"}); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if cronJobSuspended(t, dc, "batch", "report") {
+		t.Error("spec.suspend = true after Resume, want false")
+	}
+}
+
+func TestSuspendEmptyName(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	if err := c.Suspend(context.Background(), cronJobsResource, ObjectRef{Namespace: "batch"}); err == nil {
+		t.Fatal("Suspend(empty name): want error, got nil")
+	}
+	if err := c.Resume(context.Background(), cronJobsResource, ObjectRef{Namespace: "batch"}); err == nil {
+		t.Fatal("Resume(empty name): want error, got nil")
+	}
+}
+
+func TestSuspendNotFoundWrapped(t *testing.T) {
+	c := &Clients{Dynamic: newDynamicFake()}
+	err := c.Suspend(context.Background(), cronJobsResource, ObjectRef{Namespace: "batch", Name: "ghost"})
+	if err == nil {
+		t.Fatal("Suspend(missing): want error, got nil")
 	}
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("error = %v, want a wrapped NotFound", err)

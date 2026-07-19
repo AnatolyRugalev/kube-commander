@@ -655,3 +655,34 @@ D33 (M1-05) and D35 (M1-06) split precedent. Landed `Clients.Cordon` /
   cordon sets unschedulable true (namespace dropped for the cluster-scoped node),
   uncordon flips a seeded-true node to false, empty-name rejected for both,
   NotFound wrapped. No new deps.
+
+### D38 — Executing M1-06d: cronjob suspend/resume as a generic `spec.suspend` merge patch
+**2026-07-19.** Fourth slice of the M1-06 action set (after 06a delete D35, 06b
+scale/restart D36, 06c cordon/uncordon D37); 06e drain remains. Landed
+`Clients.Suspend` / `Clients.Resume` in `internal/kube/actions.go` — a near-exact
+mirror of Cordon/Uncordon (D37), which is the whole point: this slice reuses the
+established toggle-a-bool-via-merge-patch shape rather than inventing anything.
+**Choices:**
+- **Suspend/Resume merge-patch `spec.suspend` through the dynamic client**, exactly
+  as `kubectl patch cronjob NAME -p '{"spec":{"suspend":true|false}}'` does —
+  Suspend sets it true, Resume sets it false. Same generic-dynamic-client posture
+  as the other actions: no typed batch client, addressed by the discovery
+  `Resource`'s GVR via the shared `resourceInterface(r, ns)` helper. CronJobs are
+  **namespaced** (unlike the cluster-scoped node in cordon), so the ref's namespace
+  is honored.
+- **Resume writes the concrete value `false`, not `null`** — identical rationale to
+  Uncordon (D37): an RFC 7386 merge patch removes a key only when its value is null;
+  explicit `false` keeps the field present and reads the same to the controller.
+- **Suspend gates only *new* Jobs.** Already-running Jobs a suspended CronJob
+  spawned keep running — the parallel of "cordon stops only new pods". Documented on
+  `Suspend` so a caller doesn't expect it to stop in-flight Jobs.
+- **No UID precondition (like Cordon/Scale, unlike Delete).** PatchOptions carries
+  none and the toggle is idempotent, so the row-snapshot guard doesn't apply. Empty
+  name rejected locally; NotFound wrapped (#86). Shared body
+  `setSuspend(ctx, r, ref, bool)`; the error verb tracks the flag
+  (suspending/resuming) via tiny pure `suspendNoun`/`suspendVerb` helpers, mirroring
+  `cordonNoun`/`cordonVerb`.
+- **Testing:** pure `suspendPatch(bool)` asserts the wire format; the fake dynamic
+  client round-trips the merge patch — suspend flips a seeded-false CronJob to true
+  (namespace honored), resume flips a seeded-true one to false, empty-name rejected
+  for both, NotFound wrapped. No new deps.
