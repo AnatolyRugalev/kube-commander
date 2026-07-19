@@ -1027,3 +1027,39 @@ never panic on bad ns/context" exit clause (#86, old #55, principle 3). **Choice
   dual-`%w`-wrapped not-found/url error (proves chain-walking), a real
   `RESTConfig(unknown-context)` → `KindBadContext` (the #86 path end-to-end), an
   empty-kubeconfig case, and `ErrorKind.String()`.
+
+### D47 — Executing M2-01a: keymap core — Action registry + canonical chord model; M2-01 split into slices
+**2026-07-19.** First slice of the M2 action registry (D10/D11). New package
+`internal/tui/keymap` is the single place keys exist; views will resolve a
+keypress to a named `Action` and never match a raw key.
+
+- **Canonical `chord` as the join key.** A keypress and a configured token both
+  normalise to one canonical string — modifiers (`ctrl`/`alt`, lowercased, fixed
+  order) `+` a base that is either a **case-sensitive single printable rune**
+  (`G` ≠ `g`) or a **lowercased special name** (`up`, `enter`, `pgdn`, …). Two
+  constructors feed it: `parseChord(token)` (config/defaults) and
+  `chordFromKey(tea.Key)` (live). Resolution is a single reverse-index lookup.
+  `TestChordRoundTrip` locks the equality property both constructors must satisfy.
+- **Shift is never an explicit modifier.** A shifted letter is its capital rune
+  (`G`, `N`), matching the keybindings.md config syntax; `parseChord` rejects a
+  `shift+` token with a hint. `chordFromKey` prefers `ShiftedCode`, then `Text`,
+  then `Code` so shift+g reads `G` under both the Kitty protocol and legacy
+  terminals; under ctrl the rune is lowercased so `ctrl+D` == `ctrl+d`.
+- **Defaults are one data table, collision-free by construction.** `DefaultKeymap`
+  panics (programming error, caught by `TestDefaultKeymapValid`) if the static
+  table is malformed. To keep defaults collision-free, `pgdn`/`pgup` fall back to
+  the **half-page** actions only; full-page keeps `ctrl+f`/`ctrl+b` (the doc lists
+  PgDn as a fallback for both, which would collide in one flat context).
+- **`Merge(overrides)` returns a new validated keymap + warnings**, never mutates
+  the receiver. Each entry **replaces** an action's binding wholesale (empty list
+  = disable). Errors: unknown action id, bad token, or a chord bound to two
+  actions (collision names both, in a stable order). **Warnings** (not errors)
+  flag an override that shadows a default navigation key (D10).
+- **Scope / splits.** This slice is registry + chord model + defaults + merge +
+  single-chord resolution + registry primitives (`Actions`/`Keys`/`Describe`) for
+  later help generation. Deferred: **M2-01b** multi-key sequences (`gg`→`nav.top`;
+  `top` falls back to `home` for now), **M2-01c** YAML `keys:` config wiring +
+  `kubecom keys`, **M2-01d** `bubbles/key.Binding` + help overlay generation. The
+  action-menu set (describe/yaml/delete/…) is an M3 deliverable per keybindings.md
+  and is not registered here. No new deps (`tea` already vendored). Hermetic,
+  pure-logic tests only — no goroutines, no runtime surface yet.

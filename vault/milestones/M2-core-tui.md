@@ -1,7 +1,9 @@
 # M2 — Core TUI (parity)
 
-**Status:** `todo`
+**Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
+
+_Started 2026-07-19 with M2-01a (keymap core: `internal/tui/keymap`)._
 
 ## Goal
 
