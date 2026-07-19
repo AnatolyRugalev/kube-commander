@@ -1170,3 +1170,29 @@ literals, so it can't drift from actual bindings.
   and became **M2-01e**. This leg is the in-app bindings + overlay only. With it,
   the M2-01 action-registry group is functionally complete bar the doc file; next
   is the M2 app shell (root model, browse view, table) — or M2-01e first.
+
+### D51 — M2-01e: keybindings doc generated from the registry + drift-guarded golden test
+**2026-07-19.** The committed keybindings reference is **generated from the
+default keymap**, not hand-written, closing the "generated keybindings doc" half
+of D11 (the help overlay was the in-app half, D50). **Why:** a hand-maintained
+doc drifts from the registry the moment a binding changes; generating it from the
+same `Actions()`/`Keys()`/`Describe()` primitives the overlay uses makes drift
+structurally impossible, and a golden test makes it *loud*. **How:**
+- `(*Keymap).Markdown()` (`internal/tui/keymap/doc.go`) renders the keymap as
+  `docs/keybindings.md`: a fixed banner + one table per action **namespace**
+  (`groupOf`, reused from help.go), columns Action / Keys / Description, registry
+  order; keys quoted and `/`-joined vim-first (`docKeys`), no-keys → em dash.
+  Nothing restates a literal key — it's all `Keys(a)`/`Describe()`.
+- **Golden drift test** `TestKeybindingsDoc` (`doc_test.go`) compares the
+  committed file to `DefaultKeymap().Markdown()`; a `-update` flag rewrites it.
+  `make check` runs it (via `go test ./...`) so a stale doc **fails the gate**;
+  `make keys-doc` (= `go test ./internal/tui/keymap -run TestKeybindingsDoc
+  -update`) regenerates. `TestMarkdownFromRegistry` asserts every action id, key,
+  and description appears (proves derivation, not restatement).
+- Committed doc lives at **`docs/keybindings.md`** (repo root, discoverable — new
+  `docs/` dir); the test resolves it as `../../../docs/keybindings.md` (go test's
+  cwd == package dir). Golden-update over a standalone `cmd/` generator: no new
+  binary, the test *is* the generator.
+No new deps. **Completes the M2-01 action-registry group** (01a keymap core / 01b
+sequences / 01c config wiring / 01d help overlay / 01e generated doc); next is the
+M2 app shell (root model, browse view, table).

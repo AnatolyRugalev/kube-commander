@@ -1,7 +1,7 @@
 # Canonical verification gate for kubecom (D17). Agents and CI run `make check`;
 # "green" means exactly this passing.
 # (Replaces the legacy Travis/protoc Makefile; pb/ codegen is gone per D3/D14.)
-.PHONY: check build test vet lint test-envtest
+.PHONY: check build test vet lint test-envtest keys-doc
 
 check: build test vet lint
 
@@ -16,6 +16,11 @@ vet:
 
 lint:
 	golangci-lint run
+
+# Regenerate the committed keybindings reference (docs/keybindings.md) from the
+# default keymap (D11). `make check` fails if the doc drifts (TestKeybindingsDoc).
+keys-doc:
+	go test ./internal/tui/keymap -run TestKeybindingsDoc -update
 
 # Opt-in envtest integration tests (D18): stand up a real kube-apiserver + etcd.
 # Not part of `check` — needs control-plane binaries fetched via setup-envtest.

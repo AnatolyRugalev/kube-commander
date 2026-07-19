@@ -8,9 +8,10 @@ adds multi-key sequences (`gg`→`nav.top`) + a stateful, model-timed `Sequencer
 M2-01c wires the plain-YAML `keys:` config (`internal/config`) onto `Merge` and
 adds `kubecom keys` to print the resolved map; M2-01d generates the help
 (`bubbles/key.Binding`s + a toggleable overlay in `internal/tui/help`) from the
-resolved keymap so it can't drift (D50). The action registry + configurable
-keymap is now functionally complete bar the standalone generated markdown doc
-(M2-01e). The app shell (root model, browse view, table, pickers, config
+resolved keymap so it can't drift (D50); M2-01e generates the committed
+`docs/keybindings.md` from the registry with a golden drift-check test +
+`make keys-doc` (D51). The action registry + configurable keymap group
+(M2-01a–e) is now **complete**. The app shell (root model, browse view, table, pickers, config
 load/save + legacy migration) is the rest of M2 — it will route input through the
 keymap/sequencer and embed the M2-01d help overlay._
 

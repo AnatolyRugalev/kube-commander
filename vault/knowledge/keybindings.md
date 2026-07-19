@@ -10,6 +10,11 @@ Everything below (the vim scheme included) is the **default keymap**. Users can
 rebind any action via config. Implement with `bubbles/key`, but build the
 `Binding`s *from the resolved keymap*, never from literals.
 
+> The authoritative, always-current default map is generated from the registry
+> into [`docs/keybindings.md`](../../docs/keybindings.md) (`make keys-doc`;
+> drift-guarded by `TestKeybindingsDoc`, M2-01e/D51). The tables in this file are
+> the human design intent; the generated doc is what actually ships.
+
 ## Architecture: action registry (the "zero hard-coded keys" rule)
 
 - Every user-triggerable behavior is a named **`Action`** (a stable string id,
