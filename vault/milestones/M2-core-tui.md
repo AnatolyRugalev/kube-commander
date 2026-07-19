@@ -4,9 +4,12 @@
 **Phase:** REWRITE_PLAN Phase 2
 
 _Started 2026-07-19 with M2-01a (keymap core: `internal/tui/keymap`); M2-01b
-adds multi-key sequences (`gg`→`nav.top`) + a stateful, model-timed `Sequencer`.
-Remaining M2-01 slices: M2-01c (YAML `keys:` config wiring), M2-01d
-(bubbles/key.Binding + help overlay from the registry)._
+adds multi-key sequences (`gg`→`nav.top`) + a stateful, model-timed `Sequencer`;
+M2-01c wires the plain-YAML `keys:` config (`internal/config`) onto `Merge` and
+adds `kubecom keys` to print the resolved map. Remaining M2-01 slice: M2-01d
+(bubbles/key.Binding + help overlay from the registry). The action registry +
+configurable keymap is then complete; the app shell (root model, browse view,
+table, pickers, config load/save + legacy migration) is the rest of M2._
 
 ## Goal
 

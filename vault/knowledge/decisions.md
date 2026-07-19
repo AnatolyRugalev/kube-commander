@@ -1104,3 +1104,34 @@ chord model.
   on half-page). Full-page keeps `ctrl+f`/`ctrl+b`; revisit only if full-page gets
   a context where pgdn is free. No new deps. Splits remaining: M2-01c YAML `keys:`
   wiring, M2-01d bubbles/key + help gen.
+
+### D49 — M2-01c: config `keys:` wiring — plain-YAML in `internal/config`, `Config.Keymap()` resolves, `kubecom keys` prints
+**2026-07-19.** The user config gets its first real field and the keymap its
+first config surface (M2-01c, on M2-01a's `Merge`).
+
+- **`internal/config` is now a real package** (was a doc-only stub). `Config` has
+  one wired field today, `Keys map[string][]string` (`json:"keys"`), the
+  action-id → key-tokens override table. The zero value is valid (runs on
+  defaults). The browse/menu/theme sections and the legacy migration (D6) are
+  still later legs; this leg only wires `keys:`.
+- **`sigs.k8s.io/yaml`, not a new YAML dep.** It was already a direct dep (from
+  M1-07a) and gives JSON-tag decoding + `UnmarshalStrict`. Plain user YAML decodes
+  through JSON tags; no `gopkg.in/yaml.v3` promotion, no new module. `omitempty`
+  json tags; unknown top-level fields are **rejected** (`UnmarshalStrict`) so a
+  typo — or a not-yet-wired section written early — fails loudly instead of being
+  a silent no-op. Revisit if a future section needs lenient forward-compat.
+- **A missing config file is not an error.** `LoadFile` returns the zero config on
+  `os.ErrNotExist` (kubecom runs on defaults with no file); other read/parse
+  errors propagate wrapped. `Load(io.Reader)` is the stream form both share.
+- **Config path stays D20:** `Path()` = `os.UserConfigDir()/kubecom/config.yaml`.
+- **`Config.Keymap()` is where config meets the keymap.** config imports keymap
+  (one-way; keymap imports no config), casts each string id to `keymap.Action`,
+  and calls `DefaultKeymap().Merge(overrides)` — reusing M2-01a's validation
+  wholesale: unknown action / bad token / collision are errors; a nav-key shadow
+  is a returned warning. No resolution logic is duplicated in config.
+- **`kubecom keys`** loads the config (default path or `--config`), resolves, and
+  prints the effective map in registry order (`keymap.Actions()` + `Keys()` +
+  `Describe()`), disabled actions shown as `(disabled)`. Merge **warnings go to
+  stderr**, the table to stdout; an invalid keymap fails the command (exit 1).
+  `printKeys(out, errOut, km, warnings)` is split from the cobra `RunE` so it is
+  testable without cobra. No new deps.

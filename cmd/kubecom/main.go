@@ -39,6 +39,7 @@ milestones.`,
 	// "kubecom"), not cobra's default "<name> version <version>" line.
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newKeysCmd())
 	return root
 }
 
