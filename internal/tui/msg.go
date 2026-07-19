@@ -65,19 +65,14 @@ func NewErrorMsg(context string, err error) ErrorMsg {
 	return ErrorMsg{Context: context, Err: err, Kind: kube.Classify(err)}
 }
 
-// ResourceSelectedMsg is emitted by the resource menu when the user picks a kind
-// to browse; the app reacts by (re)starting a watch for it. It is defined here
-// with the other cross-component messages so the menu and app agree on one type.
-type ResourceSelectedMsg struct {
-	Resource kube.Resource
-}
-
-// RowSelectedMsg is emitted by the table when the selected row changes; the app
-// reacts by re-scoping actions/viewers to Object. Namespace is empty for
-// cluster-scoped resources.
-type RowSelectedMsg struct {
-	Object kube.ObjectRef
-}
+// A message emitted *by* a component (rather than by the kube boundary above) is
+// owned by that component's package, not declared here: the root model imports
+// the component packages, so a component cannot import this one without a cycle
+// (D56). The resource menu's "resource selected" message therefore lives in
+// internal/tui/components/menu (menu.ResourceSelectedMsg); the table's
+// "row selected" message will likewise live in the table package when M2-06 lands.
+// The types in this file are the kube-boundary messages and the generic ErrorMsg,
+// which no component originates.
 
 // (Terminal size is delivered by Bubble Tea's own tea.WindowSizeMsg; kubecom does
 // not define its own size message.)

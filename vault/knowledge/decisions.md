@@ -1310,3 +1310,37 @@ short-help hint right-aligned. Locked choices:
 - **Deps:** none new — `bubbles/v2/spinner`, `bubbletea/v2`, `lipgloss/v2` all
   already direct. First `internal/tui/components/*` package; the layout the rest
   of M2's components follow (New(styles), prop setters, value-receiver View).
+
+### D56 — M2-05a: resource menu owns its "resource selected" message (emitter owns the type)
+**2026-07-19 (M2-05a).** `internal/tui/components/menu` is the browse view's left
+pane: a static-seeded vertical list of resource kinds, navigated through keymap
+actions, that emits a selection message when the user drills in. Locked choices:
+- **A component-emitted message is owned by that component's package, not by
+  package `tui`.** The root model (package `tui`, M2-07) imports the component
+  packages, so a component importing `tui` to build a `tui`-declared message would
+  cycle. `ResourceSelectedMsg{Resource kube.Resource}` therefore lives in the
+  `menu` package (the emitter); the root model handles the concrete
+  `menu.ResourceSelectedMsg`. The pre-declared placeholder `tui.ResourceSelectedMsg`
+  is **removed** from `msg.go`; the same rule will move the table's
+  `RowSelectedMsg` into the table package in M2-06. `msg.go` keeps only the
+  kube-boundary messages + the generic `ErrorMsg`, which no component originates.
+- **Static seed, discovery-independent.** `seedItems()` is a fixed core-resource
+  list (namespaces/nodes/events · pods/deployments/statefulsets/daemonsets/
+  replicasets/jobs/cronjobs · services/ingresses · configmaps/secrets/
+  serviceaccounts · pvcs/pvs/storageclasses), each a real `kube.Resource`
+  (GVK/GVR/scope) so drilling in gives the kube layer everything List/Watch needs.
+  The seed lets the browse view render and be navigated before discovery completes
+  (fast cold start, principle 4); M2-05b reconciles it against `DiscoveryReadyMsg`.
+- **Display title = `GVK.Kind`.** Canonical, correctly-cased, and works uniformly
+  for built-ins and CRDs (no ad-hoc pluralisation). Adjustable later if the UX
+  wants plurals.
+- **Actions in, not keys.** `Update(a keymap.Action) (Model, tea.Cmd)` moves the
+  highlight (up/down/top/bottom, clamped) and, on `nav.drillIn`, emits
+  `ResourceSelectedMsg` for the highlighted item; an **unavailable** item (M2-05b)
+  is a no-op on drill-in. The menu never matches a raw key (D11). A vertical scroll
+  `offset` keeps the cursor visible so a short pane / long list still works;
+  page/half-page actions are left to a later slice. Pure value-receiver `View`
+  frames the list with `Pane`/`PaneFocus` and highlights the cursor with
+  `Selection` (D54); returns `""` until sized. No shared mutable state (principle 1).
+- **Deps:** none new. Imports `kube` (Resource) + `apimachinery/.../schema` (to
+  build the seed GVK/GVR) + `keymap` + `styles` + `bubbletea/v2` (Cmd).

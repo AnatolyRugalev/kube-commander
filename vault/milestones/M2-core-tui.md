@@ -22,8 +22,12 @@ a named-color `Theme` → derived `Styles`, `DefaultTheme`/`Default`; lipgloss v
 promoted to a direct dep, D54). **M2-04** landed the first `components/*` package,
 the status bar (`internal/tui/components/statusbar`: context · namespace ·
 discovery spinner · short-help hint, rendered purely from props; spinner ticks
-gated on discovering, D55); top-unblocked next is **M2-05a** (static seed
-resource-menu sidebar)._
+gated on discovering, D55). **M2-05a** landed the second, the resource-menu
+sidebar (`internal/tui/components/menu`: a static seed of core resource kinds,
+navigated through keymap actions, emitting its own `menu.ResourceSelectedMsg` on
+drill-in — the emitter owns the message type to avoid a component→`tui` import
+cycle, D56); top-unblocked next is **M2-05b** (reconcile the seed with
+`DiscoveryReadyMsg` without disturbing selection/scroll)._
 
 ## Goal
 
