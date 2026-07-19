@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-01b** Multi-key sequences (`gg` → `nav.top`) + timeout-based sequence resolution
+      status: in-progress | owner: claude-opus | added: 2026-07-19
+      notes: stateful chord-sequence matcher on top of M2-01a's single-chord resolution
 
 ## Blocked
 
