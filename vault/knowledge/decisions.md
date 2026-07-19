@@ -1284,3 +1284,29 @@ Rationale and locked choices:
 - **Dep:** `charm.land/lipgloss/v2` v2.0.0 **promoted indirect→direct** (was
   transitive via bubbles, D50). No version change, `go.sum` untouched — MVS
   already had it; this is a go.mod require-block move only.
+
+### D55 — M2-04: status bar renders purely from props; spinner ticks gated on discovering
+**2026-07-19 (M2-04).** `internal/tui/components/statusbar` is kubecom's bottom
+bar: `context · namespace · [spinner] discovering…` on the left, the keymap
+short-help hint right-aligned. Locked choices:
+- **Pure render from props.** The bar owns no shared state; the root model sets
+  `SetContext`/`SetNamespace`/`SetShortHelp`/`SetWidth` and reads `View()`. The
+  short-help is generated upstream from the effective keymap (`help.Model.
+  ShortHelpView()`, D11) and handed in **as a string**, so the bar never matches
+  a raw key or knows what a binding does — it only lays out the pieces it's given.
+- **Spinner ticks gated on `discovering`.** The bar embeds a `bubbles/spinner`
+  (styled with the `Styles.Spinner` accent role, D54). `StartDiscovery()` sets
+  the flag and returns the seed `spinner.Tick` Cmd; `Update` forwards a
+  `spinner.TickMsg` to the spinner **only while discovering**, so `StopDiscovery()`
+  breaks the self-scheduling tick chain and the animation stops on the next tick —
+  no timer to cancel, no goroutine (principle 1). Spinner state is model-local,
+  not shared, so this is not the mutex-guarded UI state D1 forbids.
+- **Width-aware layout.** With a known width the help is pushed to the right edge
+  (`gap = width − W(left) − W(right)` spaces) and the line is clamped
+  (`Style.Width(w).MaxWidth(w)`); when the gap can't fit both, the live left
+  segment wins and the hint is dropped. Width 0 (pre-`WindowSizeMsg`) joins the
+  pieces inline. Empty pieces are skipped so a missing namespace leaves no
+  dangling separator.
+- **Deps:** none new — `bubbles/v2/spinner`, `bubbletea/v2`, `lipgloss/v2` all
+  already direct. First `internal/tui/components/*` package; the layout the rest
+  of M2's components follow (New(styles), prop setters, value-receiver View).

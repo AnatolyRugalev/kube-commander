@@ -19,7 +19,11 @@ decomposed into ordered, leg-sized slices **M2-02 … M2-14** on the
 Tea `tea.Msg` boundary (`internal/tui/msg.go`: msg types + one-item `watchPump`/
 `discoveryPump`, D53). **M2-03** landed the styles foundation (`internal/tui/styles`:
 a named-color `Theme` → derived `Styles`, `DefaultTheme`/`Default`; lipgloss v2
-promoted to a direct dep, D54); top-unblocked next is **M2-04** (status bar)._
+promoted to a direct dep, D54). **M2-04** landed the first `components/*` package,
+the status bar (`internal/tui/components/statusbar`: context · namespace ·
+discovery spinner · short-help hint, rendered purely from props; spinner ticks
+gated on discovering, D55); top-unblocked next is **M2-05a** (static seed
+resource-menu sidebar)._
 
 ## Goal
 
