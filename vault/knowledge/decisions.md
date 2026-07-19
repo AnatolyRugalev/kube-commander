@@ -980,3 +980,50 @@ action/viewer set's remaining M1-08 exit criterion. **Choices:**
   `github.com/mxk/go-flowrate` — all satisfied within the pinned k8s.io v0.31.4
   graph; **no direct-dep or version change** (the tidy did not drift any existing
   module, unlike the kubectl-dep trap D42 warned about).
+
+### D46 — Executing M1-09: typed graceful errors as a Classify(err) → ErrorKind taxonomy over the wrapped chain; RESTConfig tags bad-context
+**2026-07-19.** Landed `internal/kube/errors.go` — the "graceful, typed errors,
+never panic on bad ns/context" exit clause (#86, old #55, principle 3). **Choices:**
+- **Classification over rewiring.** The kube layer already returns every error
+  wrapped (`fmt.Errorf(... %w)`) around the underlying apierrors/clientcmd/transport
+  error. Rather than replace ~40 error sites with constructed typed errors (a large,
+  churny diff), M1-09 adds a single `Classify(err error) ErrorKind` that **walks the
+  existing wrap chain** and maps it to a small taxonomy. Zero call sites change; the
+  underlying error stays reachable via `errors.Is`/`As`. This is exactly what the
+  M1-08 journal scoped ("wrapping the apierrors/clientcmd errors the layer already
+  returns").
+- **Taxonomy (`ErrorKind`):** `KindUnknown` (incl. nil), `KindNotFound`,
+  `KindAlreadyExists`, `KindConflict` (stale resourceVersion / failed UID
+  precondition — the D35 delete race), `KindForbidden` (RBAC/403), `KindUnauthorized`
+  (401), `KindInvalid` (400/422), `KindTimeout`, `KindUnreachable` (transport/DNS/503),
+  `KindBadContext` (kubeconfig/context). The stated M1-08 set (not-found / forbidden /
+  unreachable / bad-context) plus the neighbours with a direct apierrors predicate and
+  clear TUI value (conflict/unauthorized/invalid/timeout/already-exists). `String()`
+  returns a stable lowercase token (classification, not user copy — the TUI renders
+  its own message per kind).
+- **apierrors predicates walk the chain themselves** (`ReasonForError` → `errors.As`
+  to the embedded `*StatusError`), so `IsNotFound(err)` etc. see through the layer's
+  `%w`; called directly, most-specific first.
+- **Transport unreachable = `errors.As` to `*url.Error` / `net.Error`** (dial refused,
+  DNS, TLS never get an HTTP status, so they arrive as these, not an apierror), plus
+  `apierrors.IsServiceUnavailable` (503). `context.DeadlineExceeded` → `KindTimeout`.
+- **Bad-context is layer-tagged, not string-matched.** The common case — an override
+  context that doesn't exist (`--context nope`) — is a **plain `fmt.Errorf("context
+  %q does not exist")`** inside clientcmd (`client_config.go`) that **no clientcmd
+  predicate matches** (`IsContextNotFound` only matches the `*errContextNotFound`
+  type / its specific "was not found for specified context" string, and validation
+  never runs for a getContext override miss). So relying on clientcmd predicates
+  misses the most important case. Instead, **`RESTConfig` — the single construction
+  entry point, whose every failure is a kubeconfig/context problem — wraps its error
+  with an unexported `errBadContext` sentinel** (`fmt.Errorf("kube: loading
+  kubeconfig: %w: %w", errBadContext, err)`, dual-`%w`), and `Classify` checks
+  `errors.Is(err, errBadContext)` first. This tags at the site with the most context
+  and is robust to clientcmd's varied wording; the clientcmd predicates
+  (`IsContextNotFound`/`IsEmptyConfig`/`IsConfigurationInvalid`, run per-chain-link
+  via `chainMatches` since some match only the concrete type) stay as a secondary net
+  for a clientcmd error that reaches Classify by another path.
+- **No new deps** (net, net/url, context, apierrors, clientcmd all already vendored).
+  Hermetic tests: a `Classify` table over constructed apierrors/url/net errors + a
+  dual-`%w`-wrapped not-found/url error (proves chain-walking), a real
+  `RESTConfig(unknown-context)` → `KindBadContext` (the #86 path end-to-end), an
+  empty-kubeconfig case, and `ErrorKind.String()`.

@@ -74,6 +74,16 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **k8s.io/kubectl/pkg/describe** — in-process describe output.
 - Pod logs via `CoreV1().Pods(ns).GetLogs(...).Stream(ctx)`.
 - **metrics.k8s.io** client — optional CPU/mem columns when metrics-server present.
+- **Typed error taxonomy** (M1-09, D46, `internal/kube/errors.go`): the layer wraps
+  every error (`fmt.Errorf(... %w)`); `Classify(err) ErrorKind` walks that chain to a
+  small enum — `KindNotFound`/`AlreadyExists`/`Conflict`/`Forbidden`/`Unauthorized`/
+  `Invalid`/`Timeout`/`Unreachable`/`BadContext`/`Unknown` — so the M2 TUI degrades one
+  feature instead of crashing (#86). apierrors `Is*` predicates already unwrap `%w`;
+  transport failures come as `*url.Error`/`net.Error` (no HTTP status). **Gotcha:** a
+  bad **override** context is a plain `fmt.Errorf("context %q does not exist")` in
+  clientcmd (`client_config.go`) that **no clientcmd predicate matches** — so
+  `RESTConfig` tags its errors with the `errBadContext` sentinel (dual-`%w`) and
+  Classify keys off `errors.Is`, not clientcmd's wording.
 
 ## Key API patterns
 - **Server-side Table watch gotchas** (all handled in M1-05b, `watch.go`, D34):

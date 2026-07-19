@@ -58,7 +58,8 @@ type Clients struct {
 // RESTConfig resolves a *rest.Config from the given ClientConfig using client-go's
 // standard loading rules and context override. It performs no network I/O and
 // never panics: a missing or malformed kubeconfig, or an unknown context, returns
-// a wrapped error the caller can surface and degrade on (#86).
+// a wrapped error the caller can surface and degrade on — Classify reports it as
+// KindBadContext (#86).
 func RESTConfig(cc ClientConfig) (*rest.Config, error) {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if cc.Kubeconfig != "" {
@@ -70,7 +71,10 @@ func RESTConfig(cc ClientConfig) (*rest.Config, error) {
 	}
 	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("kube: loading kubeconfig: %w", err)
+		// Tag with errBadContext so Classify reports KindBadContext for any
+		// kubeconfig/context load failure (missing file, unknown context, empty
+		// config) — the graceful path #86 requires, never a panic.
+		return nil, fmt.Errorf("kube: loading kubeconfig: %w: %w", errBadContext, err)
 	}
 	return cfg, nil
 }
