@@ -1942,3 +1942,26 @@ future filter/search legs must not contradict:
 action-routed, layout-safe shape as the picker and the error toast, and settles the
 n/N-vs-narrowing-filter question (fold search into filter+step, don't maintain a
 parallel match cursor) so later search work builds on it instead of re-deciding.
+
+### D81 — M1-04b (lazy group-detail-on-open) retired as obsolete; do not reintroduce a collapsible-group menu for it
+**2026-07-20 (M1-04b).** The parked M1-04b item ("fetch a group's full resource
+detail only when its menu is opened") is **retired won't-do** — it does not fit the
+realized architecture and its intent is already delivered. Two grounds:
+- **No group-open interaction exists, by design.** The M2 menu is a *flat*
+  Dashboard-sectioned list of resource *kinds* (D77, hardened after the FB-menu-nesting
+  feedback); drilling in (`nav.drillIn`) starts a *watch* on the selected kind, not a
+  group-detail fetch. There is no collapsible group node to "open," and adding one
+  purely to defer discovery would **regress** UX — discovered CRDs/extra kinds would
+  vanish from the menu until their group is expanded, the opposite of "everything
+  discovered shows up."
+- **The cold-start intent is already met.** Non-blocking cold start without an eager
+  blocking full-discovery fetch is delivered by the seed set (M1-02, core kinds usable
+  instantly), async background discovery (M1-03, `StartDiscovery` never blocks a
+  caller), and kubectl-style per-host on-disk discovery caching (M1-04,
+  `diskcached`, zero network I/O at construction, TTL 6h). Per-group discovery detail
+  is already read/written lazily *by the disk cache*; there is nothing left to defer
+  without the (unwanted) group-open UI.
+**Constraint:** do not reintroduce a collapsible-group menu or per-group lazy
+discovery on the strength of this old item alone — it would need a fresh UX decision
+that supersedes D77's flat-menu direction. **Consequence:** M1 has no remaining
+open feature work; only the tracked envtest item (M1-INT, D66) is deferred.
