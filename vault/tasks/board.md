@@ -7,7 +7,8 @@ _Last updated: 2026-07-20 — added the `vault/feedback/` inbox: checked before 
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-RUN** Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
+      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
 
 ## Blocked
 
@@ -43,8 +44,8 @@ messages.
 > apiserver. Once it lands, every subsequent leg is verified against the running
 > binary and must **incrementally improve the real-cluster experience** (D68).
 
-- [ ] **M2-RUN** Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
-      status: todo | owner: — | added: 2026-07-20
+- [ ] **M2-RUN** _(claimed — see In Progress)_ Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
+      status: in-progress | owner: claude-opus | added: 2026-07-20
       notes: Wire the pieces that already exist into a runnable program (keep it minimal,
       ~1 leg). Root command builds a real `*kube.Clients` (`kube.NewClients`) from
       kubeconfig/context/namespace flags (`--kubeconfig`/`--context`/`-n`), constructs the
