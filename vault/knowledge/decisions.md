@@ -1584,3 +1584,37 @@ into the shell.
   goroutine unwinds before the program exits (the cap-1 channel already prevents a
   leak, but cancelling drops the result promptly).
 - **Deps:** none new (reuses the M2-02 pump, M2-04 spinner, M2-05b `Reconcile`).
+
+### D65 — M2-08a: generic modal picker over bubbles/list, driven by keymap actions
+**2026-07-20.** M2-08 (the namespace switcher) is too large for one leg, so it is
+split: **08a** is the picker component in isolation, **08b** adds filtering, **08c**
+wires it into the app shell (a `ns.switch` action + a `NamespaceLister` seam that
+re-scopes the watch). This decision covers 08a.
+- **A generic, kind-stamped picker.** `internal/tui/components/picker` chooses one
+  string value from a set. It is generic (values are plain strings) and carries a
+  `kind` ("namespace" first) stamped into its result messages, so the same component
+  is reused for the later context/container/port pickers and the root model can tell
+  which picker resolved. Namespace-specific plumbing lives in 08c, not the component.
+- **Wraps bubbles/list but is driven by keymap actions, never raw keys (D11).** The
+  picker holds a `list.Model` for cursor + pagination management (and, in 08b, its
+  native filter), but `Update` takes a `keymap.Action` and calls the list's public
+  cursor methods (`CursorUp/Down`, `GoToStart/End`, `Prev/NextPage`) — it never feeds
+  raw key messages to the list. The list's own key bindings and chrome (title, help,
+  status bar, pagination, filtering, quit keys) are all **disabled** so no hard-coded
+  key or help string leaks into the view; the picker frames and titles the list
+  itself through the shared `styles` (Header title, PaneFocus border, Selection cursor
+  row via a minimal one-line `itemDelegate`). This keeps the "zero hard-coded keys"
+  invariant intact even though bubbles/list ships its own keymap.
+- **Emitter owns its messages (D56).** Drill-in emits `picker.SelectedMsg{Kind,Value}`,
+  back emits `picker.CancelledMsg{Kind}` — both owned by the picker package so it never
+  imports the root package (which imports it). The picker does **not** hide itself on
+  select/cancel; it leaves that to the root model (08c), keeping the component free of
+  app-flow assumptions.
+- **Modal geometry.** `SetSize` takes the *full screen* size; the picker computes a
+  clamped modal box (a fraction of the screen within [24,60]×[5,20], never exceeding
+  the screen) and `View` centers it with `lipgloss.Place`. A hidden or unsized picker
+  renders `""`. No shared mutable state (principle 1): the root model owns the one
+  Model, feeds it actions, reads its View.
+- **Deps:** `bubbles/list` pulls two new **indirect** transitives — `github.com/atotto/
+  clipboard v0.1.4` and `github.com/sahilm/fuzzy v0.1.1` (via `textinput`/`list`). Added
+  by `go mod tidy`; no existing version moved (minimal-dep discipline, D45).

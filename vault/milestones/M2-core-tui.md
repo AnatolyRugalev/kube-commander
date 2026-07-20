@@ -67,8 +67,18 @@ model, and `Update` opens a cancellable pass, starts the M2-04 spinner, and batc
 tick with the M2-02 `discoveryPump`; `DiscoveryReadyMsg` stops the spinner and folds the
 result into the menu via M2-05b `Reconcile` — a no-op on a total failure so the menu
 degrades to its navigable seed (principle 3) — completing the **M2-07 root-shell group
-(07a–07d)** (D64). Top-unblocked next is **M2-08** (namespace picker over `bubbles/list`,
-its selection re-scoping the watch via the `m.namespace` field the shell already reads)._
+(07a–07d)** (D64). **M2-08** (namespace picker) is split into 08a/08b/08c; **M2-08a**
+landed the fourth `components/*` package, a generic modal **picker**
+(`internal/tui/components/picker`): a centered, bordered modal choosing one string
+value from a set, wrapping `bubbles/list` for cursor + pagination but driven entirely
+through keymap actions (the list's own keys + chrome disabled so no hard-coded key
+leaks, D11); kind-stamped for reuse as the later context/container/port pickers, drill-in
+emitting `picker.SelectedMsg{Kind,Value}` / back `picker.CancelledMsg{Kind}` (D56), the
+component leaving hide/flow to the root model (08c). Two new indirect deps via list/
+textinput, no version drift (D65). Top-unblocked next is **M2-08b** (picker filtering),
+then **M2-08c** (wire the namespace picker into the app shell — a `ns.switch` action + a
+`NamespaceLister` seam re-scoping the watch via the `m.namespace` field the shell already
+reads)._
 
 ## Goal
 
