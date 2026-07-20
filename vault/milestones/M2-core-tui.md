@@ -42,8 +42,14 @@ row keyed by `ObjectRef.UID`, cursor keeping its index when the selected row is 
 (D59). **M2-06c** added **horizontal scroll** — a table wider than its pane scrolls
 on `nav.left`/`nav.right` (`h`/`l`), one `hoffset` windowing header+rows in step and
 snapping to column starts (`hclip` replaces `truncate`; no-wrap invariant D58 kept;
-no keymap/doc change), completing the M2-06 table trio (D60). Top-unblocked next is
-**M2-07a** (root app shell: keymap-routed `tea.Model` skeleton + help overlay)._
+no keymap/doc change), completing the M2-06 table trio (D60). **M2-07a** landed the
+root app shell's first slice (`internal/tui/app.go`, replacing the M0 `tui.go`
+placeholder): the keymap-routed `tea.Model` skeleton — owns the resolved keymap + the
+one `Sequencer`, routes every `KeyMsg` through it to an `Action` (no raw-key match,
+D11), schedules the sequence-timeout tick with a generation guard that drops stale
+ticks (D48), embeds the M2-01d help overlay (`app.help` toggles, `nav.back` closes),
+and quits on `app.quit`; no panes yet (D61). Top-unblocked next is **M2-07b** (compose
+the two-pane browse layout: menu | table with focus switching)._
 
 ## Goal
 

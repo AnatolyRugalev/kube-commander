@@ -1458,3 +1458,36 @@ scrolls horizontally instead of only clipping the right edge (D58). Locked choic
   future pane-focus-vs-scroll arbitration (compare before/after a left/right to detect
   an edge). Pure render, no shared mutable state (principle 1).
 - **Deps:** none new.
+
+### D61 — M2-07a: root app model owns the keymap + Sequencer; a generation-tagged timeout tick
+**2026-07-20 (M2-07a).** The M0 `internal/tui/tui.go` placeholder is replaced by the
+real root model in `internal/tui/app.go` — the M2 app shell, built up across
+M2-07a..d. This slice (07a) is the keymap-routed **skeleton** (no panes yet). Locked
+choices:
+- **The root model owns the resolved `*keymap.Keymap` and the one `*keymap.Sequencer`.**
+  Every `tea.KeyPressMsg` is fed to `seq.Input(msg.Key())`; the model never matches a
+  raw key (D11). The Sequencer is a **pointer** field so its buffered prefix survives
+  the value-model copy Bubble Tea makes each `Update`, but it is only ever touched from
+  the single-threaded update loop — no shared mutable state across goroutines
+  (principle 1).
+- **The keymap runs no timer (D48); the model schedules it.** On `ResultPending` the
+  model returns `tea.Tick(keymap.SequenceTimeout, …)` producing a private
+  `seqTimeoutMsg`; on receipt it calls `seq.Timeout()` and fires the result. This keeps
+  the keymap package pure.
+- **Timeout ticks are generation-tagged to drop stale ones.** `seqTimeoutMsg` carries
+  the `seqGen` value current when it was scheduled; `seqGen` is bumped on every new
+  pending. A tick whose `gen` ≠ the model's current `seqGen` was superseded by a newer
+  pending and is ignored — otherwise a leftover timer from an already-resolved prefix
+  could fire a *newer* pending's short form early (e.g. `g`⟨pend⟩ `gg`⟨resolve⟩ `g`⟨pend⟩
+  → the first tick must not fire the second `g`). A tick that finds an empty buffer is
+  already inert via `Timeout()`; the gen guard covers the newer-pending case.
+- **Actions serviced today:** `app.quit`→`tea.Quit`, `app.help`→toggle the M2-01d help
+  overlay, `nav.back`→close the overlay when open (else inert). All nav/filter/search
+  actions are inert no-ops until the browse panes land (M2-07b onward).
+- **`New()` uses `DefaultKeymap`; `NewWithKeymap(*Keymap)` accepts a config-merged one**
+  so the command layer can hand in the resolved keymap (M2-01c/M2-11) without `tui`
+  importing `config` (one-way dependency).
+- **View draws nothing until the first `WindowSizeMsg`** (never size a layout to a zero
+  canvas); when sized it shows a placeholder body (or the help overlay when open) plus
+  a one-line short-help hint generated from the registry.
+- **Deps:** none new.
