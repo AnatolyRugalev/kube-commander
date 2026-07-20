@@ -7,7 +7,8 @@ _Last updated: 2026-07-20 — M2-RUN landed: bare `kubecom` launches the browse 
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-08b** Picker filtering (`internal/tui/components/picker`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
 
 ## Blocked
 
@@ -83,11 +84,6 @@ messages.
       namespace picker into the app shell (keymap `ns.switch` action + a
       `NamespaceLister` seam; open/select re-scopes the watch via `m.namespace`;
       regenerate `docs/keybindings.md`).
-- [ ] **M2-08b** Picker filtering (`internal/tui/components/picker`)
-      status: todo | owner: — | added: 2026-07-20
-      notes: Add incremental filtering to the M2-08a picker (bubbles/list native
-      filter or a `bubbles/textinput`), driven so no raw key leaks past the text
-      field. `/` opens filter, matches narrow the list, esc clears. Depends on: M2-08a.
 - [ ] **M2-08c** Wire namespace picker into the app shell (`internal/tui/app.go`)
       status: todo | owner: — | added: 2026-07-20
       notes: Add a `ns.switch` keymap action + a narrow `NamespaceLister` seam
