@@ -9,7 +9,10 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 - **Logging rule:** while the TUI owns the terminal, *nothing* may write to
   stdout/stderr — a stray print corrupts the alt-screen. slog writes to a log
   file (under the user state/cache dir); route klog/client-go warnings there
-  too. No `fmt.Print*` outside `cmd/` pre-TUI paths.
+  too. No `fmt.Print*` outside `cmd/` pre-TUI paths. Implemented in
+  `cmd/kubecom/logging.go`; **`klog.LogToStderr(false)` alone is not enough** —
+  klog still copies ERROR lines to stderr unless you also raise `stderrthreshold`
+  to FATAL (D71).
 
 ## TUI (Charmbracelet)
 - **bubbletea v2** (D19) — Elm-architecture runtime (Model/Update/View, `tea.Msg`,

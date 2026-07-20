@@ -1686,3 +1686,34 @@ human; a durable, in-repo inbox lets the maintainer steer between reviews (bugs 
 dogfooding per D68, priority changes, course corrections) without waiting on a chat.
 Wired into CLAUDE.md's leg loop, the `do-rewrite-leg` skill (Orient + Pick), and
 `vault/README.md`.
+
+### D70 — bubbletea v2 full-screen is a `View` property, not a program option
+**2026-07-20.** M2-RUN wired `tea.NewProgram`. The board's sketch called
+`tea.NewProgram(model, tea.WithAltScreen())`, but **`tea.WithAltScreen()` does not
+exist in bubbletea v2** (v2.0.2) — it was a v1 program option. In v2 the alternate
+screen is a field on the view the model returns: `View.AltScreen`. So the root
+model requests full-screen mode itself, in `Model.View()` (`v := tea.NewView(...);
+v.AltScreen = true`), and the launcher runs a plain `tea.NewProgram(model).Run()`
+with no screen option. Any future program-level terminal mode (mouse, focus
+reporting, bracketed paste, window title) is likewise a `tea.View` field, set in
+`View()`, not a `NewProgram` option — do not reintroduce the v1 option form.
+**Why:** v1-era snippets (the board sketch included) mislead here; recording the v2
+shape stops the next leg re-deriving it against a missing symbol.
+
+### D71 — TUI logging goes to a file with klog fully off stderr (raise the stderr threshold)
+**2026-07-20.** The `stack.md` rule "nothing may write to stdout/stderr while the
+TUI owns the terminal" needs an explicit klog step: **`klog.LogToStderr(false)` is
+not sufficient**, because klog copies every ERROR-level line to stderr regardless
+whenever the line's severity meets the stderr *threshold* (default ERROR) — which is
+exactly the `memcache.go "couldn't get current server API group list"` line
+client-go emits on an unreachable cluster, and it corrupts the alt-screen. The
+launcher (`cmd/kubecom/logging.go`, `setupLogging`) therefore, before any client is
+built: points `slog` at a log file under the user cache dir
+(`os.UserCacheDir()/kubecom/kubecom.log`), and configures klog through a **private
+`flag.FlagSet`** (no global flag pollution) with `logtostderr=false`,
+`alsologtostderr=false`, `stderrthreshold=FATAL`, plus `klog.SetOutput(logFile)`.
+Verified: with an unreachable cluster, the memcache error lands in the log file and
+stderr stays empty. Any code that adds a new logging sink must keep it off
+stdout/stderr on the TUI path the same way. **Why:** a single stray client-go line
+tears a hole in the rendered UI (D68 dogfooding regression); the threshold detail is
+non-obvious and cost a debugging round to find.

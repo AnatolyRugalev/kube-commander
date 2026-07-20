@@ -64,21 +64,30 @@ go build -o kubecom ./cmd/kubecom
 
 ## Usage
 
+Run bare `kubecom` to launch the interactive browse UI against your current
+kubeconfig context:
+
+```bash
+kubecom                        # browse the current context, all namespaces
+kubecom --context my-cluster --namespace my-ns
+kubecom --kubeconfig ~/.kube/other-config -n kube-system
+```
+
+Flags: `--kubeconfig` (path; default `$KUBECONFIG`, else `~/.kube/config`),
+`--context` (default the file's current-context), `-n`/`--namespace` (default all
+namespaces), `--config` (kubecom config file). A missing or invalid
+kubeconfig/context fails with a clear message instead of launching. While the UI
+runs it owns the terminal, so all logs (including client-go warnings) go to a file
+under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
+
+The other subcommands report information and exit:
+
 ```bash
 # Print build information
 kubecom version
 
 # Print the resolved keymap (defaults merged with your config)
 kubecom keys
-```
-
-Launching the interactive browser — bare `kubecom`, using your current
-kubeconfig/context — lands with task **`M2-RUN`**. The intended invocation:
-
-```bash
-kubecom                        # browse the current context
-kubecom --context my-cluster --namespace my-ns
-kubecom --kubeconfig ~/.kube/other-config
 ```
 
 ### Configuration

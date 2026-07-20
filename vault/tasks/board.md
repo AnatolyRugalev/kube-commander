@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — added the `vault/feedback/` inbox: checked before every leg and preempts this board (D69). M2-RUN remains the next board pick when the inbox is empty. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-RUN landed: bare `kubecom` launches the browse UI against a real cluster (D70/D71). Next board pick when the inbox is empty: M2-08b. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-RUN** Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
-      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
+_(none)_
 
 ## Blocked
 
@@ -43,19 +42,6 @@ messages.
 > client construction), so nothing has been exercised end-to-end against a real
 > apiserver. Once it lands, every subsequent leg is verified against the running
 > binary and must **incrementally improve the real-cluster experience** (D68).
-
-- [ ] **M2-RUN** _(claimed — see In Progress)_ Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
-      status: in-progress | owner: claude-opus | added: 2026-07-20
-      notes: Wire the pieces that already exist into a runnable program (keep it minimal,
-      ~1 leg). Root command builds a real `*kube.Clients` (`kube.NewClients`) from
-      kubeconfig/context/namespace flags (`--kubeconfig`/`--context`/`-n`), constructs the
-      app model with `tui.New(WithWatcher(clients), WithDiscoverer(clients))`, and runs
-      `tea.NewProgram(model, tea.WithAltScreen()).Run()`. `version`/`keys` stay as
-      subcommands. Fail gracefully (D46 typed errors) on a bad/missing kubeconfig or
-      context — never panic. slog must write to a file, never stdout/stderr while the TUI
-      owns the terminal (`stack.md` logging rule). **Manual smoke against a real cluster**
-      is part of "done": launch, browse the seed menu, drill into Pods/Nodes, see live
-      rows, quit cleanly. Update the README usage section. Unblocks dogfooding (D68).
 
 - [x] **M2-07** Root app model / shell (`internal/tui/app.go`, replaces the M0
       `internal/tui/tui.go` placeholder)
@@ -154,6 +140,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-RUN** Bare `kubecom` launches the browse UI against a real cluster (root `RunE` + kubeconfig/context/`-n` flags → live `*kube.Clients` via `WithWatcher`/`WithDiscoverer`/`WithNamespace`; graceful on bad kubeconfig; file logging) — done 2026-07-20 (D70, D71) | follow-up: human live-cluster dogfood of drill-in/live rows (D68), not reproducible in the sandbox
 - [x] **M2-08a** Generic modal picker component — done 2026-07-20 (D11, D45, D56, D65)
 - [x] **M2-07d** Root app shell: async discovery on Init → menu reconcile + status-bar spinner — done 2026-07-20 (D8, D18, D57, D63, D64)
 - [x] **M2-07c** Root app shell: live table wired to `kube.Watch` — done 2026-07-20 (D18, D60, D61, D62, D63)

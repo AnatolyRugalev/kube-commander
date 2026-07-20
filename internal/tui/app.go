@@ -62,6 +62,14 @@ func WithDiscoverer(d Discoverer) Option {
 	return func(m *Model) { m.discoverer = d }
 }
 
+// WithNamespace scopes the initial live watch to ns ("" = all namespaces, the
+// default). It seeds m.namespace at construction so the launcher can honour a
+// `-n`/`--namespace` flag; the M2-08 namespace picker later re-scopes it at
+// runtime through the same field.
+func WithNamespace(ns string) Option {
+	return func(m *Model) { m.namespace = ns }
+}
+
 // Layout constants. The status bar takes one line at the bottom; the two browse
 // panes split the width, the menu (left) sized as a fraction with sensible floors
 // so the table (right) always keeps room.
@@ -480,9 +488,16 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 // the layout is never sized to a zero terminal. Normally it lays the menu and
 // table panes side by side over the status bar; when the help overlay is open it
 // takes the body area, the status bar staying pinned below.
+//
+// Every returned view sets AltScreen: in bubbletea v2 full-screen mode is a
+// property of the View (v.AltScreen), not a program option — the v1-era
+// tea.WithAltScreen() no longer exists — so the root model, which owns View, is
+// where kubecom requests the alternate screen buffer (D70).
 func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return tea.NewView("")
+		v := tea.NewView("")
+		v.AltScreen = true
+		return v
 	}
 
 	var body string
@@ -492,5 +507,7 @@ func (m Model) View() tea.View {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), m.table.View())
 	}
 
-	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View()))
+	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View()))
+	v.AltScreen = true
+	return v
 }

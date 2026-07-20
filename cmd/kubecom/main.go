@@ -1,8 +1,8 @@
 // Command kubecom is a fast, keyboard-driven terminal UI for Kubernetes.
 //
-// This is the M0 groundwork skeleton: it wires the cobra command tree and a
-// `version` subcommand. The Bubble Tea UI and the in-process kube layer land in
-// later milestones, hanging new subcommands / the default TUI run off this root.
+// The root command builds a live cluster client from the kubeconfig/context/
+// namespace flags and runs the Bubble Tea browse UI (see run.go); `version` and
+// `keys` hang off it as subcommands.
 package main
 
 import (
@@ -22,22 +22,40 @@ func main() {
 // newRootCmd builds the kubecom command tree. It is a function (not a package
 // var) so tests can construct an isolated command with its own I/O and args.
 func newRootCmd() *cobra.Command {
+	var opts runOptions
 	root := &cobra.Command{
 		Use:   "kubecom",
 		Short: "A fast, keyboard-driven terminal UI for Kubernetes",
 		Long: `kubecom is a fast, vim-friendly, zero-deploy Kubernetes terminal UI.
 
-This is the M0 groundwork build: it wires the binary entrypoint and a version
-subcommand. The Bubble Tea UI and the in-process kube layer land in later
-milestones.`,
+Run bare "kubecom" to launch the browse UI against your current cluster; the
+kubeconfig, context, and namespace are selectable with the flags below. The
+"version" and "keys" subcommands report build info and the resolved keybindings.`,
 		Version: version.Info(),
+		// Bare kubecom (no subcommand) launches the TUI; NoArgs keeps an unknown
+		// command a clear error rather than a positional argument to the launcher.
+		Args: cobra.NoArgs,
 		// Errors are surfaced by Execute; don't also dump usage on a runtime
 		// error, and keep args-validation errors terse.
 		SilenceUsage: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runTUI(opts)
+		},
 	}
 	// --version prints the build summary verbatim (Info() already leads with
 	// "kubecom"), not cobra's default "<name> version <version>" line.
 	root.SetVersionTemplate("{{.Version}}\n")
+	// Launch flags are local to the root run (the keys subcommand has its own
+	// --config), so they don't leak onto subcommands as persistent flags would.
+	f := root.Flags()
+	f.StringVar(&opts.kubeconfig, "kubeconfig", "",
+		"path to the kubeconfig file (default: $KUBECONFIG, else ~/.kube/config)")
+	f.StringVar(&opts.context, "context", "",
+		"kubeconfig context to use (default: the file's current-context)")
+	f.StringVarP(&opts.namespace, "namespace", "n", "",
+		"namespace to scope the initial view to (default: all namespaces)")
+	f.StringVar(&opts.configPath, "config", "",
+		"kubecom config file to load (default: user config dir /kubecom/config.yaml)")
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newKeysCmd())
 	return root

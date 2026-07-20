@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (action registry + configurable keymap) complete; M2-02…M2-07 (msg pumps, styles, status bar, menu, table, two-pane browse wired to watch+discovery) landed against fakes. **Next: M2-RUN** — make the binary launch the TUI against a real cluster; then the remaining component slices (pickers, filter, modal, config persistence, migration, sort). Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) landed; **M2-RUN done** — bare `kubecom` now launches the browse UI against a real cluster (D70/D71). Remaining: pickers (M2-08b/c), filter, modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 
@@ -35,10 +35,12 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 
 ## Exit criteria
 
-- [ ] **Bare `kubecom` launches the browse UI against the user's current cluster**
-      (M2-RUN) and every leg after it keeps that runnable — a human periodically
-      installs and dogfoods it against a real cluster, so each leg incrementally
-      improves (never regresses) that experience (D68).
+- [x] **Bare `kubecom` launches the browse UI against the user's current cluster**
+      (M2-RUN, done 2026-07-20) and every leg after it keeps that runnable — a human
+      periodically installs and dogfoods it against a real cluster, so each leg
+      incrementally improves (never regresses) that experience (D68). _(Sandbox smoke
+      covered launch/render/graceful-degrade; live-cluster drill-in awaits a human
+      dogfood pass.)_
 - [ ] Browse, select a resource, see live-updating rows for any discovered kind.
 - [ ] Menu customization persists across restarts; async discovery reconciles menu without disturbing selection/scroll.
 - [ ] Namespace + filter work; scrolling and Home/End behave.
