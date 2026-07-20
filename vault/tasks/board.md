@@ -13,7 +13,10 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-07c** Wire the live table to `kube.Watch` via the M2-02 pump — handle the
+      menu's `ResourceSelectedMsg` to start/stop the watch (cancel the previous),
+      feed `ResourceEventMsg`→`table.ApplyEvent`; watch's first RESET repopulates.
+      status: in-progress | owner: claude-opus | added: 2026-07-20
 
 ## Blocked
 
