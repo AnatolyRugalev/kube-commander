@@ -1717,3 +1717,23 @@ stderr stays empty. Any code that adds a new logging sink must keep it off
 stdout/stderr on the TUI path the same way. **Why:** a single stray client-go line
 tears a hole in the rendered UI (D68 dogfooding regression); the threshold detail is
 non-obvious and cost a debugging round to find.
+
+### D72 — M2-08b: picker filtering is picker-owned (its own textinput), with a control/text key split
+**2026-07-20.** The modal picker filters itself: it holds its own
+`bubbles/textinput` over the unfiltered value set and narrows the visible list by
+**case-insensitive substring** — the list's native filter stays disabled (D65). Two
+constraints bind future legs, chiefly the M2-08c app wiring:
+- **Input split.** `Update(keymap.Action)` handles control gestures (nav,
+  `nav.drillIn`, `nav.back`, and `app.filter` which *opens* the field); raw text goes
+  through the separate `UpdateFilter(tea.KeyPressMsg)` entry point. The root model,
+  while `picker.Filtering()` is true, must resolve control keys to actions **first**
+  and route only the leftover printable/edit keys to `UpdateFilter` — otherwise a
+  value bound to a nav action (`j`, `k`, `G`, `n`, …) could never be typed into the
+  filter. This is the sanctioned exception to "no view matches a raw key" (D11): a
+  text field consuming text is not action binding.
+- **Back clears, then cancels.** `nav.back` while filtering closes the filter and
+  restores the full list (no `CancelledMsg`); a second `nav.back` cancels the picker.
+  `Hide()` also closes the filter so it reopens clean.
+
+**Why:** locks the seam M2-08c wires against, and prevents a future leg from
+reintroducing list-native filtering (its own `/` key would leak a raw binding).

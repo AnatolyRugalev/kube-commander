@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (keymap) + M2-02…M2-07 (shell) landed; **M2-RUN done** — bare `kubecom` now launches the browse UI against a real cluster (D70/D71). Remaining: pickers (M2-08b/c), filter, modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN landed, and the modal picker now filters itself (M2-08b, D72). Remaining: namespace-picker wiring (M2-08c), filter, modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 

@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -57,10 +58,11 @@ const (
 	modalMaxHeight = 20
 	screenMargin   = 4 // cells kept clear around the modal on each axis
 	titleHeight    = 1 // the title line above the list
+	filterHeight   = 1 // the filter input line (only while filtering)
 )
 
 // item is one selectable string. It satisfies list.Item; the whole string is the
-// filter target (used once M2-08b turns filtering on).
+// substring-match target used by the picker's own incremental filter (M2-08b).
 type item string
 
 func (i item) FilterValue() string { return string(i) }
@@ -97,6 +99,13 @@ type Model struct {
 	kind   string // stamped into SelectedMsg/CancelledMsg
 	title  string // shown above the list
 
+	// all is the unfiltered value set (SetItems input). The list always shows the
+	// subset matching the current filter query; all is the source it is rebuilt from
+	// so clearing the filter restores every value without re-seeding.
+	all       []string
+	filter    textinput.Model // the incremental filter field (shown only while filtering)
+	filtering bool            // whether the filter field is open and capturing text
+
 	active bool // whether the picker is shown (captures input) — "" View when false
 	width  int  // full screen width  (the modal is centered within it)
 	height int  // full screen height
@@ -104,21 +113,27 @@ type Model struct {
 
 // New builds a picker of the given kind (also its default title) rendered through
 // the shared styles. It starts hidden and empty; the caller seeds it with SetItems
-// and reveals it with Show. Filtering and the list's own chrome/keys are disabled so
-// the picker fully controls its input and appearance.
+// and reveals it with Show. The list's own chrome and key bindings — including its
+// native filter — stay disabled: the picker runs its own incremental filter over an
+// owned textinput (M2-08b) so it fully controls input and appearance, and no
+// hard-coded list key leaks into the view (D11).
 func New(s styles.Styles, kind string) Model {
 	l := list.New(nil, itemDelegate{styles: s}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
-	l.SetFilteringEnabled(false) // M2-08b turns this on
+	l.SetFilteringEnabled(false) // the picker filters itself; the list's native filter stays off
 	l.DisableQuitKeybindings()   // this picker never quits the app
+
+	fi := textinput.New()
+	fi.Prompt = "/ "
 	return Model{
 		styles: s,
 		list:   l,
 		kind:   kind,
 		title:  strings.ToUpper(kind[:1]) + kind[1:],
+		filter: fi,
 	}
 }
 
@@ -128,11 +143,23 @@ func (m Model) Kind() string { return m.kind }
 // SetTitle overrides the title shown above the list.
 func (m *Model) SetTitle(t string) { m.title = t }
 
-// SetItems replaces the picker's values and resets the cursor to the top.
+// SetItems replaces the picker's values (the unfiltered set) and shows the subset
+// matching the current filter query, cursor reset to the top.
 func (m *Model) SetItems(values []string) {
-	items := make([]list.Item, len(values))
-	for i, v := range values {
-		items[i] = item(v)
+	m.all = append(m.all[:0:0], values...)
+	m.applyFilter()
+}
+
+// applyFilter rebuilds the visible list from the unfiltered set, keeping only the
+// values whose lowercased text contains the (lowercased) filter query, and resets the
+// cursor to the top. An empty query shows everything.
+func (m *Model) applyFilter() {
+	q := strings.ToLower(m.filter.Value())
+	var items []list.Item
+	for _, v := range m.all {
+		if q == "" || strings.Contains(strings.ToLower(v), q) {
+			items = append(items, item(v))
+		}
 	}
 	m.list.SetItems(items)
 	m.list.Select(0)
@@ -141,15 +168,33 @@ func (m *Model) SetItems(values []string) {
 // SetSize records the full screen size; the modal is sized and centered within it.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
-	iw, ih := m.innerSize()
-	m.list.SetSize(iw, ih)
+	m.syncListSize()
 }
 
-// Show reveals the picker (it then captures input until Hide). Hide dismisses it.
-func (m *Model) Show()       { m.active = true }
-func (m *Model) Hide()       { m.active = false }
+// syncListSize re-applies the inner content size to the list and filter field. It is
+// called on resize and whenever the filter opens/closes, since the filter line steals
+// one row from the list while it is shown.
+func (m *Model) syncListSize() {
+	iw, ih := m.innerSize()
+	m.list.SetSize(iw, ih)
+	m.filter.SetWidth(iw)
+}
+
+// Show reveals the picker (it then captures input until Hide). Hide dismisses it and
+// closes any open filter so it reopens clean next time.
+func (m *Model) Show() { m.active = true }
+func (m *Model) Hide() {
+	m.active = false
+	m.closeFilter()
+}
 func (m Model) Active() bool { return m.active }
-func (m Model) Len() int     { return len(m.list.Items()) }
+
+// Len is the number of currently visible (post-filter) values.
+func (m Model) Len() int { return len(m.list.Items()) }
+
+// Filtering reports whether the filter field is open and capturing text. The root
+// model uses it to route raw text keys to UpdateFilter (M2-08c) while it is true.
+func (m Model) Filtering() bool { return m.filtering }
 
 // Selected returns the highlighted value and true, or "" and false when the picker
 // is empty.
@@ -183,6 +228,16 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.list.NextPage()
 	case keymap.ActionHalfPageUp, keymap.ActionPageUp:
 		m.list.PrevPage()
+	case keymap.ActionFilter:
+		// Open the filter field (no-op if already open). Focus returns the cursor
+		// blink cmd; the field then steals a row from the list.
+		if m.filtering {
+			return m, nil
+		}
+		m.filtering = true
+		cmd := m.filter.Focus()
+		m.syncListSize()
+		return m, cmd
 	case keymap.ActionDrillIn:
 		v, ok := m.Selected()
 		if !ok {
@@ -191,18 +246,56 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		kind := m.kind
 		return m, func() tea.Msg { return SelectedMsg{Kind: kind, Value: v} }
 	case keymap.ActionBack:
+		// While filtering, back closes the filter and restores the full list rather
+		// than dismissing the picker — one esc clears the filter, a second cancels.
+		if m.filtering {
+			m.closeFilter()
+			return m, nil
+		}
 		kind := m.kind
 		return m, func() tea.Msg { return CancelledMsg{Kind: kind} }
 	}
 	return m, nil
 }
 
+// UpdateFilter feeds one raw key to the filter field and re-narrows the visible list.
+// It is the picker's only raw-key entry point and is meaningful only while the filter
+// is open: the root model resolves control keys (nav, drill-in, back) to actions and
+// routes everything else — the text content — here, so the field captures typing
+// without any view matching a raw key for behaviour (D11). A no-op otherwise.
+func (m Model) UpdateFilter(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	if !m.active || !m.filtering {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	m.applyFilter()
+	return m, cmd
+}
+
+// closeFilter clears and hides the filter field, restoring the full list. Safe to call
+// when the filter is already closed.
+func (m *Model) closeFilter() {
+	if !m.filtering {
+		return
+	}
+	m.filtering = false
+	m.filter.Blur()
+	m.filter.Reset()
+	m.applyFilter()
+	m.syncListSize()
+}
+
 // innerSize is the list's content size inside the modal frame: the modal width/height
-// minus the border (2 each) and the title line.
+// minus the border (2 each), the title line, and — while the filter is open — the
+// filter input line.
 func (m Model) innerSize() (int, int) {
 	mw, mh := m.modalSize()
 	iw := mw - 2
 	ih := mh - 2 - titleHeight
+	if m.filtering {
+		ih -= filterHeight
+	}
 	if iw < 0 {
 		iw = 0
 	}
@@ -251,7 +344,12 @@ func (m Model) View() string {
 	}
 	iw, _ := m.innerSize()
 	title := m.styles.Header.Width(iw).MaxWidth(iw).Render(m.title)
-	body := lipgloss.JoinVertical(lipgloss.Left, title, m.list.View())
+	parts := []string{title}
+	if m.filtering {
+		parts = append(parts, m.styles.App.Width(iw).MaxWidth(iw).Render(m.filter.View()))
+	}
+	parts = append(parts, m.list.View())
+	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
 	box := m.styles.PaneFocus.Render(body)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-RUN landed: bare `kubecom` launches the browse UI against a real cluster (D70/D71). Next board pick when the inbox is empty: M2-08b. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-08b landed: the modal picker filters itself over an owned textinput (D72). Next board pick when the inbox is empty: M2-08c. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-08b** Picker filtering (`internal/tui/components/picker`)
-      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
+_(none)_
 
 ## Blocked
 
@@ -137,6 +136,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 - [x] **M2-RUN** Bare `kubecom` launches the browse UI against a real cluster (root `RunE` + kubeconfig/context/`-n` flags → live `*kube.Clients` via `WithWatcher`/`WithDiscoverer`/`WithNamespace`; graceful on bad kubeconfig; file logging) — done 2026-07-20 (D70, D71) | follow-up: human live-cluster dogfood of drill-in/live rows (D68), not reproducible in the sandbox
+- [x] **M2-08b** Picker filtering: picker-owned textinput, case-insensitive substring narrowing, control/text key split, back clears-then-cancels — done 2026-07-20 (D11, D65, D72)
 - [x] **M2-08a** Generic modal picker component — done 2026-07-20 (D11, D45, D56, D65)
 - [x] **M2-07d** Root app shell: async discovery on Init → menu reconcile + status-bar spinner — done 2026-07-20 (D8, D18, D57, D63, D64)
 - [x] **M2-07c** Root app shell: live table wired to `kube.Watch` — done 2026-07-20 (D18, D60, D61, D62, D63)

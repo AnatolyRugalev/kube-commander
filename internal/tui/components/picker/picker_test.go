@@ -142,3 +142,135 @@ func TestDrillInEmptyPickerNoMsg(t *testing.T) {
 		t.Fatalf("empty picker emitted %T on drill-in, want none", msg)
 	}
 }
+
+// typeFilter feeds each rune of s to the filter field as a raw key press.
+func typeFilter(m Model, s string) Model {
+	for _, r := range s {
+		m, _ = m.UpdateFilter(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
+	}
+	return m
+}
+
+func TestFilterOpensAndNarrows(t *testing.T) {
+	m := newTestModel("default", "kube-system", "kube-public", "monitoring")
+	m.Show()
+	if m.Filtering() {
+		t.Fatal("picker should not start filtering")
+	}
+	m, _ = m.Update(keymap.ActionFilter)
+	if !m.Filtering() {
+		t.Fatal("app.filter should open the filter field")
+	}
+	m = typeFilter(m, "kube")
+	if got := m.Len(); got != 2 {
+		t.Fatalf("after filtering by 'kube', Len() = %d, want 2", got)
+	}
+	if v, _ := m.Selected(); v != "kube-system" {
+		t.Fatalf("filtered selection = %q, want kube-system (first match)", v)
+	}
+	// The filter matches case-insensitively on a substring anywhere in the value.
+	m2 := newTestModel("default", "kube-system", "monitoring")
+	m2.Show()
+	m2, _ = m2.Update(keymap.ActionFilter)
+	m2 = typeFilter(m2, "SYS")
+	if got := m2.Len(); got != 1 {
+		t.Fatalf("case-insensitive 'SYS' Len() = %d, want 1", got)
+	}
+}
+
+func TestFilterBackClearsThenCancels(t *testing.T) {
+	m := newTestModel("default", "kube-system", "kube-public")
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	m = typeFilter(m, "public")
+	if got := m.Len(); got != 1 {
+		t.Fatalf("filtered Len() = %d, want 1", got)
+	}
+	// First back clears the filter (does not cancel the picker) and restores all.
+	m, cmd := m.Update(keymap.ActionBack)
+	if msg := msgFrom(cmd); msg != nil {
+		t.Fatalf("back while filtering emitted %T, want none", msg)
+	}
+	if m.Filtering() {
+		t.Fatal("back while filtering should close the filter")
+	}
+	if got := m.Len(); got != 3 {
+		t.Fatalf("after clearing filter, Len() = %d, want 3 (all restored)", got)
+	}
+	// Second back now cancels the picker.
+	_, cmd = m.Update(keymap.ActionBack)
+	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
+		t.Fatalf("back after clear produced %T, want CancelledMsg", msgFrom(cmd))
+	}
+}
+
+func TestFilterDrillInSelectsFilteredValue(t *testing.T) {
+	m := newTestModel("default", "kube-system", "kube-public")
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	m = typeFilter(m, "system")
+	_, cmd := m.Update(keymap.ActionDrillIn)
+	sel, ok := msgFrom(cmd).(SelectedMsg)
+	if !ok {
+		t.Fatalf("drill-in produced %T, want SelectedMsg", msgFrom(cmd))
+	}
+	if sel.Value != "kube-system" {
+		t.Fatalf("SelectedMsg.Value = %q, want kube-system", sel.Value)
+	}
+}
+
+func TestFilterNoMatchDrillInNoMsg(t *testing.T) {
+	m := newTestModel("default", "kube-system")
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	m = typeFilter(m, "zzz")
+	if got := m.Len(); got != 0 {
+		t.Fatalf("no-match filter Len() = %d, want 0", got)
+	}
+	_, cmd := m.Update(keymap.ActionDrillIn)
+	if msg := msgFrom(cmd); msg != nil {
+		t.Fatalf("drill-in with no matches emitted %T, want none", msg)
+	}
+}
+
+func TestFilterViewShowsInputLine(t *testing.T) {
+	m := newTestModel("default", "kube-system")
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	m = typeFilter(m, "kube")
+	v := m.View()
+	if !strings.Contains(v, "/") {
+		t.Fatalf("filtering View() missing the filter prompt; got:\n%s", v)
+	}
+	if !strings.Contains(v, "kube-system") {
+		t.Fatalf("filtering View() missing the matched item; got:\n%s", v)
+	}
+	if strings.Contains(v, "default") {
+		t.Fatalf("filtering View() still shows the non-matching item; got:\n%s", v)
+	}
+}
+
+func TestUpdateFilterInertWhenNotFiltering(t *testing.T) {
+	m := newTestModel("default", "kube-system")
+	m.Show()
+	// No filter open: raw keys are ignored and the list is untouched.
+	m = typeFilter(m, "kube")
+	if got := m.Len(); got != 2 {
+		t.Fatalf("UpdateFilter changed the list while not filtering: Len() = %d, want 2", got)
+	}
+}
+
+func TestHideClosesFilter(t *testing.T) {
+	m := newTestModel("default", "kube-system", "kube-public")
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	m = typeFilter(m, "public")
+	m.Hide()
+	if m.Filtering() {
+		t.Fatal("Hide() should close the filter")
+	}
+	m.Show()
+	if got := m.Len(); got != 3 {
+		t.Fatalf("after Hide/Show, Len() = %d, want 3 (filter cleared)", got)
+	}
+}
