@@ -9,7 +9,8 @@
 // ApplyEvent (M2-06b) folds a live watch delta onto that snapshot — RESET replaces
 // the column set and rows, ADDED/MODIFIED/DELETED touch a single row keyed by
 // object UID — always preserving the selection by re-resolving the selected UID to
-// its new index. Horizontal scroll for wide tables is M2-06c.
+// its new index. A table wider than the pane scrolls horizontally on nav.left/
+// nav.right, snapping to column boundaries (M2-06c/D60).
 //
 // The table never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands it to Update. Like the menu, the table owns no shared
@@ -57,6 +58,7 @@ type Model struct {
 
 	cursor  int // index of the highlighted row
 	offset  int // index of the first visible row (vertical scroll)
+	hoffset int // first visible display column (horizontal scroll)
 	width   int // total width incl. border
 	height  int // total height incl. border
 	focused bool
@@ -76,6 +78,7 @@ func (m *Model) SetTable(t kube.Table) {
 	m.computeColumns()
 	m.cursor = 0
 	m.offset = 0
+	m.hoffset = 0
 	m.clampOffset()
 }
 
@@ -110,6 +113,7 @@ func (m *Model) ApplyEvent(ev kube.WatchEvent) {
 	m.computeColumns()
 	m.restoreSelection(selUID)
 	m.clampOffset()
+	m.clampHOffset()
 }
 
 // selectedUID is the object UID of the highlighted row, or "" when the table is
@@ -176,6 +180,7 @@ func (m *Model) restoreSelection(uid string) {
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.clampOffset()
+	m.clampHOffset()
 }
 
 // Focus marks the table as holding focus (accented border).
@@ -192,6 +197,11 @@ func (m Model) Cursor() int { return m.cursor }
 
 // RowCount is the number of rows in the current snapshot.
 func (m Model) RowCount() int { return len(m.table.Rows) }
+
+// HOffset is the first visible display column — the horizontal scroll position
+// (for tests and, later, the root model's pane-focus-vs-scroll arbitration in
+// M2-07b, which can compare it before/after a left/right to detect an edge).
+func (m Model) HOffset() int { return m.hoffset }
 
 // SelectedRow returns the highlighted row and true, or a zero Row and false when
 // the table is empty.
@@ -234,11 +244,23 @@ func (m *Model) computeColumns() {
 	}
 }
 
-// Update handles a resolved keymap action. Navigation actions move the highlight
-// and keep it visible; nav.drillIn emits a RowSelectedMsg for the highlighted
-// row. Any other action is ignored (the root routes it elsewhere). The table
-// consumes actions, never raw keys (D11).
+// Update handles a resolved keymap action. Vertical navigation actions move the
+// highlight and keep it visible; nav.left/nav.right scroll the columns
+// horizontally when the table is wider than the pane (D60); nav.drillIn emits a
+// RowSelectedMsg for the highlighted row. Any other action is ignored (the root
+// routes it elsewhere). The table consumes actions, never raw keys (D11).
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
+	// Horizontal scroll is handled first: it applies even to a header-only table
+	// (columns can be wider than the pane with no rows yet), so it precedes the
+	// empty-rows guard below.
+	switch a {
+	case keymap.ActionLeft:
+		m.scrollLeft()
+		return m, nil
+	case keymap.ActionRight:
+		m.scrollRight()
+		return m, nil
+	}
 	if len(m.table.Rows) == 0 {
 		return m, nil
 	}
@@ -341,6 +363,99 @@ func (m *Model) clampOffset() {
 	m.scrollToCursor()
 }
 
+// innerWidth is the content width inside the border (total width minus the left
+// and right border columns), never negative.
+func (m Model) innerWidth() int {
+	w := m.width - 2
+	if w < 0 {
+		return 0
+	}
+	return w
+}
+
+// contentWidth is the display width of a fully-rendered row: the sum of the
+// computed column widths plus the inter-column gaps. Header and every data row
+// render to exactly this width (each cell is padded to its column width), so one
+// horizontal offset windows them all identically.
+func (m Model) contentWidth() int {
+	n := len(m.colWidths)
+	if n == 0 {
+		return 0
+	}
+	w := runeLen(colGap) * (n - 1)
+	for _, cw := range m.colWidths {
+		w += cw
+	}
+	return w
+}
+
+// maxHOffset is the largest valid horizontal offset — how far past the pane the
+// content extends — never negative.
+func (m Model) maxHOffset() int {
+	if over := m.contentWidth() - m.innerWidth(); over > 0 {
+		return over
+	}
+	return 0
+}
+
+// columnStarts is the display-column offset at which each visible column begins
+// in a rendered line (column i follows the earlier columns and their gaps). These
+// are the snap targets for horizontal scroll, so a left/right lands a column flush
+// against the pane's left edge.
+func (m Model) columnStarts() []int {
+	if len(m.colWidths) == 0 {
+		return nil
+	}
+	starts := make([]int, len(m.colWidths))
+	x := 0
+	gap := runeLen(colGap)
+	for i, cw := range m.colWidths {
+		starts[i] = x
+		x += cw + gap
+	}
+	return starts
+}
+
+// scrollRight advances the horizontal offset to the start of the next column
+// (revealing the leftmost hidden column), clamped so it never scrolls past the
+// content. When no column start remains within range — e.g. a final column wider
+// than the pane — it snaps to maxHOffset so that column's tail is still reachable.
+func (m *Model) scrollRight() {
+	max := m.maxHOffset()
+	for _, s := range m.columnStarts() {
+		if s > m.hoffset && s <= max {
+			m.hoffset = s
+			return
+		}
+	}
+	m.hoffset = max
+}
+
+// scrollLeft retreats the horizontal offset to the start of the previous column,
+// or to 0 when already at or before the first column start. This always lands on
+// a column boundary and eventually returns to the fully-left position.
+func (m *Model) scrollLeft() {
+	target := 0
+	for _, s := range m.columnStarts() {
+		if s >= m.hoffset {
+			break
+		}
+		target = s
+	}
+	m.hoffset = target
+}
+
+// clampHOffset keeps the horizontal offset valid after a resize or a column-width
+// change (a snapshot/delta can widen or narrow the content).
+func (m *Model) clampHOffset() {
+	if max := m.maxHOffset(); m.hoffset > max {
+		m.hoffset = max
+	}
+	if m.hoffset < 0 {
+		m.hoffset = 0
+	}
+}
+
 // View renders the table as a bordered header row plus the visible window of data
 // rows. It returns "" until the table has been sized (before the first
 // WindowSizeMsg), so the root model lays nothing out prematurely.
@@ -384,25 +499,25 @@ func (m Model) View() string {
 }
 
 // renderHeader lays out the column headers padded to the computed widths and
-// styled as the header row, hard-clipped to innerW.
+// styled as the header row, windowed to innerW at the current horizontal offset.
 func (m Model) renderHeader(innerW int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
 		cells[i] = padRight(m.table.Columns[ci].Name, m.colWidths[i])
 	}
-	line := truncate(strings.Join(cells, colGap), innerW)
+	line := m.hclip(strings.Join(cells, colGap), innerW)
 	return m.styles.Header.Width(innerW).Render(line)
 }
 
-// renderRow lays out one row's cells padded to the computed widths, hard-clipped
-// to innerW; the highlighted row takes the Selection style (full-width bar), a
-// normal row the base style.
+// renderRow lays out one row's cells padded to the computed widths, windowed to
+// innerW at the current horizontal offset; the highlighted row takes the Selection
+// style (full-width bar), a normal row the base style.
 func (m Model) renderRow(r kube.Row, selected bool, innerW int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
 		cells[i] = padRight(formatCell(cellAt(r.Cells, ci)), m.colWidths[i])
 	}
-	line := truncate(strings.Join(cells, colGap), innerW)
+	line := m.hclip(strings.Join(cells, colGap), innerW)
 	style := m.styles.App
 	if selected {
 		style = m.styles.Selection
@@ -455,16 +570,22 @@ func padRight(s string, w int) string {
 // runeLen is the display width of s in characters.
 func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
-// truncate hard-clips s to at most w display columns, so a row wider than the
-// pane is cut rather than wrapped onto a second line (horizontal scroll for wide
-// tables is M2-06c). s here is raw, unstyled text (no ANSI), so a rune cut is
-// safe.
-func truncate(s string, w int) string {
+// hclip returns the horizontal window of s that is visible in a w-column pane at
+// the current scroll offset: the runes in [hoffset, hoffset+w). A row wider than
+// the pane is cut rather than wrapped onto a second line, and the offset scrolls
+// the whole content left (D60); the enclosing style pads a short window back out
+// to w. s here is raw, unstyled text (no ANSI), so a rune cut is safe.
+func (m Model) hclip(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	if runeLen(s) <= w {
-		return s
+	runes := []rune(s)
+	if m.hoffset >= len(runes) {
+		return ""
 	}
-	return string([]rune(s)[:w])
+	end := m.hoffset + w
+	if end > len(runes) {
+		end = len(runes)
+	}
+	return string(runes[m.hoffset:end])
 }

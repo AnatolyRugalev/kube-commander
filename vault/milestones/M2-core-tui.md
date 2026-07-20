@@ -39,8 +39,11 @@ fixed the bordered-pane sizing gotcha D58). **M2-06b** added
 snapshot **preserving the selection by object UID** — RESET replaces columns+rows
 (selection preserved across reconnects), ADDED/MODIFIED upsert / DELETED removes a
 row keyed by `ObjectRef.UID`, cursor keeping its index when the selected row is gone
-(D59). Top-unblocked next is **M2-06c** (horizontal scroll for wide tables), then
-**M2-07a** (root app shell)._
+(D59). **M2-06c** added **horizontal scroll** — a table wider than its pane scrolls
+on `nav.left`/`nav.right` (`h`/`l`), one `hoffset` windowing header+rows in step and
+snapping to column starts (`hclip` replaces `truncate`; no-wrap invariant D58 kept;
+no keymap/doc change), completing the M2-06 table trio (D60). Top-unblocked next is
+**M2-07a** (root app shell: keymap-routed `tea.Model` skeleton + help overlay)._
 
 ## Goal
 

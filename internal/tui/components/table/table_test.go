@@ -456,6 +456,144 @@ func TestApplyEventDeleteMissingUIDIsNoOp(t *testing.T) {
 	}
 }
 
+// wideTable is a three-column table whose columns are each 8 wide (from the cell
+// values), giving column starts [0, 10, 20] and a total content width of 28 —
+// wide enough to exercise horizontal scroll in a narrow pane.
+func wideTable() kube.Table {
+	return kube.Table{
+		Columns: []kube.Column{{Name: "C1"}, {Name: "C2"}, {Name: "C3"}},
+		Rows: []kube.Row{
+			{Cells: []any{"aaaaaaaa", "bbbbbbbb", "cccccccc"}, Object: kube.ObjectRef{Name: "r1", UID: "1"}},
+		},
+	}
+}
+
+func TestHorizontalScrollSnapsToColumnsAndClamps(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(14, 6) // innerW 12; content 28 → maxHOffset 16, column starts [0,10,20]
+
+	if m.HOffset() != 0 {
+		t.Fatalf("initial HOffset = %d, want 0", m.HOffset())
+	}
+	// Right snaps to the next column start (10), then to maxHOffset (16, since the
+	// last column start 20 is past the content edge), then stops.
+	for _, want := range []int{10, 16, 16} {
+		m, _ = m.Update(keymap.ActionRight)
+		if m.HOffset() != want {
+			t.Fatalf("after right: HOffset = %d, want %d", m.HOffset(), want)
+		}
+	}
+	// The rightmost column is now visible, the leftmost scrolled off.
+	out := m.View()
+	if !strings.Contains(out, "cccccccc") {
+		t.Fatalf("rightmost column not visible after scrolling right:\n%s", out)
+	}
+	if strings.Contains(out, "aaaaaaaa") {
+		t.Fatalf("leftmost column should be scrolled off:\n%s", out)
+	}
+	// Left retreats to the previous column start (10), then to 0, then stops.
+	for _, want := range []int{10, 0, 0} {
+		m, _ = m.Update(keymap.ActionLeft)
+		if m.HOffset() != want {
+			t.Fatalf("after left: HOffset = %d, want %d", m.HOffset(), want)
+		}
+	}
+	out = m.View()
+	if !strings.Contains(out, "aaaaaaaa") {
+		t.Fatalf("leftmost column not visible after scrolling back:\n%s", out)
+	}
+}
+
+func TestHorizontalScrollNoOpWhenContentFits(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(40, 6) // innerW 38 ≥ content 28 → nothing to scroll
+
+	m, _ = m.Update(keymap.ActionRight)
+	if m.HOffset() != 0 {
+		t.Fatalf("HOffset = %d, want 0 (content fits, right is a no-op)", m.HOffset())
+	}
+	m, _ = m.Update(keymap.ActionLeft)
+	if m.HOffset() != 0 {
+		t.Fatalf("HOffset = %d, want 0 (left is a no-op)", m.HOffset())
+	}
+}
+
+func TestHorizontalScrollReturnsNilCmd(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(14, 6)
+	if _, cmd := m.Update(keymap.ActionRight); cmd != nil {
+		t.Fatal("right should not emit a command")
+	}
+	if _, cmd := m.Update(keymap.ActionLeft); cmd != nil {
+		t.Fatal("left should not emit a command")
+	}
+}
+
+func TestSetTableResetsHorizontalScroll(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(14, 6)
+	m, _ = m.Update(keymap.ActionRight)
+	if m.HOffset() == 0 {
+		t.Fatal("precondition: expected a non-zero HOffset after scrolling right")
+	}
+	m.SetTable(wideTable()) // a fresh resource resets horizontal scroll to the left
+	if m.HOffset() != 0 {
+		t.Fatalf("HOffset = %d, want 0 after SetTable", m.HOffset())
+	}
+}
+
+func TestResizeWiderClampsHorizontalScroll(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(14, 6)
+	m, _ = m.Update(keymap.ActionRight)
+	m, _ = m.Update(keymap.ActionRight) // scrolled to maxHOffset (16)
+	if m.HOffset() == 0 {
+		t.Fatal("precondition: expected a non-zero HOffset before widening")
+	}
+	m.SetSize(40, 6) // now the whole table fits → offset must clamp back to 0
+	if m.HOffset() != 0 {
+		t.Fatalf("HOffset = %d, want 0 after widening the pane", m.HOffset())
+	}
+}
+
+func TestApplyEventNarrowingClampsHorizontalScroll(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(wideTable())
+	m.SetSize(14, 6)
+	m, _ = m.Update(keymap.ActionRight)
+	m, _ = m.Update(keymap.ActionRight)
+	if m.HOffset() == 0 {
+		t.Fatal("precondition: expected a non-zero HOffset before the narrowing reset")
+	}
+	// A RESET to a single narrow column: content now fits, so the offset clamps.
+	m.ApplyEvent(kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "N"}},
+		Rows:    []kube.Row{row("x", "x")},
+	})
+	if m.HOffset() != 0 {
+		t.Fatalf("HOffset = %d, want 0 after a narrowing reset", m.HOffset())
+	}
+}
+
+func TestHorizontalScrollWorksWithHeaderOnly(t *testing.T) {
+	m := newTestModel()
+	// A header-only table (columns, no rows yet) whose headers overflow the pane.
+	m.SetTable(kube.Table{Columns: []kube.Column{
+		{Name: "LONGHEADER-1"}, {Name: "LONGHEADER-2"}, {Name: "LONGHEADER-3"},
+	}})
+	m.SetSize(14, 6)
+	m, _ = m.Update(keymap.ActionRight)
+	if m.HOffset() == 0 {
+		t.Fatal("header-only table should still scroll horizontally")
+	}
+}
+
 // Update must return a table.Model (not tea.Model) so the root can keep a typed
 // value; this compile-time check guards the signature.
 var _ = func(m Model) (Model, tea.Cmd) { return m.Update(keymap.ActionDown) }

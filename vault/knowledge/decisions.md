@@ -1427,3 +1427,34 @@ watch delta onto the M2-06a snapshot. Locked choices:
   ignored. Pure single-threaded (the root model calls it from `Update`); no shared
   mutable state (principle 1).
 - **Deps:** none new.
+
+### D60 — M2-06c: table scrolls horizontally on nav.left/nav.right, snapping to column boundaries
+**2026-07-20 (M2-06c).** The resource table can now be wider than its pane (the
+server-printed column set for a resource often overflows a split-pane width). It
+scrolls horizontally instead of only clipping the right edge (D58). Locked choices:
+- **Reused `nav.left`/`nav.right` (`h`/`l`), no new action.** The board specified
+  left/right; those actions already exist in the registry, so nothing changed in the
+  keymap, config surface, help, or `docs/keybindings.md` (the golden drift-check stays
+  green). The table's `Update` handles `ActionLeft`/`ActionRight` **before** the
+  empty-rows guard, so a header-only table (columns synced before the first rows) can
+  still scroll.
+- **One horizontal offset (`hoffset`, in display columns) windows the whole block.**
+  Every rendered line — header and each data row — is padded to the same content width
+  (each cell padded to its column width), so a single offset windows them identically
+  and columns stay aligned across the scroll. `hclip` replaces the old `truncate`:
+  it returns runes `[hoffset, hoffset+innerW)`; the enclosing lipgloss style pads a
+  short window back out to width (no-wrap invariant D58 preserved — guarded test still
+  passes).
+- **Scroll snaps to column starts.** `scrollRight` advances `hoffset` to the next
+  visible column's start (leftmost hidden column becomes flush-left); `scrollLeft`
+  retreats to the previous column start, or 0. This reads better than a fixed
+  char-step and needs no magic constant. **Fallback:** when no column start remains
+  within range (a final column wider than the pane), `scrollRight` snaps to
+  `maxHOffset` so that column's tail is still reachable; `scrollLeft` always reaches 0.
+- **Offset is state that must stay valid.** `SetTable` resets it to 0 (a fresh
+  resource starts fully-left, mirroring the vertical reset-to-top); `SetSize` and
+  `ApplyEvent` re-clamp it via `clampHOffset` (a resize or a column-width change from a
+  delta can widen/narrow the content). Exposed `HOffset()` for tests and for M2-07b's
+  future pane-focus-vs-scroll arbitration (compare before/after a left/right to detect
+  an edge). Pure render, no shared mutable state (principle 1).
+- **Deps:** none new.
