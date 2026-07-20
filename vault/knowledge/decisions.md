@@ -1857,3 +1857,26 @@ Constraints future legs must not contradict:
 disorganized). Mirrors the original kube-commander's cluster-then-namespaced split and
 the Kubernetes Dashboard's Workloads/Config/Network/Storage grouping, giving a familiar
 structure that survives CRDs being appended.
+
+### D78 — Table filter is a view over an authoritative unfiltered row set
+**2026-07-20 (M2-09a).** The resource table keeps two row sets: `full` (every row
+the watch has delivered) and the displayed `table` (full, or full narrowed by the
+active `filter`). Constraints future legs (M2-09b app wiring, and any later
+filter/search work) must not contradict:
+- **Watch deltas mutate `full`, never the filtered view.** ApplyEvent upserts/
+  deletes/reset onto `full`, then re-derives the displayed set via `applyFilter`.
+  A narrowing filter therefore never drops a live row: clearing it (`SetFilter("")`
+  / `ClearFilter`) brings every row back. Cursor/offset/render/selection all operate
+  on the displayed set (so `RowCount`/`SelectedRow` mean the *visible* rows;
+  `TotalRowCount` is the unfiltered denominator).
+- **Matching is case-insensitive substring across the *visible* (priority-0)
+  columns only** — never the hidden `-o wide` extras, so the filter matches what the
+  user can see. Selection is preserved by object UID across a filter change (cursor
+  follows the row if it still matches, else clamps into the narrowed range).
+- **`SetTable` clears the filter; `ApplyEvent` preserves it.** A fresh List for a
+  newly selected resource (SetTable) must not carry a stale filter from the previous
+  resource, but a watch reconnect (a fresh RESET via ApplyEvent, D59) must keep the
+  user's filter — the filter is part of the selection continuity D59 protects.
+- The component only narrows. The root model owns opening the filter from the keymap
+  `app.filter` action + a text field and rendering the active-filter indicator
+  (M2-09b); it drives narrowing through `SetFilter`.

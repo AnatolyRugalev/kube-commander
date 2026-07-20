@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-09 split into 09a (table filter core, in progress) + 09b (app wiring + search nav); claiming 09a. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-09a done: table filter core (authoritative full set + displayed filtered view; case-insensitive substring over visible columns; D78). Next pick: M2-09b (wire `/`+textinput into the shell). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-09a** Table filter core: row narrowing inside the table component
-      status: in-progress | owner: claude-opus | added: 2026-07-20
-      notes: Authoritative unfiltered row set + a displayed filtered view; a
-      case-insensitive substring query narrows the rendered rows across the
-      visible cells, selection preserved by UID. `SetFilter`/`Filter`/`ClearFilter`
-      API for the app to wire in 09b. Component-only; not wired into the shell yet
-      (no regression — filter starts empty). Split from M2-09.
+_(none)_
 
 ## Blocked
 
@@ -127,6 +121,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-09a** Table filter core: authoritative unfiltered `full` row set + a displayed filtered `table` view; `SetFilter`/`ClearFilter`/`Filter`/`TotalRowCount` narrow the rendered rows to a case-insensitive substring match across the *visible* (priority-0) columns, selection preserved by UID; watch deltas mutate `full` so clearing the filter restores every live row; `SetTable` clears the filter, `ApplyEvent` preserves it (D78). Component-only, not yet shell-wired — done 2026-07-20 (D78)
 - [x] **FB-menu-nesting** Feedback (normal): flat left menu read as disorganized → resource menu now renders Dashboard-style sections (Cluster / Workloads / Config / Network / Storage / Access Control + trailing Custom Resources for CRDs) with non-selectable, cursor-skipped headers; `Item.Section` + `menu.rows()` expand items into header+item display rows, scroll offset became display-row based (`cursorRow`), items indent under their header, Reconcile appends discovered extras into Custom Resources (D57 otherwise unchanged) — done 2026-07-20 (D77)
 - [x] **FB-welcome-page** Feedback (normal): bare launch showed an empty right-pane table → new `welcome` component (`internal/tui/components/welcome`) shows name/version, context · namespace scope, a pick-a-resource hint, and registry-generated key hints until the first drill-in, then the live table takes the slot (gated by `hasCurrent`); `WithContext`/`WithVersion` + `kube.ContextName` (no-network, blank-on-failure) wire the props; status bar now shows the context too — done 2026-07-20 (D76)
 - [x] **FB-go-install** Feedback (normal): README `go install …/cmd/kubecom@v1` failed (`@v1` is a semver version query — resolves to a nonexistent `v1.x.x` tag, never the branch) → Install section now leads with a local `v1` checkout + `go install ./cmd/kubecom`, `@v1` remote form dropped, commit-SHA pin noted as the working remote alternative, clean remote `go install …@latest` deferred to an M5 release tag — done 2026-07-20 (D75)

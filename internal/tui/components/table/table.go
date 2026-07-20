@@ -12,6 +12,12 @@
 // its new index. A table wider than the pane scrolls horizontally on nav.left/
 // nav.right, snapping to column boundaries (M2-06c/D60).
 //
+// SetFilter (M2-09a) narrows the displayed rows to a case-insensitive substring
+// match across the visible columns. Filtering is a view over an authoritative,
+// unfiltered row set: watch deltas keep updating every row, and clearing the
+// filter brings them all back. The root model owns triggering it from the keymap
+// filter action and a text field (M2-09b); this package only narrows.
+//
 // The table never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands it to Update. Like the menu, the table owns no shared
 // mutable state (principle 1) and owns its own emitted message type — RowSelectedMsg
@@ -48,7 +54,18 @@ type RowSelectedMsg struct {
 // nothing here is shared across goroutines.
 type Model struct {
 	styles styles.Styles
+
+	// full is the authoritative, unfiltered row set — every row the watch has
+	// delivered. table is the displayed view: full when no filter is set, else
+	// full narrowed to the rows matching filter. All rendering, navigation, and
+	// selection operate on table (the visible rows); watch deltas (ApplyEvent)
+	// mutate full and re-derive table via applyFilter. filter is the active
+	// case-insensitive substring query ("" = show everything). Keeping the two
+	// separate means a narrowing filter never loses rows from the live set: clear
+	// it and every row reappears (M2-09a).
+	full   kube.Table
 	table  kube.Table
+	filter string
 
 	// visible holds the indices (into table.Columns) of the columns shown, and
 	// colWidths their rendered widths — both derived from the snapshot in
@@ -72,14 +89,77 @@ func New(s styles.Styles) Model {
 // SetTable installs a new snapshot, recomputing the visible columns and their
 // widths and resetting the selection to the first row. It is the deliberate
 // reset entry point (a fresh List for a newly selected resource starts at the
-// top); live watch deltas that must preserve the selection go through ApplyEvent.
+// top): the filter is cleared too, since a filter typed against the previous
+// resource must not silently hide rows of a different one. Live watch deltas that
+// must preserve the selection (and any active filter) go through ApplyEvent.
 func (m *Model) SetTable(t kube.Table) {
-	m.table = t
-	m.computeColumns()
+	m.full = t
+	m.filter = ""
+	m.applyFilter()
 	m.cursor = 0
 	m.offset = 0
 	m.hoffset = 0
 	m.clampOffset()
+}
+
+// SetFilter narrows the displayed rows to those matching q (case-insensitive
+// substring across the visible columns' cells), preserving the selection by
+// object UID: if the selected row still matches, the cursor follows it; if the
+// filter hides it, the cursor clamps into the narrowed range. Passing "" clears
+// the filter and every row reappears. It re-derives from the authoritative full
+// set each call, so narrowing then widening never loses rows.
+func (m *Model) SetFilter(q string) {
+	if q == m.filter {
+		return
+	}
+	selUID := m.selectedUID()
+	m.filter = q
+	m.applyFilter()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+	m.clampHOffset()
+}
+
+// ClearFilter removes any active filter (equivalent to SetFilter("")).
+func (m *Model) ClearFilter() { m.SetFilter("") }
+
+// Filter is the active filter query ("" when none is set).
+func (m Model) Filter() string { return m.filter }
+
+// applyFilter re-derives the displayed table from the authoritative full set and
+// the current filter, then measures the column widths from the resulting rows.
+// The visible column set depends only on the columns (priority-0), so it is
+// selected first and reused as the match scope. Callers restore the selection and
+// re-clamp the scroll afterwards.
+func (m *Model) applyFilter() {
+	m.table.Columns = m.full.Columns
+	m.selectVisible()
+	if m.filter == "" {
+		m.table.Rows = m.full.Rows
+	} else {
+		needle := strings.ToLower(m.filter)
+		rows := make([]kube.Row, 0, len(m.full.Rows))
+		for _, r := range m.full.Rows {
+			if m.rowMatches(r, needle) {
+				rows = append(rows, r)
+			}
+		}
+		m.table.Rows = rows
+	}
+	m.measureWidths()
+}
+
+// rowMatches reports whether any of the row's visible cells contains needle
+// (which the caller has already lower-cased) as a case-insensitive substring.
+// Only the visible (priority-0) columns are searched, so the filter matches what
+// the user can actually see, not hidden -o-wide extras.
+func (m Model) rowMatches(r kube.Row, needle string) bool {
+	for _, ci := range m.visible {
+		if strings.Contains(strings.ToLower(formatCell(cellAt(r.Cells, ci))), needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // ApplyEvent folds one live watch delta (delivered as a ResourceEventMsg carrying
@@ -98,7 +178,7 @@ func (m *Model) ApplyEvent(ev kube.WatchEvent) {
 	selUID := m.selectedUID()
 	switch ev.Type {
 	case kube.WatchReset:
-		m.table = kube.Table{Columns: ev.Columns, Rows: ev.Rows}
+		m.full = kube.Table{Columns: ev.Columns, Rows: ev.Rows}
 	case kube.WatchAdded, kube.WatchModified:
 		for _, r := range ev.Rows {
 			m.upsertRow(r)
@@ -110,7 +190,11 @@ func (m *Model) ApplyEvent(ev kube.WatchEvent) {
 	default:
 		return
 	}
-	m.computeColumns()
+	// Deltas land on the authoritative full set; re-derive the displayed (possibly
+	// filtered) view. An active filter is preserved across the delta (unlike
+	// SetTable): a watch reconnect emits a fresh RESET, and the user's filter must
+	// survive it (D59 keeps the selection; the filter is part of that continuity).
+	m.applyFilter()
 	m.restoreSelection(selUID)
 	m.clampOffset()
 	m.clampHOffset()
@@ -126,15 +210,15 @@ func (m Model) selectedUID() string {
 	return m.table.Rows[m.cursor].Object.UID
 }
 
-// indexOfUID returns the index of the row with the given object UID and true, or
-// false when it is absent. An empty UID never matches: a degraded row with no
-// object metadata (principle 3) cannot be identified, so it is never collapsed
-// with another empty-UID row.
-func (m Model) indexOfUID(uid string) (int, bool) {
+// indexOfUID returns the index of the row with the given object UID in rows and
+// true, or false when it is absent. An empty UID never matches: a degraded row
+// with no object metadata (principle 3) cannot be identified, so it is never
+// collapsed with another empty-UID row.
+func indexOfUID(rows []kube.Row, uid string) (int, bool) {
 	if uid == "" {
 		return 0, false
 	}
-	for i, r := range m.table.Rows {
+	for i, r := range rows {
 		if r.Object.UID == uid {
 			return i, true
 		}
@@ -142,20 +226,22 @@ func (m Model) indexOfUID(uid string) (int, bool) {
 	return 0, false
 }
 
-// upsertRow replaces the row with r's UID in place, or appends r when its UID is
-// absent (or empty — an unidentifiable row is always appended rather than merged).
+// upsertRow replaces the row with r's UID in the authoritative full set in place,
+// or appends r when its UID is absent (or empty — an unidentifiable row is always
+// appended rather than merged). Deltas always touch full, never the filtered view.
 func (m *Model) upsertRow(r kube.Row) {
-	if i, ok := m.indexOfUID(r.Object.UID); ok {
-		m.table.Rows[i] = r
+	if i, ok := indexOfUID(m.full.Rows, r.Object.UID); ok {
+		m.full.Rows[i] = r
 		return
 	}
-	m.table.Rows = append(m.table.Rows, r)
+	m.full.Rows = append(m.full.Rows, r)
 }
 
-// deleteRow removes the row with the given UID, if present.
+// deleteRow removes the row with the given UID from the authoritative full set,
+// if present.
 func (m *Model) deleteRow(uid string) {
-	if i, ok := m.indexOfUID(uid); ok {
-		m.table.Rows = append(m.table.Rows[:i], m.table.Rows[i+1:]...)
+	if i, ok := indexOfUID(m.full.Rows, uid); ok {
+		m.full.Rows = append(m.full.Rows[:i], m.full.Rows[i+1:]...)
 	}
 }
 
@@ -169,7 +255,7 @@ func (m *Model) restoreSelection(uid string) {
 		m.offset = 0
 		return
 	}
-	if i, ok := m.indexOfUID(uid); ok {
+	if i, ok := indexOfUID(m.table.Rows, uid); ok {
 		m.cursor = i
 	} else if m.cursor > len(m.table.Rows)-1 {
 		m.cursor = len(m.table.Rows) - 1
@@ -195,8 +281,15 @@ func (m Model) Focused() bool { return m.focused }
 // Cursor is the index of the highlighted row (for tests / the root model).
 func (m Model) Cursor() int { return m.cursor }
 
-// RowCount is the number of rows in the current snapshot.
+// RowCount is the number of rows currently displayed — the whole snapshot when no
+// filter is set, or the matching rows when one is. TotalRowCount is the unfiltered
+// count.
 func (m Model) RowCount() int { return len(m.table.Rows) }
+
+// TotalRowCount is the number of rows in the authoritative unfiltered set,
+// regardless of any active filter. With no filter it equals RowCount; with one it
+// is the denominator for a "matched / total" indicator (M2-09b).
+func (m Model) TotalRowCount() int { return len(m.full.Rows) }
 
 // HOffset is the first visible display column — the horizontal scroll position
 // (for tests and, later, the root model's pane-focus-vs-scroll arbitration in
@@ -212,13 +305,14 @@ func (m Model) SelectedRow() (kube.Row, bool) {
 	return m.table.Rows[m.cursor], true
 }
 
-// computeColumns selects the visible columns and measures their widths from the
-// current snapshot. Only priority-0 columns are shown by default, matching
-// `kubectl get`'s narrow view (higher-priority columns are the `-o wide` extras);
-// if the server sends no priority-0 column, every column is shown rather than
-// rendering a blank table (degrade, don't blank — principle 3). Each column is as
-// wide as the widest of its header and cell values.
-func (m *Model) computeColumns() {
+// selectVisible chooses the visible columns from the current snapshot. Only
+// priority-0 columns are shown by default, matching `kubectl get`'s narrow view
+// (higher-priority columns are the `-o wide` extras); if the server sends no
+// priority-0 column, every column is shown rather than rendering a blank table
+// (degrade, don't blank — principle 3). The choice depends only on the columns,
+// not the rows, so applyFilter can select the visible set before narrowing and
+// reuse it as the filter's match scope.
+func (m *Model) selectVisible() {
 	m.visible = m.visible[:0]
 	for i, c := range m.table.Columns {
 		if c.Priority == 0 {
@@ -230,7 +324,11 @@ func (m *Model) computeColumns() {
 			m.visible = append(m.visible, i)
 		}
 	}
+}
 
+// measureWidths sizes each visible column to the widest of its header and the
+// cell values across the currently displayed rows.
+func (m *Model) measureWidths() {
 	m.colWidths = make([]int, len(m.visible))
 	for i, ci := range m.visible {
 		m.colWidths[i] = runeLen(m.table.Columns[ci].Name)

@@ -597,3 +597,173 @@ func TestHorizontalScrollWorksWithHeaderOnly(t *testing.T) {
 // Update must return a table.Model (not tea.Model) so the root can keep a typed
 // value; this compile-time check guards the signature.
 var _ = func(m Model) (Model, tea.Cmd) { return m.Update(keymap.ActionDown) }
+
+// --- M2-09a: filter core -------------------------------------------------------
+
+func TestSetFilterNarrowsRows(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("pod-b")
+	if got, want := m.RowCount(), 1; got != want {
+		t.Fatalf("RowCount = %d, want %d after filtering to pod-b", got, want)
+	}
+	if m.TotalRowCount() != 3 {
+		t.Fatalf("TotalRowCount = %d, want 3 (full set unchanged)", m.TotalRowCount())
+	}
+	sel, ok := m.SelectedRow()
+	if !ok || sel.Object.Name != "pod-b" {
+		t.Fatalf("selected row = %+v ok=%v, want pod-b", sel.Object, ok)
+	}
+	if m.Filter() != "pod-b" {
+		t.Fatalf("Filter() = %q, want pod-b", m.Filter())
+	}
+}
+
+func TestFilterIsCaseInsensitive(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("POD-C")
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1 for case-insensitive POD-C", m.RowCount())
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-c" {
+		t.Fatalf("selected = %q, want pod-c", sel.Object.Name)
+	}
+}
+
+func TestFilterMatchesAnyVisibleCell(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	// "0/1" is only pod-b's Ready cell — a non-name visible column.
+	m.SetFilter("0/1")
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1 matching the Ready column", m.RowCount())
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-b" {
+		t.Fatalf("selected = %q, want pod-b", sel.Object.Name)
+	}
+}
+
+func TestFilterIgnoresHiddenColumns(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	// 10.0.0.2 lives only in the hidden priority-1 IP column, so it must not match.
+	m.SetFilter("10.0.0.2")
+	if m.RowCount() != 0 {
+		t.Fatalf("RowCount = %d, want 0 — hidden column must not match", m.RowCount())
+	}
+}
+
+func TestClearFilterRestoresAllRows(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("pod-b")
+	m.ClearFilter()
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 after clearing the filter", m.RowCount())
+	}
+	if m.Filter() != "" {
+		t.Fatalf("Filter() = %q, want empty after ClearFilter", m.Filter())
+	}
+	// The selection returns to the previously-selected row (still present).
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-b" {
+		t.Fatalf("selected = %q, want pod-b preserved across clear", sel.Object.Name)
+	}
+}
+
+func TestFilterPreservesSelectionByUID(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionDown) // select pod-b (row 1)
+	// A filter that keeps pod-b (and pod-c) must keep the cursor on pod-b.
+	m.SetFilter("pod-") // matches all three
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-b" {
+		t.Fatalf("selected = %q, want pod-b preserved when it still matches", sel.Object.Name)
+	}
+}
+
+func TestFilterSelectionFallsBackWhenHidden(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionBottom) // select pod-c (last row, index 2)
+	m.SetFilter("pod-a")                 // hides pod-c; only pod-a remains
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1", m.RowCount())
+	}
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 clamped into the narrowed range", m.cursor)
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-a" {
+		t.Fatalf("selected = %q, want pod-a", sel.Object.Name)
+	}
+}
+
+func TestFilterToZeroRowsIsNavigableNoop(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("no-such-pod")
+	if m.RowCount() != 0 {
+		t.Fatalf("RowCount = %d, want 0", m.RowCount())
+	}
+	if _, ok := m.SelectedRow(); ok {
+		t.Fatal("SelectedRow should report ok=false when the filter matches nothing")
+	}
+	// Navigation over an empty filtered set is a no-op, not a panic.
+	m, _ = m.Update(keymap.ActionDown)
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 on an empty filtered set", m.cursor)
+	}
+}
+
+func TestSetTableClearsFilter(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("pod-b")
+	// A fresh snapshot (new resource) must drop the stale filter and show all rows.
+	m.SetTable(sampleTable())
+	if m.Filter() != "" {
+		t.Fatalf("Filter() = %q, want cleared by SetTable", m.Filter())
+	}
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 after SetTable clears the filter", m.RowCount())
+	}
+}
+
+func TestFilterSurvivesWatchDeltas(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("pod-b")
+	// An ADDED for a non-matching row must not appear in the filtered view but must
+	// join the full set (visible again once the filter clears).
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{row("pod-d", "d")}})
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1 — pod-d does not match pod-b filter", m.RowCount())
+	}
+	if m.TotalRowCount() != 4 {
+		t.Fatalf("TotalRowCount = %d, want 4 after the add", m.TotalRowCount())
+	}
+	// An ADDED for a matching row shows up immediately.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{row("pod-bb", "bb")}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2 — pod-bb matches", m.RowCount())
+	}
+	m.ClearFilter()
+	if m.RowCount() != 5 {
+		t.Fatalf("RowCount = %d, want 5 after clearing (a,b,c,d,bb)", m.RowCount())
+	}
+}
+
+func TestFilteredModifyThatDropsMatchHidesRow(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetFilter("pod-b")
+	// MODIFY pod-b so its name no longer matches "pod-b": it leaves the filtered view.
+	renamed := kube.Row{Cells: []any{"renamed", "0/1", "10.0.0.2"}, Object: kube.ObjectRef{Name: "renamed", UID: "b"}}
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchModified, Rows: []kube.Row{renamed}})
+	if m.RowCount() != 0 {
+		t.Fatalf("RowCount = %d, want 0 after the matching row is renamed out", m.RowCount())
+	}
+	if m.TotalRowCount() != 3 {
+		t.Fatalf("TotalRowCount = %d, want 3 (still in the full set)", m.TotalRowCount())
+	}
+}
