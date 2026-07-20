@@ -3,11 +3,17 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — FB-menu-nesting done: resource menu now renders Dashboard-style sections (Cluster/Workloads/Config/Network/Storage/Access Control + Custom Resources) with non-selectable headers the cursor skips (D77); CRDs append into Custom Resources. Feedback inbox now empty; next pick: M2-09. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-09 split into 09a (table filter core, in progress) + 09b (app wiring + search nav); claiming 09a. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-09a** Table filter core: row narrowing inside the table component
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: Authoritative unfiltered row set + a displayed filtered view; a
+      case-insensitive substring query narrows the rendered rows across the
+      visible cells, selection preserved by UID. `SetFilter`/`Filter`/`ClearFilter`
+      API for the app to wire in 09b. Component-only; not wired into the shell yet
+      (no regression — filter starts empty). Split from M2-09.
 
 ## Blocked
 
@@ -72,11 +78,16 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-09** Table filter (`bubbles/textinput`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: `/`-triggered filter (keymap `filter.open`) over the current table's
-      rows; `n`/`N` next/prev match. Client-side over the row set. Depends on:
-      M2-06, M2-07.
+- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`)
+      status: todo | owner: — | added: 2026-07-20
+      notes: Wire the M2-09a filter core into the shell: `/` (keymap `app.filter`)
+      opens a textinput over the focused table; typing narrows live; esc/back
+      clears-then-closes (mirror `routePickerKey`'s control/text split, D73). Show
+      the active filter (status bar or table border). Decide `n`/`N`
+      (`app.searchNext`/`Prev`) semantics against the narrowing model — with a
+      narrowing filter the visible rows *are* the matches, so n/N cycles the
+      selection through them (or is folded away); record the decision. Depends on:
+      M2-09a, M2-07.
 
 - [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
       status: todo | owner: — | added: 2026-07-19
