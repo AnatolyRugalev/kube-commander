@@ -7,7 +7,9 @@ _Last updated: 2026-07-20 — M2-14a (teatest: update loop + menu reconcile) don
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
+      status: in-progress | owner: claude-opus | added: 2026-07-18 | claimed: 2026-07-20
+      notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
 
 ## Blocked
 
@@ -20,9 +22,6 @@ _(none — M0 complete)_
 
 ### M1 — Kube layer
 _M1 is feature-complete (D66); these are the parked/deferred remainders, not blockers._
-- [ ] **M1-04b** Lazy group detail on first open (fetch a group's full resource detail only when its menu is opened)
-      status: todo | owner: — | added: 2026-07-18
-      notes: split from M1-04 — M2-coupled; needs the menu open interaction. Do after M2 menu exists.
 - [ ] **M1-INT** envtest integration tests (opt-in `KUBECOM_TEST_ENVTEST=1`): restricted-RBAC group isolation, watch reconnect/resync, action set against a live apiserver
       status: deferred | owner: — | added: 2026-07-20
       notes: D66 — fake-client coverage is the autonomous-loop bar; these need control-plane binaries (fragile in cloud, D18), so a human runs them locally or a dedicated CI job with `setup-envtest` does. Not an M1 blocker.
