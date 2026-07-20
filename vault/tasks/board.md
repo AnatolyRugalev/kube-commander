@@ -13,7 +13,14 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-08a** Generic list picker component (`internal/tui/components/picker`, bubbles/list)
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: First slice of M2-08. A modal, centered picker over `bubbles/list`:
+      renders a titled, bordered box of string items, navigated through keymap
+      actions (no raw keys — D11), `Show`/`Hide`/`Active`, `Selected()`; drill-in
+      emits `picker.SelectedMsg{Kind,Value}`, back emits `picker.CancelledMsg{Kind}`
+      (emitter owns the msg, D56). Filtering deferred to M2-08b; app/kube wiring to
+      M2-08c. Pure component — no app/kube/keymap/doc change.
 
 ## Blocked
 
@@ -69,10 +76,28 @@ messages.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
 - [ ] **M2-08** Namespace picker (`internal/tui/components/picker`, bubbles/list)
-      status: todo | owner: — | added: 2026-07-19
+      status: in-progress (split into 08a/08b/08c) | owner: — | added: 2026-07-19
       notes: Namespace switcher over a `bubbles/list`; scaffolding reused later for
       context/container/port pickers. Filtering handled by the picker; selection
       emits a "namespace changed" msg that re-scopes the watch. Depends on: M2-07c.
+      **Split** (component too big for one leg): **08a** generic picker component
+      (render + keymap-action nav + select/cancel msgs) — in progress; **08b** add
+      filtering to the picker (bubbles native filter / textinput); **08c** wire the
+      namespace picker into the app shell (keymap `ns.switch` action + a
+      `NamespaceLister` seam; open/select re-scopes the watch via `m.namespace`;
+      regenerate `docs/keybindings.md`).
+- [ ] **M2-08b** Picker filtering (`internal/tui/components/picker`)
+      status: todo | owner: — | added: 2026-07-20
+      notes: Add incremental filtering to the M2-08a picker (bubbles/list native
+      filter or a `bubbles/textinput`), driven so no raw key leaks past the text
+      field. `/` opens filter, matches narrow the list, esc clears. Depends on: M2-08a.
+- [ ] **M2-08c** Wire namespace picker into the app shell (`internal/tui/app.go`)
+      status: todo | owner: — | added: 2026-07-20
+      notes: Add a `ns.switch` keymap action + a narrow `NamespaceLister` seam
+      (mirroring `WithWatcher`/`WithDiscoverer`); the action opens the picker seeded
+      with namespaces; selection sets `m.namespace` and re-scopes the live watch
+      (M2-07c already reads `m.namespace`); regenerate `docs/keybindings.md`
+      (golden drift-check). Depends on: M2-08a, M2-08b.
 
 - [ ] **M2-09** Table filter (`bubbles/textinput`)
       status: todo | owner: — | added: 2026-07-19
