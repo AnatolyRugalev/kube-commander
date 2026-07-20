@@ -13,7 +13,9 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-06c** Table component: horizontal scroll + wide columns (`internal/tui/components/table`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: Horizontal scroll for tables wider than the pane via keymap left/right.
 
 ## Blocked
 
@@ -38,12 +40,6 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
-
-- [ ] **M2-06c** Table component: horizontal scroll + wide columns (`internal/tui/components/table`)
-      status: todo | owner: — | added: 2026-07-20
-      notes: Horizontal scroll for tables wider than the pane (currently clipped at
-      the right edge — D58) via keymap left/right; optionally a wide/narrow column
-      toggle to surface `Priority>0` columns. Depends on: M2-06a.
 
 - [ ] **M2-07** Root app model / shell (`internal/tui/app.go`, replaces the M0
       `internal/tui/tui.go` placeholder)
