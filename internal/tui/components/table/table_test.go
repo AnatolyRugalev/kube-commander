@@ -14,6 +14,41 @@ import (
 
 func newTestModel() Model { return New(styles.Default()) }
 
+// TestSelectWrapCyclesRows proves SelectNextWrap/SelectPrevWrap step the selection
+// and wrap at the ends (the search-match iteration behind n/N, M2-09b).
+func TestSelectWrapCyclesRows(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable()) // 3 rows, cursor at 0
+	m.SetSize(40, 8)
+
+	m.SelectNextWrap()
+	if m.Cursor() != 1 {
+		t.Fatalf("SelectNextWrap: cursor = %d, want 1", m.Cursor())
+	}
+	m.SelectNextWrap()
+	if m.Cursor() != 2 {
+		t.Fatalf("SelectNextWrap: cursor = %d, want 2", m.Cursor())
+	}
+	m.SelectNextWrap() // wraps 2 -> 0
+	if m.Cursor() != 0 {
+		t.Fatalf("SelectNextWrap at the last row should wrap to 0, got %d", m.Cursor())
+	}
+	m.SelectPrevWrap() // wraps 0 -> 2
+	if m.Cursor() != 2 {
+		t.Fatalf("SelectPrevWrap at the first row should wrap to 2, got %d", m.Cursor())
+	}
+}
+
+// TestSelectWrapEmptyTableNoop proves the wrap helpers are safe on an empty table.
+func TestSelectWrapEmptyTableNoop(t *testing.T) {
+	m := newTestModel()
+	m.SelectNextWrap()
+	m.SelectPrevWrap()
+	if m.Cursor() != 0 {
+		t.Fatalf("empty-table wrap should leave the cursor at 0, got %d", m.Cursor())
+	}
+}
+
 // sampleTable is a small three-row, two-column pod-like table with a hidden
 // priority column, used across the navigation/render tests.
 func sampleTable() kube.Table {

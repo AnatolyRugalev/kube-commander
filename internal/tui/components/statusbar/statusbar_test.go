@@ -39,6 +39,21 @@ func TestLeftSegmentSkipsEmptyPieces(t *testing.T) {
 	}
 }
 
+// TestSetFilterShowsInLeftSegment proves the filter indicator renders in the left
+// segment (verbatim) and disappears when cleared (M2-09b).
+func TestSetFilterShowsInLeftSegment(t *testing.T) {
+	m := newBar()
+	m.SetContext("prod")
+	m.SetFilter("/web")
+	if got := m.leftSegment(); !strings.Contains(got, "/web") {
+		t.Fatalf("leftSegment() = %q, want the filter indicator", got)
+	}
+	m.SetFilter("")
+	if got := m.leftSegment(); strings.Contains(got, "/web") {
+		t.Fatalf("cleared filter should not render, got %q", got)
+	}
+}
+
 func TestStartStopDiscovery(t *testing.T) {
 	m := newBar()
 	if m.Discovering() {

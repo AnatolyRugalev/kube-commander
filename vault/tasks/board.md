@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — added `vault/human-tasks/` (agent → human, can block the board / a milestone, D79); an open dogfood task gates M2-10…M2-13 until a human runs the build. Loop's next pick: M2-09b, then M2-14. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-09b (table filter wiring + n/N search, D80) done; the open dogfood human-task still gates M2-10…M2-13. Loop's next pick: M2-14. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`)
-      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
+_(none)_
 
 ## Blocked
 
@@ -73,16 +72,6 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`) — see In Progress
-      notes: Wire the M2-09a filter core into the shell: `/` (keymap `app.filter`)
-      opens a textinput over the focused table; typing narrows live; esc/back
-      clears-then-closes (mirror `routePickerKey`'s control/text split, D73). Show
-      the active filter (status bar or table border). Decide `n`/`N`
-      (`app.searchNext`/`Prev`) semantics against the narrowing model — with a
-      narrowing filter the visible rows *are* the matches, so n/N cycles the
-      selection through them (or is folded away); record the decision. Depends on:
-      M2-09a, M2-07.
-
 - [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
       status: todo | owner: — | added: 2026-07-19
       notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
@@ -121,6 +110,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-09b** Table filter app wiring + search nav: `app.filter` (`/`) opens a `bubbles/textinput` over the current table (no-op without one), routed through the picker's control/text split (D73) — text narrows live via `SetFilter`, mapped no-text keys are control actions; enter commits (routing resumes for j/k + n/N), esc clears-and-closes (restores rows, D78) and also clears a committed filter; new-resource selection resets filter state; `app.searchNext`/`Prev` (n/N) step matches with wrap (`table.SelectNextWrap`/`SelectPrevWrap`), no-op without a filter; active filter shown as a status-bar segment (`statusbar.SetFilter`) — done 2026-07-20 (D73, D74, D78, D80)
 - [x] **M2-09a** Table filter core: authoritative unfiltered `full` row set + a displayed filtered `table` view; `SetFilter`/`ClearFilter`/`Filter`/`TotalRowCount` narrow the rendered rows to a case-insensitive substring match across the *visible* (priority-0) columns, selection preserved by UID; watch deltas mutate `full` so clearing the filter restores every live row; `SetTable` clears the filter, `ApplyEvent` preserves it (D78). Component-only, not yet shell-wired — done 2026-07-20 (D78)
 - [x] **FB-menu-nesting** Feedback (normal): flat left menu read as disorganized → resource menu now renders Dashboard-style sections (Cluster / Workloads / Config / Network / Storage / Access Control + trailing Custom Resources for CRDs) with non-selectable, cursor-skipped headers; `Item.Section` + `menu.rows()` expand items into header+item display rows, scroll offset became display-row based (`cursorRow`), items indent under their header, Reconcile appends discovered extras into Custom Resources (D57 otherwise unchanged) — done 2026-07-20 (D77)
 - [x] **FB-welcome-page** Feedback (normal): bare launch showed an empty right-pane table → new `welcome` component (`internal/tui/components/welcome`) shows name/version, context · namespace scope, a pick-a-resource hint, and registry-generated key hints until the first drill-in, then the live table takes the slot (gated by `hasCurrent`); `WithContext`/`WithVersion` + `kube.ContextName` (no-network, blank-on-failure) wire the props; status bar now shows the context too — done 2026-07-20 (D76)

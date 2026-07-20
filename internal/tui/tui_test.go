@@ -716,6 +716,243 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	}
 }
 
+// multiReset builds a RESET watch event with one NAME row per name (UID == name),
+// so a test can populate the table with several rows and then filter across them.
+func multiReset(names ...string) kube.WatchEvent {
+	rows := make([]kube.Row, len(names))
+	for i, n := range names {
+		rows[i] = kube.Row{Cells: []any{n}, Object: kube.ObjectRef{Name: n, UID: n}}
+	}
+	return kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "NAME"}},
+		Rows:    rows,
+	}
+}
+
+// tableWith returns a sized model showing a live table for `pods` populated with the
+// given row names, plus the fake watcher backing it. It drives the real
+// select→pump→ApplyEvent path so hasCurrent is set and the rows are the displayed
+// set the filter narrows.
+func tableWith(t *testing.T, names ...string) (Model, *fakeWatcher) {
+	t.Helper()
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	fw.chans[0] <- multiReset(names...)
+	wm, ok := cmd().(watchMsg)
+	if !ok {
+		t.Fatalf("pump produced %T, want watchMsg", cmd())
+	}
+	next, _ = m.Update(wm)
+	m = next.(Model)
+	if m.table.RowCount() != len(names) {
+		t.Fatalf("table seeded with %d rows, want %d", m.table.RowCount(), len(names))
+	}
+	return m, fw
+}
+
+var slash = tea.Key{Code: '/', Text: "/"}
+
+// typeStr feeds each rune of s to the model as a keypress.
+func typeStr(t *testing.T, m Model, s string) Model {
+	t.Helper()
+	for _, r := range s {
+		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
+	}
+	return m
+}
+
+// TestFilterOpensAndNarrows proves app.filter (`/`) opens the field over the current
+// table and typing narrows the displayed rows live (D78), leaving the full set intact.
+func TestFilterOpensAndNarrows(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+
+	m, _ = press(t, m, slash)
+	if !m.filtering {
+		t.Fatal("app.filter should open the filter field")
+	}
+	if !m.table.Focused() {
+		t.Fatal("opening the filter should focus the table")
+	}
+	m = typeStr(t, m, "web")
+	if m.table.RowCount() != 2 {
+		t.Fatalf("filter 'web' left %d rows, want 2", m.table.RowCount())
+	}
+	if m.table.TotalRowCount() != 3 {
+		t.Fatalf("filter must not drop rows from the full set: total %d, want 3", m.table.TotalRowCount())
+	}
+	if m.table.Filter() != "web" {
+		t.Fatalf("table filter = %q, want web", m.table.Filter())
+	}
+	// The active filter surfaces in the status bar (inside the fixed layout, like the
+	// error toast) and the View renders without breaking.
+	if !bytes.Contains([]byte(m.View().Content), []byte("web")) {
+		t.Fatalf("filtering View should show the filter query in the status bar: %q", m.View().Content)
+	}
+}
+
+// TestFilterInertWithoutTable proves `/` does nothing before a resource is drilled
+// into (the welcome page is showing, so there is nothing to narrow).
+func TestFilterInertWithoutTable(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{})) // watcher wired, but no selection yet
+	m, cmd := press(t, m, slash)
+	if m.filtering {
+		t.Fatal("app.filter should be inert with no current table")
+	}
+	if cmd != nil {
+		t.Fatal("inert filter open should issue no command")
+	}
+}
+
+// TestFilterCommitKeepsNarrowing proves enter commits the narrowed view: the input
+// closes (filtering false) but the filter stays applied so the rows remain narrowed.
+func TestFilterCommitKeepsNarrowing(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if m.filtering {
+		t.Fatal("enter should close the filter input")
+	}
+	if m.table.Filter() != "web" {
+		t.Fatalf("commit should keep the filter applied, got %q", m.table.Filter())
+	}
+	if m.table.RowCount() != 2 {
+		t.Fatalf("committed filter should keep the rows narrowed, got %d", m.table.RowCount())
+	}
+}
+
+// TestFilterCancelRestores proves esc while editing clears the filter and closes the
+// input, bringing every row back (D78).
+func TestFilterCancelRestores(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+	if m.table.RowCount() != 2 {
+		t.Fatalf("precondition: filter should narrow to 2, got %d", m.table.RowCount())
+	}
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.filtering {
+		t.Fatal("esc should close the filter input")
+	}
+	if m.table.Filter() != "" {
+		t.Fatalf("esc should clear the filter, got %q", m.table.Filter())
+	}
+	if m.table.RowCount() != 3 {
+		t.Fatalf("clearing the filter should restore all rows, got %d", m.table.RowCount())
+	}
+}
+
+// TestCommittedFilterClearedByEsc proves esc on a committed filter (input closed)
+// clears the applied narrowing — esc exits the filtered view.
+func TestCommittedFilterClearedByEsc(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit
+	if m.table.Filter() != "web" {
+		t.Fatalf("precondition: committed filter should be 'web', got %q", m.table.Filter())
+	}
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.table.Filter() != "" {
+		t.Fatalf("esc on a committed filter should clear it, got %q", m.table.Filter())
+	}
+	if m.table.RowCount() != 3 {
+		t.Fatalf("clearing should restore all rows, got %d", m.table.RowCount())
+	}
+}
+
+// TestFilterLetterKeysTypeNotNavigate proves the control/text split (D73): while the
+// filter is open, a bound vim letter (`j`) types into the field rather than moving
+// the selection, but a no-text nav key (down arrow) still moves it.
+func TestFilterLetterKeysTypeNotNavigate(t *testing.T) {
+	m, _ := tableWith(t, "j-pod", "web-1", "web-2")
+	m, _ = press(t, m, slash)
+	// `j` carries text, so it types into the filter (narrowing to the "j-pod" row),
+	// it does not move the menu/table selection.
+	m = typeStr(t, m, "j")
+	if m.table.Filter() != "j" {
+		t.Fatalf("a letter key should type into the filter, got %q", m.table.Filter())
+	}
+	if m.table.RowCount() != 1 {
+		t.Fatalf("filter 'j' should narrow to the j-pod row, got %d", m.table.RowCount())
+	}
+	// A no-text nav key (down arrow) is a control action routed to the table.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
+	if !m.filtering {
+		t.Fatal("a nav key should not close the filter")
+	}
+}
+
+// TestSearchWrapsThroughMatches proves n/N step the selection through the matching
+// rows with wrap-around, once a filter is committed (this leg's n/N decision).
+func TestSearchWrapsThroughMatches(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")               // 2 matches: web-1, web-2
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit; cursor at 0
+	if m.table.Cursor() != 0 {
+		t.Fatalf("commit should leave the cursor at 0, got %d", m.table.Cursor())
+	}
+
+	n := tea.Key{Code: 'n', Text: "n"}
+	shiftN := tea.Key{Code: 'N', Text: "N"}
+
+	m, _ = press(t, m, n) // 0 -> 1
+	if m.table.Cursor() != 1 {
+		t.Fatalf("searchNext should advance to 1, got %d", m.table.Cursor())
+	}
+	m, _ = press(t, m, n) // 1 -> wrap to 0
+	if m.table.Cursor() != 0 {
+		t.Fatalf("searchNext at the last match should wrap to 0, got %d", m.table.Cursor())
+	}
+	m, _ = press(t, m, shiftN) // 0 -> wrap to 1
+	if m.table.Cursor() != 1 {
+		t.Fatalf("searchPrev at the first match should wrap to 1, got %d", m.table.Cursor())
+	}
+}
+
+// TestSearchInertWithoutFilter proves n is a no-op with no active filter — there are
+// no matches to iterate.
+func TestSearchInertWithoutFilter(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	// Focus the table but set no filter.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	before := m.table.Cursor()
+	m, cmd := press(t, m, tea.Key{Code: 'n', Text: "n"})
+	if m.table.Cursor() != before {
+		t.Fatalf("searchNext without a filter should not move the cursor: %d -> %d", before, m.table.Cursor())
+	}
+	if cmd != nil {
+		t.Fatal("searchNext without a filter should issue no command")
+	}
+}
+
+// TestNewResourceClearsFilter proves selecting a different resource resets the shell
+// filter state (SetTable clears the table filter, D78; the shell mirrors it).
+func TestNewResourceClearsFilter(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+	if m.table.Filter() == "" || !m.filtering {
+		t.Fatal("precondition: a filter should be open and applied")
+	}
+
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("nodes")})
+	m = next.(Model)
+	if m.filtering {
+		t.Fatal("selecting a new resource should close the filter input")
+	}
+	if m.table.Filter() != "" {
+		t.Fatalf("selecting a new resource should clear the filter, got %q", m.table.Filter())
+	}
+}
+
 // TestHelpSwallowsNav proves the open help overlay swallows navigation: focus does
 // not switch while help is visible.
 func TestHelpSwallowsNav(t *testing.T) {

@@ -1907,3 +1907,38 @@ while the loop built more UI on top. A blocking agent→human queue closes that 
 Wired into CLAUDE.md's leg loop + hard rules, the `do-rewrite-leg` skill (Orient,
 Pick, Verify), the `do-rewrite-run` orchestrator (blocked → end run + notify), and
 `vault/README.md`.
+
+### D80 — Table filter wiring: `/` opens a live field, enter commits · esc clears, and n/N step matches with wrap
+**2026-07-20 (M2-09b).** The M2-09a filter core is wired into the shell as an
+input mode, mirroring the namespace picker's control/text routing (D73). Constraints
+future filter/search legs must not contradict:
+- **`app.filter` (`/`) opens a live filter field over the current table**, seeded
+  with any active filter (reopening edits it). It is a **no-op unless a resource
+  table is showing** (`hasCurrent`) — the welcome page has nothing to narrow. While
+  the field is open the root routes every keypress through `routeFilterKey`,
+  bypassing the sequencer exactly as the open picker does; typing narrows the rows
+  live via `table.SetFilter` (D78).
+- **Control/text split (D73), reused verbatim.** A *mapped no-text* key
+  (esc/enter/arrows/ctrl+d…) is a control action; any text rune or unmapped no-text
+  edit key (backspace) is field input. So a bound vim letter like `j` *types* while
+  the field is open (it does not navigate); the no-text arrows/page keys move the
+  selection to preview matches live.
+- **enter commits, esc clears.** enter (nav.drillIn) closes the field keeping the
+  narrowed view — normal routing resumes so `j/k` and `n/N` work over the matches;
+  esc (nav.back) clears the filter and closes the field (restores every row, D78).
+  esc on a *committed* filter (field closed) also clears it — esc exits the filtered
+  view. A new resource selection (`SetTable`, D78) resets the shell's filter state.
+- **n/N (searchNext/Prev) step matches with wrap.** With a *narrowing* filter the
+  displayed rows are exactly the matches, so search is "step to next/prev displayed
+  row, wrapping at the ends" (vim search wraps; plain `j/k` clamp) — backed by
+  `table.SelectNextWrap`/`SelectPrevWrap`. **n/N are no-ops with no active filter**
+  (nothing to iterate); there is no separate match index over an unfiltered list.
+- **The active filter surfaces in the status bar** (a left segment: the live input
+  view while editing, `/query` once committed) — inside the fixed layout, never a
+  new pane (consistent with the D74 error toast). The component still only narrows;
+  the shell owns opening, committing, clearing, and the indicator (D78).
+
+**Why:** locks the one text-input interaction the browse view has into the same
+action-routed, layout-safe shape as the picker and the error toast, and settles the
+n/N-vs-narrowing-filter question (fold search into filter+step, don't maintain a
+parallel match cursor) so later search work builds on it instead of re-deciding.

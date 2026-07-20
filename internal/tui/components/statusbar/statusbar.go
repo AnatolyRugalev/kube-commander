@@ -39,6 +39,7 @@ type Model struct {
 	namespace   string
 	shortHelp   string
 	errText     string
+	filter      string
 	discovering bool
 	width       int
 }
@@ -60,6 +61,13 @@ func (m *Model) SetNamespace(ns string) { m.namespace = ns }
 // SetShortHelp sets the right-aligned keymap hint. The caller passes
 // help.Model.ShortHelpView() so the hint is generated from the registry (D11).
 func (m *Model) SetShortHelp(hint string) { m.shortHelp = hint }
+
+// SetFilter sets the filter indicator shown in the left segment — the live filter
+// prompt while the user is typing, or the committed "/query" indicator once a
+// filter is applied (both supplied by the root model, M2-09b). Empty renders
+// nothing. The string is used verbatim (the caller supplies the styling/prompt),
+// so it is not error-flattened like SetError.
+func (m *Model) SetFilter(s string) { m.filter = s }
 
 // SetError shows a transient error message in the bar (error-styled, taking over
 // the whole line while shown). The text is flattened to a single line —
@@ -169,6 +177,9 @@ func (m Model) leftSegment() string {
 	}
 	if m.namespace != "" {
 		parts = append(parts, m.namespace)
+	}
+	if m.filter != "" {
+		parts = append(parts, m.filter)
 	}
 	if m.discovering {
 		parts = append(parts, m.spinner.View()+discoveringLabel)

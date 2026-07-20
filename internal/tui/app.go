@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -178,6 +179,16 @@ type Model struct {
 	// with the other components) is the modal itself.
 	nsLister NamespaceLister
 
+	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
+	// the current table, typing narrows the live rows through table.SetFilter (D78),
+	// and it re-scopes to whatever is showing. filtering is whether it is open and
+	// capturing text — while true the root routes every keypress through
+	// routeFilterKey (control/text split, D73), bypassing the sequencer, exactly as
+	// the namespace picker does. The narrowing is a view over the table's
+	// authoritative full set, so clearing the filter restores every live row.
+	filterInput textinput.Model
+	filtering   bool
+
 	// discoverer runs the async discovery pass that reconciles the menu (nil →
 	// discovery-inert; the menu stays on its static seed). discoveryCancel tears
 	// the in-flight pass down on quit (the cap-1 discovery channel already keeps
@@ -215,16 +226,19 @@ func New(opts ...Option) Model {
 // into its table).
 func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	s := styles.Default()
+	fi := textinput.New()
+	fi.Prompt = "/"
 	m := Model{
-		keymap:   km,
-		seq:      keymap.NewSequencer(km),
-		help:     help.New(km),
-		styles:   s,
-		menu:     menu.New(s),
-		table:    table.New(s),
-		status:   statusbar.New(s),
-		nsPicker: picker.New(s, "namespace"),
-		welcome:  welcome.New(s),
+		keymap:      km,
+		seq:         keymap.NewSequencer(km),
+		help:        help.New(km),
+		styles:      s,
+		menu:        menu.New(s),
+		table:       table.New(s),
+		status:      statusbar.New(s),
+		nsPicker:    picker.New(s, "namespace"),
+		welcome:     welcome.New(s),
+		filterInput: fi,
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -299,6 +313,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if m.nsPicker.Active() {
 			return m.routePickerKey(msg)
+		}
+		if m.filtering {
+			return m.routeFilterKey(msg)
 		}
 		switch r := m.seq.Input(msg.Key()); r.Kind {
 		case keymap.ResultAction:
@@ -388,6 +405,13 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.watchGen++
 	m.watchCh = nil
 	m.table.SetTable(kube.Table{}) // blank until the watch's first RESET arrives.
+	// A fresh resource (or re-scoped namespace) starts unfiltered: SetTable clears
+	// the table's filter (D78); mirror that in the shell's filter state so a stale
+	// prompt/indicator from the previous resource does not linger.
+	m.filtering = false
+	m.filterInput.Blur()
+	m.filterInput.Reset()
+	m.syncFilterStatus()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := m.watcher.Watch(ctx, r, m.namespace, metav1.ListOptions{})
@@ -578,6 +602,122 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// openFilter opens the live table filter input over the current resource table
+// (M2-09b). It is a no-op unless a resource table is showing (hasCurrent) —
+// filtering the welcome page has nothing to narrow. The field is seeded with any
+// already-active filter (reopening `/` edits the current query, cursor at the end)
+// and focus moves to the table; typing then narrows the rows live through
+// table.SetFilter, enter commits the narrowed view, esc clears it and restores
+// every row (D78). With no resource open yet it does nothing.
+func (m Model) openFilter() (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	m.filtering = true
+	m.filterInput.SetValue(m.table.Filter())
+	m.filterInput.CursorEnd()
+	cmd := m.filterInput.Focus()
+	m.menu.Blur()
+	m.table.Focus()
+	m.syncFilterStatus()
+	return m, cmd
+}
+
+// routeFilterKey resolves one keypress while the filter input is open. It mirrors
+// routePickerKey's control/text split (D73): a mapped key carrying no text
+// (esc/enter/arrows/ctrl+d…) is a control Action the filter mode consumes, while any
+// text-producing or editing key (a rune, or an unmapped no-text key like backspace)
+// is filter input fed to the field — re-narrowing the table live. No view matches a
+// raw key (D11); the open field captures all input, so the sequencer and the panes
+// underneath never see it.
+func (m Model) routeFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+		return m.handleFilterAction(action)
+	}
+	var cmd tea.Cmd
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	m.table.SetFilter(m.filterInput.Value())
+	m.syncFilterStatus()
+	return m, cmd
+}
+
+// handleFilterAction applies a control action while the filter input is open: enter
+// (nav.drillIn) commits the narrowed view and closes the input; esc (nav.back)
+// cancels — clears the filter, restoring every row — and closes it; the vertical
+// navigation actions move the selection through the live-narrowed rows so matches
+// can be previewed while typing; every other action is ignored (n/N, ns.switch,
+// help and quit cannot fire mid-filter — their keys either type into the field or
+// are dropped here).
+func (m Model) handleFilterAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	switch a {
+	case keymap.ActionDrillIn:
+		return m.commitFilter()
+	case keymap.ActionBack:
+		m.clearFilter()
+		return m, nil
+	case keymap.ActionUp, keymap.ActionDown, keymap.ActionTop, keymap.ActionBottom,
+		keymap.ActionHalfPageUp, keymap.ActionHalfPageDown, keymap.ActionPageUp, keymap.ActionPageDown:
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(a)
+		return m, cmd
+	}
+	return m, nil
+}
+
+// commitFilter closes the filter input while keeping the narrowed view: normal key
+// routing resumes so nav (j/k) and search (n/N) step through the matching rows, and
+// the status bar keeps the "/query" indicator until the filter is cleared (esc).
+func (m Model) commitFilter() (tea.Model, tea.Cmd) {
+	m.filtering = false
+	m.filterInput.Blur()
+	m.syncFilterStatus()
+	return m, nil
+}
+
+// clearFilter removes any active filter and closes the input, returning the table to
+// its full row set (D78) and the status bar to its normal content. Safe to call with
+// no filter set. It is esc's behaviour both while editing (clears-then-closes) and
+// on a committed filter (clears the applied narrowing).
+func (m *Model) clearFilter() {
+	m.filtering = false
+	m.filterInput.Blur()
+	m.filterInput.Reset()
+	m.table.ClearFilter()
+	m.syncFilterStatus()
+}
+
+// searchMove steps the table selection to the next (nav.down) or previous (nav.up)
+// match. With a narrowing filter the displayed rows are exactly the matches (D78),
+// so "next/prev match" is the next/previous displayed row, wrapping at the ends
+// (vim search wraps). With no active filter there is nothing to iterate and it is a
+// no-op — n/N mean something only once a filter is set (Dn, this leg's decision).
+func (m Model) searchMove(dir keymap.Action) (tea.Model, tea.Cmd) {
+	if m.table.Filter() == "" {
+		return m, nil
+	}
+	if dir == keymap.ActionDown {
+		m.table.SelectNextWrap()
+	} else {
+		m.table.SelectPrevWrap()
+	}
+	return m, nil
+}
+
+// syncFilterStatus reflects the current filter state on the status bar: the live
+// input prompt while editing, the committed "/query" indicator while a filter is
+// applied but the input is closed, and nothing when no filter is set.
+func (m *Model) syncFilterStatus() {
+	switch {
+	case m.filtering:
+		m.status.SetFilter(m.filterInput.View())
+	case m.table.Filter() != "":
+		m.status.SetFilter("/" + m.table.Filter())
+	default:
+		m.status.SetFilter("")
+	}
+}
+
 // resize lays the panes out inside the current terminal: the status bar takes the
 // bottom line, and the menu and table split the remaining width (menu a fraction
 // with floors so the table always keeps room). Both panes are sized to their
@@ -651,18 +791,30 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		m.help.Toggle()
 		return m, nil
 	case keymap.ActionBack:
-		// esc closes the help overlay when it is open; otherwise inert until the
-		// pane/drill-in stack exists.
+		// esc closes the help overlay when it is open; else clears a committed table
+		// filter (leaving the filtered view — the live-editing esc is handled in
+		// routeFilterKey); otherwise inert until the pane/drill-in stack exists.
 		if m.help.Visible() {
 			m.help.SetVisible(false)
+			return m, nil
+		}
+		if m.table.Filter() != "" {
+			m.clearFilter()
 		}
 		return m, nil
 	}
 	if m.help.Visible() {
 		return m, nil // the overlay swallows navigation while it is open.
 	}
-	if a == keymap.ActionNamespace {
+	switch a {
+	case keymap.ActionNamespace:
 		return m.openNamespacePicker()
+	case keymap.ActionFilter:
+		return m.openFilter()
+	case keymap.ActionSearchNext:
+		return m.searchMove(keymap.ActionDown)
+	case keymap.ActionSearchPrev:
+		return m.searchMove(keymap.ActionUp)
 	}
 	return m.routeNav(a)
 }

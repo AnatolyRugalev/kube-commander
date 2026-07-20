@@ -386,6 +386,35 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// SelectNextWrap moves the selection to the next displayed row, wrapping from the
+// last row back to the first. It backs the root model's search-next (n) over a
+// narrowing filter, where the displayed rows are exactly the matches (M2-09b): a
+// plain nav.down clamps at the bottom, but stepping through matches wraps, as vim's
+// search does. A no-op on an empty table.
+func (m *Model) SelectNextWrap() {
+	if len(m.table.Rows) == 0 {
+		return
+	}
+	if m.cursor >= len(m.table.Rows)-1 {
+		m.moveTo(0)
+		return
+	}
+	m.moveTo(m.cursor + 1)
+}
+
+// SelectPrevWrap moves the selection to the previous displayed row, wrapping from
+// the first row to the last — the search-prev (N) counterpart to SelectNextWrap.
+func (m *Model) SelectPrevWrap() {
+	if len(m.table.Rows) == 0 {
+		return
+	}
+	if m.cursor <= 0 {
+		m.moveTo(len(m.table.Rows) - 1)
+		return
+	}
+	m.moveTo(m.cursor - 1)
+}
+
 // pageStep is the number of data rows a full page scroll moves — the visible data
 // height, or 1 when the pane is too short to show any (so a page step still
 // advances).

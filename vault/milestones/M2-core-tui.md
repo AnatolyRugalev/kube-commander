@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN landed, and the namespace picker is now wired into the shell (M2-08 complete, D73). Remaining: table filter, modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) have landed. Remaining: modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 
@@ -43,7 +43,7 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
       dogfood pass.)_
 - [ ] Browse, select a resource, see live-updating rows for any discovered kind.
 - [ ] Menu customization persists across restarts; async discovery reconciles menu without disturbing selection/scroll.
-- [ ] Namespace + filter work; scrolling and Home/End behave.
+- [x] Namespace + filter work; scrolling and Home/End behave. (ns picker M2-08c; table filter + n/N search M2-09b/D80; vertical+horizontal scroll and top/bottom in the table.)
 - [ ] Vim keys and their fallbacks both navigate every list/table; help overlay shows both.
 - [ ] Rebinding an action in config takes effect; invalid keymaps fail load with a clear error; no raw-key matching remains in view code.
 - [ ] Old config migrates cleanly; malformed/legacy files handled gracefully.
