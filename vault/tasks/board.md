@@ -13,7 +13,11 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-07d** Root app shell: async discovery on Init → DiscoveryReadyMsg into the menu + status-bar spinner
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: kick off async discovery on `Init` via a `Discoverer` seam/option
+      mirroring `WithWatcher`; route `DiscoveryReadyMsg` into the menu's M2-05b
+      `Reconcile` and drive the status-bar spinner (start on Init, stop on ready).
 
 ## Blocked
 
