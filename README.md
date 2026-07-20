@@ -1,214 +1,110 @@
-# Kube Commander  (kubecom)
+# kubecom
 
-[![Build Status](https://img.shields.io/travis/anatolyrugalev/kube-commander?style=for-the-badge)](https://travis-ci.org/AnatolyRugalev/kube-commander)
-[![Docker Image](https://img.shields.io/docker/v/anatolyrugalev/kubecom?sort=semver&style=for-the-badge)](https://hub.docker.com/r/anatolyrugalev/kubecom)
-[![Aur](https://img.shields.io/aur/version/kube-commander?style=for-the-badge)](https://aur.archlinux.org/packages/kube-commander/)
-
-kubecom is an easy to use tool for observing Kubernetes cluster from your terminal.
+A fast, vim-friendly, zero-deploy Kubernetes TUI — *"the kubernetes-dashboard in
+your terminal."* Browse and operate any cluster over SSH, in real time, with no
+in-cluster deployment and **no `kubectl` binary required**.
 
 > ### 🚧 `v1` is a ground-up rewrite in progress
 >
-> This branch (`v1`) is a from-scratch rewrite of the 2020 codebase into a modern,
-> vim-friendly, zero-deploy Kubernetes TUI (Bubble Tea + client-go, no `kubectl`
-> binary required). The original 2020 code lives on the
-> [`master`](https://github.com/AnatolyRugalev/kube-commander/tree/master) branch,
-> and **the rest of this README still describes that version** — it is rewritten as
-> the new code reaches parity.
+> This branch (`v1`) rebuilds the 2020 codebase from scratch on a modern Go stack
+> (**Bubble Tea + client-go**), fixing the old data-race/focus/redraw bug class by
+> construction and dropping the hard `kubectl` dependency. The original 2020 code
+> lives on [`master`](https://github.com/AnatolyRugalev/kube-commander/tree/master).
 >
-> The rewrite is driven autonomously and documents itself in the
-> **[`vault/`](vault/)**, which is the single source of truth for goals, plan, and
-> progress:
-> - [`vault/goals.md`](vault/goals.md) — vision, definition of done, non-goals, principles
-> - [`vault/milestones/`](vault/milestones/) — milestones M0–M5, scope and exit criteria
-> - [`vault/tasks/board.md`](vault/tasks/board.md) — the live task board
-> - [`vault/knowledge/decisions.md`](vault/knowledge/decisions.md) — the decision log (append-only, `Dn`-numbered)
-> - [`vault/journal/`](vault/journal/) — execution journal, one entry per unit of work
+> **Current status:** the in-process Kubernetes layer is complete and the TUI
+> components are built and tested; the interactive UI is being wired to launch
+> against a live cluster (task `M2-RUN`). Today the binary builds and exposes the
+> `version` and `keys` subcommands — the browse UI lands with `M2-RUN`. This README
+> tracks what the built binary actually does and is updated as the UI comes online.
 >
-> See [`CLAUDE.md`](CLAUDE.md) for the operating model behind the rewrite.
+> The rewrite is driven autonomously and documents itself in **[`vault/`](vault/)**
+> (goals, plan, live task board, decision log, per-leg journal); see
+> [`CLAUDE.md`](CLAUDE.md) for the operating model.
 
-> Soon `kube-commander` will change its name to `kubecom`. Please don't mind some naming inconsistency - I'm
-> trying to make the migration as seamless as possible.
+## Why kubecom
 
-![Kubecom](https://user-images.githubusercontent.com/1397674/93024273-dbb7ac80-f5fd-11ea-92b2-9df0d50d8b2f.gif)
-
-## kubecom vs. kubernetes-dashboard comparison
-
-|                                           | kubecom                  | kubernetes-dashboard     | 
-|-------------------------------------------|--------------------------|--------------------------|
-| Easy to use                               | :heavy_check_mark:       | :heavy_check_mark:       |
-| Realtime data update                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Doesn't require deployment                | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Doesn't require http access to cluster    | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Can be used over SSH                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Responsiveness                            | :zap:                    | :turtle:                 |
-| Suitable for hackers                      | :heavy_check_mark:       | :heavy_multiplication_x: |
-| Requires cluster-specific configuration   | :heavy_check_mark:       | :heavy_check_mark:       |
+- **Zero deploy.** A single static binary you run locally or over SSH — nothing to
+  install in the cluster, no HTTP ingress to expose.
+- **Real-time.** Lists are server-side watched and update live; no refresh key.
+- **No `kubectl` binary.** Discovery, list/watch, logs, describe, YAML, and the
+  action set are all in-process via client-go.
+- **Vim-first, fully rebindable.** `hjkl`, `gg`/`G`, `/`, `n`/`N` by default, with
+  arrows and classic keys as an equivalent fallback — and every key is
+  configurable (no hard-coded keys anywhere). See
+  [`docs/keybindings.md`](docs/keybindings.md).
+- **Approachable.** Simpler and more discoverable than k9s by design.
 
 ## Requirements
 
-1. GNU/Linux, MacOS or Windows system
-2. [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed and configured to access your cluster
-3. And... that's it!
+- **Linux or macOS** (Windows via WSL2 — native Windows is a non-goal).
+- A working **kubeconfig** (kubecom uses your current context by default).
+- **Go 1.24+** to build from source (until tagged release binaries ship in M5).
 
-## Installation
+## Install
 
-1. [Archlinux User Repository](#aur)
-2. [Homebrew](#homebrew)
-3. [Install binary](#binary)
-4. [Install from sources](#sources)
-5. [Run with Docker](#run-with-docker)
-
-### AUR
-
-If you use Archlinux you can install kubecom from AUR with your favorite AUR helper:
+### From source (recommended today)
 
 ```bash
-yay -S kube-commander
+go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@v1
 ```
 
-### Homebrew
+This installs the `kubecom` binary to `$(go env GOPATH)/bin` — make sure that's on
+your `PATH`.
 
-To install kubecom with brew you first need to add a tap:
+Or clone and build:
 
 ```bash
-brew tap AnatolyRugalev/kubecom
-brew install kubecom
+git clone -b v1 https://github.com/AnatolyRugalev/kube-commander
+cd kube-commander
+go build -o kubecom ./cmd/kubecom
 ```
 
-Brew formula has both Linux and MacOS binaries.
-
-### Binary
-
-You can install kubecom from binary release for your OS. Linux, macOS and Windows are supported. You can find 
-a package for your OS on [this page](https://github.com/AnatolyRugalev/kube-commander/releases/latest). Just download
-and put it to `/usr/local/bin`.
-
-There's oneliner to download the latest binary for your OS to current directory:
-
-```bash
-curl -sL https://git.io/JUneH | bash
-./kubecom --version
-```
-
-### Sources
-
-If you have Go environment configured you can install kubecom easily with this command:
-
-```bash
-go get -u github.com/AnatolyRugalev/kube-commander/cmd/kubecom
-```
-
-*NOTE: Make sure your `$PATH` has `$GOPATH/bin` in it.*
-
-### Run with Docker
-
-```bash
-alias kubecom="docker run --rm -v ~/.kube:/root/.kube -ti anatolyrugalev/kubecom:latest"
-kubecom
-```
+> Release binaries (goreleaser), Homebrew, AUR, and Docker images are planned for
+> the M5 release milestone and will be documented here when they land.
 
 ## Usage
 
-### Run
- 
-Before starting kubecom make sure you have proper kubectl configuration:
-
 ```bash
-kubectl cluster-info
+# Print build information
+kubecom version
+
+# Print the resolved keymap (defaults merged with your config)
+kubecom keys
 ```
 
-Then you can start kubecom:
+Launching the interactive browser — bare `kubecom`, using your current
+kubeconfig/context — lands with task **`M2-RUN`**. The intended invocation:
 
 ```bash
-kubecom
+kubecom                        # browse the current context
+kubecom --context my-cluster --namespace my-ns
+kubecom --kubeconfig ~/.kube/other-config
 ```
 
-If you installed kubecom from AUR, you can start it with `kubectl ui`. 
+### Configuration
 
-### Configure
+kubecom reads an optional YAML config from
+`os.UserConfigDir()/kubecom/config.yaml` (`~/.config/kubecom/config.yaml` on
+Linux). It is not required — kubecom runs on sensible defaults. The config's
+`keys:` section rebinds any action; see [`docs/keybindings.md`](docs/keybindings.md)
+for the action list and defaults, and inspect the effective map any time with
+`kubecom keys`.
 
-You can easily configure kubecom with this options:
-
-| Flag      | Env var     | Description                                                                                   |
-|-----------|-------------|-----------------------------------------------------------------------------------------------|
-|config     |KUBECOMCONFIG|Path to .kubecom.yaml                                                                          |
-|kubeconfig |KUBECONFIG   |Path to kubeconfig                                                                             |
-|context    |KUBECONTEXT  |Context name                                                                                   |
-|namespace  |KUBENAMESPACE|Initial namespace to show                                                                      |
-|timeout    |             |Connection timeout (default: "5s")                                                             |
-|editor     |EDITOR       |Name of the editor binary. Default: "vi". But you probably already have one defined by your OS |
-|pager      |PAGER        |Pager command for 'describe' command. Default: "less"                                          |
-|log-pager  |LOGPAGER     |Pager command for log output. Default: none                                                    |
-|kubectl    |KUBECTL      |Name of kubectl binary. Default: "kubectl"                                                     |
-|tail       |KUBETAIL     |Number of log lines to show with kubectl logs. Default: 1000                                   |
-|klog       |KUBELOG      |Kubernetes log file for debugging. Default: none                                               |
-
-Example:
-```bash
-kubecom --context=my-cluster-2 --namespace=my-namespace --kubeconfig=~/.kube/my-config
+```yaml
+# ~/.config/kubecom/config.yaml
+keys:
+  nav.down: ["j", "down"]
+  nav.up:   ["k", "up"]
 ```
 
-Sometimes you want to colorify JSON logs, so here's useful `--log-pager` configuration for that:
-```bash
-kubecom --log-pager="jq -c -R -r '. as \$line | try fromjson catch \$line'"
-```
+## Contributing
 
-You can pipe commands here as well:
-
-```bash
-kubecom --log-pager="jq -c | some_other_command"
-```
-
-### Configuration file
-
-You can edit configuration file at `~/.kubecom.yaml` to modify resource menu titles and themes. Usually you don't need
-to edit config manually: it updates automatically when you change resource menu items or switch theme. You can get
-familiar with configuration capabilities inspecting [pb/config.proto](pb/config.proto) protobuf file.
-
-### Hotkeys
-
-The first thing you need to press is "?". This will show help dialog in case you missed it on start screen.
-
-Official Kubernetes Dashboard has a refresh key which updates items on page. With kubecom you don't have to do that:
-kubecom watches changes and updates screen in real time, so you can relax and take a sip of your fresh coffee while
-monitoring your deployment rolling out.
-
-The most of hotkeys you can find on help dialog. Here they are:
-
-| Key | Action  |
-|:---:|:--------|
-|?| Show help dialog |
-| ↑↓→← | Navigation. When table doesn't fit to the screen, use ← and → to scroll horizontally |
-| Enter | Select menu item |
-| Esc, Backspace | Go back |
-| Q, Ctrl+C | Quit |
-| Ctrl+N, F2 | Switch namespace |
-| F3 | (experimental) Show all known resources in resource menu |
-| D | Describe selected resource with `kubectl describe` |
-| E | Edit selected resource with `kubectl edit` |
-| Delete | Delete selected resource (then press "y" to confirm) |
-| C | Copy resource name to the clipboard |
-| / | Enter filtering mode. Type string and then press Enter to confirm |
-| Ctrl+P | Switch to pods |
-| Ctrl+D | Switch to deployments |
-| Ctrl+I | Switch to ingresses |
-| L | Show pod logs |
-| Shift+L | Show previous pod logs |
-| F | Forward pod port |
-| S | Enter to container `/bin/sh` shell |
-| + (plus) | Add resource type to the menu |
-| F6, F7 | Move resource type up/down in menu | 
-| F10, F11 | Cycle through themes | 
-
-## Contribution
-
-We play by gentleman rules. If you want to contribute a code - please file an issue describing your intentions first.
-This way we can avoid wasting time doing easy work the hard way. I'm always open to give my point of view on your ideas.
+The rewrite is currently driven autonomously against the plan in
+[`vault/`](vault/). If you'd like to contribute, please open an issue describing
+your intent first so we can align with the milestone plan.
 
 ## Special thanks
 
-* [terminal.sexy](https://terminal.sexy) - great terminal color scheme configurator
-* [tcell](https://github.com/gdamore/tcell) - TUI library
-* [Goreleaser](https://goreleaser.com) - helps to ship Go software
-* [k9s](https://github.com/derailed/k9s) - another Kubernetes TUI utility
-
+- [Bubble Tea / Bubbles / Lipgloss](https://github.com/charmbracelet) — the TUI stack
+- [client-go](https://github.com/kubernetes/client-go) — in-process Kubernetes access
+- [k9s](https://github.com/derailed/k9s) — prior art in the Kubernetes-TUI space

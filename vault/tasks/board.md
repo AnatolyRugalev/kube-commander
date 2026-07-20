@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-08a done (generic modal picker component); M1 closed as feature-complete (D66). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — added M2-RUN (make the binary actually launch the TUI against a real cluster) as the next pick; real-cluster dogfooding is now a testing rule (D68). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -36,6 +36,25 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
+
+> **NEXT PICK — M2-RUN** must land before the remaining component legs: today the
+> binary never launches the TUI or touches a cluster (no `tea.NewProgram`, no real
+> client construction), so nothing has been exercised end-to-end against a real
+> apiserver. Once it lands, every subsequent leg is verified against the running
+> binary and must **incrementally improve the real-cluster experience** (D68).
+
+- [ ] **M2-RUN** Launch the TUI against a real cluster: make bare `kubecom` boot the browse UI
+      status: todo | owner: — | added: 2026-07-20
+      notes: Wire the pieces that already exist into a runnable program (keep it minimal,
+      ~1 leg). Root command builds a real `*kube.Clients` (`kube.NewClients`) from
+      kubeconfig/context/namespace flags (`--kubeconfig`/`--context`/`-n`), constructs the
+      app model with `tui.New(WithWatcher(clients), WithDiscoverer(clients))`, and runs
+      `tea.NewProgram(model, tea.WithAltScreen()).Run()`. `version`/`keys` stay as
+      subcommands. Fail gracefully (D46 typed errors) on a bad/missing kubeconfig or
+      context — never panic. slog must write to a file, never stdout/stderr while the TUI
+      owns the terminal (`stack.md` logging rule). **Manual smoke against a real cluster**
+      is part of "done": launch, browse the seed menu, drill into Pods/Nodes, see live
+      rows, quit cleanly. Update the README usage section. Unblocks dogfooding (D68).
 
 - [x] **M2-07** Root app model / shell (`internal/tui/app.go`, replaces the M0
       `internal/tui/tui.go` placeholder)

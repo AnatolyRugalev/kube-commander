@@ -1645,3 +1645,28 @@ narratives:
   `Last updated:` line are a single terse sentence each; the journal is the changelog.
   Do not append a running per-leg history to either.
 This does not supersede earlier `Dn` entries (they stand); it sets the bar going forward.
+
+### D68 — Runnable + dogfooded: land the launch leg, then keep it launchable; README stays current
+**2026-07-20.** Maintainer-directed (progress review). A review found the binary
+had never launched the TUI or connected to a cluster — `tea.NewProgram` was called
+nowhere and no real `*kube.Clients` was built outside tests — so despite a
+feature-complete kube layer and a fake-tested app model, nothing had been exercised
+end-to-end against a real apiserver, and **no leg in the plan wired it up**. Fix:
+- **M2-RUN** (new, the next pick, before the remaining M2 component slices): bare
+  `kubecom` builds a real client from kubeconfig/context/namespace flags, injects it
+  via `WithWatcher`/`WithDiscoverer`, and runs `tea.NewProgram(...).Run()`. Minimal
+  but launchable, with a manual real-cluster smoke as part of "done".
+- **Dogfooding is a testing rule, not a one-off.** A human periodically installs
+  `kubecom` and runs it against a real cluster between reviews; every leg from
+  M2-RUN on must keep the binary launchable and **incrementally improve — never
+  regress — the real-cluster experience**. Fake-tested parts are not "done" until
+  they work in the running binary. Added as goals.md principle 8 + the leg loop's
+  Verify step.
+- **README stays current.** Any leg that changes how a user installs, launches,
+  configures, or uses `kubecom` updates `README.md` in the same leg (CLAUDE.md hard
+  rule + the leg skill). The v1 README now carries a real install + usage guide that
+  legs keep in sync with the built binary.
+**Why:** an autonomous, fake-everything, DI-everywhere loop can accrete well-tested
+libraries that never integrate; forcing a runnable binary early turns "tested parts"
+into "a thing that runs" and surfaces real client-go/terminal behavior while the
+surface area is still small.

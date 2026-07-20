@@ -61,6 +61,10 @@ if not already in context. Follow these steps in order.
   or revert and pick a smaller leg. Never push red.
 - For UI/behavior changes with a runtime surface, sanity-check the behavior, not
   just compilation.
+- Once `kubecom` launches (M2-RUN onward): keep it **launchable** and don't
+  regress the running binary — the human dogfoods it against a real cluster
+  between reviews, so each leg should improve that experience (D68). If a leg
+  changes install/launch/config/usage, update `README.md` in the same leg.
 
 ## 6. Record decisions & knowledge
 

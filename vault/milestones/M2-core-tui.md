@@ -3,82 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_Started 2026-07-19 with M2-01a (keymap core: `internal/tui/keymap`); M2-01b
-adds multi-key sequences (`gg`→`nav.top`) + a stateful, model-timed `Sequencer`;
-M2-01c wires the plain-YAML `keys:` config (`internal/config`) onto `Merge` and
-adds `kubecom keys` to print the resolved map; M2-01d generates the help
-(`bubbles/key.Binding`s + a toggleable overlay in `internal/tui/help`) from the
-resolved keymap so it can't drift (D50); M2-01e generates the committed
-`docs/keybindings.md` from the registry with a golden drift-check test +
-`make keys-doc` (D51). The action registry + configurable keymap group
-(M2-01a–e) is now **complete**. The app shell (root model, browse view, table, pickers, config
-load/save + legacy migration) is the rest of M2 — it will route input through the
-keymap/sequencer and embed the M2-01d help overlay. The app shell is now
-decomposed into ordered, leg-sized slices **M2-02 … M2-14** on the
-[board](../tasks/board.md) (D52). **M2-02** landed the `kube`-channels → Bubble
-Tea `tea.Msg` boundary (`internal/tui/msg.go`: msg types + one-item `watchPump`/
-`discoveryPump`, D53). **M2-03** landed the styles foundation (`internal/tui/styles`:
-a named-color `Theme` → derived `Styles`, `DefaultTheme`/`Default`; lipgloss v2
-promoted to a direct dep, D54). **M2-04** landed the first `components/*` package,
-the status bar (`internal/tui/components/statusbar`: context · namespace ·
-discovery spinner · short-help hint, rendered purely from props; spinner ticks
-gated on discovering, D55). **M2-05a** landed the second, the resource-menu
-sidebar (`internal/tui/components/menu`: a static seed of core resource kinds,
-navigated through keymap actions, emitting its own `menu.ResourceSelectedMsg` on
-drill-in — the emitter owns the message type to avoid a component→`tui` import
-cycle, D56). **M2-05b** added `(*Model).Reconcile(kube.DiscoveryResult)`, folding
-the async discovery result into the seed — twins fill metadata, failed-group
-entries go unavailable, CRDs/extra groups append — **without disturbing selection
-or scroll**, degrading to the navigable seed on total/partial failure (D57).
-**M2-06a** landed the third `components/*` package, the resource table
-(`internal/tui/components/table`: renders a `kube.Table` snapshot — kubectl-identical
-priority-0 columns — with vertical scroll, a highlighted selection, and rows
-clipped-not-wrapped to the pane; drill-in emits its own `table.RowSelectedMsg`;
-fixed the bordered-pane sizing gotcha D58). **M2-06b** added
-`(*table.Model).ApplyEvent(kube.WatchEvent)`, folding live watch deltas onto that
-snapshot **preserving the selection by object UID** — RESET replaces columns+rows
-(selection preserved across reconnects), ADDED/MODIFIED upsert / DELETED removes a
-row keyed by `ObjectRef.UID`, cursor keeping its index when the selected row is gone
-(D59). **M2-06c** added **horizontal scroll** — a table wider than its pane scrolls
-on `nav.left`/`nav.right` (`h`/`l`), one `hoffset` windowing header+rows in step and
-snapping to column starts (`hclip` replaces `truncate`; no-wrap invariant D58 kept;
-no keymap/doc change), completing the M2-06 table trio (D60). **M2-07a** landed the
-root app shell's first slice (`internal/tui/app.go`, replacing the M0 `tui.go`
-placeholder): the keymap-routed `tea.Model` skeleton — owns the resolved keymap + the
-one `Sequencer`, routes every `KeyMsg` through it to an `Action` (no raw-key match,
-D11), schedules the sequence-timeout tick with a generation guard that drops stale
-ticks (D48), embeds the M2-01d help overlay (`app.help` toggles, `nav.back` closes),
-and quits on `app.quit`; no panes yet (D61). **M2-07b** composed the two-pane **browse
-layout**: the root model now owns the M2-05 menu (left pane), the M2-06 table (right
-pane), and the M2-04 status bar (bottom line), sized on `WindowSizeMsg`; exactly one
-pane holds focus (menu first), `nav.right`/`nav.left` switch focus between panes (the
-table's horizontal scroll taking precedence until `HOffset()==0`, D60), non-switching
-nav routes to the focused pane, and the open help overlay swallows navigation (D62).
-**M2-07c** wired the live table to `kube.Watch`: drilling into a menu item starts a
-watch for that resource (through a narrow `ResourceWatcher` seam injected by
-`WithWatcher`; nil → watch-inert) and streams its deltas into the table via the M2-02
-pump — `ResourceEventMsg`→`ApplyEvent`, the first RESET repopulating it; a new
-selection cancels the previous watch, a `watchGen` guard dropping its in-flight deltas,
-and focus moves to the table (D63). **M2-07d** kicked off async discovery on `Init`
-(through a narrow `Discoverer` seam injected by `WithDiscoverer`, mirroring
-`WithWatcher`; nil → discovery-inert, menu stays on its seed): `Init` defers the start
-one message hop (`startDiscoveryMsg`) since a value-receiver `Init` can't mutate the
-model, and `Update` opens a cancellable pass, starts the M2-04 spinner, and batches its
-tick with the M2-02 `discoveryPump`; `DiscoveryReadyMsg` stops the spinner and folds the
-result into the menu via M2-05b `Reconcile` — a no-op on a total failure so the menu
-degrades to its navigable seed (principle 3) — completing the **M2-07 root-shell group
-(07a–07d)** (D64). **M2-08** (namespace picker) is split into 08a/08b/08c; **M2-08a**
-landed the fourth `components/*` package, a generic modal **picker**
-(`internal/tui/components/picker`): a centered, bordered modal choosing one string
-value from a set, wrapping `bubbles/list` for cursor + pagination but driven entirely
-through keymap actions (the list's own keys + chrome disabled so no hard-coded key
-leaks, D11); kind-stamped for reuse as the later context/container/port pickers, drill-in
-emitting `picker.SelectedMsg{Kind,Value}` / back `picker.CancelledMsg{Kind}` (D56), the
-component leaving hide/flow to the root model (08c). Two new indirect deps via list/
-textinput, no version drift (D65). Top-unblocked next is **M2-08b** (picker filtering),
-then **M2-08c** (wire the namespace picker into the app shell — a `ns.switch` action + a
-`NamespaceLister` seam re-scoping the watch via the `m.namespace` field the shell already
-reads)._
+_M2-01 (action registry + configurable keymap) complete; M2-02…M2-07 (msg pumps, styles, status bar, menu, table, two-pane browse wired to watch+discovery) landed against fakes. **Next: M2-RUN** — make the binary launch the TUI against a real cluster; then the remaining component slices (pickers, filter, modal, config persistence, migration, sort). Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 
@@ -110,6 +35,10 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 
 ## Exit criteria
 
+- [ ] **Bare `kubecom` launches the browse UI against the user's current cluster**
+      (M2-RUN) and every leg after it keeps that runnable — a human periodically
+      installs and dogfoods it against a real cluster, so each leg incrementally
+      improves (never regresses) that experience (D68).
 - [ ] Browse, select a resource, see live-updating rows for any discovered kind.
 - [ ] Menu customization persists across restarts; async discovery reconciles menu without disturbing selection/scroll.
 - [ ] Namespace + filter work; scrolling and Home/End behave.

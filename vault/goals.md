@@ -55,6 +55,11 @@ high-value capabilities the original lacked.
    [`knowledge/keybindings.md`](knowledge/keybindings.md).
 7. **Zero hard-coded keys.** All input flows through a configurable action
    registry; no view matches a raw key. Every binding is rebindable via config.
+8. **Keep it runnable; dogfood it.** Once the binary launches (M2-RUN), it stays
+   launchable every leg. A human periodically installs `kubecom` and runs it
+   against a real cluster; each leg must incrementally improve — never regress —
+   that real-cluster experience, and keep the README's install/usage current
+   (D68). Fake-tested parts are not "done" until they work in the running binary.
 
 See [`REWRITE_PLAN.md`](REWRITE_PLAN.md) for the full architecture and
 rationale, and [`knowledge/decisions.md`](knowledge/decisions.md) for the locked

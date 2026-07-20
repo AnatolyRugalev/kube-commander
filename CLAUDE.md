@@ -45,6 +45,10 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 4. **Implement** — small. Make decisions yourself (see below).
 5. **Verify** — the tree must stay green: `make check` (= `go build ./...`,
    `go test ./...`, `go vet ./...`, lint). Scope the leg so this is achievable.
+   Once the binary launches (M2-RUN onward), a leg with a runtime surface must
+   also **not regress the running binary** — the human dogfoods `kubecom` against
+   a real cluster between reviews, so keep it launchable and each leg should
+   improve that experience (D68).
 6. **Record** — capture durable learnings in `vault/knowledge/`; append any
    decision to `vault/knowledge/decisions.md`.
 7. **Journal + board + milestone** — add a journal entry file
@@ -81,6 +85,9 @@ You decide everything. There is no one to ask. Therefore:
 - **Never touch `master`** unless the task says so; **never force-push**; never
   rewrite shared history.
 - **Every leg updates the journal and the board.** No silent work.
+- **Keep the README current.** When a leg changes how a user installs, launches,
+  configures, or uses `kubecom`, update `README.md` in the same leg — install and
+  usage instructions must always match the built binary (D68).
 - **Honor the decisions.** `vault/knowledge/decisions.md` is binding; supersede
   with a new decision rather than contradicting silently.
 
