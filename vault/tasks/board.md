@@ -7,7 +7,8 @@ _Last updated: 2026-07-20 — added `vault/human-tasks/` (agent → human, can b
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
 
 ## Blocked
 
@@ -72,8 +73,7 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`)
-      status: todo | owner: — | added: 2026-07-20
+- [ ] **M2-09b** Table filter app wiring + search nav (`bubbles/textinput`) — see In Progress
       notes: Wire the M2-09a filter core into the shell: `/` (keymap `app.filter`)
       opens a textinput over the focused table; typing narrows live; esc/back
       clears-then-closes (mirror `routePickerKey`'s control/text split, D73). Show
