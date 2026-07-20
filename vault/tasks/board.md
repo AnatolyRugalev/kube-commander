@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — feedback leg FB-welcome-page: the browse right pane now shows a `welcome` component (name/version, context · namespace, pick-a-resource hint, key hints) until a resource is drilled into (D76); status bar also gained the context label. Inbox still holds one normal-priority item (menu nesting) — the next leg; board fallback when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — claiming FB-menu-nesting: group the resource menu into Dashboard-style sections with non-selectable headers (D77). Inbox drained after this leg; board fallback when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-nesting** Group the resource menu into Dashboard-style sections (feedback `2026-07-20-menu-structure-nesting`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20
 
 ## Blocked
 
