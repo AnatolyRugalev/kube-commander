@@ -23,10 +23,18 @@ if not already in context. Follow these steps in order.
   of `vault/tasks/board.md`, and the **3 newest entry files** in `vault/journal/`
   (named `YYYY-MM-DD.N.md`; filename sort == chronological order).
   Skim `vault/knowledge/decisions.md` for anything relevant.
+- **Check the feedback inbox**: list `vault/feedback/`. Any file other than
+  `README.md` is unaddressed human feedback and **preempts the board** (see Pick).
 
 ## 2. Pick a leg
 
-- Take the **top unblocked** Backlog item for the active milestone (respect
+- **Feedback first (D69).** If `vault/feedback/` holds anything but its `README.md`,
+  the oldest (or highest-`Priority`) item **is this leg**. Address it — implement it
+  if it fits one leg; if larger, convert it into concrete board task(s) and do the
+  first slice; if it's a question/direction, decide and record it. **Delete the
+  feedback file in this leg's commit** and link it from the journal entry. Only with
+  an empty inbox do you pick from the board.
+- Otherwise take the **top unblocked** Backlog item for the active milestone (respect
   milestone order M0→M5).
 - **Size it.** A leg must be completable now and leave the tree green. If the item
   is too big, **split it**: write the smaller slices back into the Backlog and take

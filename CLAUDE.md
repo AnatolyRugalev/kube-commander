@@ -27,6 +27,8 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 - [`vault/goals.md`](vault/goals.md) — vision, definition of done, non-goals, principles.
 - [`vault/milestones/`](vault/milestones/) — M0–M5, scope + exit criteria. Work them in order.
 - [`vault/tasks/board.md`](vault/tasks/board.md) — the live task board; source of legs.
+- [`vault/feedback/`](vault/feedback/) — human → agent inbox. **Check it before every
+  leg; it preempts the board.** Delete each item once addressed (D69).
 - [`vault/knowledge/`](vault/knowledge/) — decisions log, target stack, keybindings, legacy findings.
 - [`vault/journal/`](vault/journal/) — execution journal: one file per leg,
   named `YYYY-MM-DD.N.md` (see [`vault/journal/README.md`](vault/journal/README.md)).
@@ -35,10 +37,13 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 ## The leg loop (what `/do-rewrite-leg` does)
 
 1. **Orient** — pull latest `v1`; read goals, the active milestone, board, and the
-   last few journal entries.
-2. **Pick** the next small, unblocked leg from the board (respect milestone order).
-   If the top item is too big, split it and take the first slice. If the active
-   milestone's board section is thin, expanding it *is* a valid leg.
+   last few journal entries. **Then check [`vault/feedback/`](vault/feedback/).**
+2. **Pick** the leg. **Unaddressed feedback preempts the board** (D69): if
+   `vault/feedback/` holds anything but its `README.md`, the oldest / highest-priority
+   item *is* this leg — address it and **delete the file** in the same commit. Only
+   with an empty inbox do you take the next small, unblocked board item (respect
+   milestone order). If the top item is too big, split it and take the first slice.
+   If the active milestone's board section is thin, expanding it *is* a valid leg.
 3. **Claim** it on the board (`in-progress`, your id, date) — and **commit + push
    the claim immediately** (`chore(board): claim <leg-id>`) so it acts as a lock
    for concurrent agents (D16).

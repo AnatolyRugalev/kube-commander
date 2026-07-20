@@ -28,6 +28,7 @@ under version control, and is discoverable without external context.
 | [`goals.md`](goals.md) | Top-level goal, definition of done, non-goals, principles |
 | [`milestones/`](milestones/) | Large milestone definitions (M0–M5) with exit criteria |
 | [`tasks/`](tasks/) | Task board + workflow conventions |
+| [`feedback/`](feedback/) | Human → agent inbox; checked before every leg, preempts the board, deleted once addressed (D69) |
 | [`knowledge/`](knowledge/) | Durable knowledge: decisions, target stack, legacy findings |
 | [`journal/`](journal/) | Execution journal: one file per leg, `YYYY-MM-DD.N.md` |
 | [`REWRITE_PLAN.md`](REWRITE_PLAN.md) | The strategic plan narrative (architecture, phases, risks) |
@@ -41,14 +42,17 @@ periodically via this vault and the journal. See [`../CLAUDE.md`](../CLAUDE.md) 
 ## How agents use the vault
 
 1. **Orient** — read `goals.md` and the active milestone before starting work.
-2. **Pick work** — take the next item from `tasks/board.md` (or the milestone's
+2. **Check `feedback/`** — before picking board work, drain the human inbox: any
+   file but its `README.md` is unaddressed feedback that preempts the board; address
+   it and delete the file (D69).
+3. **Pick work** — take the next item from `tasks/board.md` (or the milestone's
    checklist). Move it to In Progress with your agent id and a timestamp.
-3. **Do the work** on `v1`, in small, reviewable commits.
-4. **Capture knowledge** — anything non-obvious you discover (about the old code,
+4. **Do the work** on `v1`, in small, reviewable commits.
+5. **Capture knowledge** — anything non-obvious you discover (about the old code,
    the K8s API, a library quirk, a decision) goes into `knowledge/` immediately,
    so the next agent (or a cold-started you) doesn't re-derive it.
-5. **Update state** — check off milestone items, move tasks to Done, note blockers.
-6. **Leave a trail** — commit messages and the task board should let a fresh agent
+6. **Update state** — check off milestone items, move tasks to Done, note blockers.
+7. **Leave a trail** — commit messages and the task board should let a fresh agent
    reconstruct where things stand.
 
 ## Conventions

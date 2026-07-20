@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — added M2-RUN (make the binary actually launch the TUI against a real cluster) as the next pick; real-cluster dogfooding is now a testing rule (D68). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — added the `vault/feedback/` inbox: checked before every leg and preempts this board (D69). M2-RUN remains the next board pick when the inbox is empty. Per-leg history: `vault/journal/`._
 
 ## In Progress
 

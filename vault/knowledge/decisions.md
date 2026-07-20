@@ -1670,3 +1670,19 @@ end-to-end against a real apiserver, and **no leg in the plan wired it up**. Fix
 libraries that never integrate; forcing a runnable binary early turns "tested parts"
 into "a thing that runs" and surfaces real client-go/terminal behavior while the
 surface area is still small.
+
+### D69 — Feedback inbox: `vault/feedback/`, drained before every leg, deleted once addressed
+**2026-07-20.** Maintainer-directed. A human → agent inbox lives at
+`vault/feedback/` (format mirrors the journal: one markdown file per item,
+`YYYY-MM-DD-slug.md`, title + optional Priority/Area + free-form prose; `README.md`
+is the only non-item file). **Every leg's Orient step lists it**, and unaddressed
+feedback **preempts the board**: if any item is present, the oldest / highest-priority
+one *is* that leg's work. Addressing = implement it (small), or triage it into concrete
+board task(s) and do the first slice (large), or decide+record it (question/direction;
+new `Dn` if load-bearing). The feedback file is **deleted in the same leg's commit**
+and linked from the journal entry — the inbox is a live to-do list, not an archive, so
+a handled item is never left to be re-read. **Why:** the loop runs with no synchronous
+human; a durable, in-repo inbox lets the maintainer steer between reviews (bugs found
+dogfooding per D68, priority changes, course corrections) without waiting on a chat.
+Wired into CLAUDE.md's leg loop, the `do-rewrite-leg` skill (Orient + Pick), and
+`vault/README.md`.
