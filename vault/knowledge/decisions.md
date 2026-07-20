@@ -1830,3 +1830,30 @@ fills conditionally, gated by `m.hasCurrent`:
 **Why:** addresses feedback FB-welcome-page (a bare launch showed an empty table);
 keeps the first paint a deliberate, informative landing screen and fixes the
 status bar's context label, which was wired but never set.
+
+### D77 — Resource menu is grouped into Dashboard-style sections with non-selectable headers
+**2026-07-20.** The left resource menu renders as **grouped sections**, not a flat
+list: `Cluster` → `Workloads` → `Config` → `Network` → `Storage` → `Access Control`,
+plus a trailing `Custom Resources` section for discovered CRDs/extra groups.
+Constraints future legs must not contradict:
+- **Grouping is via static section headers, not collapse/expand.** A header is a
+  non-selectable render-only row (styled `styles.Header`); the cursor only ever lands
+  on `Item` rows and navigation (`up`/`down`/`top`/`bottom`) skips headers. No new
+  expand/collapse action, no per-section open/closed state — keeps navigation trivial
+  and aligns with the approachable, non-k9s goal. A later leg may add collapse/expand,
+  but it must supersede this decision explicitly, not bolt raw keys onto the menu (D11).
+- **`Item.Section` is the grouping key and section members must be contiguous** in the
+  item slice. `menu.rows()` walks the items once and emits exactly one header per
+  section on a section change, so a section that is split across the slice would
+  render a duplicate header. The seed authors sections contiguously; `Reconcile`
+  preserves the invariant by appending every discovered extra into the single trailing
+  `Custom Resources` section (never interleaving). Reconcile's twin-fill/mark-
+  unavailable/selection-preserve behaviour (D57) is unchanged.
+- **The scroll offset is a display-row offset** (it counts header lines), not an item
+  index. Selection stays visible via `cursorRow()`; scrolling up onto a section's
+  first item pulls its header into view.
+
+**Why:** addresses feedback `2026-07-20-menu-structure-nesting` (the flat menu read as
+disorganized). Mirrors the original kube-commander's cluster-then-namespaced split and
+the Kubernetes Dashboard's Workloads/Config/Network/Storage grouping, giving a familiar
+structure that survives CRDs being appended.

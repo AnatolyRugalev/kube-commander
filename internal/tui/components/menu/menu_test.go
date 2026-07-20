@@ -137,16 +137,17 @@ func TestScrollKeepsCursorVisible(t *testing.T) {
 	if got := m.innerHeight(); got != 2 {
 		t.Fatalf("innerHeight = %d, want 2", got)
 	}
-	// Jump to the bottom: the offset must scroll so the cursor is in view.
+	// Jump to the bottom: the offset (a display-row offset that counts section
+	// headers) must scroll so the cursor's row is in view, pinned to the last page.
 	m, _ = m.Update(keymap.ActionBottom)
-	last := len(m.items) - 1
-	if m.cursor < m.offset || m.cursor >= m.offset+m.innerHeight() {
-		t.Fatalf("cursor %d not visible in window [%d,%d)", m.cursor, m.offset, m.offset+m.innerHeight())
+	cr := m.cursorRow()
+	if cr < m.offset || cr >= m.offset+m.innerHeight() {
+		t.Fatalf("cursor row %d not visible in window [%d,%d)", cr, m.offset, m.offset+m.innerHeight())
 	}
-	if m.offset != last-m.innerHeight()+1 {
-		t.Fatalf("offset = %d, want %d", m.offset, last-m.innerHeight()+1)
+	if want := len(m.rows()) - m.innerHeight(); m.offset != want {
+		t.Fatalf("offset = %d, want %d (last page)", m.offset, want)
 	}
-	// Back to top scrolls the window back up.
+	// Back to top scrolls the window back up (cursor's Cluster header at row 0).
 	m, _ = m.Update(keymap.ActionTop)
 	if m.offset != 0 {
 		t.Fatalf("offset after top = %d, want 0", m.offset)
@@ -294,6 +295,112 @@ func TestReconcileTotalFailureLeavesSeedUntouched(t *testing.T) {
 		if !m.items[i].Available {
 			t.Errorf("item %q marked unavailable on total failure", m.items[i].Title)
 		}
+	}
+}
+
+func TestSeedItemsAreSectionGroupedContiguously(t *testing.T) {
+	m := newTestModel()
+	// Every seed item carries a section, and items of the same section are
+	// contiguous — the invariant rows() relies on to emit one header per section.
+	seen := map[string]bool{}
+	prev := ""
+	for _, it := range m.items {
+		if it.Section == "" {
+			t.Fatalf("seed item %q has no section", it.Title)
+		}
+		if it.Section != prev {
+			if seen[it.Section] {
+				t.Fatalf("section %q is not contiguous (reappears at %q)", it.Section, it.Title)
+			}
+			seen[it.Section] = true
+			prev = it.Section
+		}
+	}
+	// The first section is Cluster (matches Selected() == namespaces).
+	if m.items[0].Section != sectionCluster {
+		t.Fatalf("first section = %q, want %q", m.items[0].Section, sectionCluster)
+	}
+}
+
+func TestRowsInsertOneHeaderPerSection(t *testing.T) {
+	m := newTestModel()
+	rows := m.rows()
+
+	// One header per distinct section, and each header immediately precedes its
+	// section's items.
+	sections := map[string]bool{}
+	for _, it := range m.items {
+		sections[it.Section] = true
+	}
+	headers := 0
+	for i, r := range rows {
+		if !r.header {
+			continue
+		}
+		headers++
+		// The next row must be an item of this section.
+		if i+1 >= len(rows) || rows[i+1].header {
+			t.Fatalf("header %q not followed by an item", r.title)
+		}
+		if got := m.items[rows[i+1].itemIdx].Section; got != r.title {
+			t.Fatalf("header %q precedes an item of section %q", r.title, got)
+		}
+	}
+	if headers != len(sections) {
+		t.Fatalf("rendered %d headers, want %d (one per section)", headers, len(sections))
+	}
+	if len(rows) != len(m.items)+headers {
+		t.Fatalf("rows = %d, want items(%d)+headers(%d)", len(rows), len(m.items), headers)
+	}
+}
+
+func TestNavigationSkipsHeaders(t *testing.T) {
+	m := newTestModel()
+	// Walking down from the top must visit every item in order and never land on a
+	// header row (the cursor only indexes items).
+	for i := 0; i < len(m.items); i++ {
+		if m.cursor != i {
+			t.Fatalf("step %d: cursor = %d", i, m.cursor)
+		}
+		if _, ok := m.Selected(); !ok {
+			t.Fatalf("step %d: no selection", i)
+		}
+		m, _ = m.Update(keymap.ActionDown)
+	}
+}
+
+func TestViewRendersSectionHeaders(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40) // tall enough for every row
+	v := m.View()
+	for _, sec := range []string{sectionCluster, sectionWorkloads, sectionConfig, sectionNetwork, sectionStorage, sectionAccess} {
+		if !strings.Contains(v, sec) {
+			t.Errorf("view missing section header %q", sec)
+		}
+	}
+}
+
+func TestReconcileAppendsCRDIntoCustomResourcesSection(t *testing.T) {
+	m := newTestModel()
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{crd}})
+
+	last := m.items[len(m.items)-1]
+	if last.Section != sectionCustom {
+		t.Fatalf("appended CRD section = %q, want %q", last.Section, sectionCustom)
+	}
+	// A Custom Resources header now renders, once.
+	headers := 0
+	for _, r := range m.rows() {
+		if r.header && r.title == sectionCustom {
+			headers++
+		}
+	}
+	if headers != 1 {
+		t.Fatalf("Custom Resources header count = %d, want 1", headers)
 	}
 }
 

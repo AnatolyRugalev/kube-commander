@@ -1,9 +1,12 @@
 // Package menu is kubecom's resource-menu sidebar: the left pane of the browse
 // view, a vertical list of Kubernetes resource kinds the user moves through to
-// choose what the table pane shows. This slice (M2-05a) seeds a static list of
-// core resource kinds; a later slice (M2-05b) reconciles the list with the async
-// discovery result (adding CRDs/extra groups, marking unavailable ones) without
-// disturbing the current selection or scroll.
+// choose what the table pane shows. The list is grouped into the familiar
+// Kubernetes-Dashboard scopes (Cluster / Workloads / Config / Network / Storage /
+// Access Control, plus Custom Resources for discovered CRDs) with non-selectable
+// section headers the cursor skips over (D77). The seed provides a static list of
+// core resource kinds; Reconcile merges the async discovery result (adding
+// CRDs/extra groups, marking unavailable ones) without disturbing the current
+// selection or scroll.
 //
 // The menu never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands the Action to Update, which moves the selection. When
@@ -25,13 +28,29 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
-// Item is one row in the menu: a resource kind plus its display title and an
-// availability flag. Available is true for every seed item; M2-05b sets it false
-// for a discovered-but-unreachable group so the row renders muted but is not
-// selectable for a watch.
+// Section names group the menu into the familiar Kubernetes-Dashboard scopes.
+// They double as the header titles rendered above each group (D77). sectionCustom
+// is the trailing bucket every discovered CRD/extra group lands in on Reconcile,
+// so the grouping survives discovery.
+const (
+	sectionCluster   = "Cluster"
+	sectionWorkloads = "Workloads"
+	sectionConfig    = "Config"
+	sectionNetwork   = "Network"
+	sectionStorage   = "Storage"
+	sectionAccess    = "Access Control"
+	sectionCustom    = "Custom Resources"
+)
+
+// Item is one row in the menu: a resource kind plus its display title, the
+// section it groups under, and an availability flag. Available is true for every
+// seed item; M2-05b sets it false for a discovered-but-unreachable group so the
+// row renders muted but is not selectable for a watch. Section places the item
+// under a header (D77); items sharing a section must be contiguous in the slice.
 type Item struct {
 	Resource  kube.Resource
 	Title     string
+	Section   string
 	Available bool
 }
 
@@ -153,7 +172,8 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	}
 
 	// Append discovered resources the seed does not already list (CRDs, extra
-	// groups), in discovery's stable order, after the curated seed.
+	// groups), in discovery's stable order, into the trailing Custom Resources
+	// section so the grouping survives discovery (D77).
 	for _, r := range result.Resources {
 		if seen[r.GVR] {
 			continue
@@ -161,6 +181,7 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 		m.items = append(m.items, Item{
 			Resource:  r,
 			Title:     r.GVK.Kind,
+			Section:   sectionCustom,
 			Available: true,
 		})
 	}
@@ -221,8 +242,47 @@ func (m *Model) moveTo(i int) {
 	m.scrollToCursor()
 }
 
-// innerHeight is the number of item rows the pane can show (total height minus the
-// top and bottom border rows), never negative.
+// row is one rendered line of the menu: either a non-selectable section header or
+// a selectable item (indexed back into m.items). The cursor only ever lands on
+// item rows — headers are visual only (D77) — but scroll accounts for both so the
+// window math stays correct once headers occupy screen lines.
+type row struct {
+	header  bool
+	title   string // header title when header; unused for items
+	itemIdx int    // index into m.items when !header
+}
+
+// rows expands the flat item slice into the rendered line sequence, inserting a
+// section header wherever the section changes. It relies on the seed invariant
+// that items of a section are contiguous (seed authoring + Reconcile's
+// append-to-Custom-Resources both preserve it), so each section yields exactly one
+// header.
+func (m Model) rows() []row {
+	rows := make([]row, 0, len(m.items)+8)
+	prev := ""
+	for i := range m.items {
+		if sec := m.items[i].Section; sec != "" && sec != prev {
+			rows = append(rows, row{header: true, title: sec})
+			prev = sec
+		}
+		rows = append(rows, row{itemIdx: i})
+	}
+	return rows
+}
+
+// cursorRow is the display-row index of the highlighted item, or -1 if the menu is
+// empty. Used to keep the selection visible when the offset counts header lines.
+func (m Model) cursorRow() int {
+	for i, r := range m.rows() {
+		if !r.header && r.itemIdx == m.cursor {
+			return i
+		}
+	}
+	return -1
+}
+
+// innerHeight is the number of rows the pane can show (total height minus the top
+// and bottom border rows), never negative.
 func (m Model) innerHeight() int {
 	h := m.height - 2
 	if h < 0 {
@@ -231,18 +291,35 @@ func (m Model) innerHeight() int {
 	return h
 }
 
-// scrollToCursor adjusts the scroll offset so the cursor is within the visible
-// window.
+// scrollToCursor adjusts the scroll offset (a display-row offset) so the cursor's
+// row is within the visible window. When scrolling up onto the first item of a
+// section it also pulls in that section's header so the cursor never sits under an
+// off-screen title.
 func (m *Model) scrollToCursor() {
-	h := m.innerHeight()
-	if h == 0 {
-		m.offset = m.cursor
+	rows := m.rows()
+	cr := -1
+	for i, r := range rows {
+		if !r.header && r.itemIdx == m.cursor {
+			cr = i
+			break
+		}
+	}
+	if cr < 0 {
 		return
 	}
-	if m.cursor < m.offset {
-		m.offset = m.cursor
-	} else if m.cursor >= m.offset+h {
-		m.offset = m.cursor - h + 1
+	h := m.innerHeight()
+	if h == 0 {
+		m.offset = cr
+		return
+	}
+	top := cr
+	if cr > 0 && rows[cr-1].header {
+		top = cr - 1
+	}
+	if top < m.offset {
+		m.offset = top
+	} else if cr >= m.offset+h {
+		m.offset = cr - h + 1
 	}
 }
 
@@ -250,7 +327,7 @@ func (m *Model) scrollToCursor() {
 // cursor visible.
 func (m *Model) clampOffset() {
 	h := m.innerHeight()
-	maxOffset := len(m.items) - h
+	maxOffset := len(m.rows()) - h
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
@@ -263,9 +340,9 @@ func (m *Model) clampOffset() {
 	m.scrollToCursor()
 }
 
-// View renders the menu as a bordered vertical list. It returns "" until the menu
-// has been sized (before the first WindowSizeMsg), so the root model lays nothing
-// out prematurely.
+// View renders the menu as a bordered vertical list of section headers and items.
+// It returns "" until the menu has been sized (before the first WindowSizeMsg), so
+// the root model lays nothing out prematurely.
 func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
@@ -275,15 +352,21 @@ func (m Model) View() string {
 		innerW = 0
 	}
 	h := m.innerHeight()
+	rows := m.rows()
 
 	lines := make([]string, 0, h)
-	for row := 0; row < h; row++ {
-		i := m.offset + row
-		if i >= len(m.items) {
+	for r := 0; r < h; r++ {
+		i := m.offset + r
+		if i >= len(rows) {
 			lines = append(lines, m.styles.App.Width(innerW).Render(""))
 			continue
 		}
-		lines = append(lines, m.renderItem(m.items[i], i == m.cursor, innerW))
+		if rows[i].header {
+			lines = append(lines, m.renderHeader(rows[i].title, innerW))
+			continue
+		}
+		idx := rows[i].itemIdx
+		lines = append(lines, m.renderItem(m.items[idx], idx == m.cursor, innerW))
 	}
 
 	content := strings.Join(lines, "\n")
@@ -294,16 +377,23 @@ func (m Model) View() string {
 	return frame.Width(innerW).Height(h).Render(content)
 }
 
+// renderHeader renders a non-selectable section header clamped to innerW, in the
+// accented Header style so the grouping reads at a glance.
+func (m Model) renderHeader(title string, innerW int) string {
+	return m.styles.Header.Width(innerW).MaxWidth(innerW).Render(title)
+}
+
 // renderItem renders one item line clamped to innerW: the highlighted item takes
 // the Selection style (full-width bar), an unavailable item is muted, and a normal
-// item takes the base style.
+// item takes the base style. Items indent under their header for the tree look.
 func (m Model) renderItem(it Item, selected bool, innerW int) string {
+	title := "  " + it.Title
 	switch {
 	case selected:
-		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(it.Title)
+		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(title)
 	case !it.Available:
-		return m.styles.Subtle.Width(innerW).MaxWidth(innerW).Render(it.Title)
+		return m.styles.Subtle.Width(innerW).MaxWidth(innerW).Render(title)
 	default:
-		return m.styles.App.Width(innerW).MaxWidth(innerW).Render(it.Title)
+		return m.styles.App.Width(innerW).MaxWidth(innerW).Render(title)
 	}
 }

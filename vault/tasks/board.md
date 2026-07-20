@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — claiming FB-menu-nesting: group the resource menu into Dashboard-style sections with non-selectable headers (D77). Inbox drained after this leg; board fallback when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — FB-menu-nesting done: resource menu now renders Dashboard-style sections (Cluster/Workloads/Config/Network/Storage/Access Control + Custom Resources) with non-selectable headers the cursor skips (D77); CRDs append into Custom Resources. Feedback inbox now empty; next pick: M2-09. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-menu-nesting** Group the resource menu into Dashboard-style sections (feedback `2026-07-20-menu-structure-nesting`)
-      status: in-progress | owner: claude-opus | added: 2026-07-20
+_(none)_
 
 ## Blocked
 
@@ -117,6 +116,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-menu-nesting** Feedback (normal): flat left menu read as disorganized → resource menu now renders Dashboard-style sections (Cluster / Workloads / Config / Network / Storage / Access Control + trailing Custom Resources for CRDs) with non-selectable, cursor-skipped headers; `Item.Section` + `menu.rows()` expand items into header+item display rows, scroll offset became display-row based (`cursorRow`), items indent under their header, Reconcile appends discovered extras into Custom Resources (D57 otherwise unchanged) — done 2026-07-20 (D77)
 - [x] **FB-welcome-page** Feedback (normal): bare launch showed an empty right-pane table → new `welcome` component (`internal/tui/components/welcome`) shows name/version, context · namespace scope, a pick-a-resource hint, and registry-generated key hints until the first drill-in, then the live table takes the slot (gated by `hasCurrent`); `WithContext`/`WithVersion` + `kube.ContextName` (no-network, blank-on-failure) wire the props; status bar now shows the context too — done 2026-07-20 (D76)
 - [x] **FB-go-install** Feedback (normal): README `go install …/cmd/kubecom@v1` failed (`@v1` is a semver version query — resolves to a nonexistent `v1.x.x` tag, never the branch) → Install section now leads with a local `v1` checkout + `go install ./cmd/kubecom`, `@v1` remote form dropped, commit-SHA pin noted as the working remote alternative, clean remote `go install …@latest` deferred to an M5 release tag — done 2026-07-20 (D75)
 - [x] **FB-errors-layout** Feedback (high): errors broke the TUI layout → transient single-line status-bar toast; root `Update` now handles `ErrorMsg` (was dropped), watch-start/ns-list/watch-ERROR all route through `surfaceError`, auto-clear is generation-guarded — done 2026-07-20 (D74)
