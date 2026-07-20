@@ -7,7 +7,8 @@ _Last updated: 2026-07-20 — feedback leg FB-go-install: README install fixed t
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-welcome-page** Feedback (normal): right pane should show a welcome page at startup (kubecom/version, context + namespace, "pick a resource" hint, key hints) until a resource is drilled into
+      status: in-progress | owner: claude-opus | added: 2026-07-20
 
 ## Blocked
 
