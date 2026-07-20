@@ -7,7 +7,8 @@ _Last updated: 2026-07-20 — feedback leg FB-errors-layout: errors now surface 
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-go-install** Feedback (normal): README `go install …@v1` fails (Go parses `v1` as a semver version query, not a branch) → make local-checkout install the primary path, drop the `@v1` remote form, defer tagged remote install to M5
+      status: in-progress | owner: claude-opus | added: 2026-07-20
 
 ## Blocked
 
