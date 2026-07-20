@@ -401,8 +401,51 @@ func TestWatchStartErrorSurfaces(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("a failed watch start should surface an error")
 	}
-	if _, ok := cmd().(ErrorMsg); !ok {
+	errMsg, ok := cmd().(ErrorMsg)
+	if !ok {
 		t.Fatalf("expected ErrorMsg, got %T", cmd())
+	}
+	// Delivering the ErrorMsg surfaces it inside the fixed layout (status bar),
+	// never on a growing pane or stdout.
+	next, clearCmd := m.Update(errMsg)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Error("delivering an ErrorMsg should surface it in the status bar")
+	}
+	if clearCmd == nil {
+		t.Fatal("surfacing an error should arm an auto-clear timer")
+	}
+}
+
+// TestErrorAutoClearsWithGenGuard proves a surfaced error clears when its own
+// clear timer fires, but a stale timer (from an error already superseded by a
+// newer one) does not wipe the newer message early.
+func TestErrorAutoClearsWithGenGuard(t *testing.T) {
+	m := sized(t)
+
+	next, _ := m.Update(NewErrorMsg("list namespaces", context.DeadlineExceeded))
+	m = next.(Model)
+	staleGen := m.statusErrGen
+	if !m.status.HasError() {
+		t.Fatal("first error should be shown")
+	}
+
+	// A second error supersedes the first (bumps the generation).
+	next, _ = m.Update(NewErrorMsg("watch pods", context.DeadlineExceeded))
+	m = next.(Model)
+
+	// The first error's clear timer is now stale: it must not clear the newer one.
+	next, _ = m.Update(errorClearMsg{gen: staleGen})
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Error("a stale clear timer must not wipe a newer error")
+	}
+
+	// The current clear timer fires and clears the bar.
+	next, _ = m.Update(errorClearMsg{gen: m.statusErrGen})
+	m = next.(Model)
+	if m.status.HasError() {
+		t.Error("the matching clear timer should clear the error")
 	}
 }
 

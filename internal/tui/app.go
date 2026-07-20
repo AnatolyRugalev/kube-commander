@@ -95,6 +95,11 @@ const (
 	statusBarHeight = 1
 	minMenuWidth    = 20 // total incl. border
 	minTableWidth   = 20 // total incl. border
+
+	// errorDisplay is how long a surfaced error stays in the status bar before it
+	// auto-clears (a transient toast). A stale-generation guard (statusErrGen)
+	// stops an old clear timer wiping a newer error early.
+	errorDisplay = 5 * time.Second
 )
 
 // Model is kubecom's root Bubble Tea model — the M2 app shell that replaces the
@@ -164,6 +169,12 @@ type Model struct {
 	// newer pending) is ignored rather than firing the wrong action (D48/D61).
 	seqGen int
 
+	// statusErrGen tags each transient status-bar error's auto-clear timer so an
+	// older timer cannot wipe a newer error early (mirrors seqGen's stale-tick
+	// guard). Every surfaced error bumps it; only a clear tick whose gen still
+	// matches clears the bar.
+	statusErrGen int
+
 	width  int
 	height int
 }
@@ -218,6 +229,12 @@ type watchMsg struct {
 	gen int
 	msg tea.Msg
 }
+
+// errorClearMsg auto-clears a transient status-bar error after errorDisplay. Its
+// gen must match the model's current statusErrGen or the timer is stale (a newer
+// error superseded it) and the clear is ignored — the newer error keeps its own
+// full display window.
+type errorClearMsg struct{ gen int }
 
 // startDiscoveryMsg is the private self-message Init emits to begin discovery.
 // Init cannot start it directly — a value receiver returning only a tea.Cmd
@@ -280,6 +297,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case menu.ResourceSelectedMsg:
 		return m.selectResource(msg.Resource)
+
+	case ErrorMsg:
+		// A classified error from any async seam (watch start, namespace list, a
+		// watch ERROR bridged by the pump). Surface it inside the fixed layout — a
+		// transient status-bar message — never on stdout or a growing pane, so the
+		// panes never scroll or resize (the feedback this leg addresses).
+		return m, m.surfaceError(msg)
+
+	case errorClearMsg:
+		if msg.gen == m.statusErrGen {
+			m.status.ClearError()
+		}
+		return m, nil
 
 	case watchMsg:
 		return m.handleWatchMsg(msg)
@@ -348,6 +378,20 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	return m, m.pumpWatch()
 }
 
+// surfaceError shows a classified error as a transient message in the status bar
+// and arms its auto-clear timer. It bumps statusErrGen so a stale clear timer from
+// an earlier error cannot wipe this one early, and returns the clear Cmd for the
+// caller to schedule (batched with any other work). It mutates the receiver, so
+// callers pass the addressable model value they are about to return.
+func (m *Model) surfaceError(e ErrorMsg) tea.Cmd {
+	m.status.SetError(e.Message())
+	m.statusErrGen++
+	gen := m.statusErrGen
+	return tea.Tick(errorDisplay, func(time.Time) tea.Msg {
+		return errorClearMsg{gen: gen}
+	})
+}
+
 // pumpWatch issues the tea.Cmd that pulls the next event from the current watch
 // channel, tagged with the current watchGen so a message from a superseded watch
 // is recognisable as stale. It returns nil when no watch is active.
@@ -365,8 +409,8 @@ func (m Model) pumpWatch() tea.Cmd {
 // from ever blocking (M2-02). A message from a superseded watch (wrong gen) is
 // dropped and its chain stops. A data delta is folded onto the table preserving
 // the selection (ApplyEvent); a watch ERROR keeps the chain alive (the watch loop
-// retries and re-lists on recovery, emitting a fresh RESET — visible error
-// surfacing on the pane is a later slice); a closed channel ends the chain.
+// retries and re-lists on recovery, emitting a fresh RESET) and surfaces
+// transiently in the status bar; a closed channel ends the chain.
 func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 	if w.gen != m.watchGen {
 		return m, nil // superseded by a newer selection; drop and stop this chain.
@@ -376,7 +420,11 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 		m.table.ApplyEvent(inner.Event)
 		return m, m.pumpWatch()
 	case ErrorMsg:
-		return m, m.pumpWatch()
+		// The watch loop retries and re-lists on recovery (a fresh RESET follows),
+		// so the chain stays alive; surface the error transiently in the status bar
+		// meanwhile rather than swallowing it silently.
+		clear := m.surfaceError(inner)
+		return m, tea.Batch(clear, m.pumpWatch())
 	case WatchClosedMsg:
 		m.watchCh = nil
 		m.watchCancel = nil

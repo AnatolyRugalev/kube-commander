@@ -1767,3 +1767,28 @@ config persistence) build on:
 **Why:** locks the switcher shape so the later ctx/container/port pickers reuse the
 action+seam+routing pattern instead of re-deriving it, and keeps the "all input
 through actions" invariant (D11) intact around the one sanctioned text field.
+
+### D74 — Errors surface only inside the fixed layout: a transient, single-line status-bar toast
+**2026-07-20.** An `ErrorMsg` (any classified error from an async seam — watch
+start, namespace list, a watch ERROR bridged by the pump) is surfaced **only** as a
+transient message in the **status bar**, never printed to stdout/stderr and never
+rendered into a growing/scrolling pane. Constraints future legs must not contradict:
+- **The status bar owns error display.** `statusbar.SetError` flattens the text to
+  one line (`strings.Fields`) and `View` clips it to the bar width *before* styling,
+  so a multi-line or over-wide error can never grow the bar past its single line and
+  scroll/resize the panes (the D68 dogfood feedback this fixes). A shown error takes
+  the whole line (help hint dropped) and auto-clears after `errorDisplay` (5s).
+- **Auto-clear is generation-guarded** (`statusErrGen`, mirroring `seqGen`/`watchGen`):
+  each surfaced error bumps the gen and arms an `errorClearMsg{gen}`; only a clear
+  whose gen still matches clears the bar, so a newer error keeps its full window.
+- **The root `Update` must handle `ErrorMsg`.** Before this leg the top-level case
+  was missing, so watch-start and ns-list errors fell through to `return m, nil` and
+  were dropped silently; `handleWatchMsg` likewise swallowed watch ERRORs. All three
+  now route through `surfaceError`. A future feature that produces errors emits an
+  `ErrorMsg` (via `NewErrorMsg`) and gets this surfacing for free — it must not invent
+  its own out-of-layout error rendering. A richer surface (modal for fatal errors,
+  history) can supersede this, but the no-stdout / no-layout-shift rule is binding.
+
+**Why:** honors the "degrade, don't crash — and don't wreck the layout either"
+principle and the stack.md no-stdout-while-TUI rule (D71); gives every async seam one
+sanctioned, layout-safe error channel instead of each inventing its own.

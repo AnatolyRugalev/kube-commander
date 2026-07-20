@@ -65,6 +65,20 @@ func NewErrorMsg(context string, err error) ErrorMsg {
 	return ErrorMsg{Context: context, Err: err, Kind: kube.Classify(err)}
 }
 
+// Message renders the error as a short human line for the status bar: the context
+// label and the underlying error joined, degrading gracefully if either is empty.
+// The status bar flattens any embedded newlines, so this need not.
+func (e ErrorMsg) Message() string {
+	switch {
+	case e.Err == nil:
+		return e.Context
+	case e.Context == "":
+		return e.Err.Error()
+	default:
+		return e.Context + ": " + e.Err.Error()
+	}
+}
+
 // A message emitted *by* a component (rather than by the kube boundary above) is
 // owned by that component's package, not declared here: the root model imports
 // the component packages, so a component cannot import this one without a cycle

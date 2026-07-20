@@ -38,6 +38,7 @@ type Model struct {
 	context     string
 	namespace   string
 	shortHelp   string
+	errText     string
 	discovering bool
 	width       int
 }
@@ -59,6 +60,21 @@ func (m *Model) SetNamespace(ns string) { m.namespace = ns }
 // SetShortHelp sets the right-aligned keymap hint. The caller passes
 // help.Model.ShortHelpView() so the hint is generated from the registry (D11).
 func (m *Model) SetShortHelp(hint string) { m.shortHelp = hint }
+
+// SetError shows a transient error message in the bar (error-styled, taking over
+// the whole line while shown). The text is flattened to a single line —
+// strings.Fields collapses any embedded newlines/runs of whitespace — so a
+// multi-line error string can never grow the bar past its one line and scroll the
+// panes (the feedback this fixes: errors must surface inside the fixed layout).
+// The root model schedules the auto-clear; an empty string clears immediately.
+func (m *Model) SetError(text string) { m.errText = strings.Join(strings.Fields(text), " ") }
+
+// ClearError removes the transient error message, returning the bar to its normal
+// context · namespace · help content.
+func (m *Model) ClearError() { m.errText = "" }
+
+// HasError reports whether a transient error message is currently shown.
+func (m Model) HasError() bool { return m.errText != "" }
 
 // SetWidth informs the bar of the available terminal width so it can right-align
 // the help hint and clamp overflow; wire it from the root model's WindowSizeMsg.
@@ -105,6 +121,19 @@ func (m Model) View() string {
 	left := m.leftSegment()
 	right := m.shortHelp
 
+	// A transient error takes over the whole bar: it is the most important thing
+	// to see, and giving it the full line (help hint dropped) keeps it on one line
+	// without competing for width. It is clipped to the bar width *before* styling
+	// so the outer Width render can never wrap it onto a second line (D58).
+	if m.errText != "" {
+		errStr := m.errText
+		if m.width > 0 {
+			errStr = clipRunes(errStr, m.width)
+		}
+		left = m.styles.Error.Render(errStr)
+		right = ""
+	}
+
 	var line string
 	switch {
 	case m.width <= 0:
@@ -145,4 +174,18 @@ func (m Model) leftSegment() string {
 		parts = append(parts, m.spinner.View()+discoveringLabel)
 	}
 	return strings.Join(parts, separator)
+}
+
+// clipRunes truncates s to at most n runes (n<=0 → empty). Error text is plain
+// ASCII, so a rune cut is a safe display-width clamp; the point is only to keep
+// the styled line from exceeding the bar width and wrapping (D58).
+func clipRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }

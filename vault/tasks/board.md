@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-08c landed: the namespace picker is wired into the app shell (`ns.switch`/`ctrl+n` + `NamespaceLister` seam; selection re-scopes the live watch, D73). M2-08 complete. Next board pick when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — feedback leg FB-errors-layout: errors now surface as a transient single-line status-bar toast inside the fixed layout, never on stdout or a growing pane (D74). Inbox still holds two normal-priority items (menu nesting, welcome page); next board pick when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -116,6 +116,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-errors-layout** Feedback (high): errors broke the TUI layout → transient single-line status-bar toast; root `Update` now handles `ErrorMsg` (was dropped), watch-start/ns-list/watch-ERROR all route through `surfaceError`, auto-clear is generation-guarded — done 2026-07-20 (D74)
 - [x] **M2-08c** Wire namespace picker into the app shell: `ns.switch`/`ctrl+n` action + `NamespaceLister` seam (`WithNamespaceLister`, nil → inert); async list seeds the picker, selection sets `m.namespace` + status bar and re-scopes the live watch, `docs/keybindings.md` regenerated — done 2026-07-20 (D73)
 - [x] **M2-08** Namespace picker (08a component / 08b filtering / 08c app wiring) — done 2026-07-20 (D65, D72, D73)
 - [x] **M2-RUN** Bare `kubecom` launches the browse UI against a real cluster (root `RunE` + kubeconfig/context/`-n` flags → live `*kube.Clients` via `WithWatcher`/`WithDiscoverer`/`WithNamespace`; graceful on bad kubeconfig; file logging) — done 2026-07-20 (D70, D71) | follow-up: human live-cluster dogfood of drill-in/live rows (D68), not reproducible in the sandbox

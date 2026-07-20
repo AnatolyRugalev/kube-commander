@@ -129,6 +129,44 @@ func TestViewDropsHelpWhenNoRoom(t *testing.T) {
 	}
 }
 
+func TestSetErrorFlattensToSingleLine(t *testing.T) {
+	m := newBar()
+	m.SetError("watch pods:\nconnection refused\n\n  by peer")
+	if !m.HasError() {
+		t.Fatal("HasError should be true after SetError")
+	}
+	if strings.Contains(m.errText, "\n") {
+		t.Errorf("errText = %q, want no newlines (flattened to one line)", m.errText)
+	}
+	if m.errText != "watch pods: connection refused by peer" {
+		t.Errorf("errText = %q, want whitespace collapsed to single spaces", m.errText)
+	}
+	m.ClearError()
+	if m.HasError() {
+		t.Error("ClearError should clear the error")
+	}
+}
+
+func TestViewWithErrorStaysSingleLineAndDropsHelp(t *testing.T) {
+	m := newBar()
+	m.SetContext("prod")
+	m.SetShortHelp("? help")
+	m.SetWidth(40)
+	// A long, multi-line error must not grow the bar past one line or keep the hint.
+	m.SetError("watch pods: an extremely long error message that exceeds the bar width by a lot\nsecond line")
+
+	view := m.View()
+	if strings.Contains(view, "\n") {
+		t.Errorf("View with error = %q, want a single line", view)
+	}
+	if w := lipgloss.Width(view); w != 40 {
+		t.Errorf("View width = %d, want 40 (clamped, never wrapped)", w)
+	}
+	if strings.Contains(view, "? help") {
+		t.Errorf("View with error = %q, want the help hint dropped while erroring", view)
+	}
+}
+
 func TestViewInlineWhenWidthUnknown(t *testing.T) {
 	m := newBar()
 	m.SetContext("prod")
