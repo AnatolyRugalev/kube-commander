@@ -13,7 +13,12 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-07a** Root app model / shell — keymap-routed `tea.Model` skeleton + help overlay
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: first slice of M2-07. Root `tea.Model` owning the resolved keymap +
+      `Sequencer`, routing `KeyMsg`→`Action` (schedule `tea.Tick` on `ResultPending`,
+      D48), embedding the M2-01d help overlay (toggle `app.help`), window-size, and
+      `app.quit` — no panes yet. Replaces the M0 `internal/tui/tui.go` placeholder.
 
 ## Blocked
 
