@@ -4,11 +4,12 @@
 // resource, built-ins and CRDs alike — with a header row, vertical scroll, and a
 // highlighted selection.
 //
-// This slice (M2-06a) renders a static snapshot: SetTable installs a kube.Table,
-// the user moves the selection through keymap actions, and drilling in emits a
-// RowSelectedMsg. Later slices apply live watch deltas onto the snapshot without
-// disturbing the selection (M2-06b) and add horizontal scroll for wide tables
-// (M2-06c).
+// SetTable installs a static kube.Table snapshot (M2-06a): the user moves the
+// selection through keymap actions, and drilling in emits a RowSelectedMsg.
+// ApplyEvent (M2-06b) folds a live watch delta onto that snapshot — RESET replaces
+// the column set and rows, ADDED/MODIFIED/DELETED touch a single row keyed by
+// object UID — always preserving the selection by re-resolving the selected UID to
+// its new index. Horizontal scroll for wide tables is M2-06c.
 //
 // The table never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands it to Update. Like the menu, the table owns no shared
@@ -67,14 +68,108 @@ func New(s styles.Styles) Model {
 }
 
 // SetTable installs a new snapshot, recomputing the visible columns and their
-// widths and resetting the selection to the first row. M2-06b will replace this
-// wholesale-reset behaviour with delta application that preserves the selection.
+// widths and resetting the selection to the first row. It is the deliberate
+// reset entry point (a fresh List for a newly selected resource starts at the
+// top); live watch deltas that must preserve the selection go through ApplyEvent.
 func (m *Model) SetTable(t kube.Table) {
 	m.table = t
 	m.computeColumns()
 	m.cursor = 0
 	m.offset = 0
 	m.clampOffset()
+}
+
+// ApplyEvent folds one live watch delta (delivered as a ResourceEventMsg carrying
+// a kube.WatchEvent) onto the current snapshot, preserving the selection by object
+// UID. A RESET replaces the columns and the whole row set — the watch layer emits
+// it on the first sync and again on every reconnect, so preserving the selected
+// UID across it keeps the cursor put through a transient reconnect (D59), falling
+// back to the first row when the previously selected object is gone. ADDED and
+// MODIFIED upsert a row keyed by ObjectRef.UID (unknown UID → appended, matching
+// the server treating a modify of an unseen object as an add); DELETED removes the
+// matching row. A watch ERROR never reaches here (the pump bridges it to an
+// ErrorMsg), and any other event type is ignored. After the change the visible
+// columns and widths are recomputed (a new or wider cell can widen a column) and
+// the scroll is re-clamped so the selection stays visible.
+func (m *Model) ApplyEvent(ev kube.WatchEvent) {
+	selUID := m.selectedUID()
+	switch ev.Type {
+	case kube.WatchReset:
+		m.table = kube.Table{Columns: ev.Columns, Rows: ev.Rows}
+	case kube.WatchAdded, kube.WatchModified:
+		for _, r := range ev.Rows {
+			m.upsertRow(r)
+		}
+	case kube.WatchDeleted:
+		for _, r := range ev.Rows {
+			m.deleteRow(r.Object.UID)
+		}
+	default:
+		return
+	}
+	m.computeColumns()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+}
+
+// selectedUID is the object UID of the highlighted row, or "" when the table is
+// empty. Captured before a delta is applied so the selection can be re-resolved
+// against the new row set afterwards.
+func (m Model) selectedUID() string {
+	if len(m.table.Rows) == 0 {
+		return ""
+	}
+	return m.table.Rows[m.cursor].Object.UID
+}
+
+// indexOfUID returns the index of the row with the given object UID and true, or
+// false when it is absent. An empty UID never matches: a degraded row with no
+// object metadata (principle 3) cannot be identified, so it is never collapsed
+// with another empty-UID row.
+func (m Model) indexOfUID(uid string) (int, bool) {
+	if uid == "" {
+		return 0, false
+	}
+	for i, r := range m.table.Rows {
+		if r.Object.UID == uid {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// upsertRow replaces the row with r's UID in place, or appends r when its UID is
+// absent (or empty — an unidentifiable row is always appended rather than merged).
+func (m *Model) upsertRow(r kube.Row) {
+	if i, ok := m.indexOfUID(r.Object.UID); ok {
+		m.table.Rows[i] = r
+		return
+	}
+	m.table.Rows = append(m.table.Rows, r)
+}
+
+// deleteRow removes the row with the given UID, if present.
+func (m *Model) deleteRow(uid string) {
+	if i, ok := m.indexOfUID(uid); ok {
+		m.table.Rows = append(m.table.Rows[:i], m.table.Rows[i+1:]...)
+	}
+}
+
+// restoreSelection re-points the cursor at the row that held UID before the delta.
+// If that row is gone (deleted, or the selection was empty), the cursor keeps its
+// index position — clamped to the new row range — so the selection stays near
+// where it was rather than jumping to the top. An empty table resets to row 0.
+func (m *Model) restoreSelection(uid string) {
+	if len(m.table.Rows) == 0 {
+		m.cursor = 0
+		m.offset = 0
+		return
+	}
+	if i, ok := m.indexOfUID(uid); ok {
+		m.cursor = i
+	} else if m.cursor > len(m.table.Rows)-1 {
+		m.cursor = len(m.table.Rows) - 1
+	}
 }
 
 // SetSize sets the table's total size (including its border).

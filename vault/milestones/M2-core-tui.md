@@ -34,8 +34,13 @@ or scroll**, degrading to the navigable seed on total/partial failure (D57).
 (`internal/tui/components/table`: renders a `kube.Table` snapshot — kubectl-identical
 priority-0 columns — with vertical scroll, a highlighted selection, and rows
 clipped-not-wrapped to the pane; drill-in emits its own `table.RowSelectedMsg`;
-fixed the bordered-pane sizing gotcha D58); top-unblocked next is **M2-06b** (apply
-live watch deltas keyed by `ObjectRef`, preserving selection)._
+fixed the bordered-pane sizing gotcha D58). **M2-06b** added
+`(*table.Model).ApplyEvent(kube.WatchEvent)`, folding live watch deltas onto that
+snapshot **preserving the selection by object UID** — RESET replaces columns+rows
+(selection preserved across reconnects), ADDED/MODIFIED upsert / DELETED removes a
+row keyed by `ObjectRef.UID`, cursor keeping its index when the selected row is gone
+(D59). Top-unblocked next is **M2-06c** (horizontal scroll for wide tables), then
+**M2-07a** (root app shell)._
 
 ## Goal
 

@@ -277,6 +277,185 @@ func TestShortRowDegradesToBlanks(t *testing.T) {
 	}
 }
 
+// row builds a one-column pod-like row with the given name and UID for the
+// ApplyEvent tests.
+func row(name, uid string) kube.Row {
+	return kube.Row{Cells: []any{name}, Object: kube.ObjectRef{Name: name, UID: uid}}
+}
+
+func TestApplyEventResetReplacesTable(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionDown) // select pod-b (UID "b")
+
+	// A RESET carrying a fresh column set + rows, still containing pod-b.
+	m.ApplyEvent(kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "Name", Format: "name"}},
+		Rows:    []kube.Row{row("pod-x", "x"), row("pod-b", "b"), row("pod-y", "y")},
+	})
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 after reset", m.RowCount())
+	}
+	// Selection follows pod-b to its new index (1), not reset to the top.
+	if sel, _ := m.SelectedRow(); sel.Object.UID != "b" {
+		t.Fatalf("selection = %q, want b (preserved across reset)", sel.Object.UID)
+	}
+	if m.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1", m.cursor)
+	}
+}
+
+func TestApplyEventResetSelectionGoneFallsBackToTop(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionBottom) // select pod-c (UID "c")
+
+	// RESET without pod-c: the selected object is gone.
+	m.ApplyEvent(kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "Name", Format: "name"}},
+		Rows:    []kube.Row{row("pod-x", "x")},
+	})
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 (selection gone → clamp to top)", m.cursor)
+	}
+}
+
+func TestApplyEventAddedAppendsPreservingSelection(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionDown) // select pod-b (index 1)
+
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{row("pod-d", "d")}})
+	if m.RowCount() != 4 {
+		t.Fatalf("RowCount = %d, want 4 after add", m.RowCount())
+	}
+	// The new row is appended and the selection stays on pod-b.
+	if sel, _ := m.SelectedRow(); sel.Object.UID != "b" {
+		t.Fatalf("selection = %q, want b (unchanged by an add)", sel.Object.UID)
+	}
+	if m.table.Rows[3].Object.UID != "d" {
+		t.Fatalf("appended row = %q, want d", m.table.Rows[3].Object.UID)
+	}
+}
+
+func TestApplyEventModifiedUpdatesRowInPlace(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+
+	// Modify pod-b's first cell; it must update in place, not append.
+	updated := kube.Row{Cells: []any{"pod-b", "1/1", "10.0.0.9"}, Object: kube.ObjectRef{Name: "pod-b", UID: "b"}}
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchModified, Rows: []kube.Row{updated}})
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 (modify updates in place)", m.RowCount())
+	}
+	if got := m.table.Rows[1].Cells[1]; got != "1/1" {
+		t.Fatalf("pod-b Ready cell = %v, want 1/1 after modify", got)
+	}
+}
+
+func TestApplyEventModifiedUnknownUIDAppends(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+
+	// A MODIFIED for a UID we've never seen behaves like an add (server may send a
+	// modify for an object that entered scope before the watch synced it).
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchModified, Rows: []kube.Row{row("pod-z", "z")}})
+	if m.RowCount() != 4 {
+		t.Fatalf("RowCount = %d, want 4 (unknown modify → append)", m.RowCount())
+	}
+}
+
+func TestApplyEventDeletedRemovesRowAndKeepsPosition(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionDown) // select pod-b (index 1)
+
+	// Delete pod-a (index 0, above the cursor): pod-b shifts to index 0 and the
+	// selection follows it by UID.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchDeleted, Rows: []kube.Row{row("pod-a", "a")}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2 after delete", m.RowCount())
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.UID != "b" {
+		t.Fatalf("selection = %q, want b (followed across a delete above it)", sel.Object.UID)
+	}
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0", m.cursor)
+	}
+}
+
+func TestApplyEventDeleteSelectedKeepsIndex(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionDown) // select pod-b (index 1)
+
+	// Delete the selected row: the cursor keeps its index, now pointing at pod-c
+	// (the row that took pod-b's slot), rather than jumping to the top.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchDeleted, Rows: []kube.Row{row("pod-b", "b")}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2", m.RowCount())
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.UID != "c" {
+		t.Fatalf("selection = %q, want c (cursor holds its index after deleting itself)", sel.Object.UID)
+	}
+}
+
+func TestApplyEventDeleteLastRowClampsCursor(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m, _ = m.Update(keymap.ActionBottom) // select pod-c (last, index 2)
+
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchDeleted, Rows: []kube.Row{row("pod-c", "c")}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2", m.RowCount())
+	}
+	if m.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1 (clamped to new last row)", m.cursor)
+	}
+}
+
+func TestApplyEventDeleteToEmptyResetsCursor(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(kube.Table{Columns: []kube.Column{{Name: "N"}}, Rows: []kube.Row{row("only", "o")}})
+
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchDeleted, Rows: []kube.Row{row("only", "o")}})
+	if m.RowCount() != 0 {
+		t.Fatalf("RowCount = %d, want 0", m.RowCount())
+	}
+	if m.cursor != 0 || m.offset != 0 {
+		t.Fatalf("cursor/offset = %d/%d, want 0/0 on an emptied table", m.cursor, m.offset)
+	}
+	if _, ok := m.SelectedRow(); ok {
+		t.Fatal("emptied table: SelectedRow should report ok=false")
+	}
+}
+
+func TestApplyEventRecomputesColumnWidth(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(kube.Table{Columns: []kube.Column{{Name: "N"}}, Rows: []kube.Row{row("ab", "1")}})
+	before := m.colWidths[0]
+
+	// Add a much longer value: the column must widen to fit it.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{row("a-much-longer-name", "2")}})
+	if m.colWidths[0] <= before {
+		t.Fatalf("colWidths[0] = %d, want > %d (widened for the longer cell)", m.colWidths[0], before)
+	}
+	if m.colWidths[0] != runeLen("a-much-longer-name") {
+		t.Fatalf("colWidths[0] = %d, want %d", m.colWidths[0], runeLen("a-much-longer-name"))
+	}
+}
+
+func TestApplyEventDeleteMissingUIDIsNoOp(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchDeleted, Rows: []kube.Row{row("ghost", "gone")}})
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 (deleting an absent UID is a no-op)", m.RowCount())
+	}
+}
+
 // Update must return a table.Model (not tea.Model) so the root can keep a typed
 // value; this compile-time check guards the signature.
 var _ = func(m Model) (Model, tea.Cmd) { return m.Update(keymap.ActionDown) }

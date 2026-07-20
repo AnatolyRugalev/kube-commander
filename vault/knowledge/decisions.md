@@ -1399,3 +1399,31 @@ the M2 risk item) that renders a `kube.Table` snapshot. Locked choices:
 - **SetTable resets selection** to the first row (snapshot replace). M2-06b will add
   live watch-delta application that *preserves* the selection instead.
 - **Deps:** none new (`kube`, `keymap`, `styles`, bubbletea, lipgloss all present).
+
+### D59 — M2-06b: table applies live watch deltas keyed by object UID, preserving the selection
+**2026-07-20 (M2-06b).** `(*table.Model).ApplyEvent(kube.WatchEvent)` folds one live
+watch delta onto the M2-06a snapshot. Locked choices:
+- **UID is the row identity.** Rows are matched by `ObjectRef.UID` (`indexOfUID`);
+  ADDED/MODIFIED **upsert** (update in place, or append when the UID is unseen),
+  DELETED removes the matching row. An **empty UID never matches** — a degraded row
+  with no object metadata (principle 3) can't be identified, so it is always appended
+  rather than collapsed with another empty-UID row.
+- **MODIFIED of an unknown UID is treated as an add** (append), mirroring the server
+  sending a modify for an object that entered scope before the watch synced it.
+- **RESET preserves the selection too.** RESET replaces columns+rows, but the watch
+  layer emits RESET on the first sync *and on every reconnect* (D34-era re-List), so
+  preserving the selected UID across it keeps the cursor put through a transient
+  reconnect; it falls back to the first row only when the selected object is gone.
+  (This differs from `SetTable`, which deliberately resets to the top — that's the
+  fresh-List-for-a-newly-selected-resource path.)
+- **Selection preservation model.** The selected UID is captured *before* the delta,
+  then re-resolved to its new index after; if the row is gone the cursor **keeps its
+  index position** (clamped to the new range), so deleting the selected row lands on
+  the next row rather than jumping to the top (k9s-like). `computeColumns` reruns
+  after every delta (a new/wider cell can widen a column) and `clampOffset` re-scrolls
+  so the selection stays visible.
+- **ERROR never reaches ApplyEvent** — the M2-02 watch pump bridges a watch ERROR to
+  an `ErrorMsg`, so `ApplyEvent` only ever sees data deltas; unknown event types are
+  ignored. Pure single-threaded (the root model calls it from `Update`); no shared
+  mutable state (principle 1).
+- **Deps:** none new.
