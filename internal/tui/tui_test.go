@@ -966,3 +966,74 @@ func TestHelpSwallowsNav(t *testing.T) {
 		t.Fatal("nav.right should not switch panes while help is open")
 	}
 }
+
+// TestReconcilePreservesSelection proves the update loop's menu-reconcile path keeps
+// the user's selection put: with the cursor moved off the first seed item, a
+// DiscoveryReadyMsg that appends a CRD leaves the same resource selected (resolved by
+// GVR, D57) even though the item slice grew. TestDiscoveryReadyReconcilesMenu covers
+// the append + spinner stop but never moves the cursor first, so the preservation
+// guarantee — the M2 menu-reconcile risk item — is only asserted here.
+func TestReconcilePreservesSelection(t *testing.T) {
+	m := sized(t)
+
+	// Move the menu selection off row 0 through the real action path (nav.down).
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.menu.Cursor() == 0 {
+		t.Fatal("precondition: nav.down should move the selection off the first item")
+	}
+	before, ok := m.menu.Selected()
+	if !ok {
+		t.Fatal("the seed menu should have a selection")
+	}
+	selectedGVR := before.Resource.GVR
+	itemsBefore := len(m.menu.Items())
+
+	// A discovery result adding a CRD the seed omits (appended after the seed).
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	next, cmd := m.Update(DiscoveryReadyMsg{Result: kube.DiscoveryResult{Resources: []kube.Resource{crd}}})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("handling a discovery result should not issue a further command")
+	}
+
+	if got := len(m.menu.Items()); got != itemsBefore+1 {
+		t.Fatalf("reconcile should append the CRD: had %d items, now %d", itemsBefore, got)
+	}
+	after, ok := m.menu.Selected()
+	if !ok {
+		t.Fatal("the menu should still have a selection after reconcile")
+	}
+	if after.Resource.GVR != selectedGVR {
+		t.Fatalf("reconcile must preserve the selected resource: was %v, now %v", selectedGVR, after.Resource.GVR)
+	}
+}
+
+// TestProgramRoutesKeyToPicker drives the whole update loop through the real
+// bubbletea program (teatest/v2, the M0-05 harness) rather than a direct Update
+// call: a live ctrl+n keypress routes through the keymap to ns.switch, the async
+// namespace list seeds the picker, and the seeded namespaces render — proving
+// key→action→command→msg→View round-trips end to end through the running program.
+func TestProgramRoutesKeyToPicker(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	tm := teatest.NewTestModel(t, New(WithNamespaceLister(fl)), teatest.WithInitialTermSize(80, 24))
+
+	// The browse layout draws first (a seed kind in the left pane).
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Node"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// A live ctrl+n opens the namespace picker; its async list then seeds it and the
+	// namespaces render through the program's View. "kube-system" is an unselected
+	// picker row, so a plain byte scan sees it (the selected row's background-filled
+	// cells a scan misses — same reason TestModelSmoke keys on an unselected row).
+	tm.Send(tea.KeyPressMsg(ctrlN))
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("kube-system"))
+	}, teatest.WithDuration(3*time.Second))
+
+	tm.Send(tea.Quit())
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}

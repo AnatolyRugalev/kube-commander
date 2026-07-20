@@ -47,7 +47,7 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 - [ ] Vim keys and their fallbacks both navigate every list/table; help overlay shows both.
 - [ ] Rebinding an action in config takes effect; invalid keymaps fail load with a clear error; no raw-key matching remains in view code.
 - [ ] Old config migrates cleanly; malformed/legacy files handled gracefully.
-- [ ] teatest coverage for update loop, menu reconcile, and modal flows.
+- [~] teatest coverage for update loop, menu reconcile, and modal flows. (Update loop + menu reconcile covered — M2-14a; modal flow deferred to M2-14b, blocked by the gated M2-10.)
 - [ ] No mutex-guarded UI state; concurrency is message-driven only.
 
 ## Depends on
