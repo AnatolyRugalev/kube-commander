@@ -13,7 +13,13 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-06a** Table component: snapshot render (`internal/tui/components/table`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-20
+      notes: First slice of M2-06 (custom table — bubbles/table too basic, M2 risk).
+      Render a `kube.Table` snapshot with vertical scroll, selection, and Home/End
+      via keymap actions; emit the table's own `RowSelectedMsg` on drill-in (moves
+      out of `msg.go` per D56). 06b (live deltas) / 06c (hscroll) stay in Backlog.
+      Depends on: M2-02, M2-03.
 
 ## Blocked
 
