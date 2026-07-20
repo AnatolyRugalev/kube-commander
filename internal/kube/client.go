@@ -79,6 +79,26 @@ func RESTConfig(cc ClientConfig) (*rest.Config, error) {
 	return cfg, nil
 }
 
+// ContextName resolves the name of the context Connect would select for cc: the
+// explicit Context if set, else the kubeconfig's current-context. It performs no
+// network I/O and never panics — a missing or malformed kubeconfig returns "" so
+// the caller degrades to an unlabelled context (the name is cosmetic, e.g. the
+// status bar and welcome page), never a startup failure.
+func ContextName(cc ClientConfig) string {
+	if cc.Context != "" {
+		return cc.Context
+	}
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if cc.Kubeconfig != "" {
+		rules.ExplicitPath = cc.Kubeconfig
+	}
+	raw, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{}).RawConfig()
+	if err != nil {
+		return ""
+	}
+	return raw.CurrentContext
+}
+
 // NewClients builds the client-go handles from an already-resolved *rest.Config.
 // Construction is local — it validates and wires the clients but makes no server
 // call — so a reachable API server is not required here; connection errors

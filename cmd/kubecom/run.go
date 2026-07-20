@@ -9,6 +9,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui"
+	"github.com/AnatolyRugalev/kube-commander/internal/version"
 )
 
 // runOptions carries the resolved root-command flags into runTUI, so the launch
@@ -80,6 +81,11 @@ func runTUI(opts runOptions) error {
 		tui.WithDiscoverer(clients),
 		tui.WithNamespaceLister(clients),
 		tui.WithNamespace(opts.namespace),
+		tui.WithContext(kube.ContextName(kube.ClientConfig{
+			Kubeconfig: opts.kubeconfig,
+			Context:    opts.context,
+		})),
+		tui.WithVersion(version.Version),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("kubecom exited with error: %w", err)

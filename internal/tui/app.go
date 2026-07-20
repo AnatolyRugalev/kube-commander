@@ -14,6 +14,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/welcome"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/help"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
@@ -88,6 +89,18 @@ func WithNamespaceLister(l NamespaceLister) Option {
 	return func(m *Model) { m.nsLister = l }
 }
 
+// WithContext sets the kube context name shown on the status bar and the startup
+// welcome page. Purely cosmetic; empty renders nothing.
+func WithContext(name string) Option {
+	return func(m *Model) { m.context = name }
+}
+
+// WithVersion sets the build version shown on the startup welcome page (e.g.
+// "dev" or a release tag). Empty shows the bare name.
+func WithVersion(v string) Option {
+	return func(m *Model) { m.version = v }
+}
+
 // Layout constants. The status bar takes one line at the bottom; the two browse
 // panes split the width, the menu (left) sized as a fraction with sensible floors
 // so the table (right) always keeps room.
@@ -133,6 +146,13 @@ type Model struct {
 	table    table.Model
 	status   statusbar.Model
 	nsPicker picker.Model
+	welcome  welcome.Model
+
+	// context is the resolved kube context name and version the build version;
+	// both are cosmetic, shown on the status bar (context) and the startup welcome
+	// page (both). Set at construction via WithContext/WithVersion.
+	context string
+	version string
 
 	// watcher is the kube watch client (nil → watch-inert). namespace scopes the
 	// watch ("" = all namespaces until the M2-08 namespace picker lands). watchCh
@@ -204,13 +224,20 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		table:    table.New(s),
 		status:   statusbar.New(s),
 		nsPicker: picker.New(s, "namespace"),
+		welcome:  welcome.New(s),
 	}
 	for _, opt := range opts {
 		opt(&m)
 	}
 	m.menu.Focus()
-	m.status.SetShortHelp(m.help.ShortHelpView())
+	shortHelp := m.help.ShortHelpView()
+	m.status.SetShortHelp(shortHelp)
+	m.status.SetContext(m.context)     // reflect the resolved --context (empty renders nothing)
 	m.status.SetNamespace(m.namespace) // reflect the -n scope (empty renders nothing)
+	m.welcome.SetVersion(m.version)
+	m.welcome.SetContext(m.context)
+	m.welcome.SetNamespace(m.namespace)
+	m.welcome.SetShortHelp(shortHelp)
 	return m
 }
 
@@ -518,6 +545,7 @@ func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.C
 	m.nsPicker.Hide()
 	m.namespace = msg.Value
 	m.status.SetNamespace(msg.Value)
+	m.welcome.SetNamespace(msg.Value) // keep the welcome scope current if shown pre-drill-in
 	if m.hasCurrent && m.watcher != nil {
 		return m.selectResource(m.current)
 	}
@@ -569,6 +597,9 @@ func (m *Model) resize() {
 	}
 	m.menu.SetSize(menuW, bodyH)
 	m.table.SetSize(tableW, bodyH)
+	// The welcome page stands in for the table until a resource is drilled into, so
+	// it takes the same right-pane geometry.
+	m.welcome.SetSize(tableW, bodyH)
 	// The picker overlays the body area (above the status bar) and centers itself
 	// within it, so the status line stays visible behind the modal.
 	m.nsPicker.SetSize(m.width, bodyH)
@@ -690,7 +721,15 @@ func (m Model) View() tea.View {
 	case m.nsPicker.Active():
 		body = m.nsPicker.View()
 	default:
-		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), m.table.View())
+		// Until the user drills into a resource the right pane shows the welcome
+		// page rather than a blank table; once a watch is live (hasCurrent) the live
+		// table takes over the slot. The right pane's focus (menu-vs-table focus
+		// switch) drives whichever stand-in is shown.
+		right := m.table.View()
+		if !m.hasCurrent {
+			right = m.welcome.View(m.table.Focused())
+		}
+		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View()))

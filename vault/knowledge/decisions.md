@@ -1811,3 +1811,22 @@ falls back to the branch named `v1`. Constraints future legs must not contradict
 **Why:** addresses feedback FB-go-install (a dogfood install failure); keeps the
 documented install command actually runnable on the untagged `v1` branch instead of
 failing on a nonexistent semver tag.
+
+### D76 — Right browse pane is a slot: welcome page pre-drill-in, live table after
+**2026-07-20.** The right pane of the browse view is a single slot the root model
+fills conditionally, gated by `m.hasCurrent`:
+- **Before the first drill-in** (`!hasCurrent`) it renders the `welcome` component
+  (`internal/tui/components/welcome`) — app name/version, `context · namespace`
+  scope, a pick-a-resource hint, and the registry-generated key hints — sized to the
+  table's geometry and reflecting the same right-pane focus. A future leg adding a
+  right-pane surface (details/logs/describe view) must respect this slot: it shows
+  when a resource is open, never blanks the pane, and never a raw stdout write.
+- **After a resource is open** the live table takes the slot (unchanged).
+- **Context/version are cosmetic props**, injected via `WithContext`/`WithVersion`
+  and shown on the welcome page (both) and the status bar (context). `kube.ContextName`
+  resolves the context name with no network I/O and returns `""` on any kubeconfig
+  failure — the label degrades to blank, it never blocks start (principle 3).
+
+**Why:** addresses feedback FB-welcome-page (a bare launch showed an empty table);
+keeps the first paint a deliberate, informative landing screen and fixes the
+status bar's context label, which was wired but never set.

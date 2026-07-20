@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — feedback leg FB-go-install: README install fixed to a local `v1` checkout (`go install ./cmd/kubecom`); the broken `@v1` remote form is dropped and remote `go install …@latest` is deferred to an M5 release tag (D75). Inbox still holds two normal-priority items (menu nesting, welcome page); next board pick when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — feedback leg FB-welcome-page: the browse right pane now shows a `welcome` component (name/version, context · namespace, pick-a-resource hint, key hints) until a resource is drilled into (D76); status bar also gained the context label. Inbox still holds one normal-priority item (menu nesting) — the next leg; board fallback when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-welcome-page** Feedback (normal): right pane should show a welcome page at startup (kubecom/version, context + namespace, "pick a resource" hint, key hints) until a resource is drilled into
-      status: in-progress | owner: claude-opus | added: 2026-07-20
+_(none)_
 
 ## Blocked
 
@@ -117,6 +116,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-welcome-page** Feedback (normal): bare launch showed an empty right-pane table → new `welcome` component (`internal/tui/components/welcome`) shows name/version, context · namespace scope, a pick-a-resource hint, and registry-generated key hints until the first drill-in, then the live table takes the slot (gated by `hasCurrent`); `WithContext`/`WithVersion` + `kube.ContextName` (no-network, blank-on-failure) wire the props; status bar now shows the context too — done 2026-07-20 (D76)
 - [x] **FB-go-install** Feedback (normal): README `go install …/cmd/kubecom@v1` failed (`@v1` is a semver version query — resolves to a nonexistent `v1.x.x` tag, never the branch) → Install section now leads with a local `v1` checkout + `go install ./cmd/kubecom`, `@v1` remote form dropped, commit-SHA pin noted as the working remote alternative, clean remote `go install …@latest` deferred to an M5 release tag — done 2026-07-20 (D75)
 - [x] **FB-errors-layout** Feedback (high): errors broke the TUI layout → transient single-line status-bar toast; root `Update` now handles `ErrorMsg` (was dropped), watch-start/ns-list/watch-ERROR all route through `surfaceError`, auto-clear is generation-guarded — done 2026-07-20 (D74)
 - [x] **M2-08c** Wire namespace picker into the app shell: `ns.switch`/`ctrl+n` action + `NamespaceLister` seam (`WithNamespaceLister`, nil → inert); async list seeds the picker, selection sets `m.namespace` + status bar and re-scopes the live watch, `docs/keybindings.md` regenerated — done 2026-07-20 (D73)
