@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-09a done: table filter core (authoritative full set + displayed filtered view; case-insensitive substring over visible columns; D78). Next pick: M2-09b (wire `/`+textinput into the shell). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — added `vault/human-tasks/` (agent → human, can block the board / a milestone, D79); an open dogfood task gates M2-10…M2-13 until a human runs the build. Loop's next pick: M2-09b, then M2-14. Per-leg history: `vault/journal/`._
 
 ## In Progress
 

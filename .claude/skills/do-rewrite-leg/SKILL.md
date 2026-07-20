@@ -25,9 +25,21 @@ if not already in context. Follow these steps in order.
   Skim `vault/knowledge/decisions.md` for anything relevant.
 - **Check the feedback inbox**: list `vault/feedback/`. Any file other than
   `README.md` is unaddressed human feedback and **preempts the board** (see Pick).
+- **Check human tasks**: list `vault/human-tasks/`. Any file other than `README.md`
+  is a task for a human; read each one's `Blocks:` and `Status:` — open tasks gate
+  what you may pick (see Pick), and a `Status: done` task is yours to close.
 
 ## 2. Pick a leg
 
+- **Human tasks gate everything (D79).** For each open file in `vault/human-tasks/`:
+  - `Status: done` → this leg is closing it: fold any `## Result` into the board /
+    journal / a decision / feedback, then **delete the file**.
+  - `Status: open` with `Blocks:` → you may **not** start a leg it names (specific
+    task ids, or the whole milestone). Pick other unblocked work instead.
+  - If open human tasks block **all** otherwise-available work: **do not invent a
+    low-value leg to look busy.** Stop the leg and report that you're blocked on
+    human task(s) X (name them). Feedback items and bug fixes are never blocked
+    unless a task's `Blocks:` explicitly names them.
 - **Feedback first (D69).** If `vault/feedback/` holds anything but its `README.md`,
   the oldest (or highest-`Priority`) item **is this leg**. Address it — implement it
   if it fits one leg; if larger, convert it into concrete board task(s) and do the
@@ -73,6 +85,10 @@ if not already in context. Follow these steps in order.
   regress the running binary — the human dogfoods it against a real cluster
   between reviews, so each leg should improve that experience (D68). If a leg
   changes install/launch/config/usage, update `README.md` in the same leg.
+- If a leg genuinely needs a human (a real-cluster/visual-UX check, credentials,
+  envtest run locally, an irreversible action), **raise a `vault/human-tasks/`
+  file** with a conservative `Blocks:` — never claim a verification you couldn't
+  actually perform (D79).
 
 ## 6. Record decisions & knowledge
 

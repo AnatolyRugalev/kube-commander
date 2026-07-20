@@ -32,6 +32,10 @@ subagent context instead (D21).
 - **Failure:** stop immediately if a subagent reports a blocker, a red tree, a
   failed push, or that it could not claim work. Do not retry a failed leg —
   report it for the human instead.
+- **Blocked on a human task:** if a subagent reports it is blocked by an open
+  `vault/human-tasks/` task (all available work gated), **end the run** and make
+  the final report lead with the blocking task(s) by name — the human must act
+  before the loop can proceed. Do not spawn further legs to look busy.
 
 ## Loop
 

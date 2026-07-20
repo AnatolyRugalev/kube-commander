@@ -1880,3 +1880,30 @@ filter/search work) must not contradict:
 - The component only narrows. The root model owns opening the filter from the keymap
   `app.filter` action + a text field and rendering the active-filter indicator
   (M2-09b); it drives narrowing through `SetFilter`.
+
+### D79 — Human-task queue: `vault/human-tasks/` (agent → human), can block the board / a milestone
+**2026-07-20.** Maintainer-directed. The inverse of the feedback inbox (D69): a
+directory where the **agent parks work only a human can do** — dogfood/visual-UX
+confirmation against a real cluster, credentials/infra it must not fabricate,
+running envtest locally, irreversible/outward-facing actions (release tag, default-
+branch change, publishing), or a genuine human judgment call. One markdown file per
+task (`YYYY-MM-DD-slug.md`; `README.md` documents the flow) with `Blocks:`,
+`Priority:`, and `Status: open|done` fields. **Every leg's Orient step lists it**, and:
+- An **open** task's `Blocks:` gates Pick — it removes the named board items (or, with
+  `milestone:MX`, the whole milestone) from what the agent may start. `Blocks: none`
+  is advisory.
+- **Blocking never means busywork.** If open tasks gate all available work, the agent
+  **stops and reports** the blocker(s) rather than inventing low-value legs; the
+  scheduled run ends and its push notification names the blocker. Feedback items and
+  bug fixes are never blocked unless a task's `Blocks:` names them.
+- A `Status: done` task → the agent folds its `## Result` into the board/journal/a
+  decision/feedback and **deletes** the file.
+- The agent **raises** a task here instead of claiming a green it couldn't earn (ties
+  to the dogfooding rule D68): if a leg needs a human, it files a task with a
+  conservative `Blocks:` rather than faking verification.
+**Why:** the autonomous loop had no way to hand work back to the maintainer or to
+gate progress on it — so real-cluster validation debt (D68) silently accumulated
+while the loop built more UI on top. A blocking agent→human queue closes that gap.
+Wired into CLAUDE.md's leg loop + hard rules, the `do-rewrite-leg` skill (Orient,
+Pick, Verify), the `do-rewrite-run` orchestrator (blocked → end run + notify), and
+`vault/README.md`.

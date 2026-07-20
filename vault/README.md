@@ -29,6 +29,7 @@ under version control, and is discoverable without external context.
 | [`milestones/`](milestones/) | Large milestone definitions (M0–M5) with exit criteria |
 | [`tasks/`](tasks/) | Task board + workflow conventions |
 | [`feedback/`](feedback/) | Human → agent inbox; checked before every leg, preempts the board, deleted once addressed (D69) |
+| [`human-tasks/`](human-tasks/) | Agent → human tasks (only-a-human work); an open task can **block** board items or a milestone (D79) |
 | [`knowledge/`](knowledge/) | Durable knowledge: decisions, target stack, legacy findings |
 | [`journal/`](journal/) | Execution journal: one file per leg, `YYYY-MM-DD.N.md` |
 | [`REWRITE_PLAN.md`](REWRITE_PLAN.md) | The strategic plan narrative (architecture, phases, risks) |
@@ -42,9 +43,11 @@ periodically via this vault and the journal. See [`../CLAUDE.md`](../CLAUDE.md) 
 ## How agents use the vault
 
 1. **Orient** — read `goals.md` and the active milestone before starting work.
-2. **Check `feedback/`** — before picking board work, drain the human inbox: any
-   file but its `README.md` is unaddressed feedback that preempts the board; address
-   it and delete the file (D69).
+2. **Check `feedback/` and `human-tasks/`** — an open `human-tasks/` file's
+   `Blocks:` gates what you may pick (a milestone or specific board items); if it
+   blocks everything, stop and report rather than inventing busywork (D79). Then
+   drain `feedback/`: any file but its `README.md` is unaddressed feedback that
+   preempts the board; address it and delete the file (D69).
 3. **Pick work** — take the next item from `tasks/board.md` (or the milestone's
    checklist). Move it to In Progress with your agent id and a timestamp.
 4. **Do the work** on `v1`, in small, reviewable commits.

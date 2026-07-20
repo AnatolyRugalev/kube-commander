@@ -29,6 +29,10 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 - [`vault/tasks/board.md`](vault/tasks/board.md) — the live task board; source of legs.
 - [`vault/feedback/`](vault/feedback/) — human → agent inbox. **Check it before every
   leg; it preempts the board.** Delete each item once addressed (D69).
+- [`vault/human-tasks/`](vault/human-tasks/) — agent → human tasks (things only a human
+  can do). An open task can **block** board items or a milestone. **Check it before
+  every leg; respect its `Blocks:`.** Raise one here instead of faking a green you
+  can't earn (D79).
 - [`vault/knowledge/`](vault/knowledge/) — decisions log, target stack, keybindings, legacy findings.
 - [`vault/journal/`](vault/journal/) — execution journal: one file per leg,
   named `YYYY-MM-DD.N.md` (see [`vault/journal/README.md`](vault/journal/README.md)).
@@ -37,13 +41,20 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 ## The leg loop (what `/do-rewrite-leg` does)
 
 1. **Orient** — pull latest `v1`; read goals, the active milestone, board, and the
-   last few journal entries. **Then check [`vault/feedback/`](vault/feedback/).**
-2. **Pick** the leg. **Unaddressed feedback preempts the board** (D69): if
-   `vault/feedback/` holds anything but its `README.md`, the oldest / highest-priority
-   item *is* this leg — address it and **delete the file** in the same commit. Only
-   with an empty inbox do you take the next small, unblocked board item (respect
-   milestone order). If the top item is too big, split it and take the first slice.
-   If the active milestone's board section is thin, expanding it *is* a valid leg.
+   last few journal entries. **Then check [`vault/feedback/`](vault/feedback/) and
+   [`vault/human-tasks/`](vault/human-tasks/).**
+2. **Pick** the leg, in this precedence:
+   - **Human tasks gate the board** (D79): an open task's `Blocks:` removes those
+     board items / that milestone from what you may pick. A `Status: done` task →
+     fold its result in and delete it (that's a valid leg). If open human tasks
+     block *all* available work, **do not invent busywork — stop and report** which
+     task blocks you (feedback and bug fixes are never blocked by default).
+   - **Unaddressed feedback preempts the board** (D69): if `vault/feedback/` holds
+     anything but its `README.md`, the oldest / highest-priority item *is* this leg —
+     address it and **delete the file** in the same commit.
+   - Otherwise take the next small, **unblocked** board item (respect milestone
+     order). If the top item is too big, split it and take the first slice. If the
+     active milestone's board section is thin, expanding it *is* a valid leg.
 3. **Claim** it on the board (`in-progress`, your id, date) — and **commit + push
    the claim immediately** (`chore(board): claim <leg-id>`) so it acts as a lock
    for concurrent agents (D16).
@@ -93,6 +104,10 @@ You decide everything. There is no one to ask. Therefore:
 - **Keep the README current.** When a leg changes how a user installs, launches,
   configures, or uses `kubecom`, update `README.md` in the same leg — install and
   usage instructions must always match the built binary (D68).
+- **Raise a human task, don't fake a green.** If a leg needs something only a human
+  can do (a real cluster / visual UX check, credentials, an irreversible action),
+  write a file in [`vault/human-tasks/`](vault/human-tasks/) with a conservative
+  `Blocks:` rather than claiming verification you couldn't perform (D79).
 - **Honor the decisions.** `vault/knowledge/decisions.md` is binding; supersede
   with a new decision rather than contradicting silently.
 
