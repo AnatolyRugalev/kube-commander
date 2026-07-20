@@ -59,9 +59,16 @@ watch for that resource (through a narrow `ResourceWatcher` seam injected by
 `WithWatcher`; nil → watch-inert) and streams its deltas into the table via the M2-02
 pump — `ResourceEventMsg`→`ApplyEvent`, the first RESET repopulating it; a new
 selection cancels the previous watch, a `watchGen` guard dropping its in-flight deltas,
-and focus moves to the table (D63). Top-unblocked next is **M2-07d** (kick off async
-discovery on `Init`, route `DiscoveryReadyMsg` into the menu's M2-05b `Reconcile` and
-the status-bar spinner — a `Discoverer` seam/option mirroring `WithWatcher`)._
+and focus moves to the table (D63). **M2-07d** kicked off async discovery on `Init`
+(through a narrow `Discoverer` seam injected by `WithDiscoverer`, mirroring
+`WithWatcher`; nil → discovery-inert, menu stays on its seed): `Init` defers the start
+one message hop (`startDiscoveryMsg`) since a value-receiver `Init` can't mutate the
+model, and `Update` opens a cancellable pass, starts the M2-04 spinner, and batches its
+tick with the M2-02 `discoveryPump`; `DiscoveryReadyMsg` stops the spinner and folds the
+result into the menu via M2-05b `Reconcile` — a no-op on a total failure so the menu
+degrades to its navigable seed (principle 3) — completing the **M2-07 root-shell group
+(07a–07d)** (D64). Top-unblocked next is **M2-08** (namespace picker over `bubbles/list`,
+its selection re-scoping the watch via the `m.namespace` field the shell already reads)._
 
 ## Goal
 

@@ -1551,3 +1551,36 @@ M2-04 status bar (bottom line).
 - **Namespace scope is "" (all) for now**; the namespace picker re-scopes it in M2-08.
   `app.quit` cancels the current watch before `tea.Quit` so its goroutine unwinds.
 - **Deps:** none new.
+
+### D64 — M2-07d: async discovery on Init reconciles the menu + drives the status-bar spinner
+**2026-07-20.** M2-07d kicks off the async discovery pass on startup and folds its
+result into the resource menu (M2-05b `Reconcile`), running the M2-04 status-bar
+spinner while it is in flight — the "discovery ready" reconcile of D8, now wired
+into the shell.
+- **A narrow `Discoverer` seam, mirroring `WithWatcher` (D63).** The root model
+  depends on an interface — `StartDiscovery(ctx) <-chan kube.DiscoveryResult` — that
+  `*kube.Clients` satisfies, injected by a new `WithDiscoverer(d)` option. The tui
+  package never constructs a client; the model is driveable in hermetic tests with a
+  fake channel (D18). A model built with **no discoverer never runs discovery** — the
+  menu stays on its static seed, which is itself a fully navigable browse experience
+  (principle 4: fast cold start never blocks on discovery).
+- **Init defers the start one message hop (`startDiscoveryMsg`).** `Init()` is a value
+  receiver returning only a `tea.Cmd`, so it cannot store the cancel func or flip the
+  spinner's `discovering` flag. It therefore emits a private `startDiscoveryMsg`;
+  `Update` handles it, where the model is mutated and returned — the same place every
+  other state change lands. `startDiscovery` opens a `context.WithCancel` pass, calls
+  the discoverer, starts the spinner (`status.StartDiscovery()`), and **batches** the
+  spinner tick with the M2-02 `discoveryPump` (cap-1 channel, delivers once, D8).
+- **Spinner ticks are forwarded to the status bar.** The root `Update` routes
+  `spinner.TickMsg` to `status.Update`; the bar drops ticks once discovery finished,
+  so the animation self-terminates (M2-04) — no timer to cancel.
+- **`DiscoveryReadyMsg` stops the spinner and reconciles.** `handleDiscovery` calls
+  `status.StopDiscovery()`, cancels the one-shot context (its result is in hand), and
+  `menu.Reconcile(result)` — which merges without disturbing selection/scroll (D57)
+  and is a **no-op on a total failure** (`Result.Err` set): the menu then stays on its
+  navigable seed rather than blanking (principle 3). Visible surfacing of a discovery
+  failure on a pane is a later slice, as with the watch's ERROR handling (D63).
+- **`app.quit` cancels the in-flight discovery pass** alongside the watch, so its
+  goroutine unwinds before the program exits (the cap-1 channel already prevents a
+  leak, but cancelling drops the result promptly).
+- **Deps:** none new (reuses the M2-02 pump, M2-04 spinner, M2-05b `Reconcile`).

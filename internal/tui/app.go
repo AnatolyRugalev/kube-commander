@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -29,16 +30,36 @@ type ResourceWatcher interface {
 	Watch(ctx context.Context, r kube.Resource, namespace string, opts metav1.ListOptions) (<-chan kube.WatchEvent, error)
 }
 
+// Discoverer is the narrow slice of the kube layer the shell needs to reconcile
+// the resource menu with the cluster's full resource set: it kicks off one async
+// discovery pass and delivers its outcome exactly once on the returned channel
+// (D8). *kube.Clients satisfies it. As with ResourceWatcher the shell depends on
+// this interface, not the concrete client, so the tui package never constructs a
+// client and the model is driveable in hermetic tests with a fake channel (D18).
+// A model built without a discoverer (the default) never starts discovery: the
+// menu stays on its static seed, which is a fully navigable browse experience
+// (principle 4 — fast cold start doesn't block on discovery anyway).
+type Discoverer interface {
+	StartDiscovery(ctx context.Context) <-chan kube.DiscoveryResult
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
-// working unchanged (no watcher) while letting the launcher inject a live client
-// (WithWatcher) and future slices add their own dependencies (e.g. a discoverer
-// in M2-07d) without churning the constructor signature.
+// working unchanged (no dependencies) while letting the launcher inject a live
+// client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
+// without churning the constructor signature.
 type Option func(*Model)
 
 // WithWatcher wires the kube watch client the shell uses to start live tables.
 // Without it the model is watch-inert.
 func WithWatcher(w ResourceWatcher) Option {
 	return func(m *Model) { m.watcher = w }
+}
+
+// WithDiscoverer wires the kube discovery client the shell uses to reconcile the
+// resource menu on startup. Without it the model never runs discovery (the menu
+// stays on its static seed).
+func WithDiscoverer(d Discoverer) Option {
+	return func(m *Model) { m.discoverer = d }
 }
 
 // Layout constants. The status bar takes one line at the bottom; the two browse
@@ -62,7 +83,10 @@ const (
 // a live kube.Watch for that resource, streams its deltas into the table through
 // the M2-02 watch pump (ApplyEvent), and moves focus to the table; selecting
 // another resource cancels the previous watch, a stale-generation guard dropping
-// any in-flight deltas from it. The async discovery reconcile + spinner is M2-07d.
+// any in-flight deltas from it. On startup (M2-07d) it kicks off async discovery,
+// runs the status-bar spinner while it is in flight, and folds the result into
+// the menu (Reconcile) when it arrives — all without disturbing the seed menu the
+// user is already browsing.
 //
 // It holds no shared mutable state (principle 1): the Sequencer is a pointer so
 // its buffered prefix survives the value-model copy Bubble Tea makes each Update,
@@ -91,6 +115,13 @@ type Model struct {
 	watchCh     <-chan kube.WatchEvent
 	watchCancel context.CancelFunc
 	watchGen    int
+
+	// discoverer runs the async discovery pass that reconciles the menu (nil →
+	// discovery-inert; the menu stays on its static seed). discoveryCancel tears
+	// the in-flight pass down on quit (the cap-1 discovery channel already keeps
+	// the goroutine from leaking, D8, but cancelling drops the result promptly).
+	discoverer      Discoverer
+	discoveryCancel context.CancelFunc
 
 	// seqGen tags each pending-sequence timer so a stale tick (superseded by a
 	// newer pending) is ignored rather than firing the wrong action (D48/D61).
@@ -149,9 +180,24 @@ type watchMsg struct {
 	msg tea.Msg
 }
 
-// Init implements tea.Model. The shell has no startup command yet; async
-// discovery is kicked off in M2-07d.
-func (m Model) Init() tea.Cmd { return nil }
+// startDiscoveryMsg is the private self-message Init emits to begin discovery.
+// Init cannot start it directly — a value receiver returning only a tea.Cmd
+// cannot store the cancel func or flip the spinner's discovering flag — so the
+// work is deferred one message hop into Update, where the model is mutated and
+// returned (mirroring how every other state change is applied). Nothing outside
+// this package sends it.
+type startDiscoveryMsg struct{}
+
+// Init implements tea.Model. With a discoverer wired it kicks off the async
+// discovery pass (via the startDiscoveryMsg hop, so the spinner starts and the
+// cancel func is retained in Update); with none it has no startup command and the
+// menu stays on its static seed.
+func (m Model) Init() tea.Cmd {
+	if m.discoverer == nil {
+		return nil
+	}
+	return func() tea.Msg { return startDiscoveryMsg{} }
+}
 
 // Update implements tea.Model. It sizes the layout on a window-size message,
 // resolves keypresses through the sequencer, and services the sequence timeout
@@ -195,6 +241,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watchMsg:
 		return m.handleWatchMsg(msg)
+
+	case startDiscoveryMsg:
+		return m.startDiscovery()
+
+	case DiscoveryReadyMsg:
+		return m.handleDiscovery(msg)
+
+	case spinner.TickMsg:
+		// The status bar owns the discovery spinner; forward its ticks so the
+		// animation advances while discovery is in flight (it drops ticks once
+		// discovery finished, breaking the self-scheduling chain — M2-04).
+		var cmd tea.Cmd
+		m.status, cmd = m.status.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -271,6 +331,40 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// startDiscovery kicks off the async discovery pass and starts the status-bar
+// spinner. The pass runs on its own cancellable context (torn down on quit or
+// when its result arrives) and delivers exactly once on a cap-1 channel (D8); the
+// discovery pump reads that single result as a DiscoveryReadyMsg. The spinner Cmd
+// and the pump are batched so the animation runs alongside the wait. With no
+// discoverer this is a no-op (Init never emits startDiscoveryMsg without one, but
+// the guard keeps it safe if called directly).
+func (m Model) startDiscovery() (tea.Model, tea.Cmd) {
+	if m.discoverer == nil {
+		return m, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.discoveryCancel = cancel
+	ch := m.discoverer.StartDiscovery(ctx)
+	spin := m.status.StartDiscovery()
+	return m, tea.Batch(spin, discoveryPump(ch))
+}
+
+// handleDiscovery folds a completed discovery pass into the menu and stops the
+// spinner. Reconcile merges the discovered resources into the seed without
+// disturbing selection or scroll (M2-05b/D57) and is a no-op on a total failure
+// (Result.Err set) — the menu then stays on its fully navigable seed rather than
+// blanking (principle 3; visible surfacing of a discovery failure is a later
+// slice). The one-shot context is cancelled now its result is in hand.
+func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
+	m.status.StopDiscovery()
+	if m.discoveryCancel != nil {
+		m.discoveryCancel()
+		m.discoveryCancel = nil
+	}
+	m.menu.Reconcile(msg.Result)
+	return m, nil
+}
+
 // resize lays the panes out inside the current terminal: the status bar takes the
 // bottom line, and the menu and table split the remaining width (menu a fraction
 // with floors so the table always keeps room). Both panes are sized to their
@@ -329,6 +423,9 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionQuit:
 		if m.watchCancel != nil {
 			m.watchCancel() // tear the watch goroutine down before the program exits.
+		}
+		if m.discoveryCancel != nil {
+			m.discoveryCancel() // and any in-flight discovery pass.
 		}
 		return m, tea.Quit
 	case keymap.ActionHelp:

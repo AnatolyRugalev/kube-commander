@@ -53,6 +53,20 @@ func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, _ m
 	return ch, nil
 }
 
+// fakeDiscoverer is a hermetic Discoverer: it hands back a preset channel and
+// records the contexts it was given so a test can assert the pass is cancelled on
+// completion. The test seeds the channel (cap 1) so the discovery pump reads a
+// result without a real goroutine.
+type fakeDiscoverer struct {
+	ch   chan kube.DiscoveryResult
+	ctxs []context.Context
+}
+
+func (f *fakeDiscoverer) StartDiscovery(ctx context.Context) <-chan kube.DiscoveryResult {
+	f.ctxs = append(f.ctxs, ctx)
+	return f.ch
+}
+
 func gvrResource(name string) kube.Resource {
 	return kube.Resource{GVR: schema.GroupVersionResource{Resource: name}}
 }
@@ -388,6 +402,101 @@ func TestWatchStartErrorSurfaces(t *testing.T) {
 	}
 	if _, ok := cmd().(ErrorMsg); !ok {
 		t.Fatalf("expected ErrorMsg, got %T", cmd())
+	}
+}
+
+// TestInitStartsDiscovery proves a model with a discoverer wired begins the
+// discovery pass on startup: Init emits the private startDiscoveryMsg, and
+// delivering it calls the discoverer, starts the status-bar spinner, and issues a
+// command (the batched spinner tick + discovery pump).
+func TestInitStartsDiscovery(t *testing.T) {
+	fd := &fakeDiscoverer{ch: make(chan kube.DiscoveryResult, 1)}
+	m := sizedWith(t, WithDiscoverer(fd))
+
+	initCmd := m.Init()
+	if initCmd == nil {
+		t.Fatal("Init should kick off discovery when a discoverer is wired")
+	}
+	if _, ok := initCmd().(startDiscoveryMsg); !ok {
+		t.Fatalf("Init should emit startDiscoveryMsg, got %T", initCmd())
+	}
+
+	next, cmd := m.Update(startDiscoveryMsg{})
+	m = next.(Model)
+	if len(fd.ctxs) != 1 {
+		t.Fatalf("expected 1 StartDiscovery call, got %d", len(fd.ctxs))
+	}
+	if !m.status.Discovering() {
+		t.Fatal("starting discovery should start the status-bar spinner")
+	}
+	if cmd == nil {
+		t.Fatal("starting discovery should batch the spinner tick + discovery pump")
+	}
+}
+
+// TestInitInertWithoutDiscoverer proves a model with no discoverer never starts
+// discovery: Init has no command and the spinner stays off.
+func TestInitInertWithoutDiscoverer(t *testing.T) {
+	m := sized(t) // no WithDiscoverer
+	if cmd := m.Init(); cmd != nil {
+		t.Fatalf("Init should be a no-op without a discoverer, got a command yielding %T", cmd())
+	}
+	if m.status.Discovering() {
+		t.Fatal("no discoverer means the spinner never starts")
+	}
+}
+
+// TestDiscoveryReadyReconcilesMenu proves a completed discovery pass folds into
+// the menu (a CRD the seed omits is appended) and stops the spinner. It also
+// checks the one-shot context is cancelled once the result is in hand.
+func TestDiscoveryReadyReconcilesMenu(t *testing.T) {
+	fd := &fakeDiscoverer{ch: make(chan kube.DiscoveryResult, 1)}
+	m := sizedWith(t, WithDiscoverer(fd))
+
+	next, _ := m.Update(startDiscoveryMsg{})
+	m = next.(Model)
+	before := len(m.menu.Items())
+
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	next, cmd := m.Update(DiscoveryReadyMsg{Result: kube.DiscoveryResult{Resources: []kube.Resource{crd}}})
+	m = next.(Model)
+
+	if m.status.Discovering() {
+		t.Fatal("a ready discovery result should stop the spinner")
+	}
+	if got := len(m.menu.Items()); got != before+1 {
+		t.Fatalf("discovery should append the CRD to the menu: had %d, now %d", before, got)
+	}
+	if fd.ctxs[0].Err() == nil {
+		t.Fatal("the discovery context should be cancelled once its result is in hand")
+	}
+	if cmd != nil {
+		t.Fatal("handling a discovery result should not issue a further command")
+	}
+}
+
+// TestDiscoveryTotalFailureKeepsSeed proves a total discovery failure (Result.Err
+// set) degrades gracefully: the spinner stops and the menu stays on its navigable
+// seed rather than blanking (principle 3).
+func TestDiscoveryTotalFailureKeepsSeed(t *testing.T) {
+	fd := &fakeDiscoverer{ch: make(chan kube.DiscoveryResult, 1)}
+	m := sizedWith(t, WithDiscoverer(fd))
+
+	next, _ := m.Update(startDiscoveryMsg{})
+	m = next.(Model)
+	before := len(m.menu.Items())
+
+	next, _ = m.Update(DiscoveryReadyMsg{Result: kube.DiscoveryResult{Err: context.DeadlineExceeded}})
+	m = next.(Model)
+
+	if m.status.Discovering() {
+		t.Fatal("a failed discovery result should still stop the spinner")
+	}
+	if got := len(m.menu.Items()); got != before {
+		t.Fatalf("a total failure should leave the seed menu intact: had %d, now %d", before, got)
 	}
 }
 
