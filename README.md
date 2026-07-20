@@ -42,22 +42,31 @@ in-cluster deployment and **no `kubectl` binary required**.
 
 ## Install
 
-### From source (recommended today)
+### From a local checkout (recommended today)
 
-```bash
-go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@v1
-```
-
-This installs the `kubecom` binary to `$(go env GOPATH)/bin` — make sure that's on
-your `PATH`.
-
-Or clone and build:
+Until a tagged release lands (M5), build from a `v1` checkout — this needs no
+version tag and respects the branch:
 
 ```bash
 git clone -b v1 https://github.com/AnatolyRugalev/kube-commander
 cd kube-commander
-go build -o kubecom ./cmd/kubecom
+go install ./cmd/kubecom      # installs kubecom to $(go env GOPATH)/bin
 ```
+
+Make sure `$(go env GOPATH)/bin` is on your `PATH`. Prefer a plain binary in the
+current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
+
+> **Why not `go install …@v1`?** In `go install path@v1`, the `@v1` is a *module
+> version query*, and `v1` matches Go's semver-prefix form (major version 1), so
+> the toolchain looks for a `v1.x.x` release **tag** — which this repo does not yet
+> have — and never falls back to the branch named `v1`. A commit SHA is *not*
+> semver-parsed, so a pinned remote install does work if you want one:
+>
+> ```bash
+> go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@<commit-sha>
+> ```
+>
+> A clean `go install …@latest` returns with the first tagged release.
 
 > Release binaries (goreleaser), Homebrew, AUR, and Docker images are planned for
 > the M5 release milestone and will be documented here when they land.

@@ -16,6 +16,12 @@ from the old kube-commander.
 - Migration note: old `~/.kubecom.yaml` auto-migration + any behavior changes.
 - **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
   Docker image (Linux/macOS binaries only).
+- **Restore remote `go install`**: tag a real `v1.x.x` release so
+  `go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@latest` works
+  again (today `@v1` is semver-parsed as a version query, not the branch — see
+  FB-go-install / journal 2026-07-20). Renaming `v1`→`main` also dissolves the
+  branch-vs-semver collision. Update the README install section back to the remote
+  one-liner once tagged.
 - Merge/prepare `v1` toward becoming the default branch when ready.
 
 ## Exit criteria

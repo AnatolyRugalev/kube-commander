@@ -1792,3 +1792,22 @@ rendered into a growing/scrolling pane. Constraints future legs must not contrad
 **Why:** honors the "degrade, don't crash — and don't wreck the layout either"
 principle and the stack.md no-stdout-while-TUI rule (D71); gives every async seam one
 sanctioned, layout-safe error channel instead of each inventing its own.
+
+### D75 — README install is local-checkout-only until an M5 release tag; no `@v1` remote form
+**2026-07-20.** `go install …/cmd/kubecom@v1` is broken and stays out of the README:
+`@v1` is a **module version query**, and `v1` matches Go's semver-prefix form (major
+version 1), so the toolchain resolves it to a `v1.x.x` **tag** (none exist) and never
+falls back to the branch named `v1`. Constraints future legs must not contradict:
+- **The primary install path is a local `v1` checkout** (`git clone -b v1 … && go
+  install ./cmd/kubecom`), which needs no tag and respects the branch. Do **not**
+  reintroduce a bare `@v1` (or `@latest`) remote one-liner before a real release tag
+  exists. A commit-SHA pin (`@<sha>`) is not semver-parsed and may be offered as an
+  optional remote form.
+- **Restoring the clean remote `go install …@latest` is an M5 release task** (tag a
+  real `v1.x.x`; the `v1`→`main` rename also dissolves the branch-vs-semver
+  collision). The README install section flips back to the remote one-liner only once
+  that tag ships (keep it current per D68).
+
+**Why:** addresses feedback FB-go-install (a dogfood install failure); keeps the
+documented install command actually runnable on the untagged `v1` branch instead of
+failing on a nonexistent semver tag.
