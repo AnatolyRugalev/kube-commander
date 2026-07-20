@@ -13,7 +13,12 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-07b** Root app shell: two-pane browse layout (menu | table) with focus
+      switching between panes (`internal/tui/app.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: Compose the M2-05 menu + M2-06 table side-by-side under the M2-04 status
+      bar; switch focus with `nav.left`/`nav.right` (HOffset edge arbitration, D60);
+      route nav actions to the focused pane. Watch wiring is M2-07c, discovery M2-07d.
 
 ## Blocked
 
