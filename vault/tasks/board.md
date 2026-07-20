@@ -7,7 +7,12 @@ _Last updated: 2026-07-20 — M2-09b (table filter wiring + n/N search, D80) don
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-14a** teatest coverage: update loop + menu reconcile (defer modal to M2-14b)
+      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-20
+      notes: Split from M2-14 — the modal-flow slice depends on M2-10 (gated by the
+      open dogfood human-task), so this slice covers the two unblocked halves now:
+      a teatest/v2 program-loop drive of key→action→View routing, and a menu
+      reconcile on a fake `DiscoveryReadyMsg` that **preserves selection**.
 
 ## Blocked
 
@@ -99,12 +104,11 @@ messages.
       notes: Client-side sort by column on the table's row set (keymap `sort.*`),
       stable, type-aware where cheap. Closes #85. Depends on: M2-06.
 
-- [ ] **M2-14** teatest coverage: update loop · menu reconcile · modal flow
-      status: todo | owner: — | added: 2026-07-19
-      notes: The M2 exit criterion for tested UI — drive the root model with
-      teatest/v2 (M0-05 harness) over: key→action routing, a menu reconcile on a
-      fake `DiscoveryReadyMsg` preserving selection, and a modal confirm flow.
-      Depends on: M2-07, M2-10.
+- [ ] **M2-14b** teatest coverage: modal confirm flow
+      status: todo | owner: — | added: 2026-07-20
+      notes: Split from M2-14 — the modal-flow half. Drive a modal confirm (y/n)
+      flow with teatest/v2 (M0-05 harness). Depends on: M2-10 (the modal itself),
+      which the open dogfood human-task gates — do this once M2-10 lands.
 
 _Remaining M3–M5 items to be expanded when those milestones open. See milestone files for scope._
 
