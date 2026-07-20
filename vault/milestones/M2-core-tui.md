@@ -48,8 +48,14 @@ placeholder): the keymap-routed `tea.Model` skeleton — owns the resolved keyma
 one `Sequencer`, routes every `KeyMsg` through it to an `Action` (no raw-key match,
 D11), schedules the sequence-timeout tick with a generation guard that drops stale
 ticks (D48), embeds the M2-01d help overlay (`app.help` toggles, `nav.back` closes),
-and quits on `app.quit`; no panes yet (D61). Top-unblocked next is **M2-07b** (compose
-the two-pane browse layout: menu | table with focus switching)._
+and quits on `app.quit`; no panes yet (D61). **M2-07b** composed the two-pane **browse
+layout**: the root model now owns the M2-05 menu (left pane), the M2-06 table (right
+pane), and the M2-04 status bar (bottom line), sized on `WindowSizeMsg`; exactly one
+pane holds focus (menu first), `nav.right`/`nav.left` switch focus between panes (the
+table's horizontal scroll taking precedence until `HOffset()==0`, D60), non-switching
+nav routes to the focused pane, and the open help overlay swallows navigation (D62).
+Top-unblocked next is **M2-07c** (wire the live table to `kube.Watch` via the M2-02
+pump: menu selection starts/stops the watch, `ResourceEventMsg`→`table.ApplyEvent`)._
 
 ## Goal
 

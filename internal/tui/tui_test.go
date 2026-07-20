@@ -26,13 +26,18 @@ func press(t *testing.T, m Model, k tea.Key) (Model, tea.Cmd) {
 }
 
 // TestModelSmoke is the M0-05 teatest smoke test, carried onto the real root
-// model: the app renders and shuts down cleanly. It is the template M2 view tests
-// build on. The model now quits on the app.quit key, but teatest.Quit still works.
+// model: the app renders the browse layout and shuts down cleanly. It is the
+// template M2 view tests build on. The model quits on the app.quit key, but
+// teatest.Quit still works.
 func TestModelSmoke(t *testing.T) {
 	tm := teatest.NewTestModel(t, New(), teatest.WithInitialTermSize(80, 24))
 
+	// The seed resource menu renders its kinds in the left pane, so "Node" (a seed
+	// item) is on screen once the browse layout is drawn. (The first item is the
+	// selected row, whose background-filled cells the test terminal emulator writes
+	// via a path a plain byte scan misses, so we key on an unselected row.)
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("kubecom"))
+		return bytes.Contains(b, []byte("Node"))
 	}, teatest.WithDuration(3*time.Second))
 
 	tm.Send(tea.Quit())
@@ -128,14 +133,85 @@ func TestViewEmptyUntilSized(t *testing.T) {
 	}
 }
 
-// TestViewRendersWhenSized sanity-checks the sized skeleton renders its title and
-// a non-empty keymap-derived short-help hint.
+// TestViewRendersWhenSized sanity-checks the sized shell renders the browse layout
+// (a menu kind in the left pane) and a non-empty keymap-derived short-help hint.
 func TestViewRendersWhenSized(t *testing.T) {
 	m := sized(t)
 	if m.help.ShortHelpView() == "" {
 		t.Fatal("short-help hint should be generated from the registry")
 	}
-	if !bytes.Contains([]byte(m.View().Content), []byte("kubecom")) {
-		t.Fatalf("sized View missing title: %q", m.View().Content)
+	if !bytes.Contains([]byte(m.View().Content), []byte("Node")) {
+		t.Fatalf("sized View missing the resource menu: %q", m.View().Content)
+	}
+}
+
+// TestFocusStartsOnMenu proves the left (menu) pane holds focus initially — the
+// user picks a resource before drilling into its table.
+func TestFocusStartsOnMenu(t *testing.T) {
+	m := sized(t)
+	if !m.menu.Focused() {
+		t.Fatal("menu should start focused")
+	}
+	if m.table.Focused() {
+		t.Fatal("table should not start focused")
+	}
+}
+
+// TestFocusSwitch drives the horizontal focus switch: nav.right moves focus from
+// the menu to the table, and nav.left (with the empty table at its left edge, so
+// nothing to scroll) moves it back to the menu — the HOffset arbitration (D60).
+func TestFocusSwitch(t *testing.T) {
+	m := sized(t)
+
+	// nav.right (`l`) → focus the table.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	if !m.table.Focused() || m.menu.Focused() {
+		t.Fatal("nav.right should move focus to the table")
+	}
+
+	// nav.left (`h`) at the table's left edge → focus back to the menu.
+	if m.table.HOffset() != 0 {
+		t.Fatalf("empty table should be at HOffset 0, got %d", m.table.HOffset())
+	}
+	m, _ = press(t, m, tea.Key{Code: 'h', Text: "h"})
+	if !m.menu.Focused() || m.table.Focused() {
+		t.Fatal("nav.left at the table's left edge should move focus to the menu")
+	}
+}
+
+// TestNavRoutedToFocusedPane proves a nav action reaches only the focused pane:
+// nav.down moves the menu cursor while the menu is focused, and does not move it
+// once focus is on the table.
+func TestNavRoutedToFocusedPane(t *testing.T) {
+	m := sized(t)
+	if m.menu.Cursor() != 0 {
+		t.Fatalf("menu should start at cursor 0, got %d", m.menu.Cursor())
+	}
+
+	// Menu focused: nav.down (`j`) advances the menu cursor.
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.menu.Cursor() != 1 {
+		t.Fatalf("nav.down should advance the focused menu cursor, got %d", m.menu.Cursor())
+	}
+
+	// Focus the table; nav.down no longer moves the menu.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.menu.Cursor() != 1 {
+		t.Fatalf("nav.down should not move the blurred menu, got %d", m.menu.Cursor())
+	}
+}
+
+// TestHelpSwallowsNav proves the open help overlay swallows navigation: focus does
+// not switch while help is visible.
+func TestHelpSwallowsNav(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, tea.Key{Code: '?', Text: "?"})
+	if !m.help.Visible() {
+		t.Fatal("app.help should open the overlay")
+	}
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	if m.table.Focused() {
+		t.Fatal("nav.right should not switch panes while help is open")
 	}
 }

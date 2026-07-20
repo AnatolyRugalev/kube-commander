@@ -1491,3 +1491,29 @@ choices:
   canvas); when sized it shows a placeholder body (or the help overlay when open) plus
   a one-line short-help hint generated from the registry.
 - **Deps:** none new.
+
+### D62 — Two-pane browse layout: focus switching via nav.left/nav.right
+**2026-07-20.** M2-07b composes the root model's browse view: the M2-05 resource
+menu (left pane) and the M2-06 resource table (right pane) side by side under the
+M2-04 status bar (bottom line).
+- **Layout.** The status bar takes one line at the bottom; the menu and table split
+  the remaining width. `menuPaneWidth = total/4`, floored at `minMenuWidth` (20) and
+  never leaving the table below `minTableWidth` (20) — on a narrow terminal the two
+  split evenly. Both panes are sized to their **total** width/height incl. border (as
+  their `SetSize` expects); the table pane width is `total − menuW` so the two fill the
+  row exactly. `View` is empty until the first `WindowSizeMsg`.
+- **Focus.** Exactly one pane holds focus (accented border via `PaneFocus`); the menu
+  starts focused (pick a resource before drilling into its table). `nav.right` moves
+  focus menu→table; `nav.left` moves focus table→menu **only when the table is at its
+  left edge** (`HOffset()==0`, nothing to scroll) — otherwise `nav.left` scrolls the
+  table's columns. This is the pane-focus-vs-scroll arbitration the table's `HOffset`
+  accessor was added for (D60). Every non-switching nav action is routed to the focused
+  pane's `Update`; the blurred pane is untouched.
+- **Help overlay swallows navigation.** While the help overlay is open, `handleAction`
+  services only quit/help/back and drops nav actions, so the panes underneath don't
+  move behind the overlay.
+- **Watch/discovery deferred.** The menu's `ResourceSelectedMsg` (drill-in) and the
+  table's `RowSelectedMsg` are emitted but not yet handled by the root — starting the
+  `kube.Watch` on selection is M2-07c and the discovery reconcile + status-bar spinner
+  is M2-07d.
+- **Deps:** none new.
