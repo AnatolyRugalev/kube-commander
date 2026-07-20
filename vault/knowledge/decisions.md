@@ -1517,3 +1517,37 @@ M2-04 status bar (bottom line).
   `kube.Watch` on selection is M2-07c and the discovery reconcile + status-bar spinner
   is M2-07d.
 - **Deps:** none new.
+
+### D63 — M2-07c: drilling into a resource starts a live kube.Watch, streamed into the table
+**2026-07-20.** M2-07c wires the menu's `ResourceSelectedMsg` (drill-in) to a live
+`kube.Watch`, feeding its deltas into the table through the M2-02 watch pump.
+- **A narrow `ResourceWatcher` seam, not the concrete client.** The root model
+  depends on an interface — `Watch(ctx, kube.Resource, namespace, metav1.ListOptions)
+  (<-chan kube.WatchEvent, error)` — that `*kube.Clients` satisfies. The tui package
+  never constructs a client, and the model is driveable in hermetic tests with a fake
+  watch channel (D18). A model built with no watcher is **watch-inert**: selecting a
+  resource is a no-op, which is what the pre-launch app and the M2-07b tests want.
+- **Constructors take functional options.** `New(opts ...Option)` /
+  `NewWithKeymap(km, opts ...Option)` keep their existing call sites working (no
+  watcher) while `WithWatcher(w)` injects the client; future slices add their own
+  options (e.g. a discoverer in M2-07d) without churning the signature.
+- **Selecting a resource (re)starts the watch.** The previous watch's context is
+  cancelled, the table is blanked (`SetTable(kube.Table{})`), and a new
+  `context.WithCancel(context.Background())`-scoped watch is opened. `Watch` lists
+  internally before streaming, so its **first RESET event repopulates the table** —
+  no separate List call. Focus moves to the table (drilling *in* is the gesture to
+  start browsing rows; `nav.left` at the table's left edge returns to the menu, D60).
+  A `Watch` start error surfaces a classified `ErrorMsg` and leaves no watch state.
+- **Watch-pump messages are generation-tagged (`watchMsg{gen, msg}`).** Every pump is
+  tagged with the `watchGen` current when issued (bumped on each new selection). A
+  message whose gen ≠ the model's current `watchGen` comes from a superseded watch
+  whose channel is still draining after cancellation, and is **dropped** — it must not
+  mutate the table now showing a different resource, nor re-issue a pump that would
+  then read the *current* watch's channel and put a second reader on it. This is the
+  same stale-message guard `seqGen` gives the sequence timeout (D61). `ResourceEventMsg`
+  → `table.ApplyEvent` + re-issue the pump; a watch `ErrorMsg` re-issues the pump (the
+  watch loop retries and re-lists on recovery — visible error surfacing on the pane is
+  a later slice); `WatchClosedMsg` clears the channel and ends the chain (no re-issue).
+- **Namespace scope is "" (all) for now**; the namespace picker re-scopes it in M2-08.
+  `app.quit` cancels the current watch before `tea.Quit` so its goroutine unwinds.
+- **Deps:** none new.

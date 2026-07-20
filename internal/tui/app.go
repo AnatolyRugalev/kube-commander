@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
@@ -13,6 +16,30 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
+
+// ResourceWatcher is the narrow slice of the kube layer the shell needs to start
+// a live table: a server-side Table watch for a resource, streaming deltas on a
+// channel until the passed context is cancelled. *kube.Clients satisfies it. The
+// shell depends on this interface, not the concrete client, so the root model is
+// driveable in hermetic tests with a fake watch channel (D18) and so the tui
+// package never has to construct a client. A model built without a watcher (the
+// default — New()/NewWithKeymap with no WithWatcher) is watch-inert: selecting a
+// resource is a no-op, which is what the pre-launch app and the M2-07b tests want.
+type ResourceWatcher interface {
+	Watch(ctx context.Context, r kube.Resource, namespace string, opts metav1.ListOptions) (<-chan kube.WatchEvent, error)
+}
+
+// Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
+// working unchanged (no watcher) while letting the launcher inject a live client
+// (WithWatcher) and future slices add their own dependencies (e.g. a discoverer
+// in M2-07d) without churning the constructor signature.
+type Option func(*Model)
+
+// WithWatcher wires the kube watch client the shell uses to start live tables.
+// Without it the model is watch-inert.
+func WithWatcher(w ResourceWatcher) Option {
+	return func(m *Model) { m.watcher = w }
+}
 
 // Layout constants. The status bar takes one line at the bottom; the two browse
 // panes split the width, the menu (left) sized as a fraction with sensible floors
@@ -24,16 +51,18 @@ const (
 )
 
 // Model is kubecom's root Bubble Tea model — the M2 app shell that replaces the
-// M0 placeholder. This is slice M2-07b: the two-pane browse layout. The root
-// model owns the resolved keymap and the single mutable input state (a
-// *keymap.Sequencer), turns every keypress into an Action through that sequencer
-// (never matching a raw key — D11), embeds the toggleable help overlay, and now
-// composes the resource menu (left pane), resource table (right pane), and status
-// bar (bottom line). Exactly one pane holds focus; nav.left/nav.right switch
-// between them (with the table's horizontal scroll taking precedence until it is
-// at its left edge — D60), and every other nav action is routed to the focused
-// pane. The live watch wiring (menu selection → kube.Watch → table) is M2-07c and
-// the async discovery reconcile + spinner is M2-07d.
+// M0 placeholder. Through slice M2-07c it owns the resolved keymap and the single
+// mutable input state (a *keymap.Sequencer), turns every keypress into an Action
+// through that sequencer (never matching a raw key — D11), embeds the toggleable
+// help overlay, and composes the resource menu (left pane), resource table (right
+// pane), and status bar (bottom line). Exactly one pane holds focus;
+// nav.left/nav.right switch between them (with the table's horizontal scroll
+// taking precedence until it is at its left edge — D60), and every other nav
+// action is routed to the focused pane. Drilling into a menu item (M2-07c) starts
+// a live kube.Watch for that resource, streams its deltas into the table through
+// the M2-02 watch pump (ApplyEvent), and moves focus to the table; selecting
+// another resource cancels the previous watch, a stale-generation guard dropping
+// any in-flight deltas from it. The async discovery reconcile + spinner is M2-07d.
 //
 // It holds no shared mutable state (principle 1): the Sequencer is a pointer so
 // its buffered prefix survives the value-model copy Bubble Tea makes each Update,
@@ -49,6 +78,20 @@ type Model struct {
 	table  table.Model
 	status statusbar.Model
 
+	// watcher is the kube watch client (nil → watch-inert). namespace scopes the
+	// watch ("" = all namespaces until the M2-08 namespace picker lands). watchCh
+	// and watchCancel are the current live watch: watchCh is re-read to pull the
+	// next event, watchCancel tears it down when a newer resource is selected (or
+	// the app quits). watchGen tags every watch-pump message so a delta from a
+	// superseded watch — whose channel is already being drained — is dropped rather
+	// than applied or used to re-issue a pump on the new channel (the same stale-
+	// message guard seqGen gives the sequence timeout, D61).
+	watcher     ResourceWatcher
+	namespace   string
+	watchCh     <-chan kube.WatchEvent
+	watchCancel context.CancelFunc
+	watchGen    int
+
 	// seqGen tags each pending-sequence timer so a stale tick (superseded by a
 	// newer pending) is ignored rather than firing the wrong action (D48/D61).
 	seqGen int
@@ -59,16 +102,19 @@ type Model struct {
 
 // New returns the root model wired to the default keymap. Config-driven key
 // overrides are applied by the caller that constructs the keymap (M2-01c/M2-11);
-// this constructor keeps the built-in vim-first defaults.
-func New() Model {
-	return NewWithKeymap(keymap.DefaultKeymap())
+// this constructor keeps the built-in vim-first defaults. Options (e.g.
+// WithWatcher) are forwarded to NewWithKeymap.
+func New(opts ...Option) Model {
+	return NewWithKeymap(keymap.DefaultKeymap(), opts...)
 }
 
 // NewWithKeymap returns the root model over an already-resolved keymap, so the
 // command layer can hand in a config-merged keymap without this package importing
-// config (one-way dependency, as in kubecom keys). The menu starts focused (the
-// user picks a resource before drilling into its table).
-func NewWithKeymap(km *keymap.Keymap) Model {
+// config (one-way dependency, as in kubecom keys). Options wire optional
+// dependencies (the watch client via WithWatcher); with none the model is
+// watch-inert. The menu starts focused (the user picks a resource before drilling
+// into its table).
+func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	s := styles.Default()
 	m := Model{
 		keymap: km,
@@ -79,6 +125,9 @@ func NewWithKeymap(km *keymap.Keymap) Model {
 		table:  table.New(s),
 		status: statusbar.New(s),
 	}
+	for _, opt := range opts {
+		opt(&m)
+	}
 	m.menu.Focus()
 	m.status.SetShortHelp(m.help.ShortHelpView())
 	return m
@@ -87,6 +136,18 @@ func NewWithKeymap(km *keymap.Keymap) Model {
 // seqTimeoutMsg fires SequenceTimeout after a pending multi-key prefix (D48). Its
 // gen must match the model's current seqGen or the tick is stale and ignored.
 type seqTimeoutMsg struct{ gen int }
+
+// watchMsg wraps one message from a watch pump with the generation of the watch
+// it belongs to. The model tags every pump this way so a message from a watch
+// already superseded by a newer selection (its channel is being drained after
+// cancellation) can be dropped: a stale delta must not mutate the table now
+// showing a different resource, nor re-issue a pump that would then read the
+// *current* watch's channel and race a second reader onto it. gen must equal the
+// model's watchGen or the message is ignored (mirrors seqTimeoutMsg's guard).
+type watchMsg struct {
+	gen int
+	msg tea.Msg
+}
 
 // Init implements tea.Model. The shell has no startup command yet; async
 // discovery is kicked off in M2-07d.
@@ -127,6 +188,84 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if r := m.seq.Timeout(); r.Kind == keymap.ResultAction {
 			return m.handleAction(r.Action)
 		}
+		return m, nil
+
+	case menu.ResourceSelectedMsg:
+		return m.selectResource(msg.Resource)
+
+	case watchMsg:
+		return m.handleWatchMsg(msg)
+	}
+	return m, nil
+}
+
+// selectResource (re)starts the live table for the resource the user drilled into.
+// The previous watch is cancelled and its in-flight pump messages made stale (the
+// watchGen bump); the table is blanked so the old resource's rows do not linger
+// behind the new one — the new watch's first RESET event repopulates it (Watch
+// lists internally before streaming deltas, so no separate List is needed). Focus
+// moves to the table: drilling into a resource is the gesture to start browsing
+// its rows, so the table takes over from the menu (nav.left at the table's left
+// edge returns focus to the menu, D60/D62). With no watcher wired the model is
+// watch-inert and this is a no-op.
+func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
+	if m.watcher == nil {
+		return m, nil
+	}
+	if m.watchCancel != nil {
+		m.watchCancel()
+		m.watchCancel = nil
+	}
+	m.watchGen++
+	m.watchCh = nil
+	m.table.SetTable(kube.Table{}) // blank until the watch's first RESET arrives.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := m.watcher.Watch(ctx, r, m.namespace, metav1.ListOptions{})
+	if err != nil {
+		cancel()
+		return m, func() tea.Msg { return NewErrorMsg("watch "+r.GVR.Resource, err) }
+	}
+	m.watchCancel = cancel
+	m.watchCh = ch
+
+	m.menu.Blur()
+	m.table.Focus()
+	return m, m.pumpWatch()
+}
+
+// pumpWatch issues the tea.Cmd that pulls the next event from the current watch
+// channel, tagged with the current watchGen so a message from a superseded watch
+// is recognisable as stale. It returns nil when no watch is active.
+func (m Model) pumpWatch() tea.Cmd {
+	gen, ch := m.watchGen, m.watchCh
+	if ch == nil {
+		return nil
+	}
+	pump := watchPump(ch)
+	return func() tea.Msg { return watchMsg{gen: gen, msg: pump()} }
+}
+
+// handleWatchMsg applies one watch-pump message to the table and re-issues the
+// pump to pull the next event — the one-receive-per-Cmd loop that keeps Update
+// from ever blocking (M2-02). A message from a superseded watch (wrong gen) is
+// dropped and its chain stops. A data delta is folded onto the table preserving
+// the selection (ApplyEvent); a watch ERROR keeps the chain alive (the watch loop
+// retries and re-lists on recovery, emitting a fresh RESET — visible error
+// surfacing on the pane is a later slice); a closed channel ends the chain.
+func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
+	if w.gen != m.watchGen {
+		return m, nil // superseded by a newer selection; drop and stop this chain.
+	}
+	switch inner := w.msg.(type) {
+	case ResourceEventMsg:
+		m.table.ApplyEvent(inner.Event)
+		return m, m.pumpWatch()
+	case ErrorMsg:
+		return m, m.pumpWatch()
+	case WatchClosedMsg:
+		m.watchCh = nil
+		m.watchCancel = nil
 		return m, nil
 	}
 	return m, nil
@@ -188,6 +327,9 @@ func (m Model) scheduleTimeout() tea.Cmd {
 func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionQuit:
+		if m.watchCancel != nil {
+			m.watchCancel() // tear the watch goroutine down before the program exits.
+		}
 		return m, tea.Quit
 	case keymap.ActionHelp:
 		m.help.Toggle()

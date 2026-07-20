@@ -2,11 +2,17 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	teatest "github.com/charmbracelet/x/exp/teatest/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 )
 
 // sized returns the model after a WindowSizeMsg so View renders (it draws nothing
@@ -15,6 +21,48 @@ func sized(t *testing.T) Model {
 	t.Helper()
 	m, _ := New().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return m.(Model)
+}
+
+// sizedWith is sized() with construction options (e.g. WithWatcher).
+func sizedWith(t *testing.T, opts ...Option) Model {
+	t.Helper()
+	m, _ := New(opts...).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	return m.(Model)
+}
+
+// fakeWatcher is a hermetic ResourceWatcher: it hands back a preset channel (per
+// call) and records the contexts it was given so a test can assert the previous
+// watch was cancelled when a new resource is selected.
+type fakeWatcher struct {
+	chans []chan kube.WatchEvent // one per call, in order; a fresh one each Watch
+	err   error
+	ctxs  []context.Context
+	res   []kube.Resource
+	ns    []string
+}
+
+func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, _ metav1.ListOptions) (<-chan kube.WatchEvent, error) {
+	f.ctxs = append(f.ctxs, ctx)
+	f.res = append(f.res, r)
+	f.ns = append(f.ns, ns)
+	if f.err != nil {
+		return nil, f.err
+	}
+	ch := make(chan kube.WatchEvent, 1)
+	f.chans = append(f.chans, ch)
+	return ch, nil
+}
+
+func gvrResource(name string) kube.Resource {
+	return kube.Resource{GVR: schema.GroupVersionResource{Resource: name}}
+}
+
+func resetEvent(name, uid string) kube.WatchEvent {
+	return kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "NAME"}},
+		Rows:    []kube.Row{{Cells: []any{name}, Object: kube.ObjectRef{Name: name, UID: uid}}},
+	}
 }
 
 // press feeds one live keypress through the root model's Update, as Bubble Tea
@@ -199,6 +247,147 @@ func TestNavRoutedToFocusedPane(t *testing.T) {
 	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
 	if m.menu.Cursor() != 1 {
 		t.Fatalf("nav.down should not move the blurred menu, got %d", m.menu.Cursor())
+	}
+}
+
+// TestSelectResourceStartsWatch proves drilling into a resource starts a watch,
+// moves focus to the table, and that the watch's first RESET populates the table
+// through the pump → ApplyEvent path (M2-07c).
+func TestSelectResourceStartsWatch(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+
+	if len(fw.chans) != 1 {
+		t.Fatalf("expected 1 Watch call, got %d", len(fw.chans))
+	}
+	if fw.res[0].GVR.Resource != "pods" {
+		t.Fatalf("watched wrong resource: %q", fw.res[0].GVR.Resource)
+	}
+	if !m.table.Focused() || m.menu.Focused() {
+		t.Fatal("selecting a resource should move focus to the table")
+	}
+	if cmd == nil {
+		t.Fatal("selecting a resource should issue a watch pump")
+	}
+
+	// Deliver a RESET; running the pump cmd yields a watchMsg carrying it, and
+	// applying that watchMsg populates the table.
+	fw.chans[0] <- resetEvent("pod-a", "u1")
+	wm, ok := cmd().(watchMsg)
+	if !ok {
+		t.Fatalf("pump produced %T, want watchMsg", cmd())
+	}
+	if wm.gen != m.watchGen {
+		t.Fatalf("pump tagged gen %d, want current %d", wm.gen, m.watchGen)
+	}
+	next, cmd = m.Update(wm)
+	m = next.(Model)
+	if !bytes.Contains([]byte(m.table.View()), []byte("pod-a")) {
+		t.Fatalf("RESET did not populate the table: %q", m.table.View())
+	}
+	if cmd == nil {
+		t.Fatal("a delivered event should re-issue the pump for the next event")
+	}
+}
+
+// TestSelectResourceInertWithoutWatcher proves a model built with no watcher is
+// watch-inert: selecting a resource is a no-op (no focus change, no command).
+func TestSelectResourceInertWithoutWatcher(t *testing.T) {
+	m := sized(t) // no WithWatcher
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("watch-inert model should issue no command on selection")
+	}
+	if m.table.Focused() || !m.menu.Focused() {
+		t.Fatal("watch-inert selection should not move focus")
+	}
+}
+
+// TestSelectResourceCancelsPrevious proves selecting a second resource cancels the
+// first watch's context and that a stale delta from it (old generation) is dropped
+// rather than applied to the table now showing the new resource.
+func TestSelectResourceCancelsPrevious(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	staleGen := m.watchGen
+
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("nodes")})
+	m = next.(Model)
+
+	if len(fw.ctxs) != 2 {
+		t.Fatalf("expected 2 Watch calls, got %d", len(fw.ctxs))
+	}
+	if fw.ctxs[0].Err() == nil {
+		t.Fatal("selecting a new resource should cancel the previous watch context")
+	}
+	if m.watchGen == staleGen {
+		t.Fatal("a new selection should bump the watch generation")
+	}
+
+	// A stale delta from the first watch (old gen) must be dropped: no table change,
+	// no re-issued pump.
+	next, staleCmd := m.Update(watchMsg{gen: staleGen, msg: ResourceEventMsg{Event: resetEvent("pod-a", "u1")}})
+	m = next.(Model)
+	if staleCmd != nil {
+		t.Fatal("a stale-generation watch message should not re-issue the pump")
+	}
+	if bytes.Contains([]byte(m.table.View()), []byte("pod-a")) {
+		t.Fatal("a stale delta must not populate the table for the new resource")
+	}
+
+	// The current watch's RESET does populate it.
+	next, _ = m.Update(watchMsg{gen: m.watchGen, msg: ResourceEventMsg{Event: resetEvent("node-a", "u2")}})
+	m = next.(Model)
+	if !bytes.Contains([]byte(m.table.View()), []byte("node-a")) {
+		t.Fatalf("current RESET did not populate the table: %q", m.table.View())
+	}
+	_ = cmd
+}
+
+// TestWatchClosedStopsChain proves a WatchClosedMsg for the current watch clears
+// the channel and does not re-issue the pump (which would busy-loop on a closed
+// channel).
+func TestWatchClosedStopsChain(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	if m.watchCh == nil {
+		t.Fatal("a started watch should hold a channel")
+	}
+
+	next, cmd := m.Update(watchMsg{gen: m.watchGen, msg: WatchClosedMsg{}})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("WatchClosedMsg must not re-issue the pump")
+	}
+	if m.watchCh != nil {
+		t.Fatal("WatchClosedMsg should clear the watch channel")
+	}
+}
+
+// TestWatchStartErrorSurfaces proves a Watch that fails to start surfaces a
+// classified ErrorMsg and leaves no dangling watch state.
+func TestWatchStartErrorSurfaces(t *testing.T) {
+	fw := &fakeWatcher{err: context.DeadlineExceeded}
+	m := sizedWith(t, WithWatcher(fw))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	if m.watchCh != nil || m.watchCancel != nil {
+		t.Fatal("a failed watch start should leave no watch state")
+	}
+	if cmd == nil {
+		t.Fatal("a failed watch start should surface an error")
+	}
+	if _, ok := cmd().(ErrorMsg); !ok {
+		t.Fatalf("expected ErrorMsg, got %T", cmd())
 	}
 }
 

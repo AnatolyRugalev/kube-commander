@@ -54,8 +54,14 @@ pane), and the M2-04 status bar (bottom line), sized on `WindowSizeMsg`; exactly
 pane holds focus (menu first), `nav.right`/`nav.left` switch focus between panes (the
 table's horizontal scroll taking precedence until `HOffset()==0`, D60), non-switching
 nav routes to the focused pane, and the open help overlay swallows navigation (D62).
-Top-unblocked next is **M2-07c** (wire the live table to `kube.Watch` via the M2-02
-pump: menu selection starts/stops the watch, `ResourceEventMsg`→`table.ApplyEvent`)._
+**M2-07c** wired the live table to `kube.Watch`: drilling into a menu item starts a
+watch for that resource (through a narrow `ResourceWatcher` seam injected by
+`WithWatcher`; nil → watch-inert) and streams its deltas into the table via the M2-02
+pump — `ResourceEventMsg`→`ApplyEvent`, the first RESET repopulating it; a new
+selection cancels the previous watch, a `watchGen` guard dropping its in-flight deltas,
+and focus moves to the table (D63). Top-unblocked next is **M2-07d** (kick off async
+discovery on `Init`, route `DiscoveryReadyMsg` into the menu's M2-05b `Reconcile` and
+the status-bar spinner — a `Discoverer` seam/option mirroring `WithWatcher`)._
 
 ## Goal
 
