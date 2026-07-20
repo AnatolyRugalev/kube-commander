@@ -34,3 +34,9 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `app.searchPrev` | `N` | Previous match |
 | `app.help` | `?` | Toggle help |
 | `app.quit` | `q` / `ctrl+c` | Quit |
+
+## ns
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `ns.switch` | `ctrl+n` | Switch namespace |

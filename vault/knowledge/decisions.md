@@ -1737,3 +1737,33 @@ constraints bind future legs, chiefly the M2-08c app wiring:
 
 **Why:** locks the seam M2-08c wires against, and prevents a future leg from
 reintroducing list-native filtering (its own `/` key would leak a raw binding).
+
+### D73 — M2-08c: namespace switch is a `ns.switch` action + a `NamespaceLister` seam; picker re-scopes the current watch
+**2026-07-20.** The namespace switcher is wired into the app shell as an action, a
+seam, and a re-scope, each a constraint future legs (context/container/port pickers,
+config persistence) build on:
+- **`ns.switch` action, default `ctrl+n`.** A new `ns` action namespace (its own
+  help column / doc section). `ctrl+n` is the default so `:` stays free for a future
+  command palette; rebindable like any action (D11). Future switchers get their own
+  `<group>.switch` action, not more keys hard-coded in views.
+- **`NamespaceLister` seam** (`Namespaces(ctx) ([]string, error)`), wired with
+  `WithNamespaceLister`, mirroring `WithWatcher`/`WithDiscoverer`: `*kube.Clients`
+  satisfies it, nil → **namespace-switch-inert** (the action is a no-op, the picker
+  never opens). Listing runs off the update loop (async `namespacesLoadedMsg`), so
+  opening the picker never blocks on the network; a list failure closes the picker
+  and surfaces a classified error (principle 3), never crashes.
+- **Selection re-scopes the live watch.** The shell tracks the `current` resource
+  (set whenever a watch starts); a `picker.SelectedMsg` sets `m.namespace` +
+  `status.SetNamespace` and re-selects `current` so the M2-07c watch re-lists under
+  the new scope. With no resource open yet the scope is just stored for the next
+  drill-in.
+- **Concrete input routing (realizes D72's split).** While `nsPicker.Filtering()`,
+  the root model routes a keypress to `UpdateFilter` when it carries text **or** is an
+  unmapped no-text edit key (backspace); a *mapped* no-text key (esc/enter/arrows/
+  `ctrl+d`…) resolves to a picker `Action`. Outside filtering, mapped keys drive the
+  picker and unmapped keys are dropped. The open picker captures **all** input before
+  the sequencer, so the panes underneath never move.
+
+**Why:** locks the switcher shape so the later ctx/container/port pickers reuse the
+action+seam+routing pattern instead of re-deriving it, and keeps the "all input
+through actions" invariant (D11) intact around the one sanctioned text field.

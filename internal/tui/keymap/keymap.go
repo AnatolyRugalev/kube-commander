@@ -46,6 +46,7 @@ const (
 	ActionSearchPrev   Action = "app.searchPrev"
 	ActionHelp         Action = "app.help"
 	ActionQuit         Action = "app.quit"
+	ActionNamespace    Action = "ns.switch"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -72,6 +73,7 @@ var actionMeta = []struct {
 	{ActionSearchPrev, "Previous match"},
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
+	{ActionNamespace, "Switch namespace"},
 }
 
 var registered = func() map[Action]string {
@@ -122,6 +124,7 @@ var defaultBindings = map[Action][]string{
 	ActionSearchPrev:   {"N"},
 	ActionHelp:         {"?"},
 	ActionQuit:         {"q", "ctrl+c"},
+	ActionNamespace:    {"ctrl+n"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

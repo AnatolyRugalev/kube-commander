@@ -4,13 +4,14 @@ import (
 	"context"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/help"
@@ -43,6 +44,17 @@ type Discoverer interface {
 	StartDiscovery(ctx context.Context) <-chan kube.DiscoveryResult
 }
 
+// NamespaceLister is the narrow slice of the kube layer the shell needs to seed
+// the namespace picker (M2-08c): it lists the cluster's namespace names. As with
+// ResourceWatcher/Discoverer the shell depends on this interface, not the concrete
+// client, so the tui package never constructs a client and the model is driveable
+// in hermetic tests with a fake lister. A model built without a lister (the
+// default) is namespace-switch-inert: the ns.switch action is a no-op (the picker
+// never opens), which is what the pre-launch app and the non-picker tests want.
+type NamespaceLister interface {
+	Namespaces(ctx context.Context) ([]string, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -64,10 +76,16 @@ func WithDiscoverer(d Discoverer) Option {
 
 // WithNamespace scopes the initial live watch to ns ("" = all namespaces, the
 // default). It seeds m.namespace at construction so the launcher can honour a
-// `-n`/`--namespace` flag; the M2-08 namespace picker later re-scopes it at
-// runtime through the same field.
+// `-n`/`--namespace` flag; the namespace picker (M2-08c) re-scopes it at runtime
+// through the same field.
 func WithNamespace(ns string) Option {
 	return func(m *Model) { m.namespace = ns }
+}
+
+// WithNamespaceLister wires the kube client the shell uses to seed the namespace
+// picker. Without it the ns.switch action is inert (the picker never opens).
+func WithNamespaceLister(l NamespaceLister) Option {
+	return func(m *Model) { m.nsLister = l }
 }
 
 // Layout constants. The status bar takes one line at the bottom; the two browse
@@ -106,9 +124,10 @@ type Model struct {
 	help   help.Model
 	styles styles.Styles
 
-	menu   menu.Model
-	table  table.Model
-	status statusbar.Model
+	menu     menu.Model
+	table    table.Model
+	status   statusbar.Model
+	nsPicker picker.Model
 
 	// watcher is the kube watch client (nil → watch-inert). namespace scopes the
 	// watch ("" = all namespaces until the M2-08 namespace picker lands). watchCh
@@ -123,6 +142,16 @@ type Model struct {
 	watchCh     <-chan kube.WatchEvent
 	watchCancel context.CancelFunc
 	watchGen    int
+
+	// current is the resource whose live table is showing (hasCurrent guards it);
+	// the namespace picker re-scopes the watch by re-selecting it with the new
+	// m.namespace (M2-08c). It is set every time selectResource starts a watch.
+	current    kube.Resource
+	hasCurrent bool
+
+	// nsLister seeds the namespace picker (nil → ns.switch inert). nsPicker (below,
+	// with the other components) is the modal itself.
+	nsLister NamespaceLister
 
 	// discoverer runs the async discovery pass that reconciles the menu (nil →
 	// discovery-inert; the menu stays on its static seed). discoveryCancel tears
@@ -156,19 +185,21 @@ func New(opts ...Option) Model {
 func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	s := styles.Default()
 	m := Model{
-		keymap: km,
-		seq:    keymap.NewSequencer(km),
-		help:   help.New(km),
-		styles: s,
-		menu:   menu.New(s),
-		table:  table.New(s),
-		status: statusbar.New(s),
+		keymap:   km,
+		seq:      keymap.NewSequencer(km),
+		help:     help.New(km),
+		styles:   s,
+		menu:     menu.New(s),
+		table:    table.New(s),
+		status:   statusbar.New(s),
+		nsPicker: picker.New(s, "namespace"),
 	}
 	for _, opt := range opts {
 		opt(&m)
 	}
 	m.menu.Focus()
 	m.status.SetShortHelp(m.help.ShortHelpView())
+	m.status.SetNamespace(m.namespace) // reflect the -n scope (empty renders nothing)
 	return m
 }
 
@@ -222,6 +253,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		if m.nsPicker.Active() {
+			return m.routePickerKey(msg)
+		}
 		switch r := m.seq.Input(msg.Key()); r.Kind {
 		case keymap.ResultAction:
 			return m.handleAction(r.Action)
@@ -255,6 +289,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DiscoveryReadyMsg:
 		return m.handleDiscovery(msg)
+
+	case namespacesLoadedMsg:
+		return m.handleNamespacesLoaded(msg)
+
+	case picker.SelectedMsg:
+		return m.handleNamespaceSelected(msg)
+
+	case picker.CancelledMsg:
+		m.nsPicker.Hide()
+		return m, nil
 
 	case spinner.TickMsg:
 		// The status bar owns the discovery spinner; forward its ticks so the
@@ -296,6 +340,8 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	}
 	m.watchCancel = cancel
 	m.watchCh = ch
+	m.current = r
+	m.hasCurrent = true
 
 	m.menu.Blur()
 	m.table.Focus()
@@ -373,6 +419,89 @@ func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// namespacesLoadedMsg carries the outcome of the async namespace list issued when
+// the picker opens (M2-08c). It seeds the already-shown picker; listing happens
+// off the update loop so opening the picker never blocks on the network.
+type namespacesLoadedMsg struct {
+	namespaces []string
+	err        error
+}
+
+// openNamespacePicker shows the namespace picker and kicks off the async list that
+// seeds it. With no lister wired the model is namespace-switch-inert and this is a
+// no-op (the picker never opens). The picker is shown immediately (empty, then
+// populated when the list lands) so the gesture feels instant; a stale item set
+// from a previous open is cleared first.
+func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
+	if m.nsLister == nil {
+		return m, nil
+	}
+	m.nsPicker.SetItems(nil)
+	m.nsPicker.Show()
+	lister := m.nsLister
+	return m, func() tea.Msg {
+		ns, err := lister.Namespaces(context.Background())
+		return namespacesLoadedMsg{namespaces: ns, err: err}
+	}
+}
+
+// handleNamespacesLoaded seeds the open picker with the listed namespaces. A list
+// failure surfaces a classified error and closes the picker (principle 3 — the
+// switcher degrades, the app does not crash). A result that arrives after the user
+// already dismissed the picker is dropped.
+func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.nsPicker.Hide()
+		return m, func() tea.Msg { return NewErrorMsg("list namespaces", msg.err) }
+	}
+	if !m.nsPicker.Active() {
+		return m, nil // dismissed before the list arrived; ignore.
+	}
+	m.nsPicker.SetItems(msg.namespaces)
+	return m, nil
+}
+
+// handleNamespaceSelected applies the picked namespace: it closes the picker,
+// records the new scope on the model and the status bar, and re-scopes the live
+// table by re-selecting the current resource with the new m.namespace (M2-07c's
+// watch reads that field). With no resource open yet the scope is simply stored
+// for the next selection.
+func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.nsPicker.Hide()
+	m.namespace = msg.Value
+	m.status.SetNamespace(msg.Value)
+	if m.hasCurrent && m.watcher != nil {
+		return m.selectResource(m.current)
+	}
+	return m, nil
+}
+
+// routePickerKey resolves one keypress while the namespace picker is open. The
+// picker captures all input (the panes and the sequencer never see it): a control
+// key (esc/enter/arrows/page keys, and ctrl+d/u) resolves to an Action the picker
+// consumes, while any text-producing or editing key is filter input routed to the
+// field. The split is by whether the key carries text — a printable rune types,
+// everything without text (incl. a bound vim letter like `j`) is a control action,
+// and an unmapped no-text key (backspace) still reaches the filter for editing
+// (D73). No view matches a raw key for behaviour (D11).
+func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	action, mapped := m.keymap.Action(key)
+	var cmd tea.Cmd
+	if m.nsPicker.Filtering() {
+		if mapped && key.Text == "" {
+			m.nsPicker, cmd = m.nsPicker.Update(action)
+		} else {
+			m.nsPicker, cmd = m.nsPicker.UpdateFilter(msg)
+		}
+		return m, cmd
+	}
+	if mapped {
+		m.nsPicker, cmd = m.nsPicker.Update(action)
+	}
+	return m, cmd
+}
+
 // resize lays the panes out inside the current terminal: the status bar takes the
 // bottom line, and the menu and table split the remaining width (menu a fraction
 // with floors so the table always keeps room). Both panes are sized to their
@@ -392,6 +521,9 @@ func (m *Model) resize() {
 	}
 	m.menu.SetSize(menuW, bodyH)
 	m.table.SetSize(tableW, bodyH)
+	// The picker overlays the body area (above the status bar) and centers itself
+	// within it, so the status line stays visible behind the modal.
+	m.nsPicker.SetSize(m.width, bodyH)
 }
 
 // menuPaneWidth is the menu pane's total width for a given terminal width: a
@@ -450,6 +582,9 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if m.help.Visible() {
 		return m, nil // the overlay swallows navigation while it is open.
 	}
+	if a == keymap.ActionNamespace {
+		return m.openNamespacePicker()
+	}
 	return m.routeNav(a)
 }
 
@@ -501,9 +636,12 @@ func (m Model) View() tea.View {
 	}
 
 	var body string
-	if m.help.Visible() {
+	switch {
+	case m.help.Visible():
 		body = m.help.View()
-	} else {
+	case m.nsPicker.Active():
+		body = m.nsPicker.View()
+	default:
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), m.table.View())
 	}
 

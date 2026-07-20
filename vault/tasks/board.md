@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M2-08b landed: the modal picker filters itself over an owned textinput (D72). Next board pick when the inbox is empty: M2-08c. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-20 — M2-08c landed: the namespace picker is wired into the app shell (`ns.switch`/`ctrl+n` + `NamespaceLister` seam; selection re-scopes the live watch, D73). M2-08 complete. Next board pick when the inbox is empty: M2-09. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -72,25 +72,6 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-08** Namespace picker (`internal/tui/components/picker`, bubbles/list)
-      status: in-progress (split into 08a/08b/08c) | owner: — | added: 2026-07-19
-      notes: Namespace switcher over a `bubbles/list`; scaffolding reused later for
-      context/container/port pickers. Filtering handled by the picker; selection
-      emits a "namespace changed" msg that re-scopes the watch. Depends on: M2-07c.
-      **Split** (component too big for one leg): **08a** generic picker component
-      (render + keymap-action nav + select/cancel msgs) — in progress; **08b** add
-      filtering to the picker (bubbles native filter / textinput); **08c** wire the
-      namespace picker into the app shell (keymap `ns.switch` action + a
-      `NamespaceLister` seam; open/select re-scopes the watch via `m.namespace`;
-      regenerate `docs/keybindings.md`).
-- [ ] **M2-08c** Wire namespace picker into the app shell (`internal/tui/app.go`)
-      status: todo | owner: — | added: 2026-07-20
-      notes: Add a `ns.switch` keymap action + a narrow `NamespaceLister` seam
-      (mirroring `WithWatcher`/`WithDiscoverer`); the action opens the picker seeded
-      with namespaces; selection sets `m.namespace` and re-scopes the live watch
-      (M2-07c already reads `m.namespace`); regenerate `docs/keybindings.md`
-      (golden drift-check). Depends on: M2-08a, M2-08b.
-
 - [ ] **M2-09** Table filter (`bubbles/textinput`)
       status: todo | owner: — | added: 2026-07-19
       notes: `/`-triggered filter (keymap `filter.open`) over the current table's
@@ -135,6 +116,8 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-08c** Wire namespace picker into the app shell: `ns.switch`/`ctrl+n` action + `NamespaceLister` seam (`WithNamespaceLister`, nil → inert); async list seeds the picker, selection sets `m.namespace` + status bar and re-scopes the live watch, `docs/keybindings.md` regenerated — done 2026-07-20 (D73)
+- [x] **M2-08** Namespace picker (08a component / 08b filtering / 08c app wiring) — done 2026-07-20 (D65, D72, D73)
 - [x] **M2-RUN** Bare `kubecom` launches the browse UI against a real cluster (root `RunE` + kubeconfig/context/`-n` flags → live `*kube.Clients` via `WithWatcher`/`WithDiscoverer`/`WithNamespace`; graceful on bad kubeconfig; file logging) — done 2026-07-20 (D70, D71) | follow-up: human live-cluster dogfood of drill-in/live rows (D68), not reproducible in the sandbox
 - [x] **M2-08b** Picker filtering: picker-owned textinput, case-insensitive substring narrowing, control/text key split, back clears-then-cancels — done 2026-07-20 (D11, D65, D72)
 - [x] **M2-08a** Generic modal picker component — done 2026-07-20 (D11, D45, D56, D65)

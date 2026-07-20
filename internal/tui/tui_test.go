@@ -13,6 +13,7 @@ import (
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
 
 // sized returns the model after a WindowSizeMsg so View renders (it draws nothing
@@ -497,6 +498,178 @@ func TestDiscoveryTotalFailureKeepsSeed(t *testing.T) {
 	}
 	if got := len(m.menu.Items()); got != before {
 		t.Fatalf("a total failure should leave the seed menu intact: had %d, now %d", before, got)
+	}
+}
+
+// fakeLister is a hermetic NamespaceLister: it hands back a preset namespace set
+// (or error) and counts calls.
+type fakeLister struct {
+	ns   []string
+	err  error
+	call int
+}
+
+func (f *fakeLister) Namespaces(context.Context) ([]string, error) {
+	f.call++
+	return f.ns, f.err
+}
+
+// ctrlN is the ns.switch default key.
+var ctrlN = tea.Key{Code: 'n', Mod: tea.ModCtrl}
+
+// TestNamespaceSwitchOpensAndSeeds proves ctrl+n (ns.switch) opens the picker and
+// issues an async list whose result seeds it.
+func TestNamespaceSwitchOpensAndSeeds(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+
+	m, cmd := press(t, m, ctrlN)
+	if !m.nsPicker.Active() {
+		t.Fatal("ns.switch should open the namespace picker")
+	}
+	if cmd == nil {
+		t.Fatal("opening the picker should issue a namespace list command")
+	}
+	lm, ok := cmd().(namespacesLoadedMsg)
+	if !ok {
+		t.Fatalf("list command produced %T, want namespacesLoadedMsg", cmd())
+	}
+	next, _ := m.Update(lm)
+	m = next.(Model)
+	if got := m.nsPicker.Len(); got != 2 {
+		t.Fatalf("picker seeded with %d namespaces, want 2", got)
+	}
+}
+
+// TestNamespaceSwitchInertWithoutLister proves a model with no lister is
+// namespace-switch-inert: ctrl+n opens nothing and issues no command.
+func TestNamespaceSwitchInertWithoutLister(t *testing.T) {
+	m := sized(t) // no WithNamespaceLister
+	m, cmd := press(t, m, ctrlN)
+	if m.nsPicker.Active() {
+		t.Fatal("ns.switch without a lister should not open the picker")
+	}
+	if cmd != nil {
+		t.Fatal("ns.switch without a lister should issue no command")
+	}
+}
+
+// TestNamespaceListErrorClosesPicker proves a failed namespace list surfaces an
+// error and closes the picker (degrade, don't crash — principle 3).
+func TestNamespaceListErrorClosesPicker(t *testing.T) {
+	fl := &fakeLister{err: context.DeadlineExceeded}
+	m := sizedWith(t, WithNamespaceLister(fl))
+	m, cmd := press(t, m, ctrlN)
+	next, errCmd := m.Update(cmd()) // deliver namespacesLoadedMsg{err:…}
+	m = next.(Model)
+	if m.nsPicker.Active() {
+		t.Fatal("a failed list should close the picker")
+	}
+	if errCmd == nil {
+		t.Fatal("a failed list should surface an error")
+	}
+	if _, ok := errCmd().(ErrorMsg); !ok {
+		t.Fatalf("expected ErrorMsg, got %T", errCmd())
+	}
+}
+
+// TestNamespaceSelectRescopesWatch drives the whole switch: open the picker, filter
+// to a namespace, drill in — the selection re-scopes the live watch (a second Watch
+// with the new namespace) and updates m.namespace.
+func TestNamespaceSelectRescopesWatch(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system", "monitoring"}}
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithNamespaceLister(fl), WithWatcher(fw))
+
+	// Start a watch so the namespace change has something to re-scope.
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	if fw.ns[0] != "" {
+		t.Fatalf("initial watch namespace = %q, want all (\"\")", fw.ns[0])
+	}
+
+	// Open + seed the picker.
+	m, cmd := press(t, m, ctrlN)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	// Open the filter and narrow to "monitoring".
+	m, _ = press(t, m, tea.Key{Code: '/', Text: "/"})
+	if !m.nsPicker.Filtering() {
+		t.Fatal("app.filter should open the picker filter")
+	}
+	for _, r := range "mon" {
+		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
+	}
+	if got := m.nsPicker.Len(); got != 1 {
+		t.Fatalf("filter to 'mon' left %d items, want 1", got)
+	}
+
+	// Drill in (enter → nav.drillIn) selects the filtered value.
+	m, selCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	sel, ok := selCmd().(picker.SelectedMsg)
+	if !ok {
+		t.Fatalf("drill-in produced %T, want picker.SelectedMsg", selCmd())
+	}
+	if sel.Value != "monitoring" {
+		t.Fatalf("selected %q, want monitoring", sel.Value)
+	}
+	next, _ = m.Update(sel)
+	m = next.(Model)
+
+	if m.nsPicker.Active() {
+		t.Fatal("selecting a namespace should close the picker")
+	}
+	if m.namespace != "monitoring" {
+		t.Fatalf("m.namespace = %q, want monitoring", m.namespace)
+	}
+	if len(fw.ns) != 2 || fw.ns[1] != "monitoring" {
+		t.Fatalf("selection should re-scope the watch to monitoring, got ns calls %v", fw.ns)
+	}
+}
+
+// TestNamespacePickerCancels proves nav.back (esc) dismisses the picker without
+// changing the namespace.
+func TestNamespacePickerCancels(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+	m, cmd := press(t, m, ctrlN)
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	// esc → nav.back → picker emits CancelledMsg; delivering it hides the picker.
+	if cancelCmd == nil {
+		t.Fatal("back should emit a cancel command")
+	}
+	next, _ = m.Update(cancelCmd())
+	m = next.(Model)
+	if m.nsPicker.Active() {
+		t.Fatal("nav.back should close the picker")
+	}
+	if m.namespace != "" {
+		t.Fatalf("cancelling should not change the namespace, got %q", m.namespace)
+	}
+}
+
+// TestNamespacePickerCapturesInput proves the open picker captures navigation: a
+// nav key does not reach the panes underneath (the menu cursor stays put).
+func TestNamespacePickerCapturesInput(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+	m, cmd := press(t, m, ctrlN)
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	if m.menu.Cursor() != 0 {
+		t.Fatalf("menu should start at cursor 0, got %d", m.menu.Cursor())
+	}
+	// nav.down while the picker is open moves the picker cursor, not the menu.
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.menu.Cursor() != 0 {
+		t.Fatalf("picker should capture nav.down; menu moved to %d", m.menu.Cursor())
+	}
+	if v, _ := m.nsPicker.Selected(); v != "kube-system" {
+		t.Fatalf("nav.down should move the picker cursor to kube-system, got %q", v)
 	}
 }
 

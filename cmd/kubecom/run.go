@@ -78,6 +78,7 @@ func runTUI(opts runOptions) error {
 	model := tui.NewWithKeymap(km,
 		tui.WithWatcher(clients),
 		tui.WithDiscoverer(clients),
+		tui.WithNamespaceLister(clients),
 		tui.WithNamespace(opts.namespace),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
