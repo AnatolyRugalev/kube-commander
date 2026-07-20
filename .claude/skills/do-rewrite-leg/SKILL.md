@@ -65,7 +65,10 @@ if not already in context. Follow these steps in order.
 ## 6. Record decisions & knowledge
 
 - Append any non-obvious, load-bearing decision to `vault/knowledge/decisions.md`
-  as the next `Dn` (date it; supersede rather than contradict).
+  as the next `Dn` (date it; supersede rather than contradict). A `Dn` is a
+  **constraint a future leg must not silently contradict** — not a description of
+  how this leg was built. Implementation detail goes in the journal; the
+  decisions log is skimmed every leg, so keep it load-bearing (D67).
 - Add durable learnings (API quirks, legacy behavior, gotchas) to the relevant
   `vault/knowledge/` file so the next agent doesn't re-derive them.
 
@@ -76,7 +79,9 @@ if not already in context. Follow these steps in order.
 - Write one new journal file `vault/journal/YYYY-MM-DD.N.md` (`N` = next unused
   sequence number for today) using the template below.
 - Update the active **milestone file**: tick exit criteria now met; keep its
-  `Status:` line current (`todo`/`in-progress`/`done`) (D15).
+  `Status:` line current (`todo`/`in-progress`/`done`) (D15). The `Status:` line
+  and the board's `Last updated:` line are **one sentence each** — the journal is
+  the changelog, not these fields (D67).
 
 ## 8. Commit & push
 

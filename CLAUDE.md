@@ -50,7 +50,9 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
 7. **Journal + board + milestone** — add a journal entry file
    (`vault/journal/YYYY-MM-DD.N.md`); move the task to `done` (or split the
    remainder back to Backlog); tick any milestone exit criteria now met and keep
-   the milestone's `Status:` line current.
+   the milestone's `Status:` line current. **The journal is the changelog** —
+   `Status:` and the board's `Last updated:` line are one sentence each, never a
+   per-leg narrative (D67).
 8. **Commit + push** to `v1` with a clear message. Stop; report the next suggested leg.
 
 ## Decision authority
@@ -64,6 +66,10 @@ You decide everything. There is no one to ask. Therefore:
   expand scope beyond the current milestone without recording why.
 - Record a decision whenever you make a non-obvious, load-bearing choice
   (library, API shape, file layout, tradeoff). Append-only, `Dn` numbered.
+  **A `Dn` is a constraint a future leg must not silently contradict** — not a
+  record of how this leg was built. If it only describes this leg's
+  implementation, it belongs in the journal, not `decisions.md` (D67). The
+  decisions log is skimmed every leg; keep it load-bearing.
 
 ## Hard rules
 

@@ -1618,3 +1618,30 @@ re-scopes the watch). This decision covers 08a.
 - **Deps:** `bubbles/list` pulls two new **indirect** transitives — `github.com/atotto/
   clipboard v0.1.4` and `github.com/sahilm/fuzzy v0.1.1` (via `textinput`/`list`). Added
   by `go mod tidy`; no existing version moved (minimal-dep discipline, D45).
+
+### D66 — M1 completion bar: fake-client coverage; envtest integration tests deferred
+**2026-07-20.** Maintainer-approved (progress review). M1 is declared
+**feature-complete** on: all in-process feature work (M1-00…M1-09) done, the
+hermetic **fake-client** suite covering discovery, watch reconnect (410 → re-List),
+and the full action set, and the verified **zero-TUI-imports** invariant. The two
+exit criteria that require a **live apiserver** — the restricted-RBAC group-isolation
+integration test, and action-set/watch coverage against real etcd — are **deferred**
+to backlog item **M1-INT** (opt-in `KUBECOM_TEST_ENVTEST=1`). **Why:** envtest needs
+control-plane binaries that are fragile in the sandboxed cloud env the autonomous loop
+runs in (D18); blocking M1 on them would leave it perpetually "in-progress" while all
+downstream work proceeds. Fault isolation itself is implemented and unit-covered — only
+the live-cluster *proof* is deferred. **Consequence:** M1-INT is run by a human locally
+or a dedicated CI job with `setup-envtest`; it is not a blocker for M2–M5.
+
+### D67 — Vault hygiene: decisions are constraints, not changelog; status lines stay terse
+**2026-07-20.** Maintainer-approved (progress review). Two anti-drift rules for the
+autonomous loop, after the decisions log and status lines had swollen into per-leg
+narratives:
+- **`decisions.md` is load-bearing only.** A `Dn` records a choice a *future* leg must
+  not silently contradict (library, API shape, invariant, tradeoff). How a given leg was
+  implemented goes in the **journal**, not here. The leg loop skims this file every leg,
+  so it must stay signal.
+- **Status lines are one sentence.** A milestone's `Status:` line and the board's
+  `Last updated:` line are a single terse sentence each; the journal is the changelog.
+  Do not append a running per-leg history to either.
+This does not supersede earlier `Dn` entries (they stand); it sets the bar going forward.
