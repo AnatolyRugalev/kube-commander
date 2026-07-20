@@ -1374,3 +1374,28 @@ discovery result into the M2-05a static seed. Locked choices:
   reordering.
 - **Deps:** none new. Adds an `apimachinery/.../schema` import to `menu.go` (already
   used in `seed.go`).
+
+### D58 — M2-06a: custom table renders a server-printed snapshot, priority-0 columns, clip-not-wrap
+**2026-07-20 (M2-06a).** `internal/tui/components/table` is the browse view's right
+pane: a custom table (bubbles/table is too basic for the live watch/hscroll needs —
+the M2 risk item) that renders a `kube.Table` snapshot. Locked choices:
+- **Priority-0 columns by default.** Only columns with `Priority == 0` are shown,
+  matching `kubectl get`'s narrow view (`Priority > 0` are the `-o wide` extras). If
+  the server sends no priority-0 column, *all* columns are shown rather than a blank
+  table (degrade, don't blank — principle 3). A wide/narrow toggle is a later slice.
+- **Clip, don't wrap (this slice).** Each rendered row is hard-clipped to the pane
+  width with a rune cut (`truncate`), not wrapped, so one logical row is always one
+  display line. Horizontal scroll for wide tables is **M2-06c**; until then a wide
+  table is cut at the right edge.
+- **Bordered-pane sizing gotcha.** lipgloss counts a `Border` *inside*
+  `Style.Width`/`Height`, so a bordered `Pane` must be sized to the component's
+  **total** width/height (`m.width`/`m.height`); its content area is then the inner
+  `(width-2)×(height-2)` region the header+rows are rendered to. Sizing the frame to
+  the inner width instead leaves the content area two columns short and wraps every
+  full-width row. Guarded by `TestViewFitsPaneNoWrap`. (The `menu`/`statusbar` panes
+  render short lines that never hit this, but should adopt the same sizing.)
+- **Owns its emitted message (D56).** `table.RowSelectedMsg` lives in the table
+  package (drill-in emits it); the forward-reference in `tui/msg.go` is resolved.
+- **SetTable resets selection** to the first row (snapshot replace). M2-06b will add
+  live watch-delta application that *preserves* the selection instead.
+- **Deps:** none new (`kube`, `keymap`, `styles`, bubbletea, lipgloss all present).

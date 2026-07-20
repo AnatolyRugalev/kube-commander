@@ -70,7 +70,8 @@ func NewErrorMsg(context string, err error) ErrorMsg {
 // the component packages, so a component cannot import this one without a cycle
 // (D56). The resource menu's "resource selected" message therefore lives in
 // internal/tui/components/menu (menu.ResourceSelectedMsg); the table's
-// "row selected" message will likewise live in the table package when M2-06 lands.
+// "row selected" message likewise lives in the table package
+// (table.RowSelectedMsg, M2-06a).
 // The types in this file are the kube-boundary messages and the generic ErrorMsg,
 // which no component originates.
 

@@ -29,8 +29,13 @@ drill-in — the emitter owns the message type to avoid a component→`tui` impo
 cycle, D56). **M2-05b** added `(*Model).Reconcile(kube.DiscoveryResult)`, folding
 the async discovery result into the seed — twins fill metadata, failed-group
 entries go unavailable, CRDs/extra groups append — **without disturbing selection
-or scroll**, degrading to the navigable seed on total/partial failure (D57);
-top-unblocked next is **M2-06** (custom table component)._
+or scroll**, degrading to the navigable seed on total/partial failure (D57).
+**M2-06a** landed the third `components/*` package, the resource table
+(`internal/tui/components/table`: renders a `kube.Table` snapshot — kubectl-identical
+priority-0 columns — with vertical scroll, a highlighted selection, and rows
+clipped-not-wrapped to the pane; drill-in emits its own `table.RowSelectedMsg`;
+fixed the bordered-pane sizing gotcha D58); top-unblocked next is **M2-06b** (apply
+live watch deltas keyed by `ObjectRef`, preserving selection)._
 
 ## Goal
 

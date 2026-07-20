@@ -159,3 +159,14 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   validation (unknown-action, collision, nav-shadow warning).
 - Views resolve `tea.KeyMsg → Action` via the keymap and switch on `Action`;
   `bubbles/key.Binding`s and the help/keybindings doc are generated from it.
+
+## TUI rendering (lipgloss v2)
+- **Bordered `Style.Width`/`Height` include the border.** A `styles.Pane`/`PaneFocus`
+  frame (rounded border) sized `Width(w)` has a **content area of `w-2`**, not `w`.
+  Size a bordered pane to the component's *total* width/height and render the
+  inner content to the `(w-2)×(h-2)` region — sizing the frame to the inner width
+  wraps every full-width line. Clip inner lines to the content width yourself
+  (rune cut) rather than relying on `MaxWidth`, which does not prevent `Width`'s
+  wrapping. See D58; guarded by `table.TestViewFitsPaneNoWrap`. The `menu` and
+  `statusbar` panes only render short lines today so they don't visibly hit this,
+  but the same total-size rule applies when they need full-width rows.
