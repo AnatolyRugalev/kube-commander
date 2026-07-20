@@ -13,7 +13,13 @@ _Prev: 2026-07-19 — M1-06e-2 done: **drain eviction loop** (`internal/kube/dra
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-06b** Table component: live watch deltas (`internal/tui/components/table`)
+      status: in-progress | owner: claude-opus | added: 2026-07-20
+      notes: Apply live watch deltas onto the M2-06a snapshot: a `ResourceEventMsg`
+      RESET replaces columns+rows; ADDED/MODIFIED/DELETED update a single row keyed
+      by `ObjectRef` (UID), **preserving the selection** (re-resolve the selected
+      UID to its new index; clamp scroll) — the parallel of the menu-reconcile risk
+      item. Recompute column widths on change. Depends on: M2-06a, M2-02.
 
 ## Blocked
 
@@ -38,14 +44,6 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 `internal/tui/styles`, `internal/tui/components/*`, `internal/tui/views/*`. Every
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
-
-- [ ] **M2-06b** Table component: live watch deltas (`internal/tui/components/table`)
-      status: todo | owner: — | added: 2026-07-20
-      notes: Apply live watch deltas onto the M2-06a snapshot: a `ResourceEventMsg`
-      RESET replaces columns+rows; ADDED/MODIFIED/DELETED update a single row keyed
-      by `ObjectRef` (UID), **preserving the selection** (re-resolve the selected
-      UID to its new index; clamp scroll) — the parallel of the menu-reconcile risk
-      item. Recompute column widths on change. Depends on: M2-06a, M2-02.
 
 - [ ] **M2-06c** Table component: horizontal scroll + wide columns (`internal/tui/components/table`)
       status: todo | owner: — | added: 2026-07-20
