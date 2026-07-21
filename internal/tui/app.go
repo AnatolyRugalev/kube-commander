@@ -12,6 +12,7 @@ import (
 
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/hintbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
@@ -129,8 +130,12 @@ func WithStartupError(e *ErrorMsg) Option {
 // so the table (right) always keeps room.
 const (
 	statusBarHeight = 1
-	minMenuWidth    = 20 // total incl. border
-	minTableWidth   = 20 // total incl. border
+	// hintBarHeight is the dedicated key-hint line pinned below the status bar
+	// (FB-hintbar-dedicated) — always one row, so the hint is never dropped under
+	// width pressure nor hidden behind an error toast.
+	hintBarHeight = 1
+	minMenuWidth  = 20 // total incl. border
+	minTableWidth = 20 // total incl. border
 
 	// errorDisplay is how long a surfaced error stays in the status bar before it
 	// auto-clears (a transient toast). A stale-generation guard (statusErrGen)
@@ -168,6 +173,7 @@ type Model struct {
 	menu     menu.Model
 	table    table.Model
 	status   statusbar.Model
+	hintbar  hintbar.Model
 	nsPicker picker.Model
 	welcome  welcome.Model
 
@@ -267,6 +273,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		menu:        menu.New(s),
 		table:       table.New(s),
 		status:      statusbar.New(s),
+		hintbar:     hintbar.New(s),
 		nsPicker:    picker.New(s, "namespace"),
 		welcome:     welcome.New(s),
 		filterInput: fi,
@@ -345,6 +352,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.SetWidth(msg.Width)
 		m.status.SetWidth(msg.Width)
+		m.hintbar.SetWidth(msg.Width)
 		m.syncHints() // re-elide the focus-aware hint to the new width
 		m.resize()
 		return m, nil
@@ -779,14 +787,16 @@ func (m Model) searchMove(dir keymap.Action) (tea.Model, tea.Cmd) {
 // focus (the dogfood ask, feedback 2026-07-21-06): the menu-context keys while the
 // left resource menu is focused, the table-context keys (filter/search, back) once
 // the right table is. The hint stays registry-generated (D11) — this only picks the
-// focus context. Call it wherever focus switches, and on resize (the help renderer
-// elides the hint to the current width).
+// focus context. It feeds the dedicated hintbar line (FB-hintbar-dedicated), not
+// the status bar, so the live state and the hint never compete for one row. Call it
+// wherever focus switches, and on resize (the help renderer elides the hint to the
+// current width).
 func (m *Model) syncHints() {
 	ctx := keymap.HelpMenu
 	if m.table.Focused() {
 		ctx = keymap.HelpTable
 	}
-	m.status.SetShortHelp(m.help.ShortHelpContextView(ctx))
+	m.hintbar.SetHint(m.help.ShortHelpContextView(ctx))
 }
 
 // syncFilterStatus reflects the current filter state on the status bar: the live
@@ -819,11 +829,11 @@ func (m Model) overlayActive() bool {
 	return m.help.Visible() || m.nsPicker.Active() || m.filtering
 }
 
-// bodyHeight is the height of the two-pane body above the status bar — the region
-// mouse clicks map within; a click on the status-bar line (or off-screen) is
-// ignored.
+// bodyHeight is the height of the two-pane body above the status bar and hint line
+// — the region mouse clicks map within; a click on the status-bar/hint lines (or
+// off-screen) is ignored.
 func (m Model) bodyHeight() int {
-	h := m.height - statusBarHeight
+	h := m.height - statusBarHeight - hintBarHeight
 	if h < 0 {
 		return 0
 	}
@@ -924,15 +934,16 @@ func (m Model) clickTable(y int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resize lays the panes out inside the current terminal: the status bar takes the
-// bottom line, and the menu and table split the remaining width (menu a fraction
-// with floors so the table always keeps room). Both panes are sized to their
-// total width/height including border, as their SetSize expects.
+// resize lays the panes out inside the current terminal: the status bar and the
+// dedicated hint line take the two bottom rows, and the menu and table split the
+// remaining width (menu a fraction with floors so the table always keeps room).
+// Both panes are sized to their total width/height including border, as their
+// SetSize expects.
 func (m *Model) resize() {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
-	bodyH := m.height - statusBarHeight
+	bodyH := m.height - statusBarHeight - hintBarHeight
 	if bodyH < 0 {
 		bodyH = 0
 	}
@@ -1080,8 +1091,9 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model. Until the first WindowSizeMsg it renders nothing so
 // the layout is never sized to a zero terminal. Normally it lays the menu and
-// table panes side by side over the status bar; when the help overlay is open it
-// takes the body area, the status bar staying pinned below.
+// table panes side by side over the status bar and the dedicated key-hint line;
+// when the help overlay is open it takes the body area, the status bar and hint
+// line staying pinned below.
 //
 // Every returned view sets AltScreen: in bubbletea v2 full-screen mode is a
 // property of the View (v.AltScreen), not a program option — the v1-era
@@ -1113,7 +1125,7 @@ func (m Model) View() tea.View {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
 	}
 
-	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View()))
+	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View(), m.hintbar.View()))
 	v.AltScreen = true
 	// Enable mouse (click + wheel) the same way AltScreen is enabled — a per-View
 	// property in bubbletea v2, not a program option. The root model owns View, so

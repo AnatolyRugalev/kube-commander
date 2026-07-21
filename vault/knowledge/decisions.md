@@ -2113,3 +2113,32 @@ and `tea.MouseWheelMsg`; every other mouse type is ignored.
 Actions/public Select* entries (not new raw-mouse logic in a view), keep `MouseMode`
 set in `View`, and gate it behind `overlayActive()`. A component adding a
 click target exposes a coordinate→index accessor rather than handling mouse itself.
+
+### D87 — The persistent key-hint is a dedicated bottom line of its own (the hintbar), not a status-bar segment
+
+`2026-07-21` · board `FB-hintbar-dedicated` (deferred remainder of D85).
+
+The focus-aware key hint (D85) used to be a right-aligned segment on the status bar,
+sharing one line with the live state (context · namespace · filter · spinner). It now
+lives on its own dedicated row **below** the status bar — the `hintbar` component
+(`internal/tui/components/hintbar`) — so the hint and the state never compete for width.
+
+- **The status bar no longer lays out a hint.** `statusbar` dropped `SetShortHelp` and
+  its right-align/gap logic; it renders only its left segment (or a full-line error
+  toast), clamped to width. A future leg must not put the hint back on the status bar.
+- **The hintbar is fed the same registry-generated, focus-aware string** the status bar
+  used to get: the root's `syncHints` now calls `m.hintbar.SetHint(help.ShortHelpContextView(ctx))`
+  (D11/D85 intact — the component still matches no raw key). Call `syncHints` at every
+  focus switch and on resize, exactly as before.
+- **The hint is now always visible**: because it owns a line, it is never dropped under
+  width pressure and never hidden behind an error toast — the two failures D85 called
+  out. Layout reserves one extra bottom row: `bodyH = height - statusBarHeight -
+  hintBarHeight` (mirrored in `bodyHeight()` for mouse mapping); the vertical stack is
+  body · status · hint.
+- The welcome landing page keeps its own in-pane focus-agnostic hint (`welcome.SetShortHelp`),
+  unchanged.
+
+**Why:** state and keys competing for one line meant the hint got truncated or dropped
+just when the user needed it (narrow terminal, active error). **Consequence:** keep the
+hint on the hintbar line; a leg adding another persistent bottom element must budget its
+own row (adjust `bodyH`/`bodyHeight` together) rather than crowding the status or hint line.

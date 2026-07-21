@@ -108,39 +108,21 @@ func TestUpdateAdvancesSpinnerOnlyWhileDiscovering(t *testing.T) {
 	}
 }
 
-func TestViewRightAlignsHelpAndFillsWidth(t *testing.T) {
+// TestViewFillsWidth proves the bar's left segment renders and the line is padded
+// to the full known width (the hint no longer shares this line — it lives on the
+// dedicated hintbar below, FB-hintbar-dedicated).
+func TestViewFillsWidth(t *testing.T) {
 	m := newBar()
 	m.SetContext("prod")
 	m.SetNamespace("default")
-	m.SetShortHelp("? help")
 	m.SetWidth(60)
 
 	view := m.View()
 	if w := lipgloss.Width(view); w != 60 {
 		t.Errorf("View width = %d, want 60 (padded to full width)", w)
 	}
-	ci := strings.Index(view, "prod")
-	hi := strings.Index(view, "? help")
-	if ci < 0 || hi < 0 {
-		t.Fatalf("View = %q, want both context and help present", view)
-	}
-	if hi < ci {
-		t.Errorf("help should render to the right of context (ctx@%d, help@%d)", ci, hi)
-	}
-}
-
-func TestViewDropsHelpWhenNoRoom(t *testing.T) {
-	m := newBar()
-	m.SetContext("prod")
-	m.SetShortHelp("this is a very long help hint that will not fit")
-	m.SetWidth(len("prod")) // no room for anything but the left segment
-
-	view := m.View()
-	if strings.Contains(view, "very long help") {
-		t.Errorf("View = %q, want the help hint dropped when there is no room", view)
-	}
 	if !strings.Contains(view, "prod") {
-		t.Errorf("View = %q, want the context kept when room is tight", view)
+		t.Fatalf("View = %q, want the context present", view)
 	}
 }
 
@@ -162,12 +144,11 @@ func TestSetErrorFlattensToSingleLine(t *testing.T) {
 	}
 }
 
-func TestViewWithErrorStaysSingleLineAndDropsHelp(t *testing.T) {
+func TestViewWithErrorStaysSingleLine(t *testing.T) {
 	m := newBar()
 	m.SetContext("prod")
-	m.SetShortHelp("? help")
 	m.SetWidth(40)
-	// A long, multi-line error must not grow the bar past one line or keep the hint.
+	// A long, multi-line error must not grow the bar past one line.
 	m.SetError("watch pods: an extremely long error message that exceeds the bar width by a lot\nsecond line")
 
 	view := m.View()
@@ -177,18 +158,14 @@ func TestViewWithErrorStaysSingleLineAndDropsHelp(t *testing.T) {
 	if w := lipgloss.Width(view); w != 40 {
 		t.Errorf("View width = %d, want 40 (clamped, never wrapped)", w)
 	}
-	if strings.Contains(view, "? help") {
-		t.Errorf("View with error = %q, want the help hint dropped while erroring", view)
-	}
 }
 
 func TestViewInlineWhenWidthUnknown(t *testing.T) {
 	m := newBar()
 	m.SetContext("prod")
-	m.SetShortHelp("? help")
-	// width defaults to 0: pieces are joined inline, both present.
+	// width defaults to 0: the left segment renders as-is.
 	view := m.View()
-	if !strings.Contains(view, "prod") || !strings.Contains(view, "? help") {
-		t.Errorf("View with unknown width = %q, want context and help joined inline", view)
+	if !strings.Contains(view, "prod") {
+		t.Errorf("View with unknown width = %q, want the context present", view)
 	}
 }

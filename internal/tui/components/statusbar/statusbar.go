@@ -1,14 +1,17 @@
-// Package statusbar is kubecom's bottom status bar: a single line showing the
-// current context and namespace, a spinner while async discovery is in flight,
-// and the one-line keymap hint. It renders purely from props the root model
-// sets (SetContext / SetNamespace / SetShortHelp / SetWidth) plus its own
-// spinner; it owns no shared mutable state (principle 1), so a goroutine never
-// reaches into it — the root model feeds it messages and reads its View.
+// Package statusbar is kubecom's status bar: a single line showing the current
+// context and namespace, the live filter indicator, and a spinner while async
+// discovery is in flight (or a transient error toast taking over the whole line).
+// It renders purely from props the root model sets (SetContext / SetNamespace /
+// SetFilter / SetError / SetWidth) plus its own spinner; it owns no shared mutable
+// state (principle 1), so a goroutine never reaches into it — the root model feeds
+// it messages and reads its View.
 //
-// The short-help hint is generated from the effective keymap upstream (via
-// help.Model.ShortHelpView, D11) and handed in as a string, so the status bar
-// never matches a raw key or knows what any binding does — it only lays out the
-// pieces it is given, through the shared styles (D54).
+// The persistent keymap hint used to be right-aligned on this bar, but it now
+// lives on its own dedicated line below (the hintbar component,
+// FB-hintbar-dedicated) so the live state and the hint no longer compete for one
+// line — the hint is never dropped under width pressure nor hidden behind an error
+// toast. This bar therefore lays out only its left segment (or a full-line error),
+// clamped to width, through the shared styles (D54).
 package statusbar
 
 import (
@@ -16,7 +19,6 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -37,7 +39,6 @@ type Model struct {
 
 	context     string
 	namespace   string
-	shortHelp   string
 	errText     string
 	filter      string
 	discovering bool
@@ -57,10 +58,6 @@ func (m *Model) SetContext(ctx string) { m.context = ctx }
 
 // SetNamespace sets the displayed namespace (empty renders nothing).
 func (m *Model) SetNamespace(ns string) { m.namespace = ns }
-
-// SetShortHelp sets the right-aligned keymap hint. The caller passes
-// help.Model.ShortHelpView() so the hint is generated from the registry (D11).
-func (m *Model) SetShortHelp(hint string) { m.shortHelp = hint }
 
 // SetFilter sets the filter indicator shown in the left segment — the live filter
 // prompt while the user is typing, or the committed "/query" indicator once a
@@ -84,8 +81,8 @@ func (m *Model) ClearError() { m.errText = "" }
 // HasError reports whether a transient error message is currently shown.
 func (m Model) HasError() bool { return m.errText != "" }
 
-// SetWidth informs the bar of the available terminal width so it can right-align
-// the help hint and clamp overflow; wire it from the root model's WindowSizeMsg.
+// SetWidth informs the bar of the available terminal width so it can fill the line
+// and clamp overflow; wire it from the root model's WindowSizeMsg.
 func (m *Model) SetWidth(w int) { m.width = w }
 
 // Discovering reports whether the discovery spinner is currently animating.
@@ -121,50 +118,31 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the status bar as a single line: context · namespace · [spinner
-// discovering…] on the left, the help hint right-aligned. When the width is
-// known the help is pushed to the right edge and the whole line is clamped to
-// width; with an unknown width the pieces are simply joined left-to-right.
+// View renders the status bar as a single line: context · namespace · filter ·
+// [spinner discovering…], or a transient error taking over the whole line. The
+// persistent keymap hint lives on its own line below now (the hintbar), so the bar
+// no longer lays out a right-aligned segment — it renders its left segment,
+// background-filled to the known width and clamped so it can never wrap onto a
+// second line (D58).
 func (m Model) View() string {
-	left := m.leftSegment()
-	right := m.shortHelp
+	line := m.leftSegment()
 
-	// A transient error takes over the whole bar: it is the most important thing
-	// to see, and giving it the full line (help hint dropped) keeps it on one line
-	// without competing for width. It is clipped to the bar width *before* styling
-	// so the outer Width render can never wrap it onto a second line (D58).
+	// A transient error takes over the whole bar: it is the most important thing to
+	// see, and giving it the full line keeps it on one line. It is clipped to the
+	// bar width *before* styling so the outer Width render can never wrap it onto a
+	// second line (D58).
 	if m.errText != "" {
 		errStr := m.errText
 		if m.width > 0 {
 			errStr = clipRunes(errStr, m.width)
 		}
-		left = m.styles.Error.Render(errStr)
-		right = ""
+		line = m.styles.Error.Render(errStr)
 	}
 
-	var line string
-	switch {
-	case m.width <= 0:
-		// Width not yet known: lay the pieces out inline.
-		if right == "" {
-			line = left
-		} else if left == "" {
-			line = right
-		} else {
-			line = left + separator + right
-		}
+	if m.width <= 0 {
 		return m.styles.StatusBar.Render(line)
-	default:
-		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-		if gap < 1 {
-			// Not enough room for both: keep the left segment (the live state),
-			// drop the hint, and let the style clamp any overflow.
-			line = left
-		} else {
-			line = left + strings.Repeat(" ", gap) + right
-		}
-		return m.styles.StatusBar.Width(m.width).MaxWidth(m.width).Render(line)
 	}
+	return m.styles.StatusBar.Width(m.width).MaxWidth(m.width).Render(line)
 }
 
 // leftSegment builds the "context · namespace · [spinner] discovering…" run,
