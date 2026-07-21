@@ -3,11 +3,17 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-20 — M1-04b (lazy group detail) retired as obsolete vs the realized flat menu + async/cached discovery (D81); M1 now has no open feature work. M2-10…M2-13 remain gated by the open dogfood human-task, so the loop is blocked on it. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — M2-10…M2-13 stay gated by the open dogfood human-task; the loop is doing its explicitly-unblocked carve-out (teatest coverage of existing behavior) via M2-14c. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-14c** teatest coverage: filter flow through the real program
+      status: in-progress | owner: claude-opus | added: 2026-07-21
+      notes: Split from M2-14 — coverage of *existing* behavior (the dogfood
+      human-task explicitly does not block this). Drive the landed filter flow
+      (M2-09b: `/` opens → type → commit) end-to-end through the real bubbletea
+      program (teatest/v2, M0-05 harness), complementing the direct-Update filter
+      tests. Test-only, no product code.
 
 ## Blocked
 
