@@ -7,7 +7,9 @@ _Last updated: 2026-07-21 — dogfood feedback inbox drained: FB-mouse-support (
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-config-02** Per-context menu merge: map `config.MenuResource` →
+      `menu.Item` and merge the per-context extras into the seed/discovery set.
+      status: in-progress | owner: claude-opus | added: 2026-07-21 | claimed: 2026-07-21
 
 ## Blocked
 
@@ -70,9 +72,7 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **FB-menu-config-02** Per-context menu merge: map `config.MenuResource` →
-      `menu.Item` and merge the per-context extras into the seed/discovery set.
-      status: todo | owner: — | added: 2026-07-21
+- [ ] **FB-menu-config-02** _(claimed — see In Progress)_
       notes: Second slice of feedback `2026-07-21-02` (D83). Convert each entry to a
       `menu.Item` (default Section → Custom Resources, Title → Kind/Resource, build
       `kube.Resource` from group/version/resource + namespaced); dedup against a
