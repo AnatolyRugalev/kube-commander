@@ -7,7 +7,10 @@ _Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-help-popup
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-mouse-support** Feedback (normal, `2026-07-21-08`): enable Bubble Tea
+      mouse support — click a menu item to open it, click a table row to select it,
+      scroll-wheel to scroll the menu and table (keyboard/vim stays primary).
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
