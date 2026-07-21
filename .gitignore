@@ -2,3 +2,4 @@
 /dist
 /.kube
 /kubectl
+/kubecom
