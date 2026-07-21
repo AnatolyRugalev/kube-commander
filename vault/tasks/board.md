@@ -7,7 +7,10 @@ _Last updated: 2026-07-21 — M2-10…M2-13 stay gated by the open dogfood human
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): surface the namespace
+      picker as a row in the left menu, marking the seam between cluster-scoped and
+      namespace-scoped resources (ctrl+n stays as the shortcut).
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
