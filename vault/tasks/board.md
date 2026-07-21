@@ -7,7 +7,10 @@ _Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; 
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-config-01** Feedback (high, `2026-07-21-02`): per-context dynamic
+      menu config — **first slice**: config schema (`MenuConfig`/`MenuResource`, the
+      CRD entry format) + per-context file resolution + loader in `internal/config`.
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
