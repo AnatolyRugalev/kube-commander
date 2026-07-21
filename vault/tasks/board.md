@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-ns-menu-seam (namespace picker as the menu's cluster/namespaced seam) landed. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-menu-config-01 (per-context menu config schema + loader) landed and triaged the CRD-menu feedback into FB-menu-config-02/03. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-menu-config-01** Feedback (high, `2026-07-21-02`): per-context dynamic
-      menu config — **first slice**: config schema (`MenuConfig`/`MenuResource`, the
-      CRD entry format) + per-context file resolution + loader in `internal/config`.
-      status: in-progress | owner: claude-opus | added: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -73,6 +70,24 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
+- [ ] **FB-menu-config-02** Per-context menu merge: map `config.MenuResource` →
+      `menu.Item` and merge the per-context extras into the seed/discovery set.
+      status: todo | owner: — | added: 2026-07-21
+      notes: Second slice of feedback `2026-07-21-02` (D83). Convert each entry to a
+      `menu.Item` (default Section → Custom Resources, Title → Kind/Resource, build
+      `kube.Resource` from group/version/resource + namespaced); dedup against a
+      discovered twin by GVR (D57) and against seed rows; keep D77 grouping (extras
+      contiguous under their section). Component-level (menu pkg takes an extras
+      slice); no app wiring yet. Depends on: FB-menu-config-01 (done), M2-05b.
+- [ ] **FB-menu-config-03** App wiring: load the current context's menu file on
+      start and feed its extras into the menu.
+      status: todo | owner: — | added: 2026-07-21
+      notes: Third slice of feedback `2026-07-21-02` (D83). Resolve the active
+      context name (`kube.ContextName`, D76), `config.LoadMenuFile(config.MenuPath(ctx))`,
+      pass the extras to the menu (FB-menu-config-02). A missing/malformed file must
+      degrade to the default menu (surface a toast, never block start — principle 3).
+      Update README's config section. Depends on: FB-menu-config-02.
+
 - [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
       status: todo | owner: — | added: 2026-07-19
       notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
@@ -110,6 +125,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-menu-config-01** Feedback (high, `2026-07-21-02`): per-context dynamic menu config — **first slice** (triaged the rest into FB-menu-config-02/03). Added `config.MenuConfig`/`MenuResource` (the CRD entry format: group/version/resource + optional kind/namespaced/section/title; version+resource required, "" group = core), `config.MenuDir()` (`<configdir>/kubecom/menus`), `config.MenuPath(context)` (sanitizes an arbitrary context name to a safe single `.yaml` segment; empty context errors), and `LoadMenu`/`LoadMenuFile` (unknown-field-strict, missing file → zero config, per-entry validation). Config stays free of the kube/menu packages (no cycle); mapping+merge is FB-menu-config-02. Tests: schema round-trip, core-group-omitted, unknown-field/missing-version/missing-resource rejection, missing-file-zero, dir suffix, context sanitization (k3d/gke/arn/spaces) + no-escape, empty-context error — done 2026-07-21 (D83)
 - [x] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): namespace picker surfaced as a row in the left menu, marking the cluster-scoped ↔ namespaced seam. Added `menu.Item.Kind` (`ItemResource`/`ItemNamespace`); the seed inserts one `ItemNamespace` seam row after the `Cluster` section and before the namespaced sections; drilling into it emits `menu.NamespaceRequestedMsg` (root opens the namespace picker — same effect as ctrl+n, which stays). The seam shows the live scope (`menu.SetNamespace`, "" → "all namespaces"), kept current from the `-n` flag and every picker selection. `Reconcile` skips non-resource rows (no twin/group; selection resolved by kind), D77 grouping unaffected. Tests: seam placement/drill-in/render/reconcile-preservation (menu) + seam-opens-picker + selection-updates-seam (app) — done 2026-07-21 (D82)
 - [x] **M2-14d** teatest coverage: error-toast path (D74/FB-errors-layout) — `TestProgramErrorToastDegradesGracefully` delivers a live `ErrorMsg` to the running bubbletea program (teatest/v2) and asserts on the final model's own `View().Content`: the toast text is present, the status bar `HasError`, and the composed view is still exactly one screen (same line count as an error-free model) — proving the error degraded into an in-layout toast without growing a pane or scrolling. Reads the raw View string, not `teatest.Output()`, because the whole status bar is background-styled (unscannable, same as the filter segment). Test-only, no product code — done 2026-07-21
 - [x] **M2-14c** teatest coverage: filter flow (M2-09b) driven end-to-end through the real bubbletea program — `/` → type → enter-commit via live keypresses, asserted on `FinalModel` (status-bar filter segment is background-styled, so a byte scan misses it; the final model proves the committed query, closed input, and narrowed row set). Added a `fakeWatcher.preload` seam so a program test gets watch rows without racing the channel. Test-only, no product code — done 2026-07-21

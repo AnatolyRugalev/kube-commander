@@ -1992,3 +1992,31 @@ contradict:
 non-resource menu row" shape (a future context switcher, actions row, etc. reuse
 `Item.Kind` rather than each bolting on a parallel concept) without disturbing the
 D57/D77 reconcile+grouping guarantees.
+
+### D83 — Per-context menu customization lives in its own file per kubeconfig context, under `<configdir>/kubecom/menus/<sanitized-context>.yaml`
+**2026-07-21 (FB-menu-config-01, feedback `2026-07-21-02`).** CRDs and other
+resource types the built-in menu doesn't seed are added via a **dynamic,
+per-context** menu config — not merged into the single `config.yaml`. Constraints
+future slices must not contradict:
+- **One file per context**, in a `menus/` subdir of the kubecom config dir (D20),
+  keyed by the kubeconfig context name. A context with no file falls back to the
+  built-in seed + discovery menu (principle 3 — a missing customization degrades to
+  the default, never blocks). Owned by `config.MenuConfig` / `config.MenuResource`
+  (the CRD entry format: group/version/resource + optional kind/namespaced/section/
+  title; version+resource required, "" group = core).
+- **The context name is sanitized to a safe single filename segment**
+  (`config.menuFileName`: every char outside `[A-Za-z0-9._-]` → `_`, then `.yaml`).
+  This is intentionally lossy — two contexts differing only in sanitized characters
+  collide onto one file — chosen as the conservative safety tradeoff so an arbitrary
+  context name can never escape `menus/` or split the path. An empty context is an
+  error (no per-context file resolvable).
+- **The config package stays free of the kube/menu packages.** It defines the
+  schema, resolves the path, and loads/validates only; mapping `MenuResource` →
+  menu rows and merging with the seed/discovery set is a later slice
+  (FB-menu-config-02) so config keeps no import cycle and stays trivially testable.
+
+**Why:** addresses feedback `2026-07-21-02`; different clusters expose different
+CRDs, so per-context files keep each cluster's menu relevant. **Consequence:** the
+merge and app-wiring slices build on this loader; they must resolve the file via
+`config.MenuPath(context)` and treat a missing/half-broken file as "use the default
+menu" rather than an error that blocks start.
