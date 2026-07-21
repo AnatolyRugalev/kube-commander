@@ -7,7 +7,9 @@ _Last updated: 2026-07-21 — FB-menu-config-03 landed: the launcher loads the a
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-hintbar-dedicated** Promote the persistent key-hint into a dedicated,
+      always-visible bottom line of its own.
+      status: in-progress | owner: claude-opus | added: 2026-07-21 | claimed: 2026-07-21
 
 ## Blocked
 
@@ -69,18 +71,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **FB-hintbar-dedicated** Promote the persistent key-hint into a dedicated,
-      always-visible bottom line of its own (its own row below the status bar), so it
-      is never dropped under width pressure or hidden behind an error toast — the way
-      the status bar's right-aligned hint is today.
-      status: todo | owner: — | added: 2026-07-21
-      notes: Deferred remainder of feedback `2026-07-21-06` (D85). This leg made the
-      existing status-bar hint focus-aware; this task makes it prominent/persistent.
-      Reuse `help.Model.ShortHelpContextView` + the D85 `syncHints` focus mapping; a
-      small `hintbar` component fed the same string. Move the hint off the status bar
-      (drop its `SetShortHelp`/right-align) so state and keys don't compete for the
-      line. Shrink `bodyH` by the extra line; keep the welcome page's own hint.
 
 - [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
       status: todo | owner: — | added: 2026-07-19
