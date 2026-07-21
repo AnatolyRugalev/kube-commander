@@ -7,7 +7,9 @@ _Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; 
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-esc-back-to-menu** Esc pops focus table→menu (one level per press; clears an active table filter first, then the next Esc returns focus to the left menu)
+      status: in-progress | owner: claude (Opus 4.8) | added: 2026-07-21
+      notes: dogfood feedback `2026-07-21-04-esc-returns-to-left-pane` — delete the feedback file in this leg.
 
 ## Blocked
 
