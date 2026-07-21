@@ -3,6 +3,8 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -1102,5 +1104,57 @@ func TestProgramFilterFlow(t *testing.T) {
 	}
 	if got := fm.table.TotalRowCount(); got != 3 {
 		t.Fatalf("filter must not drop rows from the full set: total %d, want 3", got)
+	}
+}
+
+// TestProgramErrorToastDegradesGracefully drives the D74 error-toast path
+// (FB-errors-layout: a classified error must degrade into a transient status-bar
+// toast, never break the fixed browse layout) through the real bubbletea program
+// (teatest/v2, the M0-05 harness) rather than a hand-threaded direct Update. A live
+// ErrorMsg is delivered to the running program — the same value selectResource,
+// namespace-list, and the watch pump emit on failure (that wiring is already covered
+// by TestWatchStartErrorSurfaces et al.); what this adds is the composed render: the
+// program routes ErrorMsg → surfaceError → the status bar, and the final model's own
+// View proves the toast reached the screen inside the fixed layout.
+//
+// The assertion reads fm.View().Content (the model's raw render string), not the
+// emulated terminal output: the whole status bar is background-styled, so its cells —
+// toast included — are written through a path a plain byte scan of teatest.Output()
+// misses (the same reason TestProgramFilterFlow asserts on the final model). The raw
+// View string still contains the toast text and its true line count, so it proves both
+// that the toast rendered and that it stayed within one screen (no grown pane, no
+// scroll — the FB-errors-layout regression this guards against).
+func TestProgramErrorToastDegradesGracefully(t *testing.T) {
+	tm := teatest.NewTestModel(t, New(), teatest.WithInitialTermSize(80, 24))
+
+	// Browse layout draws first (a seed kind in the left pane).
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Node"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// A classified error reaches the running program; Update routes it through
+	// surfaceError to the status bar (processed synchronously before the Quit that
+	// follows it in the queue, so the final model is deterministic).
+	tm.Send(NewErrorMsg("watch pods", errors.New("induced watch failure")))
+	tm.Send(tea.Quit())
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+
+	fm, ok := tm.FinalModel(t).(Model)
+	if !ok {
+		t.Fatalf("final model is %T, want Model", tm.FinalModel(t))
+	}
+	if !fm.status.HasError() {
+		t.Fatal("the program should have surfaced the error into the status bar toast")
+	}
+	view := fm.View().Content
+	if !strings.Contains(view, "induced watch failure") {
+		t.Fatal("the toast text should appear in the composed program render")
+	}
+	// The toast lives inside the fixed layout: the error view is still exactly one
+	// screen tall — the same line count as an error-free model — so it grew no pane
+	// and scrolled nothing (the regression FB-errors-layout / D74 fixed).
+	baseline := strings.Count(sized(t).View().Content, "\n")
+	if got := strings.Count(view, "\n"); got != baseline {
+		t.Fatalf("error toast broke the layout: view has %d newlines, want %d (one screen)", got, baseline)
 	}
 }
