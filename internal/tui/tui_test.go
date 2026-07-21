@@ -35,11 +35,12 @@ func sizedWith(t *testing.T, opts ...Option) Model {
 // call) and records the contexts it was given so a test can assert the previous
 // watch was cancelled when a new resource is selected.
 type fakeWatcher struct {
-	chans []chan kube.WatchEvent // one per call, in order; a fresh one each Watch
-	err   error
-	ctxs  []context.Context
-	res   []kube.Resource
-	ns    []string
+	chans   []chan kube.WatchEvent // one per call, in order; a fresh one each Watch
+	err     error
+	ctxs    []context.Context
+	res     []kube.Resource
+	ns      []string
+	preload []kube.WatchEvent // if set, buffered into every returned channel at Watch time
 }
 
 func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, _ metav1.ListOptions) (<-chan kube.WatchEvent, error) {
@@ -49,7 +50,17 @@ func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, _ m
 	if f.err != nil {
 		return nil, f.err
 	}
-	ch := make(chan kube.WatchEvent, 1)
+	// Preloaded events let a full-program test (teatest) drive the watch without the
+	// test goroutine racing to push into the channel after Watch is called: the pump
+	// reads them straight off the buffer. Default (nil) preserves every existing test.
+	capacity := 1
+	if len(f.preload) > capacity {
+		capacity = len(f.preload)
+	}
+	ch := make(chan kube.WatchEvent, capacity)
+	for _, e := range f.preload {
+		ch <- e
+	}
 	f.chans = append(f.chans, ch)
 	return ch, nil
 }
@@ -1036,4 +1047,60 @@ func TestProgramRoutesKeyToPicker(t *testing.T) {
 
 	tm.Send(tea.Quit())
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
+// TestProgramFilterFlow drives the landed filter flow (M2-09b) end-to-end through
+// the real bubbletea program (teatest/v2, the M0-05 harness) rather than direct
+// Update calls: after a resource is drilled in and its watch delivers rows, a live
+// `/` keypress routes through the keymap to app.filter, typed runes flow into the
+// textinput, and enter commits. The assertion reads the *final model* rather than
+// scanning the rendered output — the status-bar filter segment is background-styled,
+// so the terminal emulator writes its cells via a path a plain byte scan misses (the
+// same reason the other program tests key on unselected rows). FinalModel proves the
+// running program delivered every key and committed the filter: the query is applied,
+// the input is closed, and the row set narrowed to the matches — a full
+// key→action→textinput→SetFilter round-trip that the direct-Update tests exercise
+// only by hand-threading commands.
+func TestProgramFilterFlow(t *testing.T) {
+	fw := &fakeWatcher{preload: []kube.WatchEvent{multiReset("web-1", "web-2", "api-1")}}
+	tm := teatest.NewTestModel(t, New(WithWatcher(fw)), teatest.WithInitialTermSize(80, 24))
+
+	// Browse layout draws first.
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Node"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// Drill into a resource; the preloaded watch delivers rows through the real pump,
+	// so the table populates and an unselected row ("web-2") renders.
+	tm.Send(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("web-2"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// Live `/`, type the query, commit with enter — all through the running program.
+	tm.Send(tea.KeyPressMsg(slash))
+	for _, r := range "web" {
+		tm.Send(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
+	}
+	tm.Send(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	tm.Send(tea.Quit())
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+
+	fm, ok := tm.FinalModel(t).(Model)
+	if !ok {
+		t.Fatalf("final model is %T, want Model", tm.FinalModel(t))
+	}
+	if fm.filtering {
+		t.Fatal("enter should have committed the filter, closing the input (filtering=false)")
+	}
+	if fm.table.Filter() != "web" {
+		t.Fatalf("committed filter = %q, want web", fm.table.Filter())
+	}
+	if got := fm.table.RowCount(); got != 2 {
+		t.Fatalf("filter 'web' should narrow to 2 rows through the program, got %d", got)
+	}
+	if got := fm.table.TotalRowCount(); got != 3 {
+		t.Fatalf("filter must not drop rows from the full set: total %d, want 3", got)
+	}
 }
