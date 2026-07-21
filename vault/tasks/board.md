@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-menu-config-01 (per-context menu config schema + loader) landed and triaged the CRD-menu feedback into FB-menu-config-02/03. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-menu-scroll (menu viewport: clip long kind names + proportional scrollbar) landed. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-menu-scroll** Feedback (high, `2026-07-21-03`): menu viewport — clip long
-      kind names (no wrap/overflow), keep selection in view, add a scroll indicator.
-      status: in-progress | owner: claude-opus | added: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -127,6 +125,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-menu-scroll** Feedback (high, `2026-07-21-03`): left menu is now a real viewport. Long kind names clip to one line with an ellipsis (was: wrapped outside the pane border), and a proportional scrollbar in the reserved rightmost column shows how much is scrolled off above/below (thumb span = visible/total, position = offset/range; drawn only when rows > visible). Root cause was a border-box width off-by-2 — a `styles.Pane` frame's real inner region is `innerW-2`, so content sized to `innerW` overflowed; content/clip now target `innerW-2` (D84). Selection-in-view was already handled. Tests: long-title-clipped-no-wrap, scrollbar shown/tracks-offset/absent-when-fits — done 2026-07-21 (D84)
 - [x] **FB-menu-config-01** Feedback (high, `2026-07-21-02`): per-context dynamic menu config — **first slice** (triaged the rest into FB-menu-config-02/03). Added `config.MenuConfig`/`MenuResource` (the CRD entry format: group/version/resource + optional kind/namespaced/section/title; version+resource required, "" group = core), `config.MenuDir()` (`<configdir>/kubecom/menus`), `config.MenuPath(context)` (sanitizes an arbitrary context name to a safe single `.yaml` segment; empty context errors), and `LoadMenu`/`LoadMenuFile` (unknown-field-strict, missing file → zero config, per-entry validation). Config stays free of the kube/menu packages (no cycle); mapping+merge is FB-menu-config-02. Tests: schema round-trip, core-group-omitted, unknown-field/missing-version/missing-resource rejection, missing-file-zero, dir suffix, context sanitization (k3d/gke/arn/spaces) + no-escape, empty-context error — done 2026-07-21 (D83)
 - [x] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): namespace picker surfaced as a row in the left menu, marking the cluster-scoped ↔ namespaced seam. Added `menu.Item.Kind` (`ItemResource`/`ItemNamespace`); the seed inserts one `ItemNamespace` seam row after the `Cluster` section and before the namespaced sections; drilling into it emits `menu.NamespaceRequestedMsg` (root opens the namespace picker — same effect as ctrl+n, which stays). The seam shows the live scope (`menu.SetNamespace`, "" → "all namespaces"), kept current from the `-n` flag and every picker selection. `Reconcile` skips non-resource rows (no twin/group; selection resolved by kind), D77 grouping unaffected. Tests: seam placement/drill-in/render/reconcile-preservation (menu) + seam-opens-picker + selection-updates-seam (app) — done 2026-07-21 (D82)
 - [x] **M2-14d** teatest coverage: error-toast path (D74/FB-errors-layout) — `TestProgramErrorToastDegradesGracefully` delivers a live `ErrorMsg` to the running bubbletea program (teatest/v2) and asserts on the final model's own `View().Content`: the toast text is present, the status bar `HasError`, and the composed view is still exactly one screen (same line count as an error-free model) — proving the error degraded into an in-layout toast without growing a pane or scrolling. Reads the raw View string, not `teatest.Output()`, because the whole status bar is background-styled (unscannable, same as the filter segment). Test-only, no product code — done 2026-07-21

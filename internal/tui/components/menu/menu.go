@@ -11,7 +11,11 @@
 // boundary. The seed provides a static list of core resource kinds; Reconcile
 // merges the async discovery result (adding CRDs/extra groups, marking unavailable
 // ones) without disturbing the current selection or scroll, and skips the
-// non-resource seam row.
+// non-resource seam row. The list is a real viewport: rows are clipped to the
+// pane width (long kind names truncate with an ellipsis rather than wrapping
+// outside the border), the selection is always scrolled into view, and a
+// proportional scrollbar appears in the rightmost column whenever the menu has
+// more rows than the pane can show.
 //
 // The menu never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands the Action to Update, which moves the selection. When
@@ -26,6 +30,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
@@ -51,6 +56,21 @@ const (
 // scoped ("" = every namespace), so the seam always states the scope explicitly
 // (mirrors the welcome page's wording).
 const namespaceAll = "all namespaces"
+
+// ellipsis is appended to a title that is too wide for the pane, so long kind
+// names (e.g. MutatingWebhookConfiguration) are clipped to one line rather than
+// wrapping outside the pane border (the dogfood-03 overflow bug).
+const ellipsis = "…"
+
+// Scrollbar glyphs for the reserved right-hand column, shown only when the menu
+// has more rows than the pane can display. Neither glyph appears in the rounded
+// pane border (which is ╭╮╰╯│─), so a rendered view can be scanned for them
+// unambiguously. The thumb's span and position report how much is scrolled off
+// above and below (the dogfood-03 "no scroll affordance" gap).
+const (
+	scrollThumb = "█" // the draggable position indicator
+	scrollTrack = "░" // the rest of the track
+)
 
 // ItemKind distinguishes a normal resource row from a special non-resource row.
 // The zero value is ItemResource so every seed/discovered resource item — and any
@@ -402,29 +422,50 @@ func (m Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
+	// innerW is the width handed to the bordered frame. lipgloss borders are
+	// border-box (the frame's total width is innerW, its inner text region is
+	// innerW-2), so the actual usable text columns are `region`. Sizing content to
+	// region is what keeps a full-width line from being clipped or wrapped past the
+	// border — the root of the dogfood-03 overflow.
 	innerW := m.width - 2
 	if innerW < 0 {
 		innerW = 0
 	}
+	region := innerW - 2
+	if region < 0 {
+		region = 0
+	}
 	h := m.innerHeight()
 	rows := m.rows()
+
+	// Reserve the rightmost text column for a scrollbar whenever the content
+	// overflows the pane; when everything fits, the list uses the full region and no
+	// scrollbar is drawn.
+	showBar := region > 1 && len(rows) > h
+	contentW := region
+	if showBar {
+		contentW = region - 1
+	}
 
 	lines := make([]string, 0, h)
 	for r := 0; r < h; r++ {
 		i := m.offset + r
 		if i >= len(rows) {
-			lines = append(lines, m.styles.App.Width(innerW).Render(""))
+			lines = append(lines, m.styles.App.Width(contentW).Render(""))
 			continue
 		}
 		if rows[i].header {
-			lines = append(lines, m.renderHeader(rows[i].title, innerW))
+			lines = append(lines, m.renderHeader(rows[i].title, contentW))
 			continue
 		}
 		idx := rows[i].itemIdx
-		lines = append(lines, m.renderItem(m.items[idx], idx == m.cursor, innerW))
+		lines = append(lines, m.renderItem(m.items[idx], idx == m.cursor, contentW))
 	}
 
 	content := strings.Join(lines, "\n")
+	if showBar {
+		content = lipgloss.JoinHorizontal(lipgloss.Top, content, m.scrollbar(h, len(rows)))
+	}
 	frame := m.styles.Pane
 	if m.focused {
 		frame = m.styles.PaneFocus
@@ -432,10 +473,60 @@ func (m Model) View() string {
 	return frame.Width(innerW).Height(h).Render(content)
 }
 
+// scrollbar renders the reserved right-hand column as an h-line track with a
+// proportional thumb: the thumb's height is the visible fraction (visible/total)
+// and its top is at the same fraction of the scroll range, so its span shows how
+// much of the list is on screen and its position shows how much is scrolled off
+// above and below. Called only when total > h (an overflowing menu), so the
+// division denominators are non-zero.
+func (m Model) scrollbar(h, total int) string {
+	thumb := h * h / total
+	if thumb < 1 {
+		thumb = 1
+	}
+	if thumb > h {
+		thumb = h
+	}
+	// Map the current offset (0..total-h) onto the thumb's travel (0..h-thumb).
+	pos := 0
+	if span, travel := total-h, h-thumb; span > 0 && travel > 0 {
+		pos = m.offset * travel / span
+		if pos > travel {
+			pos = travel
+		}
+	}
+	lines := make([]string, h)
+	for r := 0; r < h; r++ {
+		if r >= pos && r < pos+thumb {
+			lines[r] = m.styles.Spinner.Render(scrollThumb)
+		} else {
+			lines[r] = m.styles.Subtle.Render(scrollTrack)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// clip truncates s to at most w display columns, appending an ellipsis when it
+// had to cut, so a long title stays on one line instead of wrapping outside the
+// pane. Kind names are ASCII, so a rune count is an accurate display width here.
+func clip(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	if w == 1 {
+		return ellipsis
+	}
+	return string(r[:w-1]) + ellipsis
+}
+
 // renderHeader renders a non-selectable section header clamped to innerW, in the
 // accented Header style so the grouping reads at a glance.
 func (m Model) renderHeader(title string, innerW int) string {
-	return m.styles.Header.Width(innerW).MaxWidth(innerW).Render(title)
+	return m.styles.Header.Width(innerW).MaxWidth(innerW).Render(clip(title, innerW))
 }
 
 // renderItem renders one item line clamped to innerW: the highlighted item takes
@@ -446,7 +537,7 @@ func (m Model) renderItem(it Item, selected bool, innerW int) string {
 	if it.Kind == ItemNamespace {
 		return m.renderNamespace(selected, innerW)
 	}
-	title := "  " + it.Title
+	title := clip("  "+it.Title, innerW)
 	switch {
 	case selected:
 		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(title)
@@ -467,7 +558,7 @@ func (m Model) renderNamespace(selected bool, innerW int) string {
 	if ns == "" {
 		ns = namespaceAll
 	}
-	label := "Namespace: " + ns
+	label := clip("Namespace: "+ns, innerW)
 	if selected {
 		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(label)
 	}

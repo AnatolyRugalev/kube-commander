@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
@@ -506,6 +508,112 @@ func TestReconcilePreservesSeamAndItsSelection(t *testing.T) {
 		t.Fatal("reconcile marked the namespace seam unavailable")
 	}
 }
+
+func TestLongTitleClippedToOneLine(t *testing.T) {
+	m := newTestModel()
+	const long = "MutatingWebhookConfiguration"
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{{
+		GVK: schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1", Kind: long},
+		GVR: schema.GroupVersionResource{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"},
+	}}})
+	// A narrow pane, tall enough that the appended CRD row is on screen.
+	m.SetSize(16, 60)
+	v := m.View()
+
+	// No rendered line may be wider than the pane — the wrap/overflow bug produced
+	// lines that spilled past the border onto a second physical line.
+	for _, ln := range strings.Split(v, "\n") {
+		if w := lipgloss.Width(ln); w > 16 {
+			t.Fatalf("line width %d exceeds pane width 16: %q", w, ln)
+		}
+	}
+	// The full name must be truncated, not rendered whole, and the cut marked.
+	if strings.Contains(v, long) {
+		t.Fatal("full long title rendered without truncation (would wrap outside the pane)")
+	}
+	if !strings.Contains(v, "…") {
+		t.Fatal("truncated title is missing the ellipsis affordance")
+	}
+}
+
+func TestScrollbarShownWhenOverflowing(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(24, 8) // fewer visible rows than the seed has
+	if len(m.rows()) <= m.innerHeight() {
+		t.Fatalf("test setup: seed fits in the pane (%d rows ≤ %d)", len(m.rows()), m.innerHeight())
+	}
+	v := m.View()
+	// An overflowing menu shows both a thumb and track (the thumb is shorter than
+	// the pane), so it's clear there is more above/below.
+	if !strings.Contains(v, scrollThumb) {
+		t.Error("overflowing menu missing the scrollbar thumb")
+	}
+	if !strings.Contains(v, scrollTrack) {
+		t.Error("overflowing menu missing the scrollbar track")
+	}
+}
+
+func TestScrollbarThumbTracksOffset(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(24, 8)
+	// At the top the thumb sits on the first scrollbar cell; at the bottom it sits
+	// on the last — proving position reports how far the list is scrolled.
+	m, _ = m.Update(keymap.ActionTop)
+	top := scrollbarColumn(t, m)
+	if top[0] != scrollThumb {
+		t.Errorf("at top, first scrollbar cell = %q, want thumb", top[0])
+	}
+	if top[len(top)-1] != scrollTrack {
+		t.Errorf("at top, last scrollbar cell = %q, want track", top[len(top)-1])
+	}
+	m, _ = m.Update(keymap.ActionBottom)
+	bottom := scrollbarColumn(t, m)
+	if bottom[len(bottom)-1] != scrollThumb {
+		t.Errorf("at bottom, last scrollbar cell = %q, want thumb", bottom[len(bottom)-1])
+	}
+	if bottom[0] != scrollThumb && bottom[0] != scrollTrack {
+		t.Errorf("unexpected first scrollbar cell %q", bottom[0])
+	}
+}
+
+func TestNoScrollbarWhenAllRowsFit(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 60) // tall enough for every row
+	if len(m.rows()) > m.innerHeight() {
+		t.Fatalf("test setup: rows still overflow (%d > %d)", len(m.rows()), m.innerHeight())
+	}
+	v := m.View()
+	if strings.Contains(v, scrollThumb) || strings.Contains(v, scrollTrack) {
+		t.Fatal("scrollbar rendered when the whole menu already fits")
+	}
+}
+
+// scrollbarColumn extracts the rightmost inner cell of each content line of a
+// rendered menu — the reserved scrollbar column. It strips the border row and the
+// two border columns, returning one glyph per visible row.
+func scrollbarColumn(t *testing.T, m Model) []string {
+	t.Helper()
+	all := strings.Split(m.View(), "\n")
+	// Drop the top and bottom border rows.
+	if len(all) < 3 {
+		t.Fatalf("view has too few lines (%d) to hold a bordered viewport", len(all))
+	}
+	body := all[1 : len(all)-1]
+	col := make([]string, 0, len(body))
+	for _, ln := range body {
+		r := []rune(lipglossStrip(ln))
+		// r[0] and r[len-1] are the border columns; the cell before the right border
+		// is the scrollbar column.
+		if len(r) < 2 {
+			t.Fatalf("content line too short to hold a scrollbar column: %q", ln)
+		}
+		col = append(col, string(r[len(r)-2]))
+	}
+	return col
+}
+
+// lipglossStrip removes ANSI styling so a rendered line can be indexed by cell.
+func lipglossStrip(s string) string { return ansi.Strip(s) }
 
 // Ensure the emitted command types satisfy tea.Cmd (compile-time contract).
 var (

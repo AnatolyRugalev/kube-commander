@@ -2020,3 +2020,33 @@ CRDs, so per-context files keep each cluster's menu relevant. **Consequence:** t
 merge and app-wiring slices build on this loader; they must resolve the file via
 `config.MenuPath(context)` and treat a missing/half-broken file as "use the default
 menu" rather than an error that blocks start.
+
+### D84 — A pane's inner text region is `innerW-2`, not `innerW`: lipgloss borders are border-box for width; size content and clip to the real region
+
+`2026-07-21` · feedback `2026-07-21-03` (menu overflow/scroll).
+
+A bordered pane rendered through `styles.Pane`/`PaneFocus` uses lipgloss v2, where
+**the border is border-box for width but content-box for height**:
+`frame.Width(P)` produces a block whose *total* width is `P` (its inner text region
+is `P-2`, the two border columns eat into it), while `frame.Height(Q)` produces
+`Q` *content* rows plus 2 border rows (total `Q+2`). Components size the frame with
+`frame.Width(innerW)` where `innerW = width-2`, so the actual usable text columns
+are **`innerW-2`**. Sizing content lines to `innerW` (the prior menu code) makes
+every full-width line 2 columns too wide; lipgloss then clips or wraps it past the
+border — the visible cause of the dogfood menu overflow (long kind names spilling
+onto a detached second line below the frame).
+
+- **A viewport component must size its content lines — and clip long text — to the
+  real inner region `innerW-2`, not `innerW`.** The menu now does: it clips titles
+  to that region with an ellipsis (one line, never a wrap) and reserves the
+  rightmost region column for a proportional scrollbar (shown only when
+  `rows > visible`; thumb span = visible/total, position = offset/range).
+- **This is a latent hazard in the other bordered components** (`table`, `picker`,
+  `statusbar`, `welcome`) — they use the same `Width(innerW).MaxWidth(innerW)`
+  shape, so their full-width lines are silently truncated by 2 columns. Not fixed
+  here (out of this leg's scope); a future leg touching their layout should adopt
+  the `innerW-2` region and can lift the menu's `clip` helper.
+
+**Why:** a menu that wraps long CRD kinds outside its border reads as broken (the
+dogfood report). **Consequence:** treat `innerW-2` as the drawable width inside any
+`styles.Pane` frame; don't reintroduce full-width content sized to `innerW`.
