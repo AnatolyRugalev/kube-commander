@@ -60,8 +60,15 @@ func (m Model) View() string {
 	return m.help.View(m.keys)
 }
 
-// ShortHelpView renders the one-line status-bar hint (the curated ShortHelp
-// subset). Independent of visibility — a status bar shows it always.
+// ShortHelpView renders the one-line status-bar hint (the curated, focus-agnostic
+// ShortHelp subset). Independent of visibility — a status bar shows it always.
 func (m Model) ShortHelpView() string {
 	return m.help.ShortHelpView(m.keys.ShortHelp())
+}
+
+// ShortHelpContextView renders the one-line hint for a focus context (menu vs
+// table), so the persistent bottom hint tracks what holds focus (D11 keeps it
+// registry-generated; this component only lays out the bindings it is given).
+func (m Model) ShortHelpContextView(ctx keymap.HelpContext) string {
+	return m.help.ShortHelpView(m.keys.ShortHelpContext(ctx))
 }

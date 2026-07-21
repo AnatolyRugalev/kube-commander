@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-menu-item-states (menu marks the opened resource distinctly from the nav cursor via a `▸ ` marker + accented style) landed. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-hint-focus (the persistent bottom key-hint is now focus-aware — menu vs table subsets) landed, its dedicated-hintbar remainder triaged to FB-hintbar-dedicated. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-hint-focus** Feedback (`2026-07-21-06`, normal): make the persistent
-      bottom key-hint (status bar) **focus-aware** — show the keys relevant to what
-      currently holds focus (menu vs table), including `ctrl+n` namespace.
-      status: in-progress | owner: claude-opus | added: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -91,6 +88,18 @@ messages.
       degrade to the default menu (surface a toast, never block start — principle 3).
       Update README's config section. Depends on: FB-menu-config-02.
 
+- [ ] **FB-hintbar-dedicated** Promote the persistent key-hint into a dedicated,
+      always-visible bottom line of its own (its own row below the status bar), so it
+      is never dropped under width pressure or hidden behind an error toast — the way
+      the status bar's right-aligned hint is today.
+      status: todo | owner: — | added: 2026-07-21
+      notes: Deferred remainder of feedback `2026-07-21-06` (D85). This leg made the
+      existing status-bar hint focus-aware; this task makes it prominent/persistent.
+      Reuse `help.Model.ShortHelpContextView` + the D85 `syncHints` focus mapping; a
+      small `hintbar` component fed the same string. Move the hint off the status bar
+      (drop its `SetShortHelp`/right-align) so state and keys don't compete for the
+      line. Shrink `bodyH` by the extra line; keep the welcome page's own hint.
+
 - [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
       status: todo | owner: — | added: 2026-07-19
       notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
@@ -128,6 +137,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-hint-focus** Feedback (normal, `2026-07-21-06`): the persistent bottom key-hint (status bar) is now **focus-aware** — it shows the keys relevant to whatever pane holds focus and updates as focus moves. Added `keymap.HelpContext` (`HelpMenu`/`HelpTable`) + `HelpKeyMap.ShortHelpContext(ctx)` (registry-generated, D11 intact; unknown ctx → focus-agnostic `ShortHelp`): menu context = down/up/drill-in/namespace/help/quit; table context = down/up/filter/next-match/back/namespace/help/quit. `help.Model.ShortHelpContextView(ctx)` renders it; the root model maps focus→context in one `syncHints` and calls it at every focus switch (drill-in, nav.left/right pane switch, esc focus-pop, filter open) and on resize (re-elides to width). The welcome landing page keeps the focus-agnostic set. Only the primary slice — a **dedicated always-visible hint line** (never dropped under width pressure / behind an error toast) is triaged to FB-hintbar-dedicated. Tests: `ShortHelpContext` menu/table subsets differ + drop-disabled + unknown-ctx fallback (keymap); `ShortHelpContextView` tracks focus (help); `TestHintsAreFocusAware` (app: menu-focused hint offers drill-in not next-match; drilling in → table-focused hint offers filter not drill-in, asserted on the status bar's isolated View) — done 2026-07-21 (D85)
 - [x] **FB-menu-item-states** Feedback (normal, `2026-07-21-05`): the left menu now shows two independent states so it's always clear both which resource is open and where the cursor is. The **opened/active** resource (whose table fills the right pane) is prefixed with a `▸ ` marker and, when it's not also the cursor, drawn in a new accented `styles.Accent` (Primary fg, bold, no bar); the **nav cursor** keeps its full-width Selection bar; when a row is both, the marker and bar compose. The active resource is tracked in the menu by GVR (`menu.SetActive`/`ClearActive`, keyed so it survives Reconcile appending CRDs), set from the app's `selectResource`. The `▸` marker occupies the same two columns as the plain `  ` item indent (no width shift) and is distinct from the seam's `▾` and the scrollbar/border glyphs. Tests: active-marked-distinct-from-cursor, marker-survives-cursor-movement, survives-reconcile-by-GVR, ClearActive-clears (menu) + `TestSelectResourceMarksMenuActive` (app: drill-in marks the opened resource without moving the cursor) — done 2026-07-21
 - [x] **FB-ns-seam-followup** Feedback (high, `2026-07-21-09`): three namespace-seam dogfood fixes, the third a functional dead-end. (1) The menu seam row now reads like a dropdown — `namespaceArrow` (`▾ `) prefix + value, dropping the literal `"Namespace: "` label (`menu.go:renderNamespace`). (2) The unscoped value renders `(all)` not `"all namespaces"` (`menu.go` `namespaceAll` const), so the row reads `▾ (all)` unscoped / `▾ kube-system` scoped. (3) Fixed the picker dead-end: the app launches unscoped but the picker listed only concrete namespaces, so once a namespace was picked there was no way back to all-namespaces without restarting — `handleNamespacesLoaded` now pins an `all namespaces` sentinel entry at the top (`namespaceAllItem`), and `handleNamespaceSelected` maps it back to the empty scope (re-scopes the watch to all). Tests: menu seam renders `▾ (all)` / `▾ <ns>`; picker seeds 3 (2 ns + sentinel) with the sentinel pinned; `TestNamespaceAllSentinelResetsScope` (scope into a namespace then sentinel → empty scope + seam `(all)`); updated the capture-input/seed-count/seam-helper tests for the prepended sentinel — done 2026-07-21
 - [x] **FB-esc-back-to-menu** Feedback (normal, `2026-07-21-04`): esc is now the one-level-back gesture. In `handleAction`'s `ActionBack` case, after the existing help-close and committed-filter-clear branches, esc with the table focused now pops focus back to the left menu (`table.Blur()` + `menu.Focus()`); inert when the menu already holds focus. Ordering is one level per press: help → committed filter → focus-to-menu (the live-editing esc that clears an in-progress filter is still handled in `routeFilterKey`). Tests: `TestEscPopsTableFocusToMenu` (table focused → esc → menu focused; second esc inert) and `TestEscClearsFilterBeforePoppingFocus` (committed filter: first esc clears filter keeping table focus, second esc pops to menu) — done 2026-07-21

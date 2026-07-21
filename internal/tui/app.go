@@ -244,15 +244,14 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		opt(&m)
 	}
 	m.menu.Focus()
-	m.menu.SetNamespace(m.namespace) // seam row reflects the initial -n scope
-	shortHelp := m.help.ShortHelpView()
-	m.status.SetShortHelp(shortHelp)
+	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
+	m.syncHints()                      // menu starts focused → menu-context hints
 	m.status.SetContext(m.context)     // reflect the resolved --context (empty renders nothing)
 	m.status.SetNamespace(m.namespace) // reflect the -n scope (empty renders nothing)
 	m.welcome.SetVersion(m.version)
 	m.welcome.SetContext(m.context)
 	m.welcome.SetNamespace(m.namespace)
-	m.welcome.SetShortHelp(shortHelp)
+	m.welcome.SetShortHelp(m.help.ShortHelpView()) // landing page keeps the focus-agnostic set
 	return m
 }
 
@@ -307,7 +306,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.SetWidth(msg.Width)
 		m.status.SetWidth(msg.Width)
-		m.status.SetShortHelp(m.help.ShortHelpView())
+		m.syncHints() // re-elide the focus-aware hint to the new width
 		m.resize()
 		return m, nil
 
@@ -433,6 +432,7 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.menu.SetActive(r) // mark the opened resource distinctly from the nav cursor
 	m.menu.Blur()
 	m.table.Focus()
+	m.syncHints() // focus is now the table → table-context hints
 	return m, m.pumpWatch()
 }
 
@@ -644,6 +644,7 @@ func (m Model) openFilter() (tea.Model, tea.Cmd) {
 	cmd := m.filterInput.Focus()
 	m.menu.Blur()
 	m.table.Focus()
+	m.syncHints() // filtering acts on the table → table-context hints
 	m.syncFilterStatus()
 	return m, cmd
 }
@@ -727,6 +728,20 @@ func (m Model) searchMove(dir keymap.Action) (tea.Model, tea.Cmd) {
 		m.table.SelectPrevWrap()
 	}
 	return m, nil
+}
+
+// syncHints refreshes the persistent bottom key-hint to match what currently holds
+// focus (the dogfood ask, feedback 2026-07-21-06): the menu-context keys while the
+// left resource menu is focused, the table-context keys (filter/search, back) once
+// the right table is. The hint stays registry-generated (D11) — this only picks the
+// focus context. Call it wherever focus switches, and on resize (the help renderer
+// elides the hint to the current width).
+func (m *Model) syncHints() {
+	ctx := keymap.HelpMenu
+	if m.table.Focused() {
+		ctx = keymap.HelpTable
+	}
+	m.status.SetShortHelp(m.help.ShortHelpContextView(ctx))
 }
 
 // syncFilterStatus reflects the current filter state on the status bar: the live
@@ -835,6 +850,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		if m.table.Focused() {
 			m.table.Blur()
 			m.menu.Focus()
+			m.syncHints() // back to the menu → menu-context hints
 		}
 		return m, nil
 	}
@@ -868,6 +884,7 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 		if a == keymap.ActionLeft && m.table.HOffset() == 0 {
 			m.table.Blur()
 			m.menu.Focus()
+			m.syncHints() // focus back to the menu → menu-context hints
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -878,6 +895,7 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionRight {
 		m.menu.Blur()
 		m.table.Focus()
+		m.syncHints() // focus to the table → table-context hints
 		return m, nil
 	}
 	var cmd tea.Cmd

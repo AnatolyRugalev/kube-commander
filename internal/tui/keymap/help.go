@@ -40,9 +40,38 @@ func (k *Keymap) Bindings() []key.Binding {
 }
 
 // shortHelpActions is the curated one-line status-bar subset (help.KeyMap's
-// ShortHelp): the essentials a user needs at a glance. Ordered as shown.
+// ShortHelp): the essentials a user needs at a glance. Ordered as shown. This is
+// the focus-agnostic set used where there is no single focused pane (the startup
+// welcome page); the browse status bar uses the focus-aware sets below.
 var shortHelpActions = []Action{
 	ActionDown, ActionUp, ActionDrillIn, ActionBack, ActionFilter, ActionHelp, ActionQuit,
+}
+
+// HelpContext selects which curated key-hint subset the persistent bottom hint
+// shows, so the hint tracks what currently holds focus (the dogfood ask: "the
+// most relevant keys for the current context, updating with focus"). It names a
+// focus context, never a key — the concrete keys still come from the registry
+// (D11), so a future focus context is added here, not by hard-coding keys in a
+// view.
+type HelpContext int
+
+const (
+	// HelpMenu is the left resource-menu focus: navigate the list, open a
+	// selection, switch namespace.
+	HelpMenu HelpContext = iota
+	// HelpTable is the right resource-table focus: navigate rows, filter/search
+	// them, and step back out to the menu.
+	HelpTable
+)
+
+// contextShortHelpActions is the curated hint subset per focus context. Each set
+// is ordered as shown and rendered enabled-only. Filter/search appear only in the
+// table context (they act on a resource table, no-ops on the menu), while drill-in
+// appears only in the menu context (opening the selected resource); namespace,
+// help and quit are always-relevant and shown in both.
+var contextShortHelpActions = map[HelpContext][]Action{
+	HelpMenu:  {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a
@@ -56,11 +85,28 @@ var _ help.KeyMap = HelpKeyMap{}
 // HelpMap returns a help.KeyMap view over this keymap.
 func (k *Keymap) HelpMap() HelpKeyMap { return HelpKeyMap{km: k} }
 
-// ShortHelp returns the curated status-bar bindings, skipping any the user has
-// disabled.
+// ShortHelp returns the curated (focus-agnostic) status-bar bindings, skipping any
+// the user has disabled.
 func (h HelpKeyMap) ShortHelp() []key.Binding {
+	return h.enabled(shortHelpActions)
+}
+
+// ShortHelpContext returns the curated bindings for a focus context (menu vs
+// table), skipping any the user has disabled — the focus-aware hint the browse
+// status bar shows. An unknown context falls back to the focus-agnostic set.
+func (h HelpKeyMap) ShortHelpContext(ctx HelpContext) []key.Binding {
+	actions, ok := contextShortHelpActions[ctx]
+	if !ok {
+		actions = shortHelpActions
+	}
+	return h.enabled(actions)
+}
+
+// enabled maps actions to their bindings, dropping any the user disabled (no
+// bound keys), preserving order.
+func (h HelpKeyMap) enabled(actions []Action) []key.Binding {
 	var out []key.Binding
-	for _, a := range shortHelpActions {
+	for _, a := range actions {
 		if b := h.km.Binding(a); b.Enabled() {
 			out = append(out, b)
 		}

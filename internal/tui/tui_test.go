@@ -16,6 +16,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // sized returns the model after a WindowSizeMsg so View renders (it draws nothing
@@ -252,6 +253,42 @@ func TestFocusSwitch(t *testing.T) {
 	m, _ = press(t, m, tea.Key{Code: 'h', Text: "h"})
 	if !m.menu.Focused() || m.table.Focused() {
 		t.Fatal("nav.left at the table's left edge should move focus to the menu")
+	}
+}
+
+// TestHintsAreFocusAware proves the persistent bottom hint (status bar) tracks
+// focus (feedback 2026-07-21-06): the menu-context hint offers drill-in and not
+// next-match, and once a resource is opened and focus moves to the table the hint
+// switches to the table context (filter/next-match, not drill-in). The status bar
+// is rendered in isolation (its own View) so the welcome page's focus-agnostic
+// hint can't mask the difference. Width 200 keeps the help renderer from eliding.
+func TestHintsAreFocusAware(t *testing.T) {
+	next, _ := New(WithWatcher(&fakeWatcher{})).Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	m := next.(Model)
+
+	if !m.menu.Focused() {
+		t.Fatal("menu should start focused")
+	}
+	bar := m.status.View()
+	if !strings.Contains(bar, keymap.ActionDrillIn.Describe()) {
+		t.Errorf("menu-focused hint should offer drill-in; got %q", bar)
+	}
+	if strings.Contains(bar, keymap.ActionSearchNext.Describe()) {
+		t.Errorf("menu-focused hint should not offer next-match; got %q", bar)
+	}
+
+	// Drill into a resource → focus moves to the table → table-context hint.
+	next, _ = m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	if !m.table.Focused() {
+		t.Fatal("drilling in should focus the table")
+	}
+	bar = m.status.View()
+	if !strings.Contains(bar, keymap.ActionFilter.Describe()) {
+		t.Errorf("table-focused hint should offer filter; got %q", bar)
+	}
+	if strings.Contains(bar, keymap.ActionDrillIn.Describe()) {
+		t.Errorf("table-focused hint should not offer drill-in; got %q", bar)
 	}
 }
 

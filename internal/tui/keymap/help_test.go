@@ -2,6 +2,8 @@ package keymap
 
 import (
 	"testing"
+
+	"charm.land/bubbles/v2/key"
 )
 
 // TestBindingFromDefaults checks a normal action's binding carries the resolved
@@ -76,6 +78,56 @@ func TestHelpMapShortHelp(t *testing.T) {
 		if b.Help().Desc == ActionHelp.Describe() {
 			t.Error("disabled app.help should not appear in ShortHelp")
 		}
+	}
+}
+
+// TestShortHelpContext checks the focus-aware hint subsets differ by context —
+// the menu context offers drill-in but not filter/search, the table context the
+// reverse — and drop entries the user disabled.
+func TestShortHelpContext(t *testing.T) {
+	hm := DefaultKeymap().HelpMap()
+
+	descs := func(bs []key.Binding) map[string]bool {
+		out := map[string]bool{}
+		for _, b := range bs {
+			out[b.Help().Desc] = true
+		}
+		return out
+	}
+	menu := descs(hm.ShortHelpContext(HelpMenu))
+	table := descs(hm.ShortHelpContext(HelpTable))
+
+	if !menu[ActionDrillIn.Describe()] {
+		t.Error("menu context should offer drill-in")
+	}
+	if menu[ActionFilter.Describe()] {
+		t.Error("menu context should not offer filter (no table to filter)")
+	}
+	if !table[ActionFilter.Describe()] || !table[ActionSearchNext.Describe()] {
+		t.Error("table context should offer filter and next-match")
+	}
+	if table[ActionDrillIn.Describe()] {
+		t.Error("table context should not offer drill-in")
+	}
+	// Namespace/help/quit are relevant in both contexts.
+	for _, a := range []Action{ActionNamespace, ActionHelp, ActionQuit} {
+		if !menu[a.Describe()] || !table[a.Describe()] {
+			t.Errorf("%q should appear in both focus contexts", a)
+		}
+	}
+
+	// Disabling an action drops it from the context subset.
+	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
+	if err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if descs(km.HelpMap().ShortHelpContext(HelpMenu))[ActionNamespace.Describe()] {
+		t.Error("disabled ns.switch should not appear in the menu context")
+	}
+
+	// An unknown context falls back to the focus-agnostic set (never empty).
+	if len(hm.ShortHelpContext(HelpContext(99))) != len(hm.ShortHelp()) {
+		t.Error("unknown context should fall back to the focus-agnostic ShortHelp set")
 	}
 }
 

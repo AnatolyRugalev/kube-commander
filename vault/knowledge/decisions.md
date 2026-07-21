@@ -2050,3 +2050,36 @@ onto a detached second line below the frame).
 **Why:** a menu that wraps long CRD kinds outside its border reads as broken (the
 dogfood report). **Consequence:** treat `innerW-2` as the drawable width inside any
 `styles.Pane` frame; don't reintroduce full-width content sized to `innerW`.
+
+### D85 — The persistent bottom key-hint is focus-aware: menu-context vs table-context curated subsets, chosen by which pane holds focus
+
+`2026-07-21` · feedback `2026-07-21-06` (status-bar key hints).
+
+The always-on status-bar key hint (D11 — registry-generated, `help.Model.ShortHelpView`)
+was a single focus-agnostic curated set (`shortHelpActions`). It is now **focus-aware**:
+the browse status bar shows the keys relevant to whatever pane holds focus, so the hint
+updates as focus moves (the dogfood ask).
+
+- `keymap.HelpContext` (`HelpMenu`/`HelpTable`) names a **focus context, never a key**;
+  the concrete keys still come from the registry, so a new context is added by listing
+  actions in `contextShortHelpActions`, not by hard-coding keys in a view (D11 holds).
+  `HelpKeyMap.ShortHelpContext(ctx)` returns that context's enabled bindings; an unknown
+  context falls back to the focus-agnostic `ShortHelp()`.
+- **Menu context** offers drill-in + namespace (no filter/search — nothing to filter on
+  the menu); **table context** offers filter + next-match + back (no drill-in); namespace,
+  help and quit appear in both. The focus-agnostic `ShortHelp()` is retained for the
+  **welcome landing page** (no single focused pane there).
+- The root model owns the focus→context mapping in one place (`syncHints`) and calls it
+  wherever focus switches (drill-in, nav.left/right pane switch, esc focus-pop, filter
+  open) and on resize (the hint re-elides to the new width). A future leg adding a focus
+  target must call `syncHints` at that switch or the hint goes stale.
+
+**Why:** a hint that shows keys irrelevant to the focused pane (or omits the relevant
+ones, e.g. `/` filter while on a table) is noise. **Consequence:** keep hint subsets in
+`contextShortHelpActions` keyed by focus context; don't reintroduce a single flat status
+hint, and don't hard-code per-context key lists in views.
+
+**Deferred (board `FB-hintbar-dedicated`):** promoting the hint into a dedicated,
+always-visible bottom line of its own so it is never dropped under width pressure (today
+the status bar still drops the right-aligned hint when the left state segment leaves no
+room, and hides it entirely behind an error toast).

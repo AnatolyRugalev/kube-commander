@@ -45,3 +45,26 @@ func TestShortHelpViewAlwaysRenders(t *testing.T) {
 		t.Error("ShortHelpView should render the status-bar hint even when hidden")
 	}
 }
+
+// TestShortHelpContextViewTracksFocus proves the focus-aware hint differs between
+// the menu and table contexts (so the persistent bottom hint updates with focus)
+// and surfaces the context-only descriptions from the registry.
+func TestShortHelpContextViewTracksFocus(t *testing.T) {
+	m := New(keymap.DefaultKeymap())
+	m.SetWidth(200) // wide enough that nothing is elided
+
+	menu := m.ShortHelpContextView(keymap.HelpMenu)
+	table := m.ShortHelpContextView(keymap.HelpTable)
+	if menu == "" || table == "" {
+		t.Fatal("both focus-context hints should render")
+	}
+	if menu == table {
+		t.Fatal("menu and table hints should differ with focus")
+	}
+	if !strings.Contains(menu, keymap.ActionDrillIn.Describe()) {
+		t.Errorf("menu hint should mention drill-in; got %q", menu)
+	}
+	if !strings.Contains(table, keymap.ActionFilter.Describe()) {
+		t.Errorf("table hint should mention filter; got %q", table)
+	}
+}
