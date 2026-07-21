@@ -7,7 +7,8 @@ _Last updated: 2026-07-21 — M2-10…M2-13 stay gated by the open dogfood human
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-14d** teatest coverage: error-toast path (D74/FB-errors-layout) driven through the real program
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
