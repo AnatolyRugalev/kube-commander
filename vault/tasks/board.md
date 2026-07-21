@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox; claiming FB-menu-item-states (menu shows the opened resource distinctly from the nav cursor). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-menu-item-states (menu marks the opened resource distinctly from the nav cursor via a `▸ ` marker + accented style) landed. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-menu-item-states** Feedback (normal, `2026-07-21-05`): left menu needs
-      two distinct visual states — the nav cursor vs. the opened/active resource.
-      status: in-progress | owner: claude-opus | added: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -127,6 +125,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-menu-item-states** Feedback (normal, `2026-07-21-05`): the left menu now shows two independent states so it's always clear both which resource is open and where the cursor is. The **opened/active** resource (whose table fills the right pane) is prefixed with a `▸ ` marker and, when it's not also the cursor, drawn in a new accented `styles.Accent` (Primary fg, bold, no bar); the **nav cursor** keeps its full-width Selection bar; when a row is both, the marker and bar compose. The active resource is tracked in the menu by GVR (`menu.SetActive`/`ClearActive`, keyed so it survives Reconcile appending CRDs), set from the app's `selectResource`. The `▸` marker occupies the same two columns as the plain `  ` item indent (no width shift) and is distinct from the seam's `▾` and the scrollbar/border glyphs. Tests: active-marked-distinct-from-cursor, marker-survives-cursor-movement, survives-reconcile-by-GVR, ClearActive-clears (menu) + `TestSelectResourceMarksMenuActive` (app: drill-in marks the opened resource without moving the cursor) — done 2026-07-21
 - [x] **FB-ns-seam-followup** Feedback (high, `2026-07-21-09`): three namespace-seam dogfood fixes, the third a functional dead-end. (1) The menu seam row now reads like a dropdown — `namespaceArrow` (`▾ `) prefix + value, dropping the literal `"Namespace: "` label (`menu.go:renderNamespace`). (2) The unscoped value renders `(all)` not `"all namespaces"` (`menu.go` `namespaceAll` const), so the row reads `▾ (all)` unscoped / `▾ kube-system` scoped. (3) Fixed the picker dead-end: the app launches unscoped but the picker listed only concrete namespaces, so once a namespace was picked there was no way back to all-namespaces without restarting — `handleNamespacesLoaded` now pins an `all namespaces` sentinel entry at the top (`namespaceAllItem`), and `handleNamespaceSelected` maps it back to the empty scope (re-scopes the watch to all). Tests: menu seam renders `▾ (all)` / `▾ <ns>`; picker seeds 3 (2 ns + sentinel) with the sentinel pinned; `TestNamespaceAllSentinelResetsScope` (scope into a namespace then sentinel → empty scope + seam `(all)`); updated the capture-input/seed-count/seam-helper tests for the prepended sentinel — done 2026-07-21
 - [x] **FB-esc-back-to-menu** Feedback (normal, `2026-07-21-04`): esc is now the one-level-back gesture. In `handleAction`'s `ActionBack` case, after the existing help-close and committed-filter-clear branches, esc with the table focused now pops focus back to the left menu (`table.Blur()` + `menu.Focus()`); inert when the menu already holds focus. Ordering is one level per press: help → committed filter → focus-to-menu (the live-editing esc that clears an in-progress filter is still handled in `routeFilterKey`). Tests: `TestEscPopsTableFocusToMenu` (table focused → esc → menu focused; second esc inert) and `TestEscClearsFilterBeforePoppingFocus` (committed filter: first esc clears filter keeping table focus, second esc pops to menu) — done 2026-07-21
 - [x] **FB-menu-scroll** Feedback (high, `2026-07-21-03`): left menu is now a real viewport. Long kind names clip to one line with an ellipsis (was: wrapped outside the pane border), and a proportional scrollbar in the reserved rightmost column shows how much is scrolled off above/below (thumb span = visible/total, position = offset/range; drawn only when rows > visible). Root cause was a border-box width off-by-2 — a `styles.Pane` frame's real inner region is `innerW-2`, so content sized to `innerW` overflowed; content/clip now target `innerW-2` (D84). Selection-in-view was already handled. Tests: long-title-clipped-no-wrap, scrollbar shown/tracks-offset/absent-when-fits — done 2026-07-21 (D84)

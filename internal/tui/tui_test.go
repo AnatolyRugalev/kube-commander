@@ -321,6 +321,36 @@ func TestSelectResourceStartsWatch(t *testing.T) {
 	}
 }
 
+// TestSelectResourceMarksMenuActive proves selecting a resource marks it as the
+// opened/active item in the menu, distinct from the nav cursor (dogfood-05): the
+// menu renders the "▸ " marker on the opened row even though drilling in moved
+// focus to the table and never advanced the menu cursor.
+func TestSelectResourceMarksMenuActive(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+
+	// Use the seed's real Pods resource so its GVR matches the menu row it marks.
+	var pods kube.Resource
+	for _, it := range m.menu.Items() {
+		if it.Resource.GVR.Resource == "pods" {
+			pods = it.Resource
+		}
+	}
+	if pods.GVR.Resource == "" {
+		t.Fatal("seed menu has no pods item")
+	}
+
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: pods})
+	m = next.(Model)
+
+	if m.menu.Cursor() != 0 {
+		t.Fatalf("drilling in should not move the menu cursor, got %d", m.menu.Cursor())
+	}
+	if !strings.Contains(m.menu.View(), "▸ Pod") {
+		t.Fatalf("menu does not mark the opened resource active:\n%s", m.menu.View())
+	}
+}
+
 // TestSelectResourceInertWithoutWatcher proves a model built with no watcher is
 // watch-inert: selecting a resource is a no-op (no focus change, no command).
 func TestSelectResourceInertWithoutWatcher(t *testing.T) {

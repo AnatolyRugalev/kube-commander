@@ -92,6 +92,13 @@ type Styles struct {
 	// Selection is the highlighted row in a list, menu, or table.
 	Selection lipgloss.Style
 
+	// Accent is accented, emphasised text (Primary foreground, bold) with no
+	// background bar — the role for a marked-but-not-cursor item, e.g. the menu's
+	// opened/active resource shown while the nav cursor sits elsewhere. Distinct
+	// from Selection (which paints a full-width background bar) so the two states
+	// never look alike.
+	Accent lipgloss.Style
+
 	// Header is a table's column-header row (bold, accented).
 	Header lipgloss.Style
 
@@ -128,6 +135,9 @@ func New(t Theme) Styles {
 		Selection: lipgloss.NewStyle().
 			Foreground(t.SelectionFg).
 			Background(t.Selection),
+		Accent: lipgloss.NewStyle().
+			Foreground(t.Primary).
+			Bold(true),
 		Header: lipgloss.NewStyle().
 			Foreground(t.Header).
 			Bold(true),

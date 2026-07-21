@@ -509,6 +509,84 @@ func TestReconcilePreservesSeamAndItsSelection(t *testing.T) {
 	}
 }
 
+func TestActiveResourceMarkedDistinctFromCursor(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40) // tall enough to show every row
+	// Nothing opened yet: no active marker anywhere.
+	if strings.Contains(lipglossStrip(m.View()), activeMarker) {
+		t.Fatal("active marker rendered before any resource is opened")
+	}
+	// Open Pods while the nav cursor stays at the top (namespaces): the Pods row must
+	// render marked-active even though the cursor sits on a different item — the two
+	// states are independent (dogfood-05).
+	pods := m.items[findItem(m, "pods")].Resource
+	m.SetActive(pods)
+	if m.cursor != 0 {
+		t.Fatalf("SetActive moved the cursor to %d; it must not touch the cursor", m.cursor)
+	}
+	v := lipglossStrip(m.View())
+	if !strings.Contains(v, activeMarker+"Pod") {
+		t.Fatalf("opened Pods row not marked active (want %q) in:\n%s", activeMarker+"Pod", v)
+	}
+	// Exactly one resource is marked active (the seam's own "▾" is a different glyph).
+	if got := strings.Count(v, activeMarker); got != 1 {
+		t.Fatalf("active marker appears %d times, want exactly 1", got)
+	}
+}
+
+func TestActiveMarkerSurvivesCursorMovement(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40)
+	pods := m.items[findItem(m, "pods")].Resource
+	m.SetActive(pods)
+	// Walk the cursor down onto and back off the opened row; the marker never moves.
+	for i := 0; i < 6; i++ {
+		m, _ = m.Update(keymap.ActionDown)
+		v := lipglossStrip(m.View())
+		if !strings.Contains(v, activeMarker+"Pod") {
+			t.Fatalf("step %d: active marker lost as the cursor moved:\n%s", i, v)
+		}
+		if got := strings.Count(v, activeMarker); got != 1 {
+			t.Fatalf("step %d: active marker count = %d, want 1", i, got)
+		}
+	}
+}
+
+func TestActiveSurvivesReconcileByGVR(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 60)
+	// Open a CRD that is not in the seed — it only appears after discovery. Keying the
+	// active state by GVR (not index) means the marker lands on the row once Reconcile
+	// appends it.
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	m.SetActive(crd)
+	if strings.Contains(lipglossStrip(m.View()), activeMarker) {
+		t.Fatal("marker rendered before the active resource exists in the menu")
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{crd}})
+	v := lipglossStrip(m.View())
+	if !strings.Contains(v, activeMarker+"Widget") {
+		t.Fatalf("active marker did not follow the resource across Reconcile:\n%s", v)
+	}
+}
+
+func TestClearActiveRemovesMarker(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40)
+	pods := m.items[findItem(m, "pods")].Resource
+	m.SetActive(pods)
+	if !strings.Contains(lipglossStrip(m.View()), activeMarker) {
+		t.Fatal("SetActive did not mark the row")
+	}
+	m.ClearActive()
+	if strings.Contains(lipglossStrip(m.View()), activeMarker) {
+		t.Fatal("active marker still rendered after ClearActive")
+	}
+}
+
 func TestLongTitleClippedToOneLine(t *testing.T) {
 	m := newTestModel()
 	const long = "MutatingWebhookConfiguration"

@@ -430,6 +430,7 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.current = r
 	m.hasCurrent = true
 
+	m.menu.SetActive(r) // mark the opened resource distinctly from the nav cursor
 	m.menu.Blur()
 	m.table.Focus()
 	return m, m.pumpWatch()

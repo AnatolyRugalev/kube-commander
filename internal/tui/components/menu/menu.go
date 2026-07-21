@@ -17,6 +17,12 @@
 // proportional scrollbar appears in the rightmost column whenever the menu has
 // more rows than the pane can show.
 //
+// The menu shows two independent states so it is always clear both which resource
+// is open and where the cursor is (dogfood-05): the nav cursor is the highlighted
+// row, while the opened/active resource — the one whose table fills the right pane,
+// set by SetActive — is prefixed with a "▸ " marker and accented, so it stays
+// marked as open even when the cursor moves to a different item.
+//
 // The menu never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands the Action to Update, which moves the selection. When
 // the user drills in (nav.drillIn) the menu emits a ResourceSelectedMsg — its own
@@ -67,6 +73,18 @@ const namespaceArrow = "▾ "
 // names (e.g. MutatingWebhookConfiguration) are clipped to one line rather than
 // wrapping outside the pane border (the dogfood-03 overflow bug).
 const ellipsis = "…"
+
+// activeMarker prefixes the opened/active resource row — the item whose table is
+// showing in the right pane — so it stays visibly marked even while the nav cursor
+// sits on a different item (dogfood-05: the cursor and the opened item are two
+// separate states). It is two display columns wide, exactly like the plain "  "
+// item indent it replaces, so it never shifts the clip width.
+const activeMarker = "▸ "
+
+// itemIndent is the plain two-column indent under a section header for a resource
+// row that is neither the cursor nor the active item, matching activeMarker's width
+// so rows align whether or not one is marked active.
+const itemIndent = "  "
 
 // Scrollbar glyphs for the reserved right-hand column, shown only when the menu
 // has more rows than the pane can display. Neither glyph appears in the rounded
@@ -131,6 +149,15 @@ type Model struct {
 
 	namespace string // the scoped namespace shown on the seam row ("" → all)
 
+	// active tracks the opened resource — the one whose live table is showing in the
+	// right pane — as a distinct visual state from the nav cursor (dogfood-05). It is
+	// keyed by GVR rather than an index so it survives Reconcile appending CRDs (the
+	// same robustness the cursor-preservation resolve-by-GVR gives). hasActive guards
+	// it; only ItemResource rows are ever active (drilling into the namespace seam
+	// opens the picker, not a table).
+	activeGVR schema.GroupVersionResource
+	hasActive bool
+
 	cursor  int // index of the highlighted item
 	offset  int // index of the first visible item (vertical scroll)
 	width   int // total width incl. border
@@ -156,6 +183,30 @@ func (m *Model) SetSize(w, h int) {
 // -n scope and every namespace-picker selection so the seam always reflects the
 // live scope.
 func (m *Model) SetNamespace(ns string) { m.namespace = ns }
+
+// SetActive marks r as the opened/active resource — the one whose live table is
+// showing in the right pane — so its menu row renders in the distinct active state
+// even when the nav cursor moves elsewhere (dogfood-05). The root model wires this
+// from selectResource every time it (re)starts a watch. Keyed by GVR so it survives
+// a discovery Reconcile that appends CRDs.
+func (m *Model) SetActive(r kube.Resource) {
+	m.activeGVR = r.GVR
+	m.hasActive = true
+}
+
+// ClearActive drops the opened/active marker (no resource is open). Kept for
+// completeness / future use when a watch is torn down without a replacement.
+func (m *Model) ClearActive() {
+	m.hasActive = false
+	m.activeGVR = schema.GroupVersionResource{}
+}
+
+// isActive reports whether it is the opened/active resource row (the one whose
+// table is showing). Only resource rows can be active; a zero activeGVR never
+// matches because a real resource always carries a non-empty version+resource.
+func (m Model) isActive(it Item) bool {
+	return m.hasActive && it.Kind == ItemResource && it.Resource.GVR == m.activeGVR
+}
 
 // Focus marks the menu as holding focus (accented border).
 func (m *Model) Focus() { m.focused = true }
@@ -535,18 +586,31 @@ func (m Model) renderHeader(title string, innerW int) string {
 	return m.styles.Header.Width(innerW).MaxWidth(innerW).Render(clip(title, innerW))
 }
 
-// renderItem renders one item line clamped to innerW: the highlighted item takes
-// the Selection style (full-width bar), an unavailable item is muted, and a normal
-// item takes the base style. Items indent under their header for the tree look.
-// The namespace seam is a non-resource row rendered distinctly (renderNamespace).
+// renderItem renders one item line clamped to innerW. Two independent states are
+// shown (dogfood-05): the **nav cursor** (the highlighted row) takes the Selection
+// full-width bar, and the **opened/active** resource (whose table is showing) is
+// prefixed with activeMarker ("▸ ") and, when it is not also the cursor, drawn in
+// the accented Accent style — so it stays marked as open even while the cursor sits
+// elsewhere. When a row is both cursor and active it keeps the Selection bar and
+// gains the marker (both states composed). An unavailable item is muted, a plain
+// item takes the base style. Non-active items indent under their header ("  ") for
+// the tree look; the marker occupies those same two columns so nothing shifts. The
+// namespace seam is a non-resource row rendered distinctly (renderNamespace).
 func (m Model) renderItem(it Item, selected bool, innerW int) string {
 	if it.Kind == ItemNamespace {
 		return m.renderNamespace(selected, innerW)
 	}
-	title := clip("  "+it.Title, innerW)
+	prefix := itemIndent
+	active := m.isActive(it)
+	if active {
+		prefix = activeMarker
+	}
+	title := clip(prefix+it.Title, innerW)
 	switch {
 	case selected:
 		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(title)
+	case active:
+		return m.styles.Accent.Width(innerW).MaxWidth(innerW).Render(title)
 	case !it.Available:
 		return m.styles.Subtle.Width(innerW).MaxWidth(innerW).Render(title)
 	default:
