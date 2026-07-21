@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-menu-scroll (menu viewport: clip long kind names + proportional scrollbar) landed. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-esc-back-to-menu (esc pops table focus back to the left menu, one level per press) landed. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-esc-back-to-menu** Esc pops focus table→menu (one level per press; clears an active table filter first, then the next Esc returns focus to the left menu)
-      status: in-progress | owner: claude (Opus 4.8) | added: 2026-07-21
-      notes: dogfood feedback `2026-07-21-04-esc-returns-to-left-pane` — delete the feedback file in this leg.
+_(none)_
 
 ## Blocked
 
@@ -127,6 +125,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-esc-back-to-menu** Feedback (normal, `2026-07-21-04`): esc is now the one-level-back gesture. In `handleAction`'s `ActionBack` case, after the existing help-close and committed-filter-clear branches, esc with the table focused now pops focus back to the left menu (`table.Blur()` + `menu.Focus()`); inert when the menu already holds focus. Ordering is one level per press: help → committed filter → focus-to-menu (the live-editing esc that clears an in-progress filter is still handled in `routeFilterKey`). Tests: `TestEscPopsTableFocusToMenu` (table focused → esc → menu focused; second esc inert) and `TestEscClearsFilterBeforePoppingFocus` (committed filter: first esc clears filter keeping table focus, second esc pops to menu) — done 2026-07-21
 - [x] **FB-menu-scroll** Feedback (high, `2026-07-21-03`): left menu is now a real viewport. Long kind names clip to one line with an ellipsis (was: wrapped outside the pane border), and a proportional scrollbar in the reserved rightmost column shows how much is scrolled off above/below (thumb span = visible/total, position = offset/range; drawn only when rows > visible). Root cause was a border-box width off-by-2 — a `styles.Pane` frame's real inner region is `innerW-2`, so content sized to `innerW` overflowed; content/clip now target `innerW-2` (D84). Selection-in-view was already handled. Tests: long-title-clipped-no-wrap, scrollbar shown/tracks-offset/absent-when-fits — done 2026-07-21 (D84)
 - [x] **FB-menu-config-01** Feedback (high, `2026-07-21-02`): per-context dynamic menu config — **first slice** (triaged the rest into FB-menu-config-02/03). Added `config.MenuConfig`/`MenuResource` (the CRD entry format: group/version/resource + optional kind/namespaced/section/title; version+resource required, "" group = core), `config.MenuDir()` (`<configdir>/kubecom/menus`), `config.MenuPath(context)` (sanitizes an arbitrary context name to a safe single `.yaml` segment; empty context errors), and `LoadMenu`/`LoadMenuFile` (unknown-field-strict, missing file → zero config, per-entry validation). Config stays free of the kube/menu packages (no cycle); mapping+merge is FB-menu-config-02. Tests: schema round-trip, core-group-omitted, unknown-field/missing-version/missing-resource rejection, missing-file-zero, dir suffix, context sanitization (k3d/gke/arn/spaces) + no-escape, empty-context error — done 2026-07-21 (D83)
 - [x] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): namespace picker surfaced as a row in the left menu, marking the cluster-scoped ↔ namespaced seam. Added `menu.Item.Kind` (`ItemResource`/`ItemNamespace`); the seed inserts one `ItemNamespace` seam row after the `Cluster` section and before the namespaced sections; drilling into it emits `menu.NamespaceRequestedMsg` (root opens the namespace picker — same effect as ctrl+n, which stays). The seam shows the live scope (`menu.SetNamespace`, "" → "all namespaces"), kept current from the `-n` flag and every picker selection. `Reconcile` skips non-resource rows (no twin/group; selection resolved by kind), D77 grouping unaffected. Tests: seam placement/drill-in/render/reconcile-preservation (menu) + seam-opens-picker + selection-updates-seam (app) — done 2026-07-21 (D82)

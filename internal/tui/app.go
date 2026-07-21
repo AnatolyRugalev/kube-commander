@@ -781,9 +781,11 @@ func (m Model) scheduleTimeout() tea.Cmd {
 }
 
 // handleAction applies a resolved action. App-global actions (quit, help toggle,
-// back-closes-help) are serviced first; while the help overlay is open it swallows
-// navigation so the panes underneath do not move. Otherwise the action is routed
-// to the focused pane, with nav.left/nav.right also switching focus between panes.
+// back) are serviced first; while the help overlay is open it swallows navigation
+// so the panes underneath do not move. nav.back (esc) unwinds one level per press
+// (help → committed filter → table focus back to the menu). Otherwise the action
+// is routed to the focused pane, with nav.left/nav.right also switching focus
+// between panes.
 func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionQuit:
@@ -798,15 +800,23 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		m.help.Toggle()
 		return m, nil
 	case keymap.ActionBack:
-		// esc closes the help overlay when it is open; else clears a committed table
-		// filter (leaving the filtered view — the live-editing esc is handled in
-		// routeFilterKey); otherwise inert until the pane/drill-in stack exists.
+		// esc is the one-level-back key, resolved top-down, one level per press:
+		// close the help overlay if open; else clear a committed table filter
+		// (leaving the filtered view — the live-editing esc is handled in
+		// routeFilterKey); else, with the table focused, pop focus back to the left
+		// menu pane (the "back to the menu" gesture). Inert when the menu already
+		// holds focus and nothing is open.
 		if m.help.Visible() {
 			m.help.SetVisible(false)
 			return m, nil
 		}
 		if m.table.Filter() != "" {
 			m.clearFilter()
+			return m, nil
+		}
+		if m.table.Focused() {
+			m.table.Blur()
+			m.menu.Focus()
 		}
 		return m, nil
 	}

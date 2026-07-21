@@ -952,6 +952,57 @@ func TestCommittedFilterClearedByEsc(t *testing.T) {
 	}
 }
 
+// TestEscPopsTableFocusToMenu proves nav.back (esc) is the "back to the menu"
+// gesture: with the table focused and no filter, esc pops focus to the left menu
+// pane. Esc while the menu already holds focus is inert.
+func TestEscPopsTableFocusToMenu(t *testing.T) {
+	m := sized(t)
+
+	// Focus the table (nav.right), then esc → focus back to the menu.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	if !m.table.Focused() || m.menu.Focused() {
+		t.Fatal("precondition: nav.right should focus the table")
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if !m.menu.Focused() || m.table.Focused() {
+		t.Fatal("esc with the table focused should pop focus back to the menu")
+	}
+
+	// A second esc with the menu already focused is inert (no panic, focus stays).
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if !m.menu.Focused() || m.table.Focused() {
+		t.Fatal("esc with the menu focused should leave focus on the menu")
+	}
+}
+
+// TestEscClearsFilterBeforePoppingFocus proves the one-level-per-press ordering: on
+// a committed filter with the table focused, the first esc clears the filter (focus
+// stays on the table), and only the next esc pops focus back to the menu.
+func TestEscClearsFilterBeforePoppingFocus(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit; table stays focused
+	if m.table.Filter() != "web" || !m.table.Focused() {
+		t.Fatalf("precondition: committed filter on a focused table, got %q focused=%v", m.table.Filter(), m.table.Focused())
+	}
+
+	// First esc clears the filter but keeps focus on the table (one level).
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.table.Filter() != "" {
+		t.Fatalf("first esc should clear the committed filter, got %q", m.table.Filter())
+	}
+	if !m.table.Focused() || m.menu.Focused() {
+		t.Fatal("first esc should not also pop focus — one level per press")
+	}
+
+	// Second esc pops focus back to the menu.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if !m.menu.Focused() || m.table.Focused() {
+		t.Fatal("second esc should pop focus back to the menu")
+	}
+}
+
 // TestFilterLetterKeysTypeNotNavigate proves the control/text split (D73): while the
 // filter is open, a bound vim letter (`j`) types into the field rather than moving
 // the selection, but a no-text nav key (down arrow) still moves it.
