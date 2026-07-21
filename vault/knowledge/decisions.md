@@ -2083,3 +2083,33 @@ hint, and don't hard-code per-context key lists in views.
 always-visible bottom line of its own so it is never dropped under width pressure (today
 the status bar still drops the right-aligned hint when the left state segment leaves no
 room, and hides it entirely behind an error toast).
+
+### D86 — Mouse is additive and routed through keymap Actions, never raw mouse behaviour in views; enabled per-View via MouseModeCellMotion
+
+`2026-07-21` · feedback `2026-07-21-08` (mouse support).
+
+Bubble Tea mouse reporting is enabled in the root model's `View` (`v.MouseMode =
+tea.MouseModeCellMotion`, alongside `v.AltScreen` — in bubbletea v2 both are View
+properties, not program options, D70). The root `Update` handles `tea.MouseClickMsg`
+and `tea.MouseWheelMsg`; every other mouse type is ignored.
+
+- **Mouse is strictly additive** (goals principle 6 — vim-first, never vim-only): it
+  covers only the headline gestures — left-click a menu item to open it (drill-in),
+  left-click a table row to select it, wheel to step the selection of the pane under
+  the pointer. The keyboard path stays the primary, complete interface.
+- **No view matches a raw mouse event for behaviour** (D11 in spirit): a click/wheel is
+  turned into the same `keymap.Action` (nav.up/down, drill-in) or the same public
+  Select* call the keyboard drives, so selection/scroll/drill-in stay single-sourced.
+  The coordinate→row mapping lives in the components as pure functions
+  (`menu.RowItemAt`, `table.RowAt`, both content-row → item/row index, honouring the
+  scroll offset and rejecting headers/borders/blanks); the root converts an absolute
+  mouse (X,Y) to a body-relative content row and picks the pane by X
+  (`menuPaneWidth`).
+- **Mouse is inert while an overlay is up** (help, namespace picker, live filter): a
+  stray click must not reach and mutate the panes beneath a modal.
+
+**Why:** mouse must not fork the input model or bake keys/coordinates into rendering.
+**Consequence:** a future leg extending mouse must keep it additive, route it through
+Actions/public Select* entries (not new raw-mouse logic in a view), keep `MouseMode`
+set in `View`, and gate it behind `overlayActive()`. A component adding a
+click target exposes a coordinate→index accessor rather than handling mouse itself.

@@ -330,6 +330,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
+
+	case tea.MouseClickMsg:
+		return m.handleMouseClick(msg)
+
 	case seqTimeoutMsg:
 		if msg.gen != m.seqGen {
 			return m, nil // superseded by a newer pending; ignore.
@@ -758,6 +764,127 @@ func (m *Model) syncFilterStatus() {
 	}
 }
 
+// Mouse support is additive — the keyboard/vim path stays primary (goals
+// principle 6) — so it covers only the two headline gestures the dogfood feedback
+// (2026-07-21-08) asked for: click a menu item to open it, click a table row to
+// select it, and scroll-wheel to move through whichever pane the pointer is over.
+// Clicks and wheel notches are turned into the same keymap Actions the keyboard
+// produces (nav.up/down, drill-in), so no view gains raw mouse behaviour and the
+// selection/scroll/drill-in logic stays single-sourced (D11 in spirit). Mouse mode
+// is enabled per-View (View sets MouseModeCellMotion, as it sets AltScreen).
+
+// overlayActive reports whether a modal/overlay is capturing input (help overlay,
+// namespace picker, or the live filter field). Mouse events are inert while one is
+// up so a click cannot reach and mutate the panes underneath it.
+func (m Model) overlayActive() bool {
+	return m.help.Visible() || m.nsPicker.Active() || m.filtering
+}
+
+// bodyHeight is the height of the two-pane body above the status bar — the region
+// mouse clicks map within; a click on the status-bar line (or off-screen) is
+// ignored.
+func (m Model) bodyHeight() int {
+	h := m.height - statusBarHeight
+	if h < 0 {
+		return 0
+	}
+	return h
+}
+
+// inMenu reports whether the absolute column x falls in the left menu pane (vs the
+// right table/welcome pane), using the same split resize() computes.
+func (m Model) inMenu(x int) bool {
+	return x < menuPaneWidth(m.width)
+}
+
+// handleMouseWheel scrolls the pane under the pointer: a wheel notch steps the
+// selection up/down (nav.up/nav.down) in whichever pane the pointer is over,
+// reusing the keyboard navigation path (each pane's scroll offset follows its
+// cursor, so a notch scrolls the viewport). It never changes which pane is focused
+// — scrolling is a read gesture. Inert over the welcome page's empty table and
+// while an overlay is up.
+func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	if m.overlayActive() {
+		return m, nil
+	}
+	var a keymap.Action
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		a = keymap.ActionUp
+	case tea.MouseWheelDown:
+		a = keymap.ActionDown
+	default:
+		return m, nil
+	}
+	var cmd tea.Cmd
+	if m.inMenu(msg.X) {
+		m.menu, cmd = m.menu.Update(a)
+		return m, cmd
+	}
+	if m.hasCurrent {
+		m.table, cmd = m.table.Update(a)
+	}
+	return m, cmd
+}
+
+// handleMouseClick resolves a left click to the two headline gestures: a click in
+// the menu pane selects that resource row and opens it (drill-in — the same
+// ResourceSelectedMsg/NamespaceRequestedMsg path a keyboard drill-in takes); a
+// click in the table pane selects that row and moves focus there. Non-left buttons,
+// clicks on the status-bar line, and clicks while an overlay is up are ignored;
+// clicks that land on a border, header, or blank filler resolve to no row and are
+// no-ops.
+func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if m.overlayActive() || msg.Button != tea.MouseLeft {
+		return m, nil
+	}
+	if msg.Y < 0 || msg.Y >= m.bodyHeight() {
+		return m, nil // the status-bar line (or off-screen); nothing to select.
+	}
+	if m.inMenu(msg.X) {
+		return m.clickMenu(msg.Y)
+	}
+	return m.clickTable(msg.Y)
+}
+
+// clickMenu selects the resource row under the click and opens it. The click's
+// body-relative Y maps to a content row inside the pane border (the first content
+// line sits one row below the top border), which the menu resolves to an item
+// index; the root then drives the normal SelectItem + drill-in path, so a click and
+// a keyboard drill-in are one behaviour (drilling into a resource starts its watch
+// and moves focus to the table; the seam row opens the namespace picker). A click
+// on a header, the border, or blank space resolves to no item and is a no-op.
+func (m Model) clickMenu(y int) (tea.Model, tea.Cmd) {
+	idx, ok := m.menu.RowItemAt(y - 1)
+	if !ok {
+		return m, nil
+	}
+	m.menu.SelectItem(idx)
+	var cmd tea.Cmd
+	m.menu, cmd = m.menu.Update(keymap.ActionDrillIn)
+	return m, cmd
+}
+
+// clickTable selects the row under the click and focuses the table. With no
+// resource open (the welcome page is showing) there is nothing to select. The
+// body-relative Y maps to a content row inside the border where row 0 is the column
+// header, so only a click on a data row selects; a click on the header or blank
+// filler is a no-op.
+func (m Model) clickTable(y int) (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	idx, ok := m.table.RowAt(y - 1)
+	if !ok {
+		return m, nil
+	}
+	m.table.SelectRow(idx)
+	m.menu.Blur()
+	m.table.Focus()
+	m.syncHints() // focus is now the table → table-context hints
+	return m, nil
+}
+
 // resize lays the panes out inside the current terminal: the status bar takes the
 // bottom line, and the menu and table split the remaining width (menu a fraction
 // with floors so the table always keeps room). Both panes are sized to their
@@ -925,6 +1052,7 @@ func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		v := tea.NewView("")
 		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
 
@@ -948,5 +1076,9 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View()))
 	v.AltScreen = true
+	// Enable mouse (click + wheel) the same way AltScreen is enabled — a per-View
+	// property in bubbletea v2, not a program option. The root model owns View, so
+	// it is where kubecom requests mouse reporting (dogfood-08).
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }

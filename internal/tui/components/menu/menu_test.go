@@ -693,6 +693,74 @@ func scrollbarColumn(t *testing.T, m Model) []string {
 // lipglossStrip removes ANSI styling so a rendered line can be indexed by cell.
 func lipglossStrip(s string) string { return ansi.Strip(s) }
 
+// TestRowItemAtMapsContentRowToItem proves the mouse coordinate seam resolves a
+// content-area row to the item rendered on it (dogfood-08): section headers and
+// blank/out-of-range lines map to no item, real item lines map to their index.
+func TestRowItemAtMapsContentRowToItem(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40) // tall enough that everything fits with offset 0
+	if m.offset != 0 {
+		t.Fatalf("expected offset 0 with a tall pane, got %d", m.offset)
+	}
+	// Content row 0 is the "Cluster" section header — not an item.
+	if _, ok := m.RowItemAt(0); ok {
+		t.Fatal("content row 0 (section header) should map to no item")
+	}
+	// Content row 1 is the first item (namespaces).
+	if idx, ok := m.RowItemAt(1); !ok || m.items[idx].Resource.GVR.Resource != "namespaces" {
+		t.Fatalf("content row 1: idx=%d ok=%v, want the namespaces item", idx, ok)
+	}
+	// A content row past the last rendered line maps to nothing.
+	if _, ok := m.RowItemAt(1000); ok {
+		t.Fatal("a content row past the end should map to no item")
+	}
+	// A content row at the bottom border (>= innerHeight) is rejected.
+	if _, ok := m.RowItemAt(m.innerHeight()); ok {
+		t.Fatal("a content row at innerHeight (bottom border) should map to no item")
+	}
+	// A negative content row is rejected.
+	if _, ok := m.RowItemAt(-1); ok {
+		t.Fatal("a negative content row should map to no item")
+	}
+}
+
+// TestRowItemAtHonorsScrollOffset proves RowItemAt composes with the vertical
+// scroll: after scrolling, an on-screen content row still resolves to the item
+// actually drawn there.
+func TestRowItemAtHonorsScrollOffset(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 6)               // short pane → scrolling
+	m.SelectItem(len(m.items) - 1) // last item; offset advances to keep it visible
+	if m.offset == 0 {
+		t.Fatal("selecting the last item in a short pane should scroll the offset")
+	}
+	// The cursor's on-screen content row (its display row minus the scroll offset)
+	// must resolve back to the cursor item through the offset.
+	contentRow := m.cursorRow() - m.offset
+	if idx, ok := m.RowItemAt(contentRow); !ok || idx != m.cursor {
+		t.Fatalf("RowItemAt(%d) = (%d,%v) after scroll, want the cursor item %d",
+			contentRow, idx, ok, m.cursor)
+	}
+}
+
+// TestSelectItemMovesCursor proves the public cursor setter used by a mouse click
+// moves and clamps like keyboard navigation.
+func TestSelectItemMovesCursor(t *testing.T) {
+	m := newTestModel()
+	m.SelectItem(5)
+	if m.cursor != 5 {
+		t.Fatalf("SelectItem: cursor = %d, want 5", m.cursor)
+	}
+	m.SelectItem(1000) // clamps to the last item
+	if m.cursor != len(m.items)-1 {
+		t.Fatalf("SelectItem high clamp: cursor = %d, want %d", m.cursor, len(m.items)-1)
+	}
+	m.SelectItem(-5) // clamps to 0
+	if m.cursor != 0 {
+		t.Fatalf("SelectItem low clamp: cursor = %d, want 0", m.cursor)
+	}
+}
+
 // Ensure the emitted command types satisfy tea.Cmd (compile-time contract).
 var (
 	_ tea.Cmd = func() tea.Msg { return ResourceSelectedMsg{} }

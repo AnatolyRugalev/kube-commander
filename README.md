@@ -89,6 +89,11 @@ kubeconfig/context fails with a clear message instead of launching. While the UI
 runs it owns the terminal, so all logs (including client-go warnings) go to a file
 under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
 
+Navigation is keyboard-first (vim keys by default; see
+[`docs/keybindings.md`](docs/keybindings.md)). The mouse is additive: click a menu
+item to open it, click a table row to select it, and scroll the wheel to move
+through whichever pane the pointer is over.
+
 The other subcommands report information and exit:
 
 ```bash

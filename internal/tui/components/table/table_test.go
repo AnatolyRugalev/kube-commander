@@ -788,6 +788,77 @@ func TestFilterSurvivesWatchDeltas(t *testing.T) {
 	}
 }
 
+// TestRowAtMapsContentRowToRow proves the mouse coordinate seam resolves a
+// content-area row to the data row rendered on it (dogfood-08): the column-header
+// line and blank/out-of-range lines map to no row, data lines map to their index.
+func TestRowAtMapsContentRowToRow(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable()) // 3 rows
+	m.SetSize(40, 8)          // innerHeight 6: 1 header line + 5 data lines
+	// Content row 0 is the column header — not a data row.
+	if _, ok := m.RowAt(0); ok {
+		t.Fatal("content row 0 (column header) should map to no data row")
+	}
+	// Content row 1 is the first data row; content row 3 is the third.
+	if idx, ok := m.RowAt(1); !ok || idx != 0 {
+		t.Fatalf("content row 1: (%d,%v), want data row 0", idx, ok)
+	}
+	if idx, ok := m.RowAt(3); !ok || idx != 2 {
+		t.Fatalf("content row 3: (%d,%v), want data row 2", idx, ok)
+	}
+	// Past the last data row (only 3 rows) maps to nothing.
+	if _, ok := m.RowAt(4); ok {
+		t.Fatal("a content row past the last data row should map to nothing")
+	}
+	// A content row at the bottom border (>= innerHeight) is rejected.
+	if _, ok := m.RowAt(m.innerHeight()); ok {
+		t.Fatal("a content row at innerHeight (bottom border) should map to nothing")
+	}
+}
+
+// TestRowAtHonorsScrollOffset proves RowAt composes with the vertical scroll:
+// after scrolling, an on-screen data line resolves to the row actually drawn there.
+func TestRowAtHonorsScrollOffset(t *testing.T) {
+	m := newTestModel()
+	rows := make([]kube.Row, 0, 20)
+	for i := 0; i < 20; i++ {
+		name := "pod-" + string(rune('a'+i))
+		rows = append(rows, row(name, name))
+	}
+	m.SetTable(kube.Table{Columns: []kube.Column{{Name: "Name"}}, Rows: rows})
+	m.SetSize(40, 6) // innerHeight 4: 1 header + 3 data lines
+	m.SelectRow(19)  // last row; offset advances to keep it visible
+	if m.offset == 0 {
+		t.Fatal("selecting the last row in a short pane should scroll the offset")
+	}
+	// The last content line resolves to offset + (contentRow - 1).
+	contentRow := m.innerHeight() - 1
+	if idx, ok := m.RowAt(contentRow); !ok || idx != m.offset+contentRow-1 {
+		t.Fatalf("RowAt(%d) = (%d,%v) after scroll, want %d",
+			contentRow, idx, ok, m.offset+contentRow-1)
+	}
+}
+
+// TestSelectRowMovesCursor proves the public row setter used by a mouse click
+// moves and clamps like keyboard navigation.
+func TestSelectRowMovesCursor(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable()) // 3 rows
+	m.SetSize(40, 8)
+	m.SelectRow(2)
+	if m.Cursor() != 2 {
+		t.Fatalf("SelectRow: cursor = %d, want 2", m.Cursor())
+	}
+	m.SelectRow(1000) // clamps to the last row
+	if m.Cursor() != 2 {
+		t.Fatalf("SelectRow high clamp: cursor = %d, want 2", m.Cursor())
+	}
+	m.SelectRow(-5) // clamps to 0
+	if m.Cursor() != 0 {
+		t.Fatalf("SelectRow low clamp: cursor = %d, want 0", m.Cursor())
+	}
+}
+
 func TestFilteredModifyThatDropsMatchHidesRow(t *testing.T) {
 	m := newTestModel()
 	m.SetTable(sampleTable())

@@ -1399,3 +1399,127 @@ func TestProgramErrorToastDegradesGracefully(t *testing.T) {
 		t.Fatalf("error toast broke the layout: view has %d newlines, want %d (one screen)", got, baseline)
 	}
 }
+
+// TestMouseClickMenuOpensResource proves a left click on a menu resource row
+// selects it and opens it (dogfood-08): the click resolves to the clicked item and
+// drives the same drill-in path a keyboard nav.drillIn takes, emitting the menu's
+// ResourceSelectedMsg for that resource.
+func TestMouseClickMenuOpensResource(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	// Menu display rows (offset 0): row0 header "Cluster", row1 namespaces, row2
+	// nodes. Content row = Y-1, so Y=3 lands on the "nodes" item.
+	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 3, Button: tea.MouseLeft})
+	m = next.(Model)
+	if m.menu.Cursor() != 1 {
+		t.Fatalf("click should move the menu cursor to the clicked item (nodes, idx 1), got %d", m.menu.Cursor())
+	}
+	if cmd == nil {
+		t.Fatal("clicking a menu resource row should emit a drill-in command")
+	}
+	sel, ok := cmd().(menu.ResourceSelectedMsg)
+	if !ok {
+		t.Fatalf("drill-in produced %T, want menu.ResourceSelectedMsg", cmd())
+	}
+	if sel.Resource.GVR.Resource != "nodes" {
+		t.Fatalf("clicked-open resource = %q, want nodes", sel.Resource.GVR.Resource)
+	}
+}
+
+// TestMouseClickMenuHeaderInert proves a click on a section-header line (a
+// non-item line) selects nothing and emits no command.
+func TestMouseClickMenuHeaderInert(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	before := m.menu.Cursor()
+	// Y=1 → content row 0 → the "Cluster" section header.
+	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 1, Button: tea.MouseLeft})
+	m = next.(Model)
+	if m.menu.Cursor() != before || cmd != nil {
+		t.Fatal("clicking a section header should be inert (no selection, no command)")
+	}
+}
+
+// TestMouseClickTableSelectsRow proves a left click on a table data row selects
+// that row and moves focus to the table (dogfood-08).
+func TestMouseClickTableSelectsRow(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	// Open a resource and populate its table with three rows.
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	fw.chans[0] <- kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "NAME"}},
+		Rows: []kube.Row{
+			{Cells: []any{"pod-a"}, Object: kube.ObjectRef{Name: "pod-a", UID: "a"}},
+			{Cells: []any{"pod-b"}, Object: kube.ObjectRef{Name: "pod-b", UID: "b"}},
+			{Cells: []any{"pod-c"}, Object: kube.ObjectRef{Name: "pod-c", UID: "c"}},
+		},
+	}
+	wm, ok := cmd().(watchMsg)
+	if !ok {
+		t.Fatalf("pump produced %T, want watchMsg", cmd())
+	}
+	next, _ = m.Update(wm)
+	m = next.(Model)
+	if m.table.RowCount() != 3 {
+		t.Fatalf("setup: table has %d rows, want 3", m.table.RowCount())
+	}
+	// Move focus off the table to prove the click moves it back.
+	m.table.Blur()
+	m.menu.Focus()
+	// Table pane starts at X=menuPaneWidth(80)=20; content row 0 is the column
+	// header, so Y=3 (content row 2) selects data row 1 (pod-b).
+	next, _ = m.Update(tea.MouseClickMsg{X: 30, Y: 3, Button: tea.MouseLeft})
+	m = next.(Model)
+	if m.table.Cursor() != 1 {
+		t.Fatalf("clicking the second data row should select row 1, got %d", m.table.Cursor())
+	}
+	if !m.table.Focused() || m.menu.Focused() {
+		t.Fatal("clicking the table should move focus to it")
+	}
+}
+
+// TestMouseWheelScrollsPaneUnderPointer proves a wheel notch steps the selection of
+// whichever pane the pointer is over, without changing focus (dogfood-08).
+func TestMouseWheelScrollsPaneUnderPointer(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	c0 := m.menu.Cursor()
+	// Wheel down over the menu (X in the left pane) steps its selection down.
+	next, _ := m.Update(tea.MouseWheelMsg{X: 3, Y: 5, Button: tea.MouseWheelDown})
+	m = next.(Model)
+	if m.menu.Cursor() != c0+1 {
+		t.Fatalf("wheel-down over the menu should move its cursor to %d, got %d", c0+1, m.menu.Cursor())
+	}
+	// Wheel up brings it back.
+	next, _ = m.Update(tea.MouseWheelMsg{X: 3, Y: 5, Button: tea.MouseWheelUp})
+	m = next.(Model)
+	if m.menu.Cursor() != c0 {
+		t.Fatalf("wheel-up should move the menu cursor back to %d, got %d", c0, m.menu.Cursor())
+	}
+	// Scrolling is a read gesture — the menu stays focused, no pane switch.
+	if !m.menu.Focused() {
+		t.Fatal("scroll-wheel should not change focus")
+	}
+}
+
+// TestMouseInertWhileOverlayOpen proves the mouse is inert while a modal/overlay is
+// capturing input, so a click cannot reach the panes underneath it.
+func TestMouseInertWhileOverlayOpen(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	m.help.SetVisible(true)
+	c0 := m.menu.Cursor()
+	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 3, Button: tea.MouseLeft})
+	m = next.(Model)
+	if m.menu.Cursor() != c0 || cmd != nil {
+		t.Fatal("a click while the help overlay is open should be inert")
+	}
+	next, _ = m.Update(tea.MouseWheelMsg{X: 3, Y: 5, Button: tea.MouseWheelDown})
+	m = next.(Model)
+	if m.menu.Cursor() != c0 {
+		t.Fatal("a wheel event while an overlay is open should be inert")
+	}
+}

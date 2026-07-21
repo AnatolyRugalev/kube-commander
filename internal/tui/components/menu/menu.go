@@ -232,6 +232,31 @@ func (m Model) Selected() (Item, bool) {
 	return m.items[m.cursor], true
 }
 
+// RowItemAt maps a content-area row to the item index rendered on it, or false
+// when that line is a section header, blank filler, or outside the visible window.
+// contentRow is 0-based from the first content line inside the top border (the root
+// model converts an absolute mouse Y to it), so it composes with the vertical
+// scroll offset: the display row is offset+contentRow. It backs click-to-select/
+// open — the root resolves the clicked line to an item, then drives the normal
+// SelectItem + drill-in path, so a mouse click and a keyboard drill-in share one
+// code path (no coordinate behaviour baked into rendering, D11 in spirit).
+func (m Model) RowItemAt(contentRow int) (int, bool) {
+	if contentRow < 0 || contentRow >= m.innerHeight() {
+		return 0, false
+	}
+	rows := m.rows()
+	i := m.offset + contentRow
+	if i < 0 || i >= len(rows) || rows[i].header {
+		return 0, false
+	}
+	return rows[i].itemIdx, true
+}
+
+// SelectItem moves the nav cursor to item index i (clamped) and scrolls it into
+// view — the public entry the root model uses to place the cursor on a
+// mouse-clicked row before drilling in. Keyboard navigation uses the same moveTo.
+func (m *Model) SelectItem(i int) { m.moveTo(i) }
+
 // Reconcile merges an async discovery result into the seed menu without
 // disturbing the current selection or scroll — the M2 risk item (D57). It:
 //

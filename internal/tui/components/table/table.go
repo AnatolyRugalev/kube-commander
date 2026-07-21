@@ -262,6 +262,29 @@ func (m *Model) restoreSelection(uid string) {
 	}
 }
 
+// RowAt maps a content-area row to the data-row index rendered on it, or false
+// when that line is the column header, blank filler, or outside the visible window.
+// contentRow is 0-based from the first content line inside the top border (the root
+// model converts an absolute mouse Y to it): content row 0 is the column header, so
+// data rows start at content row 1 and index offset+contentRow-1. It backs
+// click-to-select — the root resolves the clicked line to a row, then drives
+// SelectRow, so a mouse click reuses the keyboard selection path.
+func (m Model) RowAt(contentRow int) (int, bool) {
+	if contentRow <= 0 || contentRow >= m.innerHeight() {
+		return 0, false // row 0 is the header; >= innerHeight is the bottom border.
+	}
+	i := m.offset + contentRow - 1
+	if i < 0 || i >= len(m.table.Rows) {
+		return 0, false
+	}
+	return i, true
+}
+
+// SelectRow moves the selection to data-row index i (clamped) and scrolls it into
+// view — the public entry the root model uses for a mouse click on a row. Keyboard
+// navigation uses the same moveTo.
+func (m *Model) SelectRow(i int) { m.moveTo(i) }
+
 // SetSize sets the table's total size (including its border).
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
