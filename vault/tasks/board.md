@@ -7,7 +7,9 @@ _Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; 
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-scroll** Feedback (high, `2026-07-21-03`): menu viewport — clip long
+      kind names (no wrap/overflow), keep selection in view, add a scroll indicator.
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
