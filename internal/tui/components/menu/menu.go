@@ -53,9 +53,15 @@ const (
 )
 
 // namespaceAll is the label the namespace-seam row shows when no namespace is
-// scoped ("" = every namespace), so the seam always states the scope explicitly
-// (mirrors the welcome page's wording).
-const namespaceAll = "all namespaces"
+// scoped ("" = every namespace), so the seam always states the scope explicitly.
+// Rendered as a compact "(all)" so the seam reads like a dropdown value rather
+// than a sentence (dogfood-09).
+const namespaceAll = "(all)"
+
+// namespaceArrow is the dropdown indicator prefixed to the namespace-seam value,
+// so the seam reads "▾ <value>" like a collapsed dropdown rather than a labelled
+// field (dogfood-09).
+const namespaceArrow = "▾ "
 
 // ellipsis is appended to a title that is too wide for the pane, so long kind
 // names (e.g. MutatingWebhookConfiguration) are clipped to one line rather than
@@ -146,7 +152,7 @@ func (m *Model) SetSize(w, h int) {
 }
 
 // SetNamespace records the scoped namespace shown on the namespace-seam row
-// ("" renders as "all namespaces"). The root model wires this from the initial
+// ("" renders as "(all)"). The root model wires this from the initial
 // -n scope and every namespace-picker selection so the seam always reflects the
 // live scope.
 func (m *Model) SetNamespace(ns string) { m.namespace = ns }
@@ -549,16 +555,17 @@ func (m Model) renderItem(it Item, selected bool, innerW int) string {
 }
 
 // renderNamespace renders the namespace-picker seam row: a full-width, un-indented
-// line showing the scoped namespace ("all namespaces" when unscoped), so it reads
-// as the boundary between the cluster-scoped section above and the namespaced
-// sections below rather than as one more resource. Selected → the Selection bar;
-// otherwise the accented Header style so the seam stands out from resource rows.
+// line showing the scoped namespace as a dropdown ("▾ (all)" when unscoped,
+// "▾ <ns>" when scoped), so it reads as the boundary between the cluster-scoped
+// section above and the namespaced sections below rather than as one more resource.
+// Selected → the Selection bar; otherwise the accented Header style so the seam
+// stands out from resource rows.
 func (m Model) renderNamespace(selected bool, innerW int) string {
 	ns := m.namespace
 	if ns == "" {
 		ns = namespaceAll
 	}
-	label := clip("Namespace: "+ns, innerW)
+	label := clip(namespaceArrow+ns, innerW)
 	if selected {
 		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(label)
 	}

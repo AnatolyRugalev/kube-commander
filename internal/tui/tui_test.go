@@ -592,8 +592,12 @@ func TestNamespaceSwitchOpensAndSeeds(t *testing.T) {
 	}
 	next, _ := m.Update(lm)
 	m = next.(Model)
-	if got := m.nsPicker.Len(); got != 2 {
-		t.Fatalf("picker seeded with %d namespaces, want 2", got)
+	// 2 concrete namespaces + the pinned all-namespaces sentinel at the top.
+	if got := m.nsPicker.Len(); got != 3 {
+		t.Fatalf("picker seeded with %d entries, want 3 (2 namespaces + all-namespaces sentinel)", got)
+	}
+	if v, _ := m.nsPicker.Selected(); v != namespaceAllItem {
+		t.Fatalf("sentinel should be pinned at the top, got %q", v)
 	}
 }
 
@@ -765,16 +769,40 @@ func TestNamespaceSelectionUpdatesMenuSeam(t *testing.T) {
 	}
 }
 
+// TestNamespaceAllSentinelResetsScope proves the pinned "all namespaces" picker
+// entry maps back to the empty (unscoped) scope, so a user who drilled into a
+// concrete namespace can return to the all-namespaces view (dogfood-09 dead-end).
+func TestNamespaceAllSentinelResetsScope(t *testing.T) {
+	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}))
+	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m := sz.(Model)
+	// Scope into a concrete namespace first.
+	next, _ := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m = next.(Model)
+	if m.namespace != "kube-system" {
+		t.Fatalf("precondition: scope = %q, want kube-system", m.namespace)
+	}
+	// Selecting the sentinel returns to the unscoped view.
+	next, _ = m.Update(picker.SelectedMsg{Value: namespaceAllItem})
+	m = next.(Model)
+	if m.namespace != "" {
+		t.Fatalf("all-namespaces sentinel = %q scope, want empty (unscoped)", m.namespace)
+	}
+	if got := menuSeamNamespace(t, m); got != "(all)" {
+		t.Fatalf("seam after sentinel = %q, want (all)", got)
+	}
+}
+
 // menuSeamNamespace renders the sized menu and returns the namespace the seam row
-// shows ("all namespaces" when unscoped), read back from the rendered view.
+// shows ("(all)" when unscoped), read back from the rendered view.
 func menuSeamNamespace(t *testing.T, m Model) string {
 	t.Helper()
 	v := m.menu.View()
 	if strings.Contains(v, "kube-system") {
 		return "kube-system"
 	}
-	if strings.Contains(v, "all namespaces") {
-		return "all namespaces"
+	if strings.Contains(v, "(all)") {
+		return "(all)"
 	}
 	t.Fatalf("menu view shows no recognisable seam scope:\n%s", v)
 	return ""
@@ -791,13 +819,15 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("menu should start at cursor 0, got %d", m.menu.Cursor())
 	}
-	// nav.down while the picker is open moves the picker cursor, not the menu.
+	// nav.down while the picker is open moves the picker cursor, not the menu. The
+	// picker starts on the pinned all-namespaces sentinel (row 0), so one step lands
+	// on the first concrete namespace.
 	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture nav.down; menu moved to %d", m.menu.Cursor())
 	}
-	if v, _ := m.nsPicker.Selected(); v != "kube-system" {
-		t.Fatalf("nav.down should move the picker cursor to kube-system, got %q", v)
+	if v, _ := m.nsPicker.Selected(); v != "default" {
+		t.Fatalf("nav.down should move the picker cursor to default, got %q", v)
 	}
 }
 

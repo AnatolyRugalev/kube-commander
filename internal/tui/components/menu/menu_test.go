@@ -476,12 +476,12 @@ func TestDrillInOnSeamEmitsNamespaceRequested(t *testing.T) {
 func TestNamespaceSeamRendersScope(t *testing.T) {
 	m := newTestModel()
 	m.SetSize(30, 40) // tall enough to show every row
-	if v := m.View(); !strings.Contains(v, "all namespaces") {
-		t.Fatal("unscoped seam should render \"all namespaces\"")
+	if v := m.View(); !strings.Contains(v, "▾ (all)") {
+		t.Fatal("unscoped seam should render the dropdown \"▾ (all)\"")
 	}
 	m.SetNamespace("kube-system")
-	if v := m.View(); !strings.Contains(v, "kube-system") {
-		t.Fatal("scoped seam should render the namespace name")
+	if v := m.View(); !strings.Contains(v, "▾ kube-system") {
+		t.Fatal("scoped seam should render the dropdown \"▾ <ns>\"")
 	}
 }
 

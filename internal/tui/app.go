@@ -550,10 +550,19 @@ func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
 	}
 }
 
-// handleNamespacesLoaded seeds the open picker with the listed namespaces. A list
-// failure surfaces a classified error and closes the picker (principle 3 — the
-// switcher degrades, the app does not crash). A result that arrives after the user
-// already dismissed the picker is dropped.
+// namespaceAllItem is the sentinel entry pinned at the top of the namespace picker.
+// Selecting it re-scopes the watch to every namespace (empty scope) — the app
+// launches unscoped, so without this entry the picker (which lists only concrete
+// namespaces) is a one-way door: once a namespace is picked there is no way back to
+// the all-namespaces view short of restarting (dogfood-09). A concrete namespace can
+// never collide with it: DNS-label names cannot contain a space.
+const namespaceAllItem = "all namespaces"
+
+// handleNamespacesLoaded seeds the open picker with the listed namespaces, pinning
+// the all-namespaces sentinel at the top so the unscoped view is always reachable.
+// A list failure surfaces a classified error and closes the picker (principle 3 —
+// the switcher degrades, the app does not crash). A result that arrives after the
+// user already dismissed the picker is dropped.
 func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.nsPicker.Hide()
@@ -562,21 +571,29 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.C
 	if !m.nsPicker.Active() {
 		return m, nil // dismissed before the list arrived; ignore.
 	}
-	m.nsPicker.SetItems(msg.namespaces)
+	items := make([]string, 0, len(msg.namespaces)+1)
+	items = append(items, namespaceAllItem)
+	items = append(items, msg.namespaces...)
+	m.nsPicker.SetItems(items)
 	return m, nil
 }
 
 // handleNamespaceSelected applies the picked namespace: it closes the picker,
 // records the new scope on the model and the status bar, and re-scopes the live
 // table by re-selecting the current resource with the new m.namespace (M2-07c's
-// watch reads that field). With no resource open yet the scope is simply stored
+// watch reads that field). The all-namespaces sentinel maps back to the empty scope
+// (watch every namespace). With no resource open yet the scope is simply stored
 // for the next selection.
 func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	m.nsPicker.Hide()
-	m.namespace = msg.Value
-	m.status.SetNamespace(msg.Value)
-	m.menu.SetNamespace(msg.Value)    // keep the seam row's scope current
-	m.welcome.SetNamespace(msg.Value) // keep the welcome scope current if shown pre-drill-in
+	ns := msg.Value
+	if ns == namespaceAllItem {
+		ns = ""
+	}
+	m.namespace = ns
+	m.status.SetNamespace(ns)
+	m.menu.SetNamespace(ns)    // keep the seam row's scope current
+	m.welcome.SetNamespace(ns) // keep the welcome scope current if shown pre-drill-in
 	if m.hasCurrent && m.watcher != nil {
 		return m.selectResource(m.current)
 	}
