@@ -7,7 +7,14 @@ _Last updated: 2026-07-21 — FB-menu-config-02 landed: the menu package now map
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-config-03** App wiring: load the current context's menu file on
+      start and feed its extras into the menu.
+      status: in-progress | owner: claude-opus | added: 2026-07-21 | claimed: 2026-07-21
+      notes: Third slice of feedback `2026-07-21-02` (D83). Resolve the active
+      context name (`kube.ContextName`, D76), `config.LoadMenuFile(config.MenuPath(ctx))`,
+      pass the extras to the menu (FB-menu-config-02). A missing/malformed file must
+      degrade to the default menu (surface a toast, never block start — principle 3).
+      Update README's config section. Depends on: FB-menu-config-02.
 
 ## Blocked
 
@@ -69,15 +76,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **FB-menu-config-03** App wiring: load the current context's menu file on
-      start and feed its extras into the menu.
-      status: todo | owner: — | added: 2026-07-21
-      notes: Third slice of feedback `2026-07-21-02` (D83). Resolve the active
-      context name (`kube.ContextName`, D76), `config.LoadMenuFile(config.MenuPath(ctx))`,
-      pass the extras to the menu (FB-menu-config-02). A missing/malformed file must
-      degrade to the default menu (surface a toast, never block start — principle 3).
-      Update README's config section. Depends on: FB-menu-config-02.
 
 - [ ] **FB-hintbar-dedicated** Promote the persistent key-hint into a dedicated,
       always-visible bottom line of its own (its own row below the status bar), so it
