@@ -5,11 +5,13 @@ import (
 	"testing"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
 func TestOverlayToggleAndView(t *testing.T) {
-	m := New(keymap.DefaultKeymap())
+	m := New(styles.Default(), keymap.DefaultKeymap())
 	m.SetWidth(80)
+	m.SetHeight(24)
 
 	if m.Visible() {
 		t.Error("overlay should start hidden")
@@ -37,8 +39,50 @@ func TestOverlayToggleAndView(t *testing.T) {
 	}
 }
 
+// TestOverlayRendersAsCenteredModal proves the visible overlay is a bordered box
+// centered within the sized area (the picker-style popup), not a full-bleed page:
+// it carries the modal title and a rounded border, and is padded above/around
+// rather than starting flush at the top-left.
+func TestOverlayRendersAsCenteredModal(t *testing.T) {
+	m := New(styles.Default(), keymap.DefaultKeymap())
+	m.SetWidth(80)
+	m.SetHeight(24)
+	m.Toggle()
+
+	view := m.View()
+	if !strings.Contains(view, helpTitle) {
+		t.Errorf("modal should carry the %q title; got:\n%s", helpTitle, view)
+	}
+	// A rounded pane border frames the box.
+	if !strings.Contains(view, "╭") || !strings.Contains(view, "╯") {
+		t.Errorf("modal should be bordered; got:\n%s", view)
+	}
+	lines := strings.Split(view, "\n")
+	if len(lines) != 24 {
+		t.Fatalf("placed modal should fill the %d-row area; got %d rows", 24, len(lines))
+	}
+	// Centered vertically: the top rows are blank padding, the border starts lower.
+	if strings.TrimSpace(lines[0]) != "" {
+		t.Errorf("modal should be centered (blank top padding), got first line: %q", lines[0])
+	}
+}
+
+// TestUnsizedOverlayRendersEmpty proves the modal renders nothing until it has a
+// size to center within, so an unsized program never paints a zero-area box.
+func TestUnsizedOverlayRendersEmpty(t *testing.T) {
+	m := New(styles.Default(), keymap.DefaultKeymap())
+	m.Toggle()
+	if got := m.View(); got != "" {
+		t.Errorf("unsized visible overlay should render empty; got %q", got)
+	}
+	m.SetWidth(80) // width alone, still no height
+	if got := m.View(); got != "" {
+		t.Errorf("overlay without a height should render empty; got %q", got)
+	}
+}
+
 func TestShortHelpViewAlwaysRenders(t *testing.T) {
-	m := New(keymap.DefaultKeymap())
+	m := New(styles.Default(), keymap.DefaultKeymap())
 	m.SetWidth(200)
 	// Short help renders regardless of overlay visibility (it's the status bar).
 	if got := m.ShortHelpView(); got == "" {
@@ -50,7 +94,7 @@ func TestShortHelpViewAlwaysRenders(t *testing.T) {
 // the menu and table contexts (so the persistent bottom hint updates with focus)
 // and surfaces the context-only descriptions from the registry.
 func TestShortHelpContextViewTracksFocus(t *testing.T) {
-	m := New(keymap.DefaultKeymap())
+	m := New(styles.Default(), keymap.DefaultKeymap())
 	m.SetWidth(200) // wide enough that nothing is elided
 
 	menu := m.ShortHelpContextView(keymap.HelpMenu)

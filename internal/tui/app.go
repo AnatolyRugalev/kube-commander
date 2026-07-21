@@ -231,7 +231,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m := Model{
 		keymap:      km,
 		seq:         keymap.NewSequencer(km),
-		help:        help.New(km),
+		help:        help.New(s, km),
 		styles:      s,
 		menu:        menu.New(s),
 		table:       table.New(s),
@@ -780,9 +780,11 @@ func (m *Model) resize() {
 	// The welcome page stands in for the table until a resource is drilled into, so
 	// it takes the same right-pane geometry.
 	m.welcome.SetSize(tableW, bodyH)
-	// The picker overlays the body area (above the status bar) and centers itself
-	// within it, so the status line stays visible behind the modal.
+	// The picker and the help overlay both overlay the body area (above the status
+	// bar) and center themselves within it, so the status line stays visible below
+	// the modal.
 	m.nsPicker.SetSize(m.width, bodyH)
+	m.help.SetHeight(bodyH)
 }
 
 // menuPaneWidth is the menu pane's total width for a given terminal width: a
@@ -822,6 +824,13 @@ func (m Model) scheduleTimeout() tea.Cmd {
 func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionQuit:
+		// While the help modal is open, quit dismisses the modal instead of the
+		// app — a modal owns the quit key until it closes (esc / `?` / `q` all
+		// dismiss it), matching the feedback that help is a popup, not a page.
+		if m.help.Visible() {
+			m.help.SetVisible(false)
+			return m, nil
+		}
 		if m.watchCancel != nil {
 			m.watchCancel() // tear the watch goroutine down before the program exits.
 		}

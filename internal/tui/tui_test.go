@@ -152,6 +152,27 @@ func TestHelpToggle(t *testing.T) {
 	}
 }
 
+// TestHelpQuitKeyClosesOverlay proves the quit key (`q`) dismisses the open help
+// modal instead of quitting the app — a modal owns the quit key until it closes.
+func TestHelpQuitKeyClosesOverlay(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, tea.Key{Code: '?', Text: "?"})
+	if !m.help.Visible() {
+		t.Fatal("app.help did not open the overlay")
+	}
+	m, cmd := press(t, m, tea.Key{Code: 'q', Text: "q"})
+	if m.help.Visible() {
+		t.Fatal("q did not close the help overlay")
+	}
+	if cmd != nil {
+		t.Fatal("q should not quit the app while help is open")
+	}
+	// With help closed, q now quits (returns the tea.Quit command).
+	if _, cmd = press(t, m, tea.Key{Code: 'q', Text: "q"}); cmd == nil {
+		t.Fatal("q should quit once help is closed")
+	}
+}
+
 // TestSequencePending checks the multi-key path: a lone `g` is a prefix of `gg`
 // (nav.top), so it buffers and schedules a timeout tick; the tick then fires the
 // buffered prefix only if it is itself a complete binding.

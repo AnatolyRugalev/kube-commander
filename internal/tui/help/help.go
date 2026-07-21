@@ -4,13 +4,28 @@
 // from the actual bindings (D11). Input resolution stays in the keymap/sequencer
 // the root model owns; this component only decides what help to show, never what
 // a key does — it matches no raw keys.
+//
+// The full overlay renders as a centered, bordered modal box over the body area —
+// the same overlay approach as the modal picker (M2-08a): the browse layout stays
+// laid out around it (the status bar below it) rather than being replaced by a
+// full-screen help page. Dismissal (esc / `?` / `q`) is resolved by the root model.
 package help
 
 import (
 	bhelp "charm.land/bubbles/v2/help"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+)
+
+// helpTitle labels the modal box; helpMargin is the horizontal room kept clear of
+// the box (its border plus a small gap) so the framed, centered modal never
+// exceeds the screen width.
+const (
+	helpTitle  = "Keybindings"
+	helpMargin = 6
 )
 
 // Model is the help overlay. The root model owns one, toggles it when the
@@ -19,15 +34,19 @@ import (
 type Model struct {
 	help    bhelp.Model
 	keys    keymap.HelpKeyMap
+	styles  styles.Styles
 	visible bool
+	width   int // full screen width  (the modal is centered within it)
+	height  int // body-area height    (the status bar sits below, so pass bodyH)
 }
 
-// New builds a help overlay over a resolved keymap. The overlay renders the full
-// (grouped) help; the status-bar hint uses the short view.
-func New(km *keymap.Keymap) Model {
+// New builds a help overlay over a resolved keymap, framed through the shared
+// styles. The overlay renders the full (grouped) help as a centered modal box;
+// the status-bar hint uses the short view.
+func New(s styles.Styles, km *keymap.Keymap) Model {
 	h := bhelp.New()
 	h.ShowAll = true
-	return Model{help: h, keys: km.HelpMap()}
+	return Model{help: h, keys: km.HelpMap(), styles: s}
 }
 
 // Visible reports whether the overlay is currently shown.
@@ -40,8 +59,17 @@ func (m *Model) Toggle() { m.visible = !m.visible }
 func (m *Model) SetVisible(v bool) { m.visible = v }
 
 // SetWidth informs the help renderer of the available width so it can elide
-// overflowing short-help items; wire it from the root model's WindowSizeMsg.
-func (m *Model) SetWidth(w int) { m.help.SetWidth(w) }
+// overflowing short-help items, and records it as the modal's centering width;
+// wire it from the root model's WindowSizeMsg.
+func (m *Model) SetWidth(w int) {
+	m.width = w
+	m.help.SetWidth(w)
+}
+
+// SetHeight records the body-area height the modal centers within (pass the height
+// above the status bar, not the full screen, so the bar stays visible below the
+// box). Wire it from the root model's resize, alongside the picker's SetSize.
+func (m *Model) SetHeight(h int) { m.height = h }
 
 // Update forwards messages to the embedded help model (a no-op today) so the
 // component satisfies the usual bubble update shape as the app shell grows.
@@ -51,13 +79,31 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the full help overlay when visible, and the empty string when
-// hidden so the caller can lay it out unconditionally.
+// View renders the full help as a centered, bordered modal box over the body
+// area, and the empty string when hidden or not yet sized so the caller can lay
+// it out unconditionally. The box is framed with the focused-pane style and
+// titled, then placed centered within the (width × height) area — the same
+// overlay approach as the modal picker, so the browse view's status bar stays
+// visible below rather than the whole TUI being replaced.
 func (m Model) View() string {
-	if !m.visible {
+	if !m.visible || m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	return m.help.View(m.keys)
+	// Constrain the full-help layout to the modal's inner width so the framed,
+	// centered box never exceeds the screen. m is a value copy — mutating the
+	// embedded help's width here doesn't disturb the short-help width the status
+	// bar hint reads from the model the root owns.
+	inner := m.help
+	innerW := m.width - helpMargin
+	if innerW < 1 {
+		innerW = 1
+	}
+	inner.SetWidth(innerW)
+
+	title := m.styles.Header.Render(helpTitle)
+	body := lipgloss.JoinVertical(lipgloss.Left, title, inner.View(m.keys))
+	box := m.styles.PaneFocus.Render(body)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
 // ShortHelpView renders the one-line status-bar hint (the curated, focus-agnostic
