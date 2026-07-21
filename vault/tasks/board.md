@@ -3,11 +3,13 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-ns-seam-followup (namespace seam reads as a dropdown "▾ (all)"; picker gains a pinned all-namespaces sentinel that re-scopes to unscoped) landed. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox; claiming FB-menu-item-states (menu shows the opened resource distinctly from the nav cursor). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-menu-item-states** Feedback (normal, `2026-07-21-05`): left menu needs
+      two distinct visual states — the nav cursor vs. the opened/active resource.
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
