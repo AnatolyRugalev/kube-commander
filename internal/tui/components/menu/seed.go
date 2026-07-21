@@ -55,7 +55,7 @@ func seedItems() []Item {
 		{"", "v1", "serviceaccounts", "ServiceAccount", true, sectionAccess},
 	}
 
-	items := make([]Item, 0, len(specs))
+	items := make([]Item, 0, len(specs)+1)
 	for _, s := range specs {
 		items = append(items, Item{
 			Resource: kube.Resource{
@@ -68,5 +68,23 @@ func seedItems() []Item {
 			Section:   s.section,
 		})
 	}
-	return items
+
+	// Insert the namespace-picker seam between the cluster-scoped section and the
+	// namespaced ones (feedback 2026-07-21-01): the seam marks that boundary — the
+	// cluster-scoped kinds (Namespace, Node, PV, StorageClass) sit above it, the
+	// namespaced kinds below. It is a non-resource row (ItemNamespace) with no
+	// Section, so it renders un-grouped between the two and Reconcile skips it.
+	insertAt := len(items)
+	for i, it := range items {
+		if it.Section != sectionCluster {
+			insertAt = i
+			break
+		}
+	}
+	seam := Item{Kind: ItemNamespace, Title: "Namespace", Available: true}
+	out := make([]Item, 0, len(items)+1)
+	out = append(out, items[:insertAt]...)
+	out = append(out, seam)
+	out = append(out, items[insertAt:]...)
+	return out
 }

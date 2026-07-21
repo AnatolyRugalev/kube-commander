@@ -32,10 +32,14 @@ func TestSeedNonEmptyFirstSelected(t *testing.T) {
 	if sel.Resource.GVR.Resource != "namespaces" {
 		t.Fatalf("first item = %q, want namespaces", sel.Resource.GVR.Resource)
 	}
-	// Every seed item must carry a title and a listable GVR.
+	// Every seed item must carry a title and a listable GVR — except the
+	// non-resource namespace seam, which has a title but no GVR.
 	for _, it := range m.items {
 		if it.Title == "" {
 			t.Errorf("item %v has empty title", it.Resource.GVR)
+		}
+		if it.Kind != ItemResource {
+			continue
 		}
 		if it.Resource.GVR.Resource == "" || it.Resource.GVR.Version == "" {
 			t.Errorf("item %q has an incomplete GVR: %+v", it.Title, it.Resource.GVR)
@@ -305,6 +309,9 @@ func TestSeedItemsAreSectionGroupedContiguously(t *testing.T) {
 	seen := map[string]bool{}
 	prev := ""
 	for _, it := range m.items {
+		if it.Kind != ItemResource {
+			continue // the namespace seam is a non-resource row with no section.
+		}
 		if it.Section == "" {
 			t.Fatalf("seed item %q has no section", it.Title)
 		}
@@ -327,9 +334,13 @@ func TestRowsInsertOneHeaderPerSection(t *testing.T) {
 	rows := m.rows()
 
 	// One header per distinct section, and each header immediately precedes its
-	// section's items.
+	// section's items. The namespace seam (non-resource, no section) contributes no
+	// header.
 	sections := map[string]bool{}
 	for _, it := range m.items {
+		if it.Kind != ItemResource {
+			continue
+		}
 		sections[it.Section] = true
 	}
 	headers := 0
@@ -404,5 +415,100 @@ func TestReconcileAppendsCRDIntoCustomResourcesSection(t *testing.T) {
 	}
 }
 
-// Ensure the emitted command type satisfies tea.Cmd (compile-time contract).
-var _ tea.Cmd = func() tea.Msg { return ResourceSelectedMsg{} }
+// namespaceSeamIndex returns the index of the single namespace-seam row, or -1.
+func namespaceSeamIndex(m Model) int {
+	idx := -1
+	for i, it := range m.items {
+		if it.Kind == ItemNamespace {
+			if idx != -1 {
+				return -2 // more than one seam — a bug the caller asserts against
+			}
+			idx = i
+		}
+	}
+	return idx
+}
+
+func TestSeedHasNamespaceSeamBetweenClusterAndNamespaced(t *testing.T) {
+	m := newTestModel()
+	seam := namespaceSeamIndex(m)
+	if seam < 0 {
+		t.Fatalf("namespace seam index = %d, want exactly one seam row", seam)
+	}
+	// The row immediately above the seam is the last cluster-scoped item; the row
+	// immediately below is the first namespaced item (the boundary the seam marks).
+	if seam == 0 || seam == len(m.items)-1 {
+		t.Fatalf("seam at %d sits at an edge, not between sections", seam)
+	}
+	if above := m.items[seam-1]; above.Section != sectionCluster {
+		t.Fatalf("item above seam is section %q, want %q", above.Section, sectionCluster)
+	}
+	below := m.items[seam+1]
+	if below.Section == sectionCluster {
+		t.Fatalf("item below seam is still cluster-scoped (%q); seam not at the boundary", below.Title)
+	}
+	if !below.Resource.Namespaced {
+		t.Fatalf("item below seam (%q) is not namespaced", below.Title)
+	}
+	if !m.items[seam].Available {
+		t.Fatal("the namespace seam should be selectable (Available)")
+	}
+}
+
+func TestDrillInOnSeamEmitsNamespaceRequested(t *testing.T) {
+	m := newTestModel()
+	seam := namespaceSeamIndex(m)
+	if seam < 0 {
+		t.Fatalf("no namespace seam (index %d)", seam)
+	}
+	m.cursor = seam
+	_, cmd := m.Update(keymap.ActionDrillIn)
+	if cmd == nil {
+		t.Fatal("drilling into the seam returned no command")
+	}
+	if _, ok := cmd().(NamespaceRequestedMsg); !ok {
+		t.Fatalf("seam drill-in emitted %T, want NamespaceRequestedMsg", cmd())
+	}
+}
+
+func TestNamespaceSeamRendersScope(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 40) // tall enough to show every row
+	if v := m.View(); !strings.Contains(v, "all namespaces") {
+		t.Fatal("unscoped seam should render \"all namespaces\"")
+	}
+	m.SetNamespace("kube-system")
+	if v := m.View(); !strings.Contains(v, "kube-system") {
+		t.Fatal("scoped seam should render the namespace name")
+	}
+}
+
+func TestReconcilePreservesSeamAndItsSelection(t *testing.T) {
+	m := newTestModel()
+	seam := namespaceSeamIndex(m)
+	m.cursor = seam
+
+	crd := kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{crd}})
+
+	// Exactly one seam still present and still selected (its index is unchanged —
+	// nothing is inserted before it — but resolve by kind to be robust).
+	if got := namespaceSeamIndex(m); got != seam {
+		t.Fatalf("seam moved/duplicated: index %d, want %d", got, seam)
+	}
+	if sel, _ := m.Selected(); sel.Kind != ItemNamespace {
+		t.Fatalf("selection after reconcile is kind %v, want the namespace seam", sel.Kind)
+	}
+	if !m.items[seam].Available {
+		t.Fatal("reconcile marked the namespace seam unavailable")
+	}
+}
+
+// Ensure the emitted command types satisfy tea.Cmd (compile-time contract).
+var (
+	_ tea.Cmd = func() tea.Msg { return ResourceSelectedMsg{} }
+	_ tea.Cmd = func() tea.Msg { return NamespaceRequestedMsg{} }
+)

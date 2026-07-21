@@ -708,6 +708,78 @@ func TestNamespacePickerCancels(t *testing.T) {
 	}
 }
 
+// TestMenuSeamOpensNamespacePicker proves the namespace-seam row in the left menu
+// opens the namespace picker on drill-in — the same effect as ctrl+n — driven
+// through the real update loop: walk the menu cursor down to the seam, press enter,
+// and the emitted menu.NamespaceRequestedMsg opens and seeds the picker.
+func TestMenuSeamOpensNamespacePicker(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+
+	// Walk down to the seam row (nav.down = `j`); bounded so a regression can't hang.
+	seamReached := false
+	for i := 0; i < len(m.menu.Items()); i++ {
+		if sel, ok := m.menu.Selected(); ok && sel.Kind == menu.ItemNamespace {
+			seamReached = true
+			break
+		}
+		m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	}
+	if !seamReached {
+		t.Fatal("never landed on the namespace seam walking the menu down")
+	}
+
+	// Enter (nav.drillIn) emits the menu's NamespaceRequestedMsg; deliver it.
+	m, cmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("drilling into the seam produced no command")
+	}
+	if _, ok := cmd().(menu.NamespaceRequestedMsg); !ok {
+		t.Fatalf("seam drill-in emitted %T, want menu.NamespaceRequestedMsg", cmd())
+	}
+	next, openCmd := m.Update(menu.NamespaceRequestedMsg{})
+	m = next.(Model)
+	if !m.nsPicker.Active() {
+		t.Fatal("the seam should open the namespace picker")
+	}
+	if openCmd == nil {
+		t.Fatal("opening the picker should issue a namespace list command")
+	}
+	if _, ok := openCmd().(namespacesLoadedMsg); !ok {
+		t.Fatalf("list command produced %T, want namespacesLoadedMsg", openCmd())
+	}
+}
+
+// TestNamespaceSelectionUpdatesMenuSeam proves picking a namespace re-scopes the
+// menu seam's displayed namespace (not just the status bar / welcome).
+func TestNamespaceSelectionUpdatesMenuSeam(t *testing.T) {
+	// A wide terminal so the menu pane (a quarter of the width) is broad enough to
+	// render the full seam label without truncating the namespace name.
+	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}))
+	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m := sz.(Model)
+	next, _ := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m = next.(Model)
+	if got := menuSeamNamespace(t, m); got != "kube-system" {
+		t.Fatalf("menu seam namespace = %q, want kube-system", got)
+	}
+}
+
+// menuSeamNamespace renders the sized menu and returns the namespace the seam row
+// shows ("all namespaces" when unscoped), read back from the rendered view.
+func menuSeamNamespace(t *testing.T, m Model) string {
+	t.Helper()
+	v := m.menu.View()
+	if strings.Contains(v, "kube-system") {
+		return "kube-system"
+	}
+	if strings.Contains(v, "all namespaces") {
+		return "all namespaces"
+	}
+	t.Fatalf("menu view shows no recognisable seam scope:\n%s", v)
+	return ""
+}
+
 // TestNamespacePickerCapturesInput proves the open picker captures navigation: a
 // nav key does not reach the panes underneath (the menu cursor stays put).
 func TestNamespacePickerCapturesInput(t *testing.T) {

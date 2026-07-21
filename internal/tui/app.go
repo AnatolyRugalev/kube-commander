@@ -244,6 +244,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		opt(&m)
 	}
 	m.menu.Focus()
+	m.menu.SetNamespace(m.namespace) // seam row reflects the initial -n scope
 	shortHelp := m.help.ShortHelpView()
 	m.status.SetShortHelp(shortHelp)
 	m.status.SetContext(m.context)     // reflect the resolved --context (empty renders nothing)
@@ -341,6 +342,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case menu.ResourceSelectedMsg:
 		return m.selectResource(msg.Resource)
+
+	case menu.NamespaceRequestedMsg:
+		// Drilling into the menu's namespace-seam row opens the namespace picker —
+		// the same effect as the ns.switch (ctrl+n) shortcut.
+		return m.openNamespacePicker()
 
 	case ErrorMsg:
 		// A classified error from any async seam (watch start, namespace list, a
@@ -569,6 +575,7 @@ func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.C
 	m.nsPicker.Hide()
 	m.namespace = msg.Value
 	m.status.SetNamespace(msg.Value)
+	m.menu.SetNamespace(msg.Value)    // keep the seam row's scope current
 	m.welcome.SetNamespace(msg.Value) // keep the welcome scope current if shown pre-drill-in
 	if m.hasCurrent && m.watcher != nil {
 		return m.selectResource(m.current)

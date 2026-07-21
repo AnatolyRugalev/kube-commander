@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — M2-10…M2-13 stay gated by the open dogfood human-task; the loop is draining the last explicitly-unblocked carve-out (teatest coverage of existing behavior) — M2-14d covers the error-toast path. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — draining the dogfood feedback inbox oldest-first; FB-ns-menu-seam (namespace picker as the menu's cluster/namespaced seam) landed. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): surface the namespace
-      picker as a row in the left menu, marking the seam between cluster-scoped and
-      namespace-scoped resources (ctrl+n stays as the shortcut).
-      status: in-progress | owner: claude-opus | added: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -110,6 +107,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-ns-menu-seam** Feedback (normal, `2026-07-21-01`): namespace picker surfaced as a row in the left menu, marking the cluster-scoped ↔ namespaced seam. Added `menu.Item.Kind` (`ItemResource`/`ItemNamespace`); the seed inserts one `ItemNamespace` seam row after the `Cluster` section and before the namespaced sections; drilling into it emits `menu.NamespaceRequestedMsg` (root opens the namespace picker — same effect as ctrl+n, which stays). The seam shows the live scope (`menu.SetNamespace`, "" → "all namespaces"), kept current from the `-n` flag and every picker selection. `Reconcile` skips non-resource rows (no twin/group; selection resolved by kind), D77 grouping unaffected. Tests: seam placement/drill-in/render/reconcile-preservation (menu) + seam-opens-picker + selection-updates-seam (app) — done 2026-07-21 (D82)
 - [x] **M2-14d** teatest coverage: error-toast path (D74/FB-errors-layout) — `TestProgramErrorToastDegradesGracefully` delivers a live `ErrorMsg` to the running bubbletea program (teatest/v2) and asserts on the final model's own `View().Content`: the toast text is present, the status bar `HasError`, and the composed view is still exactly one screen (same line count as an error-free model) — proving the error degraded into an in-layout toast without growing a pane or scrolling. Reads the raw View string, not `teatest.Output()`, because the whole status bar is background-styled (unscannable, same as the filter segment). Test-only, no product code — done 2026-07-21
 - [x] **M2-14c** teatest coverage: filter flow (M2-09b) driven end-to-end through the real bubbletea program — `/` → type → enter-commit via live keypresses, asserted on `FinalModel` (status-bar filter segment is background-styled, so a byte scan misses it; the final model proves the committed query, closed input, and narrowed row set). Added a `fakeWatcher.preload` seam so a program test gets watch rows without racing the channel. Test-only, no product code — done 2026-07-21
 - [x] **M1-04b** Lazy group-detail-on-open: **retired won't-do** — doesn't fit the realized flat Dashboard-sectioned menu (no group-open interaction, D77) and its non-blocking cold-start intent is already delivered by seed (M1-02) + async discovery (M1-03) + per-host on-disk cache (M1-04); reintroducing a collapsible-group menu for it would need a fresh UX decision superseding D77 — done 2026-07-20 (D81)

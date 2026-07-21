@@ -1965,3 +1965,30 @@ realized architecture and its intent is already delivered. Two grounds:
 discovery on the strength of this old item alone — it would need a fresh UX decision
 that supersedes D77's flat-menu direction. **Consequence:** M1 has no remaining
 open feature work; only the tracked envtest item (M1-INT, D66) is deferred.
+
+### D82 — Menu carries non-resource rows (`Item.Kind`); the namespace picker is a seam row between cluster-scoped and namespaced sections
+**2026-07-21 (FB-ns-menu-seam).** The left menu is no longer resource-rows-only. An
+`Item.Kind` (`ItemResource` default / `ItemNamespace`) tags each row; the seed
+inserts one `ItemNamespace` **seam row** between the cluster-scoped `Cluster`
+section and the first namespaced section, so the menu itself communicates the
+cluster/namespaced boundary (the feedback's ask). Constraints future legs must not
+contradict:
+- **A non-resource row has no GVR/`Section`.** It is selectable (cursor lands on it)
+  and drilling in emits its own message — the namespace seam emits
+  `menu.NamespaceRequestedMsg`, which the root opens the namespace picker on (the
+  same effect as the `ns.switch`/ctrl+n shortcut, which stays). It never starts a
+  watch.
+- **Discovery `Reconcile` skips non-resource rows** (`Kind != ItemResource`): they
+  have no discovered twin and no API group, so twin-fill / mark-unavailable /
+  `seen` all bypass them, and selection-preservation resolves the seam by kind (it
+  has no GVR to match). The D77 grouping invariant (one header per contiguous
+  `Section`) is unaffected — the seam's empty `Section` emits no header and sits
+  un-grouped between the two.
+- **The seam shows the live scope** (`menu.SetNamespace`, "" → "all namespaces"),
+  which the root keeps current from the initial `-n` flag and every picker
+  selection — alongside the status bar and welcome page.
+
+**Why:** addresses feedback `2026-07-21-01`; establishes the general "special
+non-resource menu row" shape (a future context switcher, actions row, etc. reuse
+`Item.Kind` rather than each bolting on a parallel concept) without disturbing the
+D57/D77 reconcile+grouping guarantees.

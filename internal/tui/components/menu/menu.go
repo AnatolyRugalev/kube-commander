@@ -3,10 +3,15 @@
 // choose what the table pane shows. The list is grouped into the familiar
 // Kubernetes-Dashboard scopes (Cluster / Workloads / Config / Network / Storage /
 // Access Control, plus Custom Resources for discovered CRDs) with non-selectable
-// section headers the cursor skips over (D77). The seed provides a static list of
-// core resource kinds; Reconcile merges the async discovery result (adding
-// CRDs/extra groups, marking unavailable ones) without disturbing the current
-// selection or scroll.
+// section headers the cursor skips over (D77). Between the cluster-scoped section
+// and the namespaced ones sits a namespace-picker seam row (ItemNamespace): a
+// selectable non-resource row that shows the scoped namespace and, on drill-in,
+// requests the namespace picker (NamespaceRequestedMsg) — the same effect as the
+// ctrl+n shortcut — so the menu itself communicates the cluster/namespaced
+// boundary. The seed provides a static list of core resource kinds; Reconcile
+// merges the async discovery result (adding CRDs/extra groups, marking unavailable
+// ones) without disturbing the current selection or scroll, and skips the
+// non-resource seam row.
 //
 // The menu never matches a raw key (D11): the root model resolves a KeyMsg to a
 // keymap.Action and hands the Action to Update, which moves the selection. When
@@ -42,16 +47,39 @@ const (
 	sectionCustom    = "Custom Resources"
 )
 
+// namespaceAll is the label the namespace-seam row shows when no namespace is
+// scoped ("" = every namespace), so the seam always states the scope explicitly
+// (mirrors the welcome page's wording).
+const namespaceAll = "all namespaces"
+
+// ItemKind distinguishes a normal resource row from a special non-resource row.
+// The zero value is ItemResource so every seed/discovered resource item — and any
+// value not explicitly tagged — is a resource, keeping existing construction and
+// Reconcile behaviour unchanged.
+type ItemKind int
+
+const (
+	// ItemResource is a Kubernetes resource kind: drilling in starts a watch.
+	ItemResource ItemKind = iota
+	// ItemNamespace is the namespace-picker seam row: drilling in requests the
+	// namespace picker (NamespaceRequestedMsg) rather than a watch. It carries no
+	// Resource/Section and sits between the cluster-scoped and namespaced sections.
+	ItemNamespace
+)
+
 // Item is one row in the menu: a resource kind plus its display title, the
 // section it groups under, and an availability flag. Available is true for every
 // seed item; M2-05b sets it false for a discovered-but-unreachable group so the
 // row renders muted but is not selectable for a watch. Section places the item
 // under a header (D77); items sharing a section must be contiguous in the slice.
+// Kind marks a non-resource special row (ItemNamespace, the picker seam) — such a
+// row has no Resource/Section and is skipped by discovery Reconcile.
 type Item struct {
 	Resource  kube.Resource
 	Title     string
 	Section   string
 	Available bool
+	Kind      ItemKind
 }
 
 // ResourceSelectedMsg is emitted when the user drills into the highlighted menu
@@ -62,11 +90,20 @@ type ResourceSelectedMsg struct {
 	Resource kube.Resource
 }
 
+// NamespaceRequestedMsg is emitted when the user drills into the namespace-seam
+// row (the ItemNamespace item). The root model reacts by opening the namespace
+// picker — the same effect as the ns.switch (ctrl+n) shortcut. Like
+// ResourceSelectedMsg it is owned by the menu package so the menu never imports
+// the root package (D56).
+type NamespaceRequestedMsg struct{}
+
 // Model is the resource menu. Every field is owned by the embedding root model;
 // nothing here is shared across goroutines.
 type Model struct {
 	styles styles.Styles
 	items  []Item
+
+	namespace string // the scoped namespace shown on the seam row ("" → all)
 
 	cursor  int // index of the highlighted item
 	offset  int // index of the first visible item (vertical scroll)
@@ -87,6 +124,12 @@ func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.clampOffset()
 }
+
+// SetNamespace records the scoped namespace shown on the namespace-seam row
+// ("" renders as "all namespaces"). The root model wires this from the initial
+// -n scope and every namespace-picker selection so the seam always reflects the
+// live scope.
+func (m *Model) SetNamespace(ns string) { m.namespace = ns }
 
 // Focus marks the menu as holding focus (accented border).
 func (m *Model) Focus() { m.focused = true }
@@ -134,12 +177,15 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 		return
 	}
 
-	// Remember the highlighted resource so we can restore the cursor to it after
-	// the item slice changes.
+	// Remember the highlighted item so we can restore the cursor to it after the
+	// item slice changes. Resource rows are resolved back by GVR; the namespace
+	// seam has no GVR, so it is restored by kind.
 	var selectedGVR schema.GroupVersionResource
+	var selectedKind ItemKind
 	haveSelection := len(m.items) > 0
 	if haveSelection {
 		selectedGVR = m.items[m.cursor].Resource.GVR
+		selectedKind = m.items[m.cursor].Kind
 	}
 
 	// Index the discovered resources by GVR (twin lookup) and collect the groups
@@ -160,6 +206,9 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	// Reconcile the seed items in place, preserving their order and title.
 	seen := make(map[schema.GroupVersionResource]bool, len(m.items))
 	for i := range m.items {
+		if m.items[i].Kind != ItemResource {
+			continue // non-resource seam rows (namespace picker) have no twin.
+		}
 		gvr := m.items[i].Resource.GVR
 		seen[gvr] = true
 		if d, ok := twin[gvr]; ok {
@@ -191,7 +240,10 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	// keeps the guarantee robust regardless.
 	if haveSelection {
 		for i := range m.items {
-			if m.items[i].Resource.GVR == selectedGVR {
+			if m.items[i].Kind != selectedKind {
+				continue
+			}
+			if selectedKind != ItemResource || m.items[i].Resource.GVR == selectedGVR {
 				m.cursor = i
 				break
 			}
@@ -222,6 +274,9 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		item := m.items[m.cursor]
 		if !item.Available {
 			return m, nil
+		}
+		if item.Kind == ItemNamespace {
+			return m, func() tea.Msg { return NamespaceRequestedMsg{} }
 		}
 		res := item.Resource
 		return m, func() tea.Msg { return ResourceSelectedMsg{Resource: res} }
@@ -386,7 +441,11 @@ func (m Model) renderHeader(title string, innerW int) string {
 // renderItem renders one item line clamped to innerW: the highlighted item takes
 // the Selection style (full-width bar), an unavailable item is muted, and a normal
 // item takes the base style. Items indent under their header for the tree look.
+// The namespace seam is a non-resource row rendered distinctly (renderNamespace).
 func (m Model) renderItem(it Item, selected bool, innerW int) string {
+	if it.Kind == ItemNamespace {
+		return m.renderNamespace(selected, innerW)
+	}
 	title := "  " + it.Title
 	switch {
 	case selected:
@@ -396,4 +455,21 @@ func (m Model) renderItem(it Item, selected bool, innerW int) string {
 	default:
 		return m.styles.App.Width(innerW).MaxWidth(innerW).Render(title)
 	}
+}
+
+// renderNamespace renders the namespace-picker seam row: a full-width, un-indented
+// line showing the scoped namespace ("all namespaces" when unscoped), so it reads
+// as the boundary between the cluster-scoped section above and the namespaced
+// sections below rather than as one more resource. Selected → the Selection bar;
+// otherwise the accented Header style so the seam stands out from resource rows.
+func (m Model) renderNamespace(selected bool, innerW int) string {
+	ns := m.namespace
+	if ns == "" {
+		ns = namespaceAll
+	}
+	label := "Namespace: " + ns
+	if selected {
+		return m.styles.Selection.Width(innerW).MaxWidth(innerW).Render(label)
+	}
+	return m.styles.Header.Width(innerW).MaxWidth(innerW).Render(label)
 }
