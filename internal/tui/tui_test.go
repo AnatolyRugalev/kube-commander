@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
@@ -588,6 +589,62 @@ func TestInitInertWithoutDiscoverer(t *testing.T) {
 	}
 	if m.status.Discovering() {
 		t.Fatal("no discoverer means the spinner never starts")
+	}
+}
+
+// TestMenuExtrasFoldedIn proves WithMenuExtras merges a per-context menu entry
+// (FB-menu-config-03) into the seed menu at construction: an extra CRD the seed
+// does not know shows up as a menu item, deduped by GVR (menu.AddExtras).
+func TestMenuExtrasFoldedIn(t *testing.T) {
+	extra := config.MenuResource{
+		Group: "cert-manager.io", Version: "v1", Resource: "certificates",
+		Kind: "Certificate", Namespaced: true,
+	}
+	base := len(sized(t).menu.Items())
+	m := sizedWith(t, WithMenuExtras([]config.MenuResource{extra}))
+
+	items := m.menu.Items()
+	if len(items) != base+1 {
+		t.Fatalf("WithMenuExtras should add one menu item: had %d, now %d", base, len(items))
+	}
+	found := false
+	for _, it := range items {
+		if it.Resource.GVR.Resource == "certificates" && it.Resource.GVR.Group == "cert-manager.io" {
+			found = true
+			if it.Title != "Certificate" {
+				t.Errorf("extra title = %q, want %q", it.Title, "Certificate")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the per-context extra CRD should appear in the menu")
+	}
+}
+
+// TestStartupErrorSurfacesToast proves WithStartupError (e.g. a malformed
+// per-context menu file the launcher chose not to make fatal) is surfaced as a
+// transient status-bar toast on Init rather than swallowed — the app still launches
+// on the default menu (principle 3).
+func TestStartupErrorSurfacesToast(t *testing.T) {
+	e := NewErrorMsg("menu config", errors.New("bad menu file"))
+	m := New(WithStartupError(&e)) // no discoverer: Init emits only the toast
+
+	initCmd := m.Init()
+	if initCmd == nil {
+		t.Fatal("Init should emit the seeded startup error")
+	}
+	msg := initCmd()
+	errMsg, ok := msg.(ErrorMsg)
+	if !ok {
+		t.Fatalf("Init should yield the ErrorMsg toast, got %T", msg)
+	}
+	next, clearCmd := m.Update(errMsg)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Error("delivering the startup error should surface it in the status bar")
+	}
+	if clearCmd == nil {
+		t.Fatal("surfacing the startup error should arm an auto-clear timer")
 	}
 }
 

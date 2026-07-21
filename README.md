@@ -120,6 +120,29 @@ keys:
   nav.up:   ["k", "up"]
 ```
 
+#### Per-context menu
+
+kubecom can add extra resource types (chiefly CRDs the built-in menu doesn't know)
+to the browse menu, per kubeconfig context. Each context reads its own file from
+`os.UserConfigDir()/kubecom/menus/<context>.yaml` (`~/.config/kubecom/menus/` on
+Linux; the context name is sanitized into a safe filename). The file is optional —
+a context with no file uses the default menu; a malformed file falls back to the
+default menu and shows a brief startup notice rather than failing to launch.
+
+```yaml
+# ~/.config/kubecom/menus/my-cluster.yaml
+resources:
+  - group: cert-manager.io   # omit for the core ("") group
+    version: v1
+    resource: certificates   # plural, as the API addresses it
+    kind: Certificate        # optional; defaults from resource
+    namespaced: true         # optional; default false (cluster-scoped)
+    section: Custom Resources # optional; default the Custom Resources group
+```
+
+An entry whose resource is already in the menu (a seed row or one discovery finds)
+is merged, never listed twice.
+
 ## Contributing
 
 The rewrite is currently driven autonomously against the plan in

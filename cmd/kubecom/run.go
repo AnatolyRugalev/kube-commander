@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -72,6 +73,23 @@ func runTUI(opts runOptions) error {
 		return fmt.Errorf("cannot start: %w", err)
 	}
 
+	// Resolve the active context once — it names both the status bar and the
+	// per-context menu file. Load that file's extra resource entries (FB-menu-config-03,
+	// D83): a missing file yields no extras (the default menu), while a malformed one
+	// degrades to the default menu and surfaces a transient startup toast rather than
+	// blocking launch (principle 3). A warning also lands in the log.
+	ctxName := kube.ContextName(kube.ClientConfig{
+		Kubeconfig: opts.kubeconfig,
+		Context:    opts.context,
+	})
+	menuExtras, menuErr := loadMenuExtras(ctxName)
+	var startupErr *tui.ErrorMsg
+	if menuErr != nil {
+		slog.Warn("menu config", "context", ctxName, "error", menuErr)
+		e := tui.NewErrorMsg("menu config", menuErr)
+		startupErr = &e
+	}
+
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
 	// the alternate screen itself (via View.AltScreen — D70), so no program option
@@ -81,14 +99,34 @@ func runTUI(opts runOptions) error {
 		tui.WithDiscoverer(clients),
 		tui.WithNamespaceLister(clients),
 		tui.WithNamespace(opts.namespace),
-		tui.WithContext(kube.ContextName(kube.ClientConfig{
-			Kubeconfig: opts.kubeconfig,
-			Context:    opts.context,
-		})),
+		tui.WithContext(ctxName),
 		tui.WithVersion(version.Version),
+		tui.WithMenuExtras(menuExtras),
+		tui.WithStartupError(startupErr),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("kubecom exited with error: %w", err)
 	}
 	return nil
+}
+
+// loadMenuExtras resolves the per-context menu file for the active context and
+// returns its extra resource entries (D83). It degrades rather than blocks launch
+// (principle 3): an unresolved context (blank name) or a missing file yields no
+// extras and no error (the built-in default menu); only a malformed/unreadable
+// file returns an error, which the caller turns into a startup toast + log warning
+// while still launching on the default menu.
+func loadMenuExtras(context string) ([]config.MenuResource, error) {
+	if strings.TrimSpace(context) == "" {
+		return nil, nil // no resolved context → no per-context menu file.
+	}
+	path, err := config.MenuPath(context)
+	if err != nil {
+		return nil, err
+	}
+	mc, err := config.LoadMenuFile(path) // a missing file returns the zero config, no error.
+	if err != nil {
+		return nil, err
+	}
+	return mc.Resources, nil
 }

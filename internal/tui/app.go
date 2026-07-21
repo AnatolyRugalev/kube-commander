@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
@@ -102,6 +103,27 @@ func WithVersion(v string) Option {
 	return func(m *Model) { m.version = v }
 }
 
+// WithMenuExtras folds the current context's per-context menu customizations
+// (config.MenuResource entries, D83) into the resource menu at construction — the
+// extra CRDs a user named for this kubeconfig context. They are merged before
+// discovery runs (menu.AddExtras) so a later discovered twin dedupes against the
+// extra rather than double-listing it (FB-menu-config-02). Empty/nil adds nothing,
+// leaving the built-in default menu (a context with no menu file). The launcher
+// resolves the file via config.LoadMenuFile(config.MenuPath(ctx)) and passes the
+// entries here; a missing/malformed file degrades to the default menu upstream.
+func WithMenuExtras(extras []config.MenuResource) Option {
+	return func(m *Model) { m.menuExtras = extras }
+}
+
+// WithStartupError seeds a one-shot error the model surfaces as a transient
+// status-bar toast on Init (batched with any discovery start), so a startup-time
+// degradation the launcher chose not to make fatal — chiefly a malformed
+// per-context menu file that fell back to the default menu — is still visible to
+// the user rather than silently swallowed (principle 3). Nil surfaces nothing.
+func WithStartupError(e *ErrorMsg) Option {
+	return func(m *Model) { m.startupErr = e }
+}
+
 // Layout constants. The status bar takes one line at the bottom; the two browse
 // panes split the width, the menu (left) sized as a fraction with sensible floors
 // so the table (right) always keeps room.
@@ -154,6 +176,15 @@ type Model struct {
 	// page (both). Set at construction via WithContext/WithVersion.
 	context string
 	version string
+
+	// menuExtras are the current context's per-context menu customizations (D83),
+	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
+	// before discovery so a discovered twin dedupes against them. startupErr is a
+	// one-shot toast surfaced on Init (WithStartupError) — chiefly a malformed
+	// per-context menu file that degraded to the default menu, kept visible rather
+	// than swallowed. Both nil by default (the plain default menu, no toast).
+	menuExtras []config.MenuResource
+	startupErr *ErrorMsg
 
 	// watcher is the kube watch client (nil → watch-inert). namespace scopes the
 	// watch ("" = all namespaces until the M2-08 namespace picker lands). watchCh
@@ -243,6 +274,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	for _, opt := range opts {
 		opt(&m)
 	}
+	m.menu.AddExtras(m.menuExtras)     // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
 	m.syncHints()                      // menu starts focused → menu-context hints
@@ -288,12 +320,19 @@ type startDiscoveryMsg struct{}
 // Init implements tea.Model. With a discoverer wired it kicks off the async
 // discovery pass (via the startDiscoveryMsg hop, so the spinner starts and the
 // cancel func is retained in Update); with none it has no startup command and the
-// menu stays on its static seed.
+// menu stays on its static seed. A seeded startup error (WithStartupError — e.g. a
+// malformed per-context menu file that degraded to the default menu) is surfaced
+// as a transient toast, batched with the discovery start.
 func (m Model) Init() tea.Cmd {
-	if m.discoverer == nil {
-		return nil
+	var cmds []tea.Cmd
+	if m.startupErr != nil {
+		e := *m.startupErr
+		cmds = append(cmds, func() tea.Msg { return e })
 	}
-	return func() tea.Msg { return startDiscoveryMsg{} }
+	if m.discoverer != nil {
+		cmds = append(cmds, func() tea.Msg { return startDiscoveryMsg{} })
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update implements tea.Model. It sizes the layout on a window-size message,
