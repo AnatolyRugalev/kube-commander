@@ -7,7 +7,10 @@ _Last updated: 2026-07-21 — draining the dogfood feedback inbox; FB-menu-item-
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-hint-focus** Feedback (`2026-07-21-06`, normal): make the persistent
+      bottom key-hint (status bar) **focus-aware** — show the keys relevant to what
+      currently holds focus (menu vs table), including `ctrl+n` namespace.
+      status: in-progress | owner: claude-opus | added: 2026-07-21
 
 ## Blocked
 
