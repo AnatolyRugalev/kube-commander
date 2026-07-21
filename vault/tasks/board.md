@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — dogfood feedback inbox drained: FB-mouse-support (additive mouse — click a menu item to open it, click a table row to select it, wheel to scroll the pane under the pointer; keyboard stays primary) landed and the inbox is now empty. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-21 — FB-menu-config-02 landed: the menu package now maps `config.MenuResource` extras into rows and merges them into the seed (dedup by GVR, D77-contiguous), ready for the FB-menu-config-03 app wiring. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-menu-config-02** Per-context menu merge: map `config.MenuResource` →
-      `menu.Item` and merge the per-context extras into the seed/discovery set.
-      status: in-progress | owner: claude-opus | added: 2026-07-21 | claimed: 2026-07-21
+_(none)_
 
 ## Blocked
 
@@ -72,13 +70,6 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **FB-menu-config-02** _(claimed — see In Progress)_
-      notes: Second slice of feedback `2026-07-21-02` (D83). Convert each entry to a
-      `menu.Item` (default Section → Custom Resources, Title → Kind/Resource, build
-      `kube.Resource` from group/version/resource + namespaced); dedup against a
-      discovered twin by GVR (D57) and against seed rows; keep D77 grouping (extras
-      contiguous under their section). Component-level (menu pkg takes an extras
-      slice); no app wiring yet. Depends on: FB-menu-config-01 (done), M2-05b.
 - [ ] **FB-menu-config-03** App wiring: load the current context's menu file on
       start and feed its extras into the menu.
       status: todo | owner: — | added: 2026-07-21
@@ -137,6 +128,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-menu-config-02** Second slice of feedback `2026-07-21-02` (D83): per-context menu **merge**. The menu package gained `AddExtras([]config.MenuResource)` — maps each entry to a resource `Item` (`extraItem`: GVK/GVR from group/version/resource, `Namespaced`; Title falls back Title→Kind→Resource; Section defaults to the trailing `Custom Resources` bucket; `Available: true` like a seed row) and merges it in via `insertExtra`, which places it after the last item of its section so the D77 one-header-per-section contiguity holds (a new section is appended, starting its own contiguous run; the namespace seam is never split). Dedup is by GVR against seed rows, earlier extras, and (since extras land before discovery) any discovered twin — Reconcile's existing seen-set (D57) covers extras already in the slice, so a later discovered resource fills the extra's twin metadata instead of double-listing. Selection is preserved by re-resolving the cursor's GVR/kind after the slice grows, mirroring Reconcile. `menu` now imports `config` (no cycle: config→keymap only). Component-level only; app wiring is FB-menu-config-03. Tests: map-into-custom, title fallback (Title/Kind/Resource), dedup-against-seed+itself, sections-stay-contiguous (+one-header-per-section), preserves-selection, discovered-twin-no-duplicate, empty-noop — done 2026-07-21
 - [x] **FB-mouse-support** Feedback (normal, `2026-07-21-08`): additive Bubble Tea mouse support (keyboard/vim stays primary). Mouse reporting is enabled per-View (`View` sets `MouseModeCellMotion`, as it sets AltScreen — D70); the root `Update` handles `MouseClickMsg`/`MouseWheelMsg`. Left-click a menu resource row → select + drill in (opens its table, or the namespace picker for the seam); left-click a table data row → select + focus the table; wheel → step the selection of whichever pane the pointer is over (X<`menuPaneWidth` = menu), no focus change. Every gesture becomes the same `keymap.Action`/public `Select*` the keyboard drives — no raw mouse behaviour in a view (D11 in spirit). Coordinate→row mapping is pure component code (`menu.RowItemAt`, `table.RowAt`: content-row → index honouring the scroll offset, rejecting headers/borders/blanks); the root maps absolute (X,Y) → body-relative content row and picks the pane by X. Inert while an overlay is up (help/picker/filter). Tests: `RowItemAt`/`SelectItem` + scroll-offset (menu), `RowAt`/`SelectRow` + scroll-offset (table), and app-level click-opens-resource / header-click-inert / click-selects-row+focuses / wheel-scrolls-pane / inert-while-overlay-open. README Usage gained a mouse note. — done 2026-07-21 (D86)
 - [x] **FB-help-popup** Feedback (normal, `2026-07-21-07`): the `?` help/keys view was a full-screen replacement of the whole TUI; it is now a **centered, bordered modal box** over the browse layout — the same overlay approach as the M2-08a picker — so the status bar stays laid out below it and the view reads as a popup, not a page. The help component now frames its registry-generated full help in `styles.PaneFocus` with a `Keybindings` title and centers it via `lipgloss.Place` over the body area (width × bodyH, so the status bar is never covered); it took `styles.Styles` + a height (`help.New(s, km)`, `SetHeight`, wired from the app's `resize` alongside the picker's `SetSize`), and its `View` renders empty until sized. The full-help layout is width-constrained to the modal's inner width (a local copy of the embedded bubbles/help, so the status-bar short-help width is untouched). Dismissal now covers esc / `?` / `q`: `q` (ActionQuit) dismisses the open modal instead of quitting the app (a modal owns the quit key until it closes). Tests: `TestOverlayRendersAsCenteredModal` (title + rounded border + centered/blank-top-padding, fills the sized area), `TestUnsizedOverlayRendersEmpty` (help), `TestHelpQuitKeyClosesOverlay` (app: q closes help then quits once closed); updated the existing help tests for the new constructor + size. — done 2026-07-21
 - [x] **FB-hint-focus** Feedback (normal, `2026-07-21-06`): the persistent bottom key-hint (status bar) is now **focus-aware** — it shows the keys relevant to whatever pane holds focus and updates as focus moves. Added `keymap.HelpContext` (`HelpMenu`/`HelpTable`) + `HelpKeyMap.ShortHelpContext(ctx)` (registry-generated, D11 intact; unknown ctx → focus-agnostic `ShortHelp`): menu context = down/up/drill-in/namespace/help/quit; table context = down/up/filter/next-match/back/namespace/help/quit. `help.Model.ShortHelpContextView(ctx)` renders it; the root model maps focus→context in one `syncHints` and calls it at every focus switch (drill-in, nav.left/right pane switch, esc focus-pop, filter open) and on resize (re-elides to width). The welcome landing page keeps the focus-agnostic set. Only the primary slice — a **dedicated always-visible hint line** (never dropped under width pressure / behind an error toast) is triaged to FB-hintbar-dedicated. Tests: `ShortHelpContext` menu/table subsets differ + drop-disabled + unknown-ctx fallback (keymap); `ShortHelpContextView` tracks focus (help); `TestHintsAreFocusAware` (app: menu-focused hint offers drill-in not next-match; drilling in → table-focused hint offers filter not drill-in, asserted on the status bar's isolated View) — done 2026-07-21 (D85)

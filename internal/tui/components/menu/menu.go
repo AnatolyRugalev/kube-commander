@@ -11,7 +11,10 @@
 // boundary. The seed provides a static list of core resource kinds; Reconcile
 // merges the async discovery result (adding CRDs/extra groups, marking unavailable
 // ones) without disturbing the current selection or scroll, and skips the
-// non-resource seam row. The list is a real viewport: rows are clipped to the
+// non-resource seam row. AddExtras folds in per-context menu customizations
+// (config.MenuResource, D83) — user-named CRDs for the current context — before
+// discovery runs, deduped by GVR so a later discovered twin never double-lists.
+// The list is a real viewport: rows are clipped to the
 // pane width (long kind names truncate with an ellipsis rather than wrapping
 // outside the border), the selection is always scrolled into view, and a
 // proportional scrollbar appears in the rightmost column whenever the menu has
@@ -39,6 +42,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
@@ -256,6 +260,122 @@ func (m Model) RowItemAt(contentRow int) (int, bool) {
 // view — the public entry the root model uses to place the cursor on a
 // mouse-clicked row before drilling in. Keyboard navigation uses the same moveTo.
 func (m *Model) SelectItem(i int) { m.moveTo(i) }
+
+// AddExtras merges per-context menu customizations (config.MenuResource entries,
+// D83) into the menu: extra resource kinds — chiefly CRDs the built-in seed does
+// not know — that a user has named for the current kubeconfig context. Each entry
+// is mapped to an Item (extraItem) and inserted into its section, keeping the
+// section contiguous so the D77 one-header-per-section grouping still holds. It is
+// additive and idempotent-safe by GVR: an extra whose GVR already exists among the
+// items (a seed row, an earlier extra, or — if AddExtras is called after a
+// discovery pass — a discovered row) is skipped, so it never double-lists a
+// resource the menu already shows. Because the extras land in m.items before the
+// first Reconcile, dedup against a *later* discovered twin is automatic: Reconcile
+// keys its "already listed" set off every current ItemResource (D57), so a
+// discovered resource matching an extra fills the extra's twin metadata rather than
+// appending a duplicate. The current selection is preserved by resolving it back to
+// its post-insert index, mirroring Reconcile. This is the component-level merge
+// (FB-menu-config-02); wiring the per-context file into the app is a later slice.
+func (m *Model) AddExtras(extras []config.MenuResource) {
+	if len(extras) == 0 {
+		return
+	}
+
+	// Remember the highlighted item so the cursor can be restored to it after the
+	// item slice grows. Resource rows resolve back by GVR; the namespace seam by kind.
+	var selectedGVR schema.GroupVersionResource
+	var selectedKind ItemKind
+	haveSelection := len(m.items) > 0
+	if haveSelection {
+		selectedGVR = m.items[m.cursor].Resource.GVR
+		selectedKind = m.items[m.cursor].Kind
+	}
+
+	// Track the GVRs already present so an extra duplicating a seed row (or an
+	// earlier extra) is dropped rather than listed twice.
+	seen := make(map[schema.GroupVersionResource]bool, len(m.items)+len(extras))
+	for i := range m.items {
+		if m.items[i].Kind == ItemResource {
+			seen[m.items[i].Resource.GVR] = true
+		}
+	}
+
+	for _, e := range extras {
+		it := extraItem(e)
+		if seen[it.Resource.GVR] {
+			continue
+		}
+		seen[it.Resource.GVR] = true
+		m.items = insertExtra(m.items, it)
+	}
+
+	if haveSelection {
+		for i := range m.items {
+			if m.items[i].Kind != selectedKind {
+				continue
+			}
+			if selectedKind != ItemResource || m.items[i].Resource.GVR == selectedGVR {
+				m.cursor = i
+				break
+			}
+		}
+	}
+	m.clampOffset()
+}
+
+// extraItem maps one per-context config.MenuResource to a menu Item. The title
+// falls back Title → Kind → Resource so an entry that names only a resource still
+// renders a legible row; the section defaults to the trailing Custom Resources
+// bucket (where discovered CRDs also land) when the entry does not name one. The
+// item is marked Available like a seed row — optimistically selectable before
+// discovery — so Reconcile marks it unavailable only if its group actually fails
+// discovery.
+func extraItem(e config.MenuResource) Item {
+	section := e.Section
+	if section == "" {
+		section = sectionCustom
+	}
+	title := e.Title
+	if title == "" {
+		title = e.Kind
+	}
+	if title == "" {
+		title = e.Resource
+	}
+	return Item{
+		Resource: kube.Resource{
+			GVK:        schema.GroupVersionKind{Group: e.Group, Version: e.Version, Kind: e.Kind},
+			GVR:        schema.GroupVersionResource{Group: e.Group, Version: e.Version, Resource: e.Resource},
+			Namespaced: e.Namespaced,
+		},
+		Title:     title,
+		Section:   section,
+		Available: true,
+		Kind:      ItemResource,
+	}
+}
+
+// insertExtra inserts it into items so its section stays contiguous (the D77
+// invariant rows() relies on to emit one header per section): after the last
+// existing item of the same section, or appended at the end — which starts a new
+// contiguous section — when no item of that section exists yet. The namespace seam
+// (Section "") never matches an extra's section, so the seam is never split.
+func insertExtra(items []Item, it Item) []Item {
+	last := -1
+	for i := range items {
+		if items[i].Kind == ItemResource && items[i].Section == it.Section {
+			last = i
+		}
+	}
+	if last < 0 {
+		return append(items, it)
+	}
+	out := make([]Item, 0, len(items)+1)
+	out = append(out, items[:last+1]...)
+	out = append(out, it)
+	out = append(out, items[last+1:]...)
+	return out
+}
 
 // Reconcile merges an async discovery result into the seed menu without
 // disturbing the current selection or scroll — the M2 risk item (D57). It:

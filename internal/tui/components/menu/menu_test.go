@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
@@ -692,6 +693,214 @@ func scrollbarColumn(t *testing.T, m Model) []string {
 
 // lipglossStrip removes ANSI styling so a rendered line can be indexed by cell.
 func lipglossStrip(s string) string { return ansi.Strip(s) }
+
+// assertSectionsContiguous fails if any section's items are split across the item
+// slice — the D77 invariant rows() relies on to emit exactly one header per
+// section. Non-resource rows (the namespace seam) are skipped.
+func assertSectionsContiguous(t *testing.T, m Model) {
+	t.Helper()
+	seen := map[string]bool{}
+	prev := ""
+	for _, it := range m.items {
+		if it.Kind != ItemResource {
+			continue
+		}
+		if it.Section != prev {
+			if seen[it.Section] {
+				t.Fatalf("section %q is not contiguous (reappears at %q)", it.Section, it.Title)
+			}
+			seen[it.Section] = true
+			prev = it.Section
+		}
+	}
+}
+
+func findGVR(m Model, gvr schema.GroupVersionResource) int {
+	for i, it := range m.items {
+		if it.Kind == ItemResource && it.Resource.GVR == gvr {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestAddExtrasMapsEntryIntoCustomResources(t *testing.T) {
+	m := newTestModel()
+	seedLen := len(m.items)
+
+	m.AddExtras([]config.MenuResource{{
+		Group:      "cert-manager.io",
+		Version:    "v1",
+		Resource:   "certificates",
+		Kind:       "Certificate",
+		Namespaced: true,
+	}})
+
+	if len(m.items) != seedLen+1 {
+		t.Fatalf("item count = %d, want %d", len(m.items), seedLen+1)
+	}
+	// A default (no section) extra lands in the trailing Custom Resources section,
+	// so it is appended last.
+	it := m.items[len(m.items)-1]
+	if it.Section != sectionCustom {
+		t.Fatalf("extra section = %q, want %q", it.Section, sectionCustom)
+	}
+	if it.Title != "Certificate" || !it.Available || it.Kind != ItemResource {
+		t.Fatalf("extra item = %+v, want available Certificate resource row", it)
+	}
+	if !it.Resource.Namespaced {
+		t.Error("extra should be namespaced")
+	}
+	wantGVR := schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}
+	if it.Resource.GVR != wantGVR {
+		t.Fatalf("extra GVR = %+v, want %+v", it.Resource.GVR, wantGVR)
+	}
+	if it.Resource.GVK.Kind != "Certificate" {
+		t.Fatalf("extra GVK.Kind = %q, want Certificate", it.Resource.GVK.Kind)
+	}
+}
+
+func TestAddExtrasTitleFallback(t *testing.T) {
+	m := newTestModel()
+	m.AddExtras([]config.MenuResource{
+		{Version: "v1", Resource: "widgets", Kind: "Widget", Title: "My Widget"}, // Title wins
+		{Version: "v1", Resource: "gadgets", Kind: "Gadget"},                     // Kind fallback
+		{Version: "v1", Resource: "sprockets"},                                   // Resource fallback
+	})
+	want := map[string]string{"widgets": "My Widget", "gadgets": "Gadget", "sprockets": "sprockets"}
+	for res, title := range want {
+		i := findItem(m, res)
+		if i < 0 {
+			t.Fatalf("extra %q missing", res)
+		}
+		if m.items[i].Title != title {
+			t.Errorf("%q title = %q, want %q", res, m.items[i].Title, title)
+		}
+	}
+}
+
+func TestAddExtrasDedupsAgainstSeedAndItself(t *testing.T) {
+	m := newTestModel()
+	seedLen := len(m.items)
+
+	m.AddExtras([]config.MenuResource{
+		{Version: "v1", Resource: "pods", Kind: "Pod"},        // dup of a seed row (GVR match)
+		{Version: "v1", Resource: "widgets", Kind: "Widget"},  // new
+		{Version: "v1", Resource: "widgets", Kind: "Widget2"}, // dup of the extra just added
+	})
+
+	if len(m.items) != seedLen+1 {
+		t.Fatalf("item count = %d, want %d (one net add)", len(m.items), seedLen+1)
+	}
+	// The seed's pods row is untouched (still exactly one pods row).
+	pods := 0
+	for _, it := range m.items {
+		if it.Resource.GVR.Resource == "pods" {
+			pods++
+		}
+	}
+	if pods != 1 {
+		t.Fatalf("pods rows = %d, want 1 (extra dup must not add a second)", pods)
+	}
+}
+
+func TestAddExtrasKeepsSectionsContiguous(t *testing.T) {
+	m := newTestModel()
+
+	// One extra into an existing section (Workloads), two into a brand-new default
+	// (Custom Resources) section — all must stay contiguous within their section.
+	m.AddExtras([]config.MenuResource{
+		{Group: "apps", Version: "v1", Resource: "rollouts", Kind: "Rollout", Section: sectionWorkloads},
+		{Version: "v1", Resource: "widgets", Kind: "Widget"},
+		{Version: "v1", Resource: "gadgets", Kind: "Gadget"},
+	})
+
+	assertSectionsContiguous(t, m)
+
+	// rows() still emits exactly one header per section (the D77 guarantee).
+	sections := map[string]bool{}
+	for _, it := range m.items {
+		if it.Kind == ItemResource {
+			sections[it.Section] = true
+		}
+	}
+	headers := 0
+	for _, r := range m.rows() {
+		if r.header {
+			headers++
+		}
+	}
+	if headers != len(sections) {
+		t.Fatalf("rendered %d headers, want %d (one per section)", headers, len(sections))
+	}
+	// The Workloads extra sits inside the Workloads run, not after Custom Resources.
+	ri := findItem(m, "rollouts")
+	if ri < 0 || m.items[ri].Section != sectionWorkloads {
+		t.Fatalf("rollout landed at %d with wrong section", ri)
+	}
+}
+
+func TestAddExtrasPreservesSelection(t *testing.T) {
+	m := newTestModel()
+	target := findItem(m, "pods")
+	m.SelectItem(target)
+	if m.cursor != target {
+		t.Fatalf("setup: cursor = %d, want %d", m.cursor, target)
+	}
+
+	m.AddExtras([]config.MenuResource{
+		// An extra into Workloads (before pods? no — after events) plus a Custom one.
+		{Group: "apps", Version: "v1", Resource: "rollouts", Kind: "Rollout", Section: sectionWorkloads},
+		{Version: "v1", Resource: "widgets", Kind: "Widget"},
+	})
+
+	if sel, _ := m.Selected(); sel.Resource.GVR.Resource != "pods" {
+		t.Fatalf("selection moved to %q, want pods", sel.Resource.GVR.Resource)
+	}
+}
+
+func TestDiscoveredTwinDoesNotDuplicateExtra(t *testing.T) {
+	m := newTestModel()
+	gvr := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+
+	// Add the CRD as a per-context extra first (as app start would), then a later
+	// discovery pass returns the same GVR: Reconcile must fill the twin, not append
+	// a duplicate (the D57 seen-set covers extras already in the item slice).
+	m.AddExtras([]config.MenuResource{{Group: "example.com", Version: "v1", Resource: "widgets", Kind: "Widget"}})
+	afterExtra := len(m.items)
+
+	twin := kube.Resource{
+		GVK:        schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR:        gvr,
+		Namespaced: true,
+		ShortNames: []string{"wg"},
+	}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{twin}})
+
+	if len(m.items) != afterExtra {
+		t.Fatalf("item count = %d after reconcile, want %d (no duplicate)", len(m.items), afterExtra)
+	}
+	i := findGVR(m, gvr)
+	if i < 0 {
+		t.Fatal("widgets row missing after reconcile")
+	}
+	if got := m.items[i].Resource.ShortNames; len(got) != 1 || got[0] != "wg" {
+		t.Fatalf("twin metadata not merged into the extra: short names = %v", got)
+	}
+	if !m.items[i].Available {
+		t.Error("extra with a discovered twin should be available")
+	}
+}
+
+func TestAddExtrasEmptyIsNoOp(t *testing.T) {
+	m := newTestModel()
+	before := len(m.items)
+	m.AddExtras(nil)
+	m.AddExtras([]config.MenuResource{})
+	if len(m.items) != before {
+		t.Fatalf("empty AddExtras changed item count %d → %d", before, len(m.items))
+	}
+}
 
 // TestRowItemAtMapsContentRowToItem proves the mouse coordinate seam resolves a
 // content-area row to the item rendered on it (dogfood-08): section headers and
