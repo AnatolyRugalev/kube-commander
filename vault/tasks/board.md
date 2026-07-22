@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — M3 (actions & viewers) expanded into ordered leg-sized slices M3-01…M3-15 (D105); M3 is the active milestone. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M3-01 landed the shared read-only viewer component (D106); M3-02 (action surface + keymap) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`)
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+_(none)_
 
 ## Blocked
 
@@ -93,15 +92,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`):
-      wraps `bubbles/viewport` v2 as a scrollable, keymap-routed (vim nav + `gg`/`G` +
-      `Ctrl+u/d`, D10), read-only text pane with a title bar; returns a **bare box**
-      overlaid via `overlayCenter`/`browseBody` (D95), never replacing the base.
-      status: todo | owner: — | added: 2026-07-22
-      notes: The shared substrate for the YAML/describe/logs/secret viewers. In-viewer
-      `/` search (`n`/`N`) can reuse the M2-09 filter pattern or land in a follow-up
-      slice — keep the first cut to scroll + render. Component-only, hermetic; no app
-      wiring (a viewer isn't reachable until M3-02 gives actions a home).
 - [ ] **M3-02** Action surface + M3 keymap: an **actions menu** (reuse the generic
       picker keyed by a distinct Kind, like the resource palette D100) listing the
       actions applicable to the selected row, plus named keymap entries for the M3
@@ -166,6 +156,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`): keymap-routed scrollable text overlay, bare box, `ClosedMsg` — done 2026-07-22 (D106)
 - [x] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices M3-01…M3-15 — done 2026-07-22 (D105)
 - [x] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): kinds without the `watch` verb (e.g. componentstatuses) blanked/retry-looped — watch degrades to list-only polling — done 2026-07-22 (D104)
 - [x] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups failed list/watch — encode params with `metav1.ParameterCodec` — done 2026-07-22 (D103)

@@ -2636,3 +2636,20 @@ state (principle 1) — background streams/forwards only send msgs via the M2-02
 (D10/D11). Ordering is a default, not a contract — re-split any slice that proves
 > ~300 lines (the skill's split-and-take rule still applies per leg). Board-only;
 no code, `make check` green.
+
+### D106 — All M3 read-only viewers share one `viewer.Model` overlay
+**2026-07-22 (M3-01).** The YAML/describe/logs/secret viewers (M3-03…08) each render
+into the **one** `internal/tui/components/viewer` component, not their own pager. Its
+contract (mirrors the picker, D95/D56/D11): constructed with a `Kind` string; fed
+text via `SetContent` (which resets scroll to the top) and sized via `SetSize`;
+driven **only** through resolved `keymap.Action`s (`Update(a keymap.Action)`) —
+nav.up/down + nav.top/bottom (gg/G) + half/full page scroll the wrapped
+`bubbles/viewport`, nav.back emits `ClosedMsg{Kind}`; it never receives a raw
+`tea.KeyMsg`, so the viewport's own key bindings are inert and no hard-coded key
+leaks in (D11). `View()` returns a **bare** bordered box (title bar + viewport) that
+the root composites via `overlayCenter` (D95) — it never replaces the base browse
+view. Mouse-wheel scroll on the viewport is off (input flows through actions).
+`AtBottom()` is exposed for the follow-logs slice (M3-06) to decide auto-scroll. A
+future viewer leg **feeds this component**; it must not re-implement scroll/framing
+or match raw keys. In-viewer `/` search (`n`/`N`) is a deliberately deferred
+follow-up slice, not part of M3-01.
