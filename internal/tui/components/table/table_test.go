@@ -873,3 +873,161 @@ func TestFilteredModifyThatDropsMatchHidesRow(t *testing.T) {
 		t.Fatalf("TotalRowCount = %d, want 3 (still in the full set)", m.TotalRowCount())
 	}
 }
+
+// displayNames returns the Name (first visible column) cell of each displayed
+// row in order — the observable effect of a sort.
+func displayNames(m Model) []string {
+	out := make([]string, len(m.table.Rows))
+	for i, r := range m.table.Rows {
+		out[i], _ = r.Cells[0].(string)
+	}
+	return out
+}
+
+// sortSampleTable is an unsorted table with a numeric "Restarts" column, used to
+// prove type-aware ordering (9 < 10 numerically, "10" < "9" lexically).
+func sortSampleTable() kube.Table {
+	return kube.Table{
+		Columns: []kube.Column{
+			{Name: "Name", Type: "string"},
+			{Name: "Restarts", Type: "integer"},
+		},
+		Rows: []kube.Row{
+			{Cells: []any{"pod-b", int64(10)}, Object: kube.ObjectRef{Name: "pod-b", UID: "b"}},
+			{Cells: []any{"pod-a", int64(2)}, Object: kube.ObjectRef{Name: "pod-a", UID: "a"}},
+			{Cells: []any{"pod-c", int64(9)}, Object: kube.ObjectRef{Name: "pod-c", UID: "c"}},
+		},
+	}
+}
+
+// TestSortByTextColumnAscendingThenToggle proves SortBy orders a text column
+// ascending and toggles to descending when called again on the same column.
+func TestSortByTextColumnAscendingThenToggle(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+
+	m.SortBy(0)
+	if got := displayNames(m); got[0] != "pod-a" || got[2] != "pod-c" {
+		t.Fatalf("ascending sort by name = %v, want pod-a..pod-c", got)
+	}
+	if col, ok := m.SortColumn(); !ok || col != 0 || m.SortDescending() {
+		t.Fatalf("after SortBy(0): col=%d ok=%v desc=%v, want 0 true false", col, ok, m.SortDescending())
+	}
+
+	m.SortBy(0) // toggle to descending
+	if got := displayNames(m); got[0] != "pod-c" || got[2] != "pod-a" {
+		t.Fatalf("descending sort by name = %v, want pod-c..pod-a", got)
+	}
+	if !m.SortDescending() {
+		t.Fatal("second SortBy(0) should toggle to descending")
+	}
+}
+
+// TestSortNumericColumnComparesByValue proves an integer column sorts by numeric
+// value, not lexically (2 < 9 < 10, where a text sort would put "10" before "9").
+func TestSortNumericColumnComparesByValue(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+
+	m.SortBy(1) // Restarts, ascending
+	if got := displayNames(m); got[0] != "pod-a" || got[1] != "pod-c" || got[2] != "pod-b" {
+		t.Fatalf("numeric ascending = %v, want pod-a(2),pod-c(9),pod-b(10)", got)
+	}
+}
+
+// TestSortPreservesSelectionByUID proves the cursor follows the selected object
+// across a re-sort rather than staying at a fixed index.
+func TestSortPreservesSelectionByUID(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+	m.SelectRow(0) // pod-b (UID "b"), the unsorted first row
+
+	m.SortBy(0) // ascending by name: pod-a, pod-b, pod-c
+	row, _ := m.SelectedRow()
+	if row.Object.UID != "b" {
+		t.Fatalf("selection after sort = %q, want the same object b", row.Object.UID)
+	}
+	if m.Cursor() != 1 {
+		t.Fatalf("cursor = %d, want 1 (pod-b's new position)", m.Cursor())
+	}
+}
+
+// TestSortSurvivesWatchDelta proves a live delta is folded into the sorted view:
+// a newly added row lands in sorted position, not appended at the end.
+func TestSortSurvivesWatchDelta(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+	m.SortBy(0) // ascending by name
+
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{
+		{Cells: []any{"pod-aa", int64(0)}, Object: kube.ObjectRef{Name: "pod-aa", UID: "aa"}},
+	}})
+	if got := displayNames(m); got[0] != "pod-a" || got[1] != "pod-aa" {
+		t.Fatalf("after add, sorted order = %v, want pod-a,pod-aa,... (added row in sorted position)", got)
+	}
+}
+
+// TestSetTableResetsSort proves loading a new resource snapshot drops the sort
+// (a sort chosen for one resource's columns must not carry to another).
+func TestSetTableResetsSort(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+	m.SortBy(0)
+	if _, ok := m.SortColumn(); !ok {
+		t.Fatal("precondition: table should be sorted")
+	}
+
+	m.SetTable(sortSampleTable())
+	if _, ok := m.SortColumn(); ok {
+		t.Fatal("SetTable should reset the sort to unsorted")
+	}
+	if got := displayNames(m); got[0] != "pod-b" {
+		t.Fatalf("after SetTable, order = %v, want the unsorted watch order (pod-b first)", got)
+	}
+}
+
+// TestClearSortRestoresWatchOrder proves ClearSort returns to the authoritative
+// (watch-delivered) row order.
+func TestClearSortRestoresWatchOrder(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+	m.SortBy(0)
+
+	m.ClearSort()
+	if _, ok := m.SortColumn(); ok {
+		t.Fatal("ClearSort should leave the table unsorted")
+	}
+	if got := displayNames(m); got[0] != "pod-b" || got[2] != "pod-c" {
+		t.Fatalf("after ClearSort, order = %v, want watch order pod-b,pod-a,pod-c", got)
+	}
+}
+
+// TestSortByOutOfRangeIgnored proves an out-of-range column index is a no-op and
+// never panics.
+func TestSortByOutOfRangeIgnored(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+
+	m.SortBy(-1)
+	m.SortBy(5) // only 2 visible columns
+	if _, ok := m.SortColumn(); ok {
+		t.Fatal("out-of-range SortBy should leave the table unsorted")
+	}
+}
+
+// TestSortEmptyTableNoop proves sorting an empty table is safe.
+func TestSortEmptyTableNoop(t *testing.T) {
+	m := newTestModel()
+	m.SortBy(0)
+	m.ClearSort()
+	if m.RowCount() != 0 {
+		t.Fatalf("empty table RowCount = %d, want 0", m.RowCount())
+	}
+}

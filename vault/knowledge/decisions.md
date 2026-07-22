@@ -2297,3 +2297,35 @@ D92 `config.Migrate` on first start only, and never blocks launch (principle 3):
 once a config exists) and never a launch blocker. Any leg that changes when the
 launcher writes `config.yaml`, or adds a startup toast, must keep migration one-shot
 and keep every degraded fault logged.
+
+### D94 — Table column sort is a view over the authoritative row set (like filter): stable, type-aware only for integer/number, reset on `SetTable`, preserved across watch deltas
+
+`2026-07-22` (M2-13a). The table's column sort is not a mutation of the delivered
+data — it is a display transformation layered onto the same authoritative `full`
+row set that the filter narrows, re-derived by `applyFilter` on every change so it
+survives live updates. Load-bearing constraints for M2-13b and any later leg:
+
+- **Sort follows filter in `applyFilter`.** `full → filter → sort → measure`. Only
+  the visible (displayed) rows are ordered; `full.Rows` is never reordered (the
+  unfiltered path now copies into the display slice instead of aliasing `full.Rows`,
+  so a sort can't scramble the authoritative set). `SortBy`/`ClearSort` re-derive
+  through `applyFilter`, so a watch delta (`ApplyEvent`) re-sorts in place and a new
+  row lands in sorted position, not appended.
+- **`sortCol` is a visible-column position (index into `visible`), or -1 for the
+  unsorted watch order.** `New` starts at -1; a zero-value `Model{}` would read as
+  "sort column 0", so tables must be built with `New`.
+- **`SetTable` resets the sort** (a sort chosen for one resource's columns must not
+  carry to a different resource, mirroring the filter reset); `ApplyEvent` preserves
+  it (a reconnect RESET keeps the same resource). Selection is preserved by object
+  UID across every re-sort.
+- **Type-aware only where cheap: integer/number sort numerically, everything else
+  as case-insensitive text.** Column types are the server's OpenAPI names. Date
+  columns are deliberately text-sorted — kubectl prints ages ("5d", "2h") that don't
+  parse as numbers or times cheaply; a wrong-but-fast numeric parse is worse than an
+  honest lexical order. `sort.SliceStable` keeps equal-key rows in watch order in
+  both directions.
+
+**Consequence:** M2-13b wires the `sort.*` keymap action(s) to `SortBy(currentCol)`
+/ `ClearSort` and renders the header indicator from `SortColumn`/`SortDescending`;
+it must not re-implement ordering or sort `full.Rows`. Adding richer typing (real
+date/quantity parsing) is a superseding decision, not a silent change here.

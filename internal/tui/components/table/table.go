@@ -27,6 +27,7 @@ package table
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -67,6 +68,17 @@ type Model struct {
 	table  kube.Table
 	filter string
 
+	// sortCol is the visible-column position (index into visible) the displayed
+	// rows are sorted on, or -1 for the unsorted, authoritative watch order.
+	// sortDesc flips the direction. Sorting, like filtering, is a view over the
+	// authoritative full set re-derived by applyFilter — watch deltas keep
+	// flowing and re-sort in place, ClearSort restores the watch order, and
+	// SetTable resets it (a sort chosen for one resource's columns must not carry
+	// to a different resource). Selection is preserved by object UID across a
+	// re-sort.
+	sortCol  int
+	sortDesc bool
+
 	// visible holds the indices (into table.Columns) of the columns shown, and
 	// colWidths their rendered widths — both derived from the snapshot in
 	// SetTable so View stays a pure render.
@@ -81,9 +93,11 @@ type Model struct {
 	focused bool
 }
 
-// New builds an empty table rendered through the given styles.
+// New builds an empty table rendered through the given styles. It starts in the
+// unsorted state (sortCol -1): rows are shown in the authoritative watch order
+// until SortBy is called.
 func New(s styles.Styles) Model {
-	return Model{styles: s}
+	return Model{styles: s, sortCol: -1}
 }
 
 // SetTable installs a new snapshot, recomputing the visible columns and their
@@ -95,6 +109,8 @@ func New(s styles.Styles) Model {
 func (m *Model) SetTable(t kube.Table) {
 	m.full = t
 	m.filter = ""
+	m.sortCol = -1
+	m.sortDesc = false
 	m.applyFilter()
 	m.cursor = 0
 	m.offset = 0
@@ -126,16 +142,71 @@ func (m *Model) ClearFilter() { m.SetFilter("") }
 // Filter is the active filter query ("" when none is set).
 func (m Model) Filter() string { return m.filter }
 
+// SortBy sets the sort column to the visible-column position col (an index into
+// the visible columns — what the user sees and navigates) and applies a stable,
+// type-aware sort to the displayed rows. Calling it again with the same column
+// toggles the direction (ascending → descending); a different column starts
+// ascending. An out-of-range col is ignored. The selection is preserved by
+// object UID, and the sort is a view over the authoritative set: watch deltas
+// keep flowing and re-sort in place, and ClearSort restores the watch order.
+func (m *Model) SortBy(col int) {
+	if col < 0 || col >= len(m.visible) {
+		return
+	}
+	selUID := m.selectedUID()
+	if m.sortCol == col {
+		m.sortDesc = !m.sortDesc
+	} else {
+		m.sortCol = col
+		m.sortDesc = false
+	}
+	m.applyFilter()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+}
+
+// ClearSort restores the authoritative (watch-delivered) row order, preserving
+// the selection by object UID. A no-op when the table is already unsorted.
+func (m *Model) ClearSort() {
+	if m.sortCol < 0 {
+		return
+	}
+	selUID := m.selectedUID()
+	m.sortCol = -1
+	m.sortDesc = false
+	m.applyFilter()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+}
+
+// SortColumn returns the visible-column position currently sorted on and true,
+// or false when the table is in its unsorted (watch) order. It backs the header
+// sort indicator the app wiring (M2-13b) will render.
+func (m Model) SortColumn() (int, bool) {
+	if m.sortCol < 0 {
+		return 0, false
+	}
+	return m.sortCol, true
+}
+
+// SortDescending reports whether the active sort is descending (false when
+// unsorted or ascending).
+func (m Model) SortDescending() bool { return m.sortCol >= 0 && m.sortDesc }
+
 // applyFilter re-derives the displayed table from the authoritative full set and
-// the current filter, then measures the column widths from the resulting rows.
-// The visible column set depends only on the columns (priority-0), so it is
-// selected first and reused as the match scope. Callers restore the selection and
-// re-clamp the scroll afterwards.
+// the current filter, applies the active sort, then measures the column widths
+// from the resulting rows. The visible column set depends only on the columns
+// (priority-0), so it is selected first and reused as the match scope. Sorting
+// runs after filtering (only the visible rows are ordered) and, like the filter,
+// is re-applied on every derivation so it survives watch deltas. Callers restore
+// the selection and re-clamp the scroll afterwards.
 func (m *Model) applyFilter() {
 	m.table.Columns = m.full.Columns
 	m.selectVisible()
 	if m.filter == "" {
-		m.table.Rows = m.full.Rows
+		// Copy so the sort below reorders the displayed view, never the
+		// authoritative full.Rows slice (which it aliases when unfiltered).
+		m.table.Rows = append(m.table.Rows[:0], m.full.Rows...)
 	} else {
 		needle := strings.ToLower(m.filter)
 		rows := make([]kube.Row, 0, len(m.full.Rows))
@@ -146,7 +217,36 @@ func (m *Model) applyFilter() {
 		}
 		m.table.Rows = rows
 	}
+	m.sortRows()
 	m.measureWidths()
+}
+
+// sortRows stably orders the displayed rows in place by the active sort column,
+// a no-op in the unsorted state (sortCol < 0) or when the column is out of range
+// — leaving the authoritative watch order. Integer/number columns compare
+// numerically (falling back to text when a cell doesn't parse); every other
+// column type compares case-insensitively as text. sort.SliceStable keeps rows
+// with equal keys in their existing (watch-delivered) order, in both directions.
+func (m *Model) sortRows() {
+	if m.sortCol < 0 || m.sortCol >= len(m.visible) {
+		return
+	}
+	ci := m.visible[m.sortCol]
+	numeric := isNumericColumn(m.table.Columns[ci].Type)
+	sort.SliceStable(m.table.Rows, func(i, j int) bool {
+		c := compareCells(
+			formatCell(cellAt(m.table.Rows[i].Cells, ci)),
+			formatCell(cellAt(m.table.Rows[j].Cells, ci)),
+			numeric,
+		)
+		if c == 0 {
+			return false
+		}
+		if m.sortDesc {
+			return c > 0
+		}
+		return c < 0
+	})
 }
 
 // rowMatches reports whether any of the row's visible cells contains needle
@@ -704,6 +804,45 @@ func formatCell(v any) string {
 		return strconv.FormatInt(x, 10)
 	default:
 		return fmt.Sprint(x)
+	}
+}
+
+// isNumericColumn reports whether a server column type sorts numerically. The
+// server-side Table column types follow the OpenAPI names ("integer", "number");
+// anything else — string, boolean, or date — sorts as text. Dates in particular
+// print as kubectl's human ages ("5d", "2h"), which don't parse as numbers, so
+// text order is the honest cheap choice (D94).
+func isNumericColumn(t string) bool {
+	return t == "integer" || t == "number"
+}
+
+// compareCells three-way compares two formatted cell strings (returns <0, 0, or
+// >0 for a<b, a==b, a>b). When numeric is set and both parse as numbers they
+// compare by value; otherwise, or on a parse failure, they compare
+// case-insensitively as text.
+func compareCells(a, b string, numeric bool) int {
+	if numeric {
+		fa, ea := strconv.ParseFloat(strings.TrimSpace(a), 64)
+		fb, eb := strconv.ParseFloat(strings.TrimSpace(b), 64)
+		if ea == nil && eb == nil {
+			switch {
+			case fa < fb:
+				return -1
+			case fa > fb:
+				return 1
+			default:
+				return 0
+			}
+		}
+	}
+	la, lb := strings.ToLower(a), strings.ToLower(b)
+	switch {
+	case la < lb:
+		return -1
+	case la > lb:
+		return 1
+	default:
+		return 0
 	}
 }
 

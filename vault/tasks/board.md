@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — M2-12b landed: one-shot legacy `~/.kubecom.yaml` migration wired into the launcher (`maybeMigrate`, gated on `config.yaml` absence, notes → startup toast, degrade-and-never-block, D93); M2 migration exit criterion met. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M2-13a landed: table column-sort primitive (`SortBy`/`ClearSort` + accessors) as a stable, type-aware view over the authoritative row set, reset on `SetTable`, preserved across watch deltas (D94); no keymap/app wiring yet (M2-13b). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-13a** Table column-sort primitive (`internal/tui/components/table`, component-only)
-      status: in-progress | owner: claude-opus | added: 2026-07-22
-      notes: First slice of the split M2-13 (#85), mirroring the M2-11a/M2-12a
-      primitive-first rhythm. Sort as a view over the authoritative `full` set
-      (like filter): `SortBy`/`ClearSort` + accessors, stable + type-aware, no
-      keymap/app wiring. M2-13b adds the `sort.*` actions, app wiring, and the
-      header indicator. Depends on: M2-06.
+_(none)_
 
 ## Blocked
 
@@ -76,10 +70,13 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-13** Column sort (#85)
-      status: todo | owner: — | added: 2026-07-19
-      notes: Client-side sort by column on the table's row set (keymap `sort.*`),
-      stable, type-aware where cheap. Closes #85. Depends on: M2-06.
+- [ ] **M2-13b** Column sort — keymap actions + app wiring (#85)
+      status: todo | owner: — | added: 2026-07-22
+      notes: Second/final slice of the split M2-13. Register the `sort.*` keymap
+      action(s), route to `table.SortBy` on the table's current/selected column
+      (+ `ClearSort`), render the header sort indicator from `SortColumn`/
+      `SortDescending`, regenerate `docs/keybindings.md`. Must not re-implement
+      ordering or sort `full.Rows` (D94). Closes #85. Depends on: M2-13a (done).
 
 - [ ] **M2-14b** teatest coverage: modal confirm flow
       status: todo | owner: — | added: 2026-07-20
@@ -93,6 +90,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-13a** Table column-sort primitive (`internal/tui/components/table`, component-only). First slice of the split M2-13 (#85), primitive-first (M2-11a/M2-12a rhythm). Sort as a view over the authoritative `full` row set, layered onto `applyFilter` (`full → filter → sort → measure`) so it re-applies on every watch delta (a new row lands in sorted position) and `ClearSort` restores the watch order. API: `SortBy(visibleCol)` (stable; same column toggles asc↔desc, new column starts ascending, out-of-range ignored, selection preserved by UID), `ClearSort`, `SortColumn`/`SortDescending` accessors (for M2-13b's header indicator). `sortCol` is a visible-column position or -1 (unsorted); `New` starts -1, `SetTable` resets it (a sort for one resource's columns must not carry to another). Type-aware only where cheap — integer/number compare numerically (9 < 10), everything else incl. date columns (kubectl ages) as case-insensitive text (D94). Unfiltered display path now copies rows instead of aliasing `full.Rows`, so a re-sort never scrambles the authoritative set. No keymap/app wiring — not runtime-reachable until M2-13b. Tests: text asc+toggle-desc, numeric-by-value, preserves-selection-by-UID, survives-watch-delta, SetTable-resets, ClearSort-restores, out-of-range-noop, empty-table-noop — done 2026-07-22 (D94)
 - [x] **M2-12b** Legacy config migration — launcher wiring (`cmd/kubecom/run.go` `maybeMigrate`). Second/final slice of the split M2-12: wires the M2-12a `Migrate` primitive into the launch path. On first start, before loading the config, if no new-format `config.yaml` exists yet (checked with `os.Stat`, not `LoadFile` which hides the missing/zero distinction) and a legacy `~/.kubecom.yaml` is present, it parses the legacy file, writes a fresh new-format config **once** (so a present config suppresses re-migration — one-shot), and surfaces the migration notes as a transient startup toast via the existing `WithStartupError` seam. Degrades and never blocks (principle 3, D93): absent legacy file / malformed-unreadable legacy YAML / failed config write all → no migration, no toast, only a `slog` warning (a fixed file migrates on a later start). The single startup-toast slot prefers the migration report over a per-context menu-config error (menu error still logged). README Configuration gained a "Migrating from the 2020 kube-commander" note. Tests (cmd): no-legacy-file (no migration/no write), existing-config-suppresses (one-shot, config not overwritten), reports-notes (menu+theme → toast + config written), empty-legacy-no-notes (writes config, no toast), malformed-legacy-degrades (no toast, no config written) — done 2026-07-22 (D93)
 - [x] **M2-12a** Legacy config migration — parse + report primitive (`internal/config/migrate.go`): `LegacyPath()` (`~/.kubecom.yaml`) + `Migrate(io.Reader) (*Config, []string, error)`. First slice of the split M2-12 (config-package only, no app wiring). Inspecting the old protobuf-yaml shape (`pb.Config` = `menu` + `currentTheme`/`themes`) showed a faithful offline field-migration is impossible: the legacy `menu` stored `group`+`kind` but no `version`/`resource` (which `MenuResource` requires and only discovery resolves), and v1 has no runtime theming. So `Migrate` recognises the legacy file, returns the **zero Config** (keys never existed in it — nothing maps), and emits human-readable **notes** on what to redo by hand (legacy menu → per-context menu file; themes → dropped). Parsing is lenient (non-strict — leftover theme detail ignored, not rejected) so a legacy file never blocks start (principle 3); only unparseable YAML errors → D92. Tests: empty/whitespace→zero+no-notes, menu→count+kinds note (singular/plural), themes/currentTheme→dropped note, both→two notes, malformed-YAML errors, unknown-legacy-field ignored, `LegacyPath` base/dir — done 2026-07-22 (D92)
 - [x] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`). Completes M2-11b. The launcher resolves the active context's state (`loadState` → `config.LoadStateFile`, degrading a blank context / missing / malformed file to the zero State, D91) and picks the initial watch scope via `initialNamespace`: an explicit `-n` (`cmd.Flags().Changed("namespace")`, so `-n ""` counts) wins for the run and does not overwrite stored state; with no `-n`, the stored `LastNamespace` is restored. Added a `tui.NamespacePersister` app seam (`WithNamespacePersister`, mirroring `WithNamespaceLister`) — `handleNamespaceSelected` now persists the picked namespace off the update loop via `persistNamespace` (a `tea.Cmd`; the launcher's `statePersister` writes through `State.SaveFile`); a write failure degrades to a transient toast, never blocks, and the picked scope still applies. README gained a "Remembered namespace" subsection. Tests: initialNamespace precedence (explicit-wins / explicit-empty-wins / from-state), loadState (blank/missing/reads), statePersister round-trip (cmd); persist-on-select / sentinel-persists-unscoped / inert-without-persister / persist-error-toast (tui) — done 2026-07-22 (D91)
