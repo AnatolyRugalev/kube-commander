@@ -2488,3 +2488,43 @@ slices (FB-nav-resource-palette, FB-nav-menu-popup) must preserve or supersede:
   FB-nav-menu-popup may then fold the toggled menu into an `overlayCenter` popup (D95),
   which would supersede the fixed-pane half of this decision while keeping the toggle
   action and focus contract.
+
+### D100 — Resource command palette (`resources.switch`) reuses the generic picker keyed by a distinct Kind; selecting drives `selectResource`. Second slice of D96
+
+`2026-07-22` (FB-nav-resource-palette). D96 named the pane-free, k9s-`:`-style
+resource switch as the counterpart to the toggleable menu (D99); this leg builds it
+and locks how it is wired, so FB-nav-menu-popup (which may fold the menu into this
+palette) and any future picker preserve or supersede the contract:
+
+- **One generic picker component, two instances, disambiguated by `Kind`.** The root
+  now holds a second `picker.Model` (`resPicker`, `picker.New(s, "resource")`)
+  alongside the namespace `nsPicker`. Both emit the same `picker.SelectedMsg`/
+  `CancelledMsg` (D65), so the root branches on `msg.Kind == resourcePickerKind`
+  (`"resource"`) to route a palette result to `handleResourceSelected` rather than the
+  namespace path. An empty `Kind` routes to the namespace picker (the hermetic tests
+  deliver bare `SelectedMsg{Value:…}`). A future picker must stamp its own distinct
+  Kind and add a branch, not overload an existing one.
+- **`resources.switch` (registry action, default `:`, rebindable — D11)** opens the
+  palette. Handled in the post-help branch of `handleAction` (beside `ns.switch`), so
+  it fires whichever pane is focused and while the menu is hidden — the pane-free
+  switch D99 flagged as its missing piece. Watch-inert (no `WithWatcher`) → the
+  palette does not open (nothing to switch).
+- **The source list is the menu's own item set.** `openResourcePicker` snapshots
+  `menu.Items()` filtered to available `ItemResource` rows (the namespace seam and
+  unavailable rows are skipped, mirroring what a menu drill-in can act on), so
+  discovered CRDs and per-context extras (D83) are included for free. The picker is
+  generic over strings, so a rebuilt-on-open `resByLabel map[string]kube.Resource`
+  resolves the picked title back to its resource; a title collision keeps the first.
+- **Selecting drives the same `selectResource` path a menu drill-in takes** (start the
+  watch, `menu.SetActive`, focus the table), so a palette switch and a menu drill-in
+  are one behaviour. The palette does not move the menu cursor; the active-row marker
+  (▸, dogfood-05) shows which kind is open.
+- **Routing generalized to "the active picker."** `activePicker()` returns whichever
+  of the two is open (at most one ever is); `Update`'s key dispatch, `routePickerKey`,
+  `overlayActive`, and `View`'s overlay compositing (D95) all go through it instead of
+  naming `nsPicker`. Both pickers are sized in `resize()`.
+
+**Consequence:** FB-nav-menu-popup may promote the toggled menu into this palette (or
+an `overlayCenter` menu popup) — that supersedes D99's fixed-pane half while keeping
+this Kind-routing + `selectResource` contract. A real column/kind cursor or richer
+palette scoring is out of scope here.

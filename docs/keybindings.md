@@ -41,6 +41,12 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `ns.switch` | `ctrl+n` | Switch namespace |
 
+## resources
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `resources.switch` | `:` | Switch resource (command palette) |
+
 ## mouse
 
 | Action | Keys | Description |

@@ -196,12 +196,13 @@ type Model struct {
 	help   help.Model
 	styles styles.Styles
 
-	menu     menu.Model
-	table    table.Model
-	status   statusbar.Model
-	hintbar  hintbar.Model
-	nsPicker picker.Model
-	welcome  welcome.Model
+	menu      menu.Model
+	table     table.Model
+	status    statusbar.Model
+	hintbar   hintbar.Model
+	nsPicker  picker.Model
+	resPicker picker.Model
+	welcome   welcome.Model
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
@@ -244,6 +245,14 @@ type Model struct {
 	// persistence-inert, M2-11b-2).
 	nsLister    NamespaceLister
 	nsPersister NamespacePersister
+
+	// resByLabel maps each entry of the resource command palette (resPicker) back to
+	// its kube.Resource. The picker is generic over strings (D65), so the palette
+	// lists resource titles and this map, rebuilt each time the palette opens from the
+	// menu's current item set (openResourcePicker), resolves the picked title to the
+	// resource selectResource watches (FB-nav-resource-palette). It holds no shared
+	// mutable state — only the update loop touches it.
+	resByLabel map[string]kube.Resource
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -324,13 +333,15 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		status:      statusbar.New(s),
 		hintbar:     hintbar.New(s),
 		nsPicker:    picker.New(s, "namespace"),
+		resPicker:   picker.New(s, "resource"),
 		welcome:     welcome.New(s),
 		filterInput: fi,
 	}
 	for _, opt := range opts {
 		opt(&m)
 	}
-	m.menu.AddExtras(m.menuExtras)     // fold in the per-context menu customizations (D83); no-op when none
+	m.resPicker.SetTitle("Switch resource")
+	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
 	m.syncHints()                      // menu starts focused → menu-context hints
@@ -407,7 +418,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		if m.nsPicker.Active() {
+		if m.activePicker() != nil {
 			return m.routePickerKey(msg)
 		}
 		if m.filtering {
@@ -475,9 +486,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleNamespacesLoaded(msg)
 
 	case picker.SelectedMsg:
+		if msg.Kind == resourcePickerKind {
+			return m.handleResourceSelected(msg)
+		}
 		return m.handleNamespaceSelected(msg)
 
 	case picker.CancelledMsg:
+		if msg.Kind == resourcePickerKind {
+			m.resPicker.Hide()
+			return m, nil
+		}
 		m.nsPicker.Hide()
 		return m, nil
 
@@ -724,28 +742,104 @@ func (m Model) persistNamespace(ns string) tea.Cmd {
 	}
 }
 
-// routePickerKey resolves one keypress while the namespace picker is open. The
-// picker captures all input (the panes and the sequencer never see it): a control
-// key (esc/enter/arrows/page keys, and ctrl+d/u) resolves to an Action the picker
-// consumes, while any text-producing or editing key is filter input routed to the
-// field. The split is by whether the key carries text — a printable rune types,
-// everything without text (incl. a bound vim letter like `j`) is a control action,
-// and an unmapped no-text key (backspace) still reaches the filter for editing
-// (D73). No view matches a raw key for behaviour (D11).
+// activePicker returns a pointer to whichever modal picker is currently open (the
+// namespace switcher or the resource command palette), or nil when none is. At most
+// one is ever active — opening one does not open the other — so the root can route
+// input and composite the overlay through this single accessor rather than branching
+// on each picker. The pointer aliases into the value-receiver copy, so mutations
+// through it persist in the returned model exactly like a direct field assignment.
+func (m *Model) activePicker() *picker.Model {
+	switch {
+	case m.nsPicker.Active():
+		return &m.nsPicker
+	case m.resPicker.Active():
+		return &m.resPicker
+	}
+	return nil
+}
+
+// resourcePickerKind is the Kind stamped on the resource command palette's picker
+// (picker.New(s, "resource")). Both the namespace switcher and the palette emit the
+// same picker.SelectedMsg/CancelledMsg types (D65), so the root branches on this Kind
+// to route a resolved palette selection to selectResource rather than the namespace
+// path. An empty Kind (as the hermetic tests deliver) is treated as the namespace
+// picker, keeping those tests unchanged.
+const resourcePickerKind = "resource"
+
+// openResourcePicker opens the resource command palette (FB-nav-resource-palette,
+// D96's k9s `:`-style switch): a modal list of the browsable resource kinds, filtered
+// with `/` and confirmed with Enter to switch the table to that kind — a pane-free way
+// to change the browsed resource that does not need the left menu shown (it is what
+// makes the toggled-off menu of D99 fully usable). The source list is the menu's own
+// current item set (so discovered CRDs and per-context extras are included), filtered
+// to the available resource rows; the namespace seam and unavailable rows are skipped,
+// mirroring what a menu drill-in can act on. resByLabel is rebuilt from that snapshot
+// so the picked title resolves back to its resource. With no watcher wired the model
+// is watch-inert and switching a resource is a no-op, so the palette does not open.
+func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
+	if m.watcher == nil {
+		return m, nil
+	}
+	items := m.menu.Items()
+	labels := make([]string, 0, len(items))
+	byLabel := make(map[string]kube.Resource, len(items))
+	for _, it := range items {
+		if it.Kind != menu.ItemResource || !it.Available {
+			continue
+		}
+		if _, dup := byLabel[it.Title]; dup {
+			continue // a title collision would make the pick ambiguous — keep the first.
+		}
+		byLabel[it.Title] = it.Resource
+		labels = append(labels, it.Title)
+	}
+	m.resByLabel = byLabel
+	m.resPicker.SetItems(labels)
+	m.resPicker.Show()
+	return m, nil
+}
+
+// handleResourceSelected applies a resource picked from the command palette: it closes
+// the palette and drives the same selectResource path a menu drill-in takes (start a
+// watch for the kind, mark it active in the menu, move focus to the table). The picked
+// title is resolved through resByLabel (built when the palette opened); a title with no
+// mapping — the palette can only list titles it mapped, so this is defensive — closes
+// the palette without switching.
+func (m Model) handleResourceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.resPicker.Hide()
+	r, ok := m.resByLabel[msg.Value]
+	if !ok {
+		return m, nil
+	}
+	return m.selectResource(r)
+}
+
+// routePickerKey resolves one keypress while a modal picker (namespace switcher or
+// resource palette) is open. The picker captures all input (the panes and the
+// sequencer never see it): a control key (esc/enter/arrows/page keys, and ctrl+d/u)
+// resolves to an Action the picker consumes, while any text-producing or editing key
+// is filter input routed to the field. The split is by whether the key carries text —
+// a printable rune types, everything without text (incl. a bound vim letter like `j`)
+// is a control action, and an unmapped no-text key (backspace) still reaches the
+// filter for editing (D73). No view matches a raw key for behaviour (D11).
 func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	p := m.activePicker()
+	if p == nil {
+		return m, nil
+	}
 	key := msg.Key()
 	action, mapped := m.keymap.Action(key)
 	var cmd tea.Cmd
-	if m.nsPicker.Filtering() {
+	if p.Filtering() {
 		if mapped && key.Text == "" {
-			m.nsPicker, cmd = m.nsPicker.Update(action)
+			*p, cmd = p.Update(action)
 		} else {
-			m.nsPicker, cmd = m.nsPicker.UpdateFilter(msg)
+			*p, cmd = p.UpdateFilter(msg)
 		}
 		return m, cmd
 	}
 	if mapped {
-		m.nsPicker, cmd = m.nsPicker.Update(action)
+		*p, cmd = p.Update(action)
 	}
 	return m, cmd
 }
@@ -930,7 +1024,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -1098,6 +1192,7 @@ func (m *Model) resize() {
 	// bar) and center themselves within it, so the status line stays visible below
 	// the modal.
 	m.nsPicker.SetSize(m.width, bodyH)
+	m.resPicker.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -1198,6 +1293,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionNamespace:
 		return m.openNamespacePicker()
+	case keymap.ActionResources:
+		return m.openResourcePicker()
 	case keymap.ActionFilter:
 		return m.openFilter()
 	case keymap.ActionSearchNext:
@@ -1295,6 +1392,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
 	case m.nsPicker.Active():
 		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
+	case m.resPicker.Active():
+		body = overlayCenter(body, m.resPicker.View(), m.width, m.bodyHeight())
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))

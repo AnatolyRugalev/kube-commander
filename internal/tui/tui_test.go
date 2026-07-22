@@ -951,6 +951,140 @@ func TestNamespacePickerCancels(t *testing.T) {
 	}
 }
 
+// colon is the default resources.switch (command palette) key.
+var colon = tea.Key{Code: ':', Text: ":"}
+
+// availableResourceCount is how many menu rows the resource command palette should
+// list: the available resource rows (the namespace seam and any unavailable row are
+// excluded). Computed from the menu so the assertion tracks the seed instead of
+// pinning a magic number.
+func availableResourceCount(m Model) int {
+	n := 0
+	for _, it := range m.menu.Items() {
+		if it.Kind == menu.ItemResource && it.Available {
+			n++
+		}
+	}
+	return n
+}
+
+// TestResourcePaletteOpensAndSeeds proves `:` (resources.switch) opens the resource
+// command palette seeded with the menu's available resource kinds — the pane-free
+// resource switch of FB-nav-resource-palette (D96 slice 2). It needs a watcher (the
+// palette only makes sense when a resource can be watched).
+func TestResourcePaletteOpensAndSeeds(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m, cmd := press(t, m, colon)
+	if !m.resPicker.Active() {
+		t.Fatal("resources.switch should open the resource palette")
+	}
+	if cmd != nil {
+		t.Fatalf("opening the palette should issue no command, got %T", cmd())
+	}
+	if got, want := m.resPicker.Len(), availableResourceCount(m); got != want {
+		t.Fatalf("palette seeded with %d entries, want %d (available resource rows)", got, want)
+	}
+	if got := m.resPicker.Len(); got == 0 {
+		t.Fatal("palette should list the seed resource kinds")
+	}
+}
+
+// TestResourcePaletteInertWithoutWatcher proves a model with no watcher is
+// switch-inert: `:` opens nothing (there is no live table to switch).
+func TestResourcePaletteInertWithoutWatcher(t *testing.T) {
+	m := sized(t) // no WithWatcher
+	m, cmd := press(t, m, colon)
+	if m.resPicker.Active() {
+		t.Fatal("resources.switch without a watcher should not open the palette")
+	}
+	if cmd != nil {
+		t.Fatal("resources.switch without a watcher should issue no command")
+	}
+}
+
+// TestResourcePaletteSelectSwitchesResource drives the whole switch: open the palette,
+// filter to a kind, drill in — the selection starts a watch for that resource, marks
+// it active in the menu, and moves focus to the table (the same selectResource path a
+// menu drill-in takes). Works with the menu hidden, so it is the pane-free switch.
+func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+
+	// Hide the menu first (menu.toggle = `m`) so this exercises the pane-free path.
+	m, _ = press(t, m, tea.Key{Code: 'm', Text: "m"})
+	if !m.menuHidden {
+		t.Fatal("menu.toggle should hide the menu")
+	}
+
+	// Open the palette and filter to the unique kind "CronJob" (query "cron").
+	m, _ = press(t, m, colon)
+	m, _ = press(t, m, tea.Key{Code: '/', Text: "/"})
+	if !m.resPicker.Filtering() {
+		t.Fatal("app.filter should open the palette filter")
+	}
+	for _, r := range "cron" {
+		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
+	}
+	if got := m.resPicker.Len(); got != 1 {
+		t.Fatalf("filter to 'cron' left %d items, want 1 (CronJob)", got)
+	}
+
+	// Drill in (enter → nav.drillIn) selects the filtered value, stamped with the
+	// resource picker's Kind so the root routes it to selectResource, not namespaces.
+	m, selCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	sel, ok := selCmd().(picker.SelectedMsg)
+	if !ok {
+		t.Fatalf("drill-in produced %T, want picker.SelectedMsg", selCmd())
+	}
+	if sel.Kind != resourcePickerKind {
+		t.Fatalf("palette selection Kind = %q, want %q", sel.Kind, resourcePickerKind)
+	}
+	if sel.Value != "CronJob" {
+		t.Fatalf("selected %q, want CronJob", sel.Value)
+	}
+	next, _ := m.Update(sel)
+	m = next.(Model)
+
+	if m.resPicker.Active() {
+		t.Fatal("selecting a resource should close the palette")
+	}
+	if !m.hasCurrent || m.current.GVR.Resource != "cronjobs" {
+		t.Fatalf("selection should start a watch for cronjobs, got current=%+v hasCurrent=%v", m.current.GVR, m.hasCurrent)
+	}
+	if !m.table.Focused() {
+		t.Fatal("switching a resource should move focus to the table")
+	}
+	if len(fw.res) != 1 || fw.res[0].GVR.Resource != "cronjobs" {
+		t.Fatalf("palette selection should watch cronjobs, got watch calls %v", fw.res)
+	}
+}
+
+// TestResourcePaletteCancels proves nav.back (esc) dismisses the palette without
+// switching the resource.
+func TestResourcePaletteCancels(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	m, _ = press(t, m, colon)
+	if !m.resPicker.Active() {
+		t.Fatal("resources.switch should open the palette")
+	}
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("back should emit a cancel command")
+	}
+	next, _ := m.Update(cancelCmd())
+	m = next.(Model)
+	if m.resPicker.Active() {
+		t.Fatal("nav.back should close the palette")
+	}
+	if m.hasCurrent {
+		t.Fatal("cancelling should not start a watch")
+	}
+	if len(fw.res) != 0 {
+		t.Fatalf("cancelling should issue no watch, got %v", fw.res)
+	}
+}
+
 // TestMenuSeamOpensNamespacePicker proves the namespace-seam row in the left menu
 // opens the namespace picker on drill-in — the same effect as ctrl+n — driven
 // through the real update loop: walk the menu cursor down to the seam, press enter,

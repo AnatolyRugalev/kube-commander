@@ -47,6 +47,7 @@ const (
 	ActionHelp         Action = "app.help"
 	ActionQuit         Action = "app.quit"
 	ActionNamespace    Action = "ns.switch"
+	ActionResources    Action = "resources.switch"
 	ActionToggleMouse  Action = "mouse.toggle"
 	ActionSort         Action = "sort.column"
 	ActionClearSort    Action = "sort.clear"
@@ -78,6 +79,7 @@ var actionMeta = []struct {
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
 	{ActionNamespace, "Switch namespace"},
+	{ActionResources, "Switch resource (command palette)"},
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
@@ -133,6 +135,7 @@ var defaultBindings = map[Action][]string{
 	ActionHelp:         {"?"},
 	ActionQuit:         {"q", "ctrl+c"},
 	ActionNamespace:    {"ctrl+n"},
+	ActionResources:    {":"},
 	ActionToggleMouse:  {"M"},
 	ActionSort:         {"s"},
 	ActionClearSort:    {"S"},

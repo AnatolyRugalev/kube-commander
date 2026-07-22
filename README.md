@@ -103,6 +103,11 @@ table then takes the full width — and press it again to bring the menu back. W
 the menu is hidden, focus lives on the table; re-show it to pick a different
 resource.
 
+Press `:` (`resources.switch`, rebindable) to open the resource command palette — a
+pop-up list of every browsable resource kind. Type `/` to filter it by substring and
+press Enter to switch the table to that kind. This is the pane-free way to change the
+browsed resource, so you can work with the left menu hidden.
+
 The other subcommands report information and exit:
 
 ```bash
