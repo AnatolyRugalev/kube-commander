@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — M2-13b landed: column sort is wired to the running
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-nav-menu-toggle** Make the left menu pane optional — a keybind to show/hide it (#feedback 2026-07-22-status-bar-top / D96)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
 
 ## Blocked
 
@@ -70,16 +71,6 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **FB-nav-menu-toggle** Make the left menu pane optional — a keybind to show/hide it (#feedback 2026-07-22-status-bar-top / D96)
-      status: todo | owner: — | added: 2026-07-22
-      notes: First slice of the D96 navigation direction. Add a `menu.toggle` keymap
-      action (registry, no hard-coded key — D11) that hides/shows the left menu pane
-      on demand; when hidden the table (+ top status bar) takes the full width, and
-      focus lives on the table. `resize()`/`menuPaneWidth` account for a zero-width
-      menu; hidden-menu nav must still reach the resource switch (depends on
-      FB-nav-resource-palette for a pane-free way to change resource, but the toggle
-      itself can land first with the menu re-showable by the same key). Regenerate
-      `docs/keybindings.md`. Keeps zero shared mutable UI state (principle 1).
 - [ ] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style) (#feedback 2026-07-22-status-bar-top / D96)
       status: todo | owner: — | added: 2026-07-22
       notes: Second slice of D96. A `resources` hotkey opens the resource list as a
