@@ -2460,3 +2460,31 @@ later leg must not silently contradict:
 sort-by-named-column palette, but that supersedes this decision rather than silently
 changing the `s` cycle. Richer type-aware ordering is still D94's concern, not this
 one.
+
+### D99 — The left menu pane is toggleable (`menu.toggle`); a hidden menu is zero-width and cannot hold focus. First implemented slice of D96
+
+`2026-07-22` (FB-nav-menu-toggle). D96 recorded that the left pane is not a permanent
+fixture; this leg makes it hideable and locks the toggle contract the remaining D96
+slices (FB-nav-resource-palette, FB-nav-menu-popup) must preserve or supersede:
+
+- **`menu.toggle` (registry action, default `m`, rebindable — D11)** hides/shows the
+  left resource-menu pane at runtime. It is handled in the app-global branch of
+  `handleAction` (alongside `mouse.toggle`), so it works regardless of which pane is
+  focused. `menuHidden` starts false (the menu shows), is touched only from the update
+  loop (no shared mutable state, principle 1), and is not persisted (session-only for
+  now).
+- **A hidden menu is zero-width everywhere.** `resize()` gives the table the full
+  width, `browseBody()` renders the table alone (no `JoinHorizontal` with the menu),
+  and `inMenu()` returns false so mouse routing sends every click/wheel to the table.
+  Any future layout, focus, or mouse-mapping leg must treat `menuHidden` as a
+  zero-width menu, not assume an always-present left pane.
+- **Focus follows visibility.** Hiding moves focus to the table (a hidden pane can't
+  hold focus); showing returns focus to the menu (the gesture to pick a resource). The
+  same key re-shows the menu, so it is never a one-way door even before a pane-free
+  resource switch exists.
+- **Known gap (by design, this slice):** with the menu hidden there is no pane-free
+  way to change the browsed resource yet — the user re-shows the menu to switch.
+  FB-nav-resource-palette (the command-palette `:`-style switch) closes that gap;
+  FB-nav-menu-popup may then fold the toggled menu into an `overlayCenter` popup (D95),
+  which would supersede the fixed-pane half of this decision while keeping the toggle
+  action and focus contract.

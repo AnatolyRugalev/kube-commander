@@ -262,6 +262,17 @@ type Model struct {
 	discoverer      Discoverer
 	discoveryCancel context.CancelFunc
 
+	// menuHidden gates the left resource-menu pane (FB-nav-menu-toggle, D96's first
+	// navigation slice). It is false by default (the menu shows). menu.toggle
+	// (default `m`) flips it at runtime: when hidden the table (+ top status bar)
+	// take the full width and focus lives on the table (a hidden pane can't hold
+	// focus); the same key re-shows the menu, so it is never a one-way door even
+	// before the pane-free command-palette resource switch (FB-nav-resource-palette)
+	// lands. resize()/inMenu()/browseBody() treat a hidden menu as zero-width. It is
+	// touched only from the single-threaded update loop, so no shared mutable state
+	// (principle 1), exactly like filtering/mouseEnabled.
+	menuHidden bool
+
 	// mouseEnabled gates mouse reporting (D97). It is false by default so the
 	// terminal keeps its own click-drag select-to-copy — capturing the mouse
 	// (MouseModeCellMotion) makes the terminal send events to the app instead, which
@@ -936,6 +947,9 @@ func (m Model) bodyHeight() int {
 // inMenu reports whether the absolute column x falls in the left menu pane (vs the
 // right table/welcome pane), using the same split resize() computes.
 func (m Model) inMenu(x int) bool {
+	if m.menuHidden {
+		return false // no menu pane on screen — every click is over the table.
+	}
 	return x < menuPaneWidth(m.width)
 }
 
@@ -1032,9 +1046,31 @@ func (m Model) clickTable(y int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// toggleMenu shows or hides the left resource-menu pane (menu.toggle, D96's first
+// navigation slice). Hiding it hands the full width to the table (+ top status
+// bar) and moves focus to the table, since a hidden pane cannot hold focus;
+// showing it again returns focus to the menu so the user can pick a resource. The
+// same key re-shows the menu, so it is never a one-way door even before the
+// command-palette resource switch (FB-nav-resource-palette) lands. The layout is
+// re-split immediately (resize) and the focus-aware hint refreshed.
+func (m Model) toggleMenu() (tea.Model, tea.Cmd) {
+	m.menuHidden = !m.menuHidden
+	if m.menuHidden {
+		m.menu.Blur()
+		m.table.Focus()
+	} else {
+		m.table.Blur()
+		m.menu.Focus()
+	}
+	m.resize()
+	m.syncHints()
+	return m, nil
+}
+
 // resize lays the panes out inside the current terminal: the status bar and the
 // dedicated hint line take the two bottom rows, and the menu and table split the
 // remaining width (menu a fraction with floors so the table always keeps room).
+// A hidden menu (menu.toggle) is zero-width, handing the full width to the table.
 // Both panes are sized to their total width/height including border, as their
 // SetSize expects.
 func (m *Model) resize() {
@@ -1046,6 +1082,9 @@ func (m *Model) resize() {
 		bodyH = 0
 	}
 	menuW := menuPaneWidth(m.width)
+	if m.menuHidden {
+		menuW = 0 // hidden menu: the table takes the full width.
+	}
 	tableW := m.width - menuW
 	if tableW < 0 {
 		tableW = 0
@@ -1129,6 +1168,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		m.mouseEnabled = !m.mouseEnabled
 		m.status.SetMouse(m.mouseEnabled)
 		return m, nil
+	case keymap.ActionToggleMenu:
+		return m.toggleMenu()
 	case keymap.ActionBack:
 		// esc is the one-level-back key, resolved top-down, one level per press:
 		// close the help overlay if open; else clear a committed table filter
@@ -1227,6 +1268,9 @@ func (m Model) browseBody() string {
 	right := m.table.View()
 	if !m.hasCurrent {
 		right = m.welcome.View(m.table.Focused())
+	}
+	if m.menuHidden {
+		return right // hidden menu: the table (+ top status bar) fills the width.
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
 }

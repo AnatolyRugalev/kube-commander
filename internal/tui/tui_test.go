@@ -298,6 +298,59 @@ func TestFocusSwitch(t *testing.T) {
 	}
 }
 
+// TestMenuToggle proves menu.toggle (`m`) hides and shows the left menu pane and
+// moves focus accordingly (FB-nav-menu-toggle, D96's first navigation slice):
+// hiding hands the full width to the table and focuses it (a hidden pane can't hold
+// focus), the menu disappears from the browse view, and no column falls in a menu
+// pane any more (so mouse routing sends every click to the table); the same key
+// re-shows the menu and returns focus to it. Width 200 so the shown menu pane is
+// well below full width, making the hand-off observable.
+func TestMenuToggle(t *testing.T) {
+	next, _ := New().Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	m := next.(Model)
+
+	if m.menuHidden {
+		t.Fatal("menu should start shown")
+	}
+	if !m.menu.Focused() {
+		t.Fatal("menu should start focused")
+	}
+	if !strings.Contains(m.View().Content, "Workloads") {
+		t.Fatalf("shown menu should render its sections in the browse view:\n%s", m.View().Content)
+	}
+	if !m.inMenu(0) {
+		t.Fatal("with the menu shown, x=0 should fall in the menu pane")
+	}
+
+	// menu.toggle (`m`) hides the pane: focus moves to the table, the menu vanishes
+	// from the view, and no column falls in a menu pane any more.
+	m, _ = press(t, m, tea.Key{Code: 'm', Text: "m"})
+	if !m.menuHidden {
+		t.Fatal("menu.toggle did not hide the menu")
+	}
+	if m.menu.Focused() || !m.table.Focused() {
+		t.Fatal("hiding the menu should move focus to the table")
+	}
+	if strings.Contains(m.View().Content, "Workloads") {
+		t.Fatalf("hidden menu should not render; view:\n%s", m.View().Content)
+	}
+	if m.inMenu(0) {
+		t.Fatal("with the menu hidden, no column should fall in a menu pane")
+	}
+
+	// The same key re-shows the menu and returns focus to it.
+	m, _ = press(t, m, tea.Key{Code: 'm', Text: "m"})
+	if m.menuHidden {
+		t.Fatal("second menu.toggle did not re-show the menu")
+	}
+	if !m.menu.Focused() || m.table.Focused() {
+		t.Fatal("showing the menu should return focus to it")
+	}
+	if !strings.Contains(m.View().Content, "Workloads") {
+		t.Fatalf("re-shown menu should render again; view:\n%s", m.View().Content)
+	}
+}
+
 // TestHintsAreFocusAware proves the persistent bottom hint tracks focus (feedback
 // 2026-07-21-06): the menu-context hint offers drill-in and not next-match, and
 // once a resource is opened and focus moves to the table the hint switches to the

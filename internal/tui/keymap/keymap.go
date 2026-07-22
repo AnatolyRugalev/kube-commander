@@ -50,6 +50,7 @@ const (
 	ActionToggleMouse  Action = "mouse.toggle"
 	ActionSort         Action = "sort.column"
 	ActionClearSort    Action = "sort.clear"
+	ActionToggleMenu   Action = "menu.toggle"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -80,6 +81,7 @@ var actionMeta = []struct {
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
+	{ActionToggleMenu, "Toggle left menu pane"},
 }
 
 var registered = func() map[Action]string {
@@ -134,6 +136,7 @@ var defaultBindings = map[Action][]string{
 	ActionToggleMouse:  {"M"},
 	ActionSort:         {"s"},
 	ActionClearSort:    {"S"},
+	ActionToggleMenu:   {"m"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

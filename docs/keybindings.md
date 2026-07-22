@@ -53,3 +53,9 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `sort.column` | `s` | Sort table (cycle column / direction) |
 | `sort.clear` | `S` | Clear sort (restore order) |
+
+## menu
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `menu.toggle` | `m` | Toggle left menu pane |

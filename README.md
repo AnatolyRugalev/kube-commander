@@ -98,6 +98,11 @@ it, and scroll the wheel to move through whichever pane the pointer is over; a
 `mouse` marker shows on the status bar while it is on. Toggle it back off (`M`) to
 restore native selection. Keyboard navigation is unaffected either way.
 
+Press `m` (`menu.toggle`, rebindable) to hide the left resource-menu pane — the
+table then takes the full width — and press it again to bring the menu back. While
+the menu is hidden, focus lives on the table; re-show it to pick a different
+resource.
+
 The other subcommands report information and exit:
 
 ```bash
