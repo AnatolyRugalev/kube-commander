@@ -262,6 +262,15 @@ type Model struct {
 	discoverer      Discoverer
 	discoveryCancel context.CancelFunc
 
+	// mouseEnabled gates mouse reporting (D97). It is false by default so the
+	// terminal keeps its own click-drag select-to-copy — capturing the mouse
+	// (MouseModeCellMotion) makes the terminal send events to the app instead, which
+	// broke native selection (feedback 2026-07-22-text-selection-select-to-copy).
+	// mouse.toggle (default `M`) flips it at runtime; View only sets MouseMode when
+	// it is true, and the status bar shows a `mouse` marker while on. The D86 mouse
+	// handlers are unchanged — they simply receive no events until it is enabled.
+	mouseEnabled bool
+
 	// seqGen tags each pending-sequence timer so a stale tick (superseded by a
 	// newer pending) is ignored rather than firing the wrong action (D48/D61).
 	seqGen int
@@ -869,8 +878,10 @@ func (m *Model) syncFilterStatus() {
 // select it, and scroll-wheel to move through whichever pane the pointer is over.
 // Clicks and wheel notches are turned into the same keymap Actions the keyboard
 // produces (nav.up/down, drill-in), so no view gains raw mouse behaviour and the
-// selection/scroll/drill-in logic stays single-sourced (D11 in spirit). Mouse mode
-// is enabled per-View (View sets MouseModeCellMotion, as it sets AltScreen).
+// selection/scroll/drill-in logic stays single-sourced (D11 in spirit). Mouse
+// capture is opt-in and off by default (D97) so the terminal keeps its native
+// select-to-copy; these handlers only receive events once mouse.toggle turns it on
+// (View then sets MouseModeCellMotion, as it sets AltScreen).
 
 // overlayActive reports whether a modal/overlay is capturing input (help overlay,
 // namespace picker, or the live filter field). Mouse events are inert while one is
@@ -1078,6 +1089,14 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionHelp:
 		m.help.Toggle()
 		return m, nil
+	case keymap.ActionToggleMouse:
+		// Flip mouse capture (D97). Off (the default) leaves the terminal's own
+		// select-to-copy working; on enables the D86 click/wheel gestures. View
+		// reflects the new MouseMode next frame; the status bar shows the state so
+		// this invisible mode is always visible.
+		m.mouseEnabled = !m.mouseEnabled
+		m.status.SetMouse(m.mouseEnabled)
+		return m, nil
 	case keymap.ActionBack:
 		// esc is the one-level-back key, resolved top-down, one level per press:
 		// close the help overlay if open; else clear a committed table filter
@@ -1177,7 +1196,9 @@ func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		v := tea.NewView("")
 		v.AltScreen = true
-		v.MouseMode = tea.MouseModeCellMotion
+		if m.mouseEnabled {
+			v.MouseMode = tea.MouseModeCellMotion
+		}
 		return v
 	}
 
@@ -1195,9 +1216,14 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))
 	v.AltScreen = true
-	// Enable mouse (click + wheel) the same way AltScreen is enabled — a per-View
-	// property in bubbletea v2, not a program option. The root model owns View, so
-	// it is where kubecom requests mouse reporting (dogfood-08).
-	v.MouseMode = tea.MouseModeCellMotion
+	// Mouse reporting is a per-View property in bubbletea v2 (like AltScreen), not a
+	// program option — the root model owns View, so it is where kubecom requests it.
+	// It is opt-in (off by default) so the terminal keeps its native select-to-copy;
+	// only when the user toggles mouse capture on does View request it, and switching
+	// back to MouseModeNone tears the reporting down again (D97, superseding D86's
+	// unconditional capture).
+	if m.mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	return v
 }

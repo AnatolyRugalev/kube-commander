@@ -40,3 +40,9 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `ns.switch` | `ctrl+n` | Switch namespace |
+
+## mouse
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `mouse.toggle` | `M` | Toggle mouse capture (off = select text to copy) |

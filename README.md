@@ -90,9 +90,13 @@ runs it owns the terminal, so all logs (including client-go warnings) go to a fi
 under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
 
 Navigation is keyboard-first (vim keys by default; see
-[`docs/keybindings.md`](docs/keybindings.md)). The mouse is additive: click a menu
-item to open it, click a table row to select it, and scroll the wheel to move
-through whichever pane the pointer is over.
+[`docs/keybindings.md`](docs/keybindings.md)). Mouse capture is **off by default**
+so your terminal's own click-drag **select-to-copy** keeps working (names, values,
+log lines). Press `M` (`mouse.toggle`, rebindable) to turn mouse capture on — then
+the mouse is additive: click a menu item to open it, click a table row to select
+it, and scroll the wheel to move through whichever pane the pointer is over; a
+`mouse` marker shows on the status bar while it is on. Toggle it back off (`M`) to
+restore native selection. Keyboard navigation is unaffected either way.
 
 The other subcommands report information and exit:
 

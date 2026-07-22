@@ -42,6 +42,7 @@ type Model struct {
 	resourceType string
 	errText      string
 	filter       string
+	mouse        bool
 	discovering  bool
 	width        int
 }
@@ -72,6 +73,12 @@ func (m *Model) SetResourceType(kind string) { m.resourceType = kind }
 // nothing. The string is used verbatim (the caller supplies the styling/prompt),
 // so it is not error-flattened like SetError.
 func (m *Model) SetFilter(s string) { m.filter = s }
+
+// SetMouse sets the persistent mouse-capture indicator. Mouse capture is off by
+// default so the terminal's own select-to-copy works (D97); when the user turns
+// it on (mouse.toggle) the bar shows a `mouse` marker so this otherwise-invisible
+// mode is always visible. Off renders nothing.
+func (m *Model) SetMouse(on bool) { m.mouse = on }
 
 // SetError shows a transient error message in the bar (error-styled, taking over
 // the whole line while shown). The text is flattened to a single line —
@@ -152,8 +159,8 @@ func (m Model) View() string {
 	return m.styles.StatusBar.Width(m.width).MaxWidth(m.width).Render(line)
 }
 
-// leftSegment builds the "context · namespace · resourceType · filter · [spinner]
-// discovering…" run, skipping empty pieces so a missing namespace (or a
+// leftSegment builds the "context · namespace · resourceType · filter · mouse ·
+// [spinner] discovering…" run, skipping empty pieces so a missing namespace (or a
 // pre-drill-in empty resource type) doesn't leave a dangling separator.
 func (m Model) leftSegment() string {
 	var parts []string
@@ -168,6 +175,9 @@ func (m Model) leftSegment() string {
 	}
 	if m.filter != "" {
 		parts = append(parts, m.filter)
+	}
+	if m.mouse {
+		parts = append(parts, "mouse")
 	}
 	if m.discovering {
 		parts = append(parts, m.spinner.View()+discoveringLabel)

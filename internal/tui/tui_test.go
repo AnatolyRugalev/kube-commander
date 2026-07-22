@@ -1731,6 +1731,60 @@ func TestMouseInertWhileOverlayOpen(t *testing.T) {
 	}
 }
 
+// mouseM is the default mouse.toggle key.
+var mouseM = tea.Key{Code: 'M', Text: "M"}
+
+// TestMouseCaptureOffByDefault proves the app does not capture the mouse on start
+// (D97), so the terminal keeps its native select-to-copy: View sets MouseModeNone.
+func TestMouseCaptureOffByDefault(t *testing.T) {
+	m := sized(t)
+	if m.mouseEnabled {
+		t.Fatal("mouse capture should be off by default")
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeNone {
+		t.Fatalf("default View MouseMode = %v, want MouseModeNone (native select-to-copy)", got)
+	}
+}
+
+// TestMouseToggleEnablesCapture proves the mouse.toggle key (default `M`) flips
+// capture on — View then requests MouseModeCellMotion and the status bar shows the
+// `mouse` marker — and a second press flips it back off (native selection restored).
+func TestMouseToggleEnablesCapture(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, mouseM)
+	if !m.mouseEnabled {
+		t.Fatal("mouse.toggle should enable mouse capture")
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Fatalf("after toggle View MouseMode = %v, want MouseModeCellMotion", got)
+	}
+	if !strings.Contains(m.status.View(), "mouse") {
+		t.Fatal("status bar should show the `mouse` marker while capture is on")
+	}
+	m, _ = press(t, m, mouseM)
+	if m.mouseEnabled {
+		t.Fatal("a second mouse.toggle should disable mouse capture")
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeNone {
+		t.Fatalf("after second toggle View MouseMode = %v, want MouseModeNone", got)
+	}
+	if strings.Contains(m.status.View(), "mouse") {
+		t.Fatal("status bar should not show the `mouse` marker once capture is off")
+	}
+}
+
+// TestMouseToggleWorksWhileHelpOpen proves mouse.toggle is an app mode toggle, not
+// navigation: it flips capture even while the help overlay is up (the overlay
+// swallows navigation but not this app-level toggle).
+func TestMouseToggleWorksWhileHelpOpen(t *testing.T) {
+	m := sized(t)
+	m.help.SetVisible(true)
+	m, _ = press(t, m, mouseM)
+	if !m.mouseEnabled {
+		t.Fatal("mouse.toggle should work while the help overlay is open")
+	}
+}
+
 func TestMenuPaneWidthNarrowsWideTerminals(t *testing.T) {
 	cases := []struct {
 		name  string

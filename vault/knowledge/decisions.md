@@ -2086,7 +2086,10 @@ room, and hides it entirely behind an error toast).
 
 ### D86 — Mouse is additive and routed through keymap Actions, never raw mouse behaviour in views; enabled per-View via MouseModeCellMotion
 
-`2026-07-21` · feedback `2026-07-21-08` (mouse support).
+`2026-07-21` · feedback `2026-07-21-08` (mouse support). **Partially superseded by
+D97 (2026-07-22): mouse capture is now off by default and opt-in via `mouse.toggle`
+— the "additive, routed through Actions" invariant here still holds; only the
+"enabled per-View unconditionally" clause is replaced.**
 
 Bubble Tea mouse reporting is enabled in the root model's `View` (`v.MouseMode =
 tea.MouseModeCellMotion`, alongside `v.AltScreen` — in bubbletea v2 both are View
@@ -2388,3 +2391,39 @@ this decision locks, plus a direction the follow-on legs implement:
 **Consequence:** the top status bar + resource-type display is delivered by this
 leg. The optional-menu toggle, the popup menu, and the command-palette switch are
 FB-nav-menu-toggle / FB-nav-menu-popup / FB-nav-resource-palette on the board.
+### D97 — Mouse capture is off by default (native select-to-copy); mouse is opt-in via the `mouse.toggle` keybind. Supersedes D86's unconditional capture
+
+`2026-07-22` (feedback `2026-07-22-text-selection-select-to-copy`). D86 enabled
+mouse reporting unconditionally in `View` (`v.MouseMode = tea.MouseModeCellMotion`
+on every frame). Any mouse-reporting mode makes the terminal send events to the app
+instead of doing its own click-drag selection, so it broke **select-to-copy** — the
+human couldn't select names/values/log lines to copy them. This decision flips the
+default and makes mouse capture opt-in:
+
+- **Off by default.** `Model.mouseEnabled` starts false; `View` sets
+  `MouseModeCellMotion` **only** when it is true, otherwise leaves `MouseModeNone`.
+  So the terminal keeps its native select-to-copy everywhere out of the box. This is
+  the aligned default per goals principle 6 (vim-first, never vim-only) and principle
+  8 (dogfoodable): the keyboard path is complete, so losing default mouse-wheel scroll
+  costs nothing a key doesn't already do.
+- **Opt-in via a runtime toggle keybind**, not a config flag: `mouse.toggle`
+  (registry action, default `M`, rebindable — D11) flips `mouseEnabled` at runtime.
+  Chosen over a config-file-only switch so it needs no restart and no cmd/config
+  wiring, and over "keep capture + document Shift+drag" because that isn't a true
+  default. Switching back to `MouseModeNone` tears reporting down again (bubbletea v2
+  toggles the reporting sequences from the View's `MouseMode` each frame), so native
+  selection is restored the moment capture is turned off.
+- **The state is visible.** Mouse capture is otherwise an invisible mode, so the
+  status bar shows a persistent `mouse` marker (`statusbar.SetMouse`) while it is on —
+  not a transient toast, because the user needs to know the current state at any time.
+- **The D86 mouse handlers are unchanged.** `handleMouseClick` / `handleMouseWheel`
+  and their component coordinate→row accessors stay exactly as they were; they simply
+  receive no events until capture is toggled on. The `mouse.toggle` action is handled
+  in the app-mode branch of `handleAction` (alongside quit/help), so it works even
+  while an overlay is open — it is a mode toggle, not navigation.
+
+**Consequence:** a future leg must keep mouse capture off by default and gated on
+`mouseEnabled`; it must not reintroduce unconditional `MouseModeCellMotion` in `View`,
+and any new mouse affordance stays inert until the user opts in. In-app copy (e.g.
+OSC 52 yank of the selected row/field) was noted as a possible complement and is not
+built here.

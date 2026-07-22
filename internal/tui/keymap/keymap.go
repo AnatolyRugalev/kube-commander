@@ -47,6 +47,7 @@ const (
 	ActionHelp         Action = "app.help"
 	ActionQuit         Action = "app.quit"
 	ActionNamespace    Action = "ns.switch"
+	ActionToggleMouse  Action = "mouse.toggle"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -74,6 +75,7 @@ var actionMeta = []struct {
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
 	{ActionNamespace, "Switch namespace"},
+	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
 }
 
 var registered = func() map[Action]string {
@@ -125,6 +127,7 @@ var defaultBindings = map[Action][]string{
 	ActionHelp:         {"?"},
 	ActionQuit:         {"q", "ctrl+c"},
 	ActionNamespace:    {"ctrl+n"},
+	ActionToggleMouse:  {"M"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

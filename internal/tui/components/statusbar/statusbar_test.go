@@ -54,6 +54,24 @@ func TestSetFilterShowsInLeftSegment(t *testing.T) {
 	}
 }
 
+// TestSetMouseShowsMarker proves the mouse-capture indicator renders only while
+// capture is on (D97), so this otherwise-invisible mode is always visible.
+func TestSetMouseShowsMarker(t *testing.T) {
+	m := newBar()
+	m.SetContext("prod")
+	if got := m.leftSegment(); strings.Contains(got, "mouse") {
+		t.Fatalf("mouse marker should be absent by default, got %q", got)
+	}
+	m.SetMouse(true)
+	if got := m.leftSegment(); !strings.Contains(got, "mouse") {
+		t.Fatalf("leftSegment() = %q, want the mouse marker while capture is on", got)
+	}
+	m.SetMouse(false)
+	if got := m.leftSegment(); strings.Contains(got, "mouse") {
+		t.Fatalf("mouse marker should disappear when capture is off, got %q", got)
+	}
+}
+
 func TestStartStopDiscovery(t *testing.T) {
 	m := newBar()
 	if m.Discovering() {
