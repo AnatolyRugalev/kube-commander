@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — M2-13a landed: table column-sort primitive (`SortB
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-popups-overlay** Feedback (high, `2026-07-22-popups-should-overlay`): help + namespace picker composite over the base browse instead of replacing it
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
