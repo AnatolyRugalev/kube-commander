@@ -2427,3 +2427,36 @@ default and makes mouse capture opt-in:
 and any new mouse affordance stays inert until the user opts in. In-app copy (e.g.
 OSC 52 yank of the selected row/field) was noted as a possible complement and is not
 built here.
+
+### D98 — Column sort is driven by one cycling key over a stateless derivation of the table's own sort state; there is no separate column-selection gesture
+
+`2026-07-22` (M2-13b). M2-13a delivered `SortBy(visibleCol)`/`ClearSort` as a view
+over the row set (D94) but no way to reach it. The table has no column cursor, so
+this leg's wiring had to decide **which column** the sort acts on. Locked choices a
+later leg must not silently contradict:
+
+- **One key cycles everything.** `sort.column` (registry action, default `s`,
+  rebindable — D11) advances a single cycle: unsorted → column 0 ascending → column 0
+  descending → column 1 ascending → … → last column descending → **cleared**
+  (`ClearSort`) → column 0 ascending. This makes every visible column and both
+  directions reachable **without** adding a column-selection cursor/navigation
+  gesture. `sort.clear` (default `S`) drops any sort in one press.
+- **The cycle is stateless.** It is derived entirely from the table's own
+  `SortColumn()`/`SortDescending()` each press (plus `VisibleColumnCount()` for the
+  wrap point); the root model stores **no** sort cursor. This keeps principle 1 (no
+  shared mutable UI state) and means a `SetTable` reset (which clears the sort, D94)
+  automatically restarts the cycle — no separate reset to keep in sync.
+- **Rejected: sort the leftmost-visible column** (via the horizontal scroll offset).
+  A table that fits without scrolling has offset 0 always, so only the first column
+  would ever be sortable, and the last columns can never become leftmost even when
+  scrolled — most useful sorts would be unreachable. The cycle avoids both.
+- **Header indicator lives in the component.** The sorted column's header carries a
+  direction arrow (`▲` ascending / `▼` descending); its width is reserved in
+  `measureWidths` so the arrow never overflows the column and misaligns the data rows
+  below it. `sort.column` is also added to the table-context short-help hint so the
+  key is discoverable.
+
+**Consequence:** a future leg may add a real column cursor / a k9s-style
+sort-by-named-column palette, but that supersedes this decision rather than silently
+changing the `s` cycle. Richer type-aware ordering is still D94's concern, not this
+one.

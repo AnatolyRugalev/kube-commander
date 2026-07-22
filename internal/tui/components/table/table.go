@@ -193,6 +193,13 @@ func (m Model) SortColumn() (int, bool) {
 // unsorted or ascending).
 func (m Model) SortDescending() bool { return m.sortCol >= 0 && m.sortDesc }
 
+// VisibleColumnCount is the number of columns currently shown (the priority-0 set,
+// or every column when the server sent none). It backs the app's sort-column cycle
+// (M2-13b): the shell steps SortBy across [0, VisibleColumnCount) then ClearSort,
+// so it needs to know how many visible columns there are without reaching into the
+// component's internals.
+func (m Model) VisibleColumnCount() int { return len(m.visible) }
+
 // applyFilter re-derives the displayed table from the authoritative full set and
 // the current filter, applies the active sort, then measures the column widths
 // from the resulting rows. The visible column set depends only on the columns
@@ -449,8 +456,22 @@ func (m *Model) selectVisible() {
 	}
 }
 
+// sortIndicator is the header suffix marking the sorted column: a leading space
+// then an arrow for the direction (ascending ▲ / descending ▼). Empty for any
+// other column. sortIndicatorWidth is its display width, reserved in the sorted
+// column's measured width so the arrow never overflows the column and misaligns
+// the data rows below it.
+const (
+	sortAscMark        = " ▲"
+	sortDescMark       = " ▼"
+	sortIndicatorWidth = 2
+)
+
 // measureWidths sizes each visible column to the widest of its header and the
-// cell values across the currently displayed rows.
+// cell values across the currently displayed rows. The sorted column additionally
+// reserves room for its header sort indicator (M2-13b), so appending the arrow in
+// renderHeader never pushes the header past the measured width and shifts the
+// columns to its right.
 func (m *Model) measureWidths() {
 	m.colWidths = make([]int, len(m.visible))
 	for i, ci := range m.visible {
@@ -461,6 +482,12 @@ func (m *Model) measureWidths() {
 			if w := runeLen(formatCell(cellAt(row.Cells, ci))); w > m.colWidths[i] {
 				m.colWidths[i] = w
 			}
+		}
+	}
+	if m.sortCol >= 0 && m.sortCol < len(m.visible) {
+		ci := m.visible[m.sortCol]
+		if need := runeLen(m.table.Columns[ci].Name) + sortIndicatorWidth; need > m.colWidths[m.sortCol] {
+			m.colWidths[m.sortCol] = need
 		}
 	}
 }
@@ -750,13 +777,29 @@ func (m Model) View() string {
 
 // renderHeader lays out the column headers padded to the computed widths and
 // styled as the header row, windowed to innerW at the current horizontal offset.
+// The sorted column's header carries a direction arrow (M2-13b); its extra width
+// is reserved in measureWidths so the marker never overflows and misaligns the
+// data rows.
 func (m Model) renderHeader(innerW int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
-		cells[i] = padRight(m.table.Columns[ci].Name, m.colWidths[i])
+		name := m.table.Columns[ci].Name
+		if i == m.sortCol {
+			name += m.sortMark()
+		}
+		cells[i] = padRight(name, m.colWidths[i])
 	}
 	line := m.hclip(strings.Join(cells, colGap), innerW)
 	return m.styles.Header.Width(innerW).Render(line)
+}
+
+// sortMark is the header arrow for the active sort direction (▲ ascending / ▼
+// descending). Only ever appended to the sorted column's header.
+func (m Model) sortMark() string {
+	if m.sortDesc {
+		return sortDescMark
+	}
+	return sortAscMark
 }
 
 // renderRow lays out one row's cells padded to the computed widths, windowed to

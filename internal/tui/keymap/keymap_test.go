@@ -43,6 +43,8 @@ func TestDefaultResolution(t *testing.T) {
 		{tea.Key{Code: '/', Text: "/"}, ActionFilter},
 		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, ActionQuit},
 		{tea.Key{Code: 'm', ShiftedCode: 'M', Mod: tea.ModShift}, ActionToggleMouse},
+		{tea.Key{Code: 's', Text: "s"}, ActionSort},
+		{tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}, ActionClearSort},
 	}
 	for _, tt := range tests {
 		got, ok := km.Action(tt.key)

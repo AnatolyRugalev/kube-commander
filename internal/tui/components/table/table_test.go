@@ -3,9 +3,11 @@ package table
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
@@ -1030,4 +1032,90 @@ func TestSortEmptyTableNoop(t *testing.T) {
 	if m.RowCount() != 0 {
 		t.Fatalf("empty table RowCount = %d, want 0", m.RowCount())
 	}
+}
+
+// TestVisibleColumnCount proves the accessor reports the shown-column count that
+// the app's sort-column cycle steps over — the priority-0 columns, not the wide-only
+// extras.
+func TestVisibleColumnCount(t *testing.T) {
+	m := newTestModel()
+	if got := m.VisibleColumnCount(); got != 0 {
+		t.Fatalf("empty table VisibleColumnCount = %d, want 0", got)
+	}
+	m.SetTable(sampleTable()) // 2 priority-0 columns + 1 wide-only (Priority 1)
+	if got := m.VisibleColumnCount(); got != 2 {
+		t.Fatalf("VisibleColumnCount = %d, want 2 (the wide-only IP column is hidden)", got)
+	}
+}
+
+// TestHeaderShowsSortIndicator proves the sorted column's header carries a
+// direction arrow (▲ ascending, ▼ descending) and an unsorted table shows neither.
+func TestHeaderShowsSortIndicator(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sortSampleTable())
+	m.SetSize(40, 8)
+
+	if out := m.View(); strings.ContainsAny(out, "▲▼") {
+		t.Fatalf("unsorted table should show no sort arrow, got:\n%s", out)
+	}
+
+	m.SortBy(0) // Name ascending
+	header := headerLine(m.View())
+	if !strings.Contains(header, "Name") || !strings.Contains(header, "▲") {
+		t.Fatalf("ascending sort header = %q, want a Name column with a ▲ arrow", header)
+	}
+	if strings.Contains(header, "▼") {
+		t.Fatalf("ascending sort header should not show a ▼ arrow: %q", header)
+	}
+
+	m.SortBy(0) // toggle to descending
+	header = headerLine(m.View())
+	if !strings.Contains(header, "▼") || strings.Contains(header, "▲") {
+		t.Fatalf("descending sort header = %q, want a ▼ arrow (not ▲)", header)
+	}
+
+	m.ClearSort()
+	if out := m.View(); strings.ContainsAny(out, "▲▼") {
+		t.Fatalf("after ClearSort the arrow should be gone, got:\n%s", out)
+	}
+}
+
+// TestSortIndicatorKeepsColumnsAligned proves reserving the arrow's width in the
+// sorted column keeps the header and the data rows aligned: the next column's
+// header starts at the same display offset as that column's cell values, so the
+// arrow never bleeds past its column and shifts the header out of step with the
+// rows below it.
+func TestSortIndicatorKeepsColumnsAligned(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(kube.Table{
+		Columns: []kube.Column{{Name: "Name", Type: "string"}, {Name: "Zone", Type: "string"}},
+		Rows: []kube.Row{
+			{Cells: []any{"pod-a", "alpha"}, Object: kube.ObjectRef{Name: "pod-a", UID: "a"}},
+			{Cells: []any{"pod-b", "bravo"}, Object: kube.ObjectRef{Name: "pod-b", UID: "b"}},
+		},
+	})
+	m.SetSize(60, 8) // wide enough that no horizontal clipping occurs
+
+	m.SortBy(0) // sort the first column — its header grows by the arrow
+	lines := strings.Split(m.View(), "\n")
+	header := ansi.Strip(lines[1]) // line 0 border, line 1 header
+	data := ansi.Strip(lines[2])   // first data row (pod-a, ascending)
+	// Compare by rune column, not byte offset: the header carries the multibyte ▲
+	// (one display column, three bytes), so a byte index would spuriously differ.
+	hIdx := utf8.RuneCountInString(header[:strings.Index(header, "Zone")])
+	dIdx := utf8.RuneCountInString(data[:strings.Index(data, "alpha")])
+	if hIdx != dIdx {
+		t.Fatalf("second column misaligned under the sort arrow: header at col %d, cell at col %d\n%s\n%s",
+			hIdx, dIdx, header, data)
+	}
+}
+
+// headerLine returns the first content line (the column header row) of a rendered
+// table view, stripped of ANSI styling so a plain substring/offset check is exact.
+func headerLine(view string) string {
+	lines := strings.Split(view, "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	return ansi.Strip(lines[1]) // line 0 is the top border; line 1 is the header.
 }

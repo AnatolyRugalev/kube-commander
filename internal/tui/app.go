@@ -842,6 +842,38 @@ func (m Model) searchMove(dir keymap.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// sortNext advances the table's column sort one step through a single cycle driven
+// by the sort.column key (default `s`), so every visible column and both directions
+// are reachable without a separate column-selection gesture (there is no column
+// cursor — the table sorts by a visible-column position, D94). The cycle, derived
+// entirely from the table's own SortColumn/SortDescending state (no shared mutable
+// UI state — principle 1), is: unsorted → column 0 ascending → column 0 descending
+// → column 1 ascending → … → last column descending → unsorted (ClearSort). It is a
+// no-op with no resource table open or no visible columns. Sort itself is a view
+// over the authoritative row set (SortBy re-derives through applyFilter), so it
+// never reorders full.Rows and survives watch deltas (D94).
+func (m Model) sortNext() (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	n := m.table.VisibleColumnCount()
+	if n == 0 {
+		return m, nil
+	}
+	cur, sorted := m.table.SortColumn()
+	switch {
+	case !sorted:
+		m.table.SortBy(0) // start at the first column, ascending
+	case !m.table.SortDescending():
+		m.table.SortBy(cur) // same column: ascending → descending (SortBy toggles)
+	case cur+1 < n:
+		m.table.SortBy(cur + 1) // advance to the next column, ascending
+	default:
+		m.table.ClearSort() // past the last column: back to the watch order
+	}
+	return m, nil
+}
+
 // syncHints refreshes the persistent bottom key-hint to match what currently holds
 // focus (the dogfood ask, feedback 2026-07-21-06): the menu-context keys while the
 // left resource menu is focused, the table-context keys (filter/search, back) once
@@ -1131,6 +1163,13 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.searchMove(keymap.ActionDown)
 	case keymap.ActionSearchPrev:
 		return m.searchMove(keymap.ActionUp)
+	case keymap.ActionSort:
+		return m.sortNext()
+	case keymap.ActionClearSort:
+		if m.hasCurrent {
+			m.table.ClearSort()
+		}
+		return m, nil
 	}
 	return m.routeNav(a)
 }

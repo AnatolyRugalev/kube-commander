@@ -46,3 +46,10 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `mouse.toggle` | `M` | Toggle mouse capture (off = select text to copy) |
+
+## sort
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `sort.column` | `s` | Sort table (cycle column / direction) |
+| `sort.clear` | `S` | Clear sort (restore order) |

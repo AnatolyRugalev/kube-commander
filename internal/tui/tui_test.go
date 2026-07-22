@@ -1331,7 +1331,7 @@ func TestFilterLetterKeysTypeNotNavigate(t *testing.T) {
 func TestSearchWrapsThroughMatches(t *testing.T) {
 	m, _ := tableWith(t, "web-1", "web-2", "api-1")
 	m, _ = press(t, m, slash)
-	m = typeStr(t, m, "web")               // 2 matches: web-1, web-2
+	m = typeStr(t, m, "web")                        // 2 matches: web-1, web-2
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit; cursor at 0
 	if m.table.Cursor() != 0 {
 		t.Fatalf("commit should leave the cursor at 0, got %d", m.table.Cursor())
@@ -1793,7 +1793,7 @@ func TestMenuPaneWidthNarrowsWideTerminals(t *testing.T) {
 	}{
 		{"zero", 0, 0},
 		{"eighty-floors-at-min", 80, minMenuWidth}, // 80/4 == 20 == floor
-		{"wide-caps-at-max", 200, maxMenuWidth},     // 200/4 == 50, capped to 28
+		{"wide-caps-at-max", 200, maxMenuWidth},    // 200/4 == 50, capped to 28
 		{"very-wide-caps-at-max", 400, maxMenuWidth},
 		{"narrow-even-split", 39, 19}, // floor(20) would starve table → total/2
 	}
@@ -1817,5 +1817,96 @@ func TestMenuPaneWidthNarrowsWideTerminals(t *testing.T) {
 		if w > maxMenuWidth {
 			t.Fatalf("menuPaneWidth(%d) = %d exceeds maxMenuWidth %d", total, w, maxMenuWidth)
 		}
+	}
+}
+
+// sortReset is a two-column, two-row watch RESET used to give the app a live table
+// the sort-cycle test can order.
+func sortReset() kube.WatchEvent {
+	return kube.WatchEvent{
+		Type:    kube.WatchReset,
+		Columns: []kube.Column{{Name: "NAME"}, {Name: "STATUS"}},
+		Rows: []kube.Row{
+			{Cells: []any{"pod-b", "Running"}, Object: kube.ObjectRef{Name: "pod-b", UID: "b"}},
+			{Cells: []any{"pod-a", "Pending"}, Object: kube.ObjectRef{Name: "pod-a", UID: "a"}},
+		},
+	}
+}
+
+// sortKey is the default sort.column key (`s`).
+var sortKey = tea.Key{Code: 's', Text: "s"}
+
+// TestSortInertWithoutResource proves the sort key is a no-op before any resource
+// table is open (the welcome page is showing): there is nothing to sort.
+func TestSortInertWithoutResource(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m, _ = press(t, m, sortKey)
+	if _, ok := m.table.SortColumn(); ok {
+		t.Fatal("sort should be inert with no resource table open")
+	}
+}
+
+// TestSortCycleAdvancesColumnsAndClears proves the sort.column key cycles the table
+// through every visible column and both directions, then back to the unsorted watch
+// order — the single-key sort model (M2-13b): unsorted → col0 asc → col0 desc →
+// col1 asc → col1 desc → cleared → col0 asc …
+func TestSortCycleAdvancesColumnsAndClears(t *testing.T) {
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw))
+
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	// Drain the preloaded RESET into the table so it has 2 visible columns + 2 rows.
+	wm, ok := cmd().(watchMsg)
+	if !ok {
+		t.Fatalf("pump produced %T, want watchMsg", cmd())
+	}
+	next, _ = m.Update(wm)
+	m = next.(Model)
+	if m.table.VisibleColumnCount() != 2 {
+		t.Fatalf("precondition: visible columns = %d, want 2", m.table.VisibleColumnCount())
+	}
+
+	wantState := func(step string, wantCol int, wantSorted, wantDesc bool) {
+		t.Helper()
+		col, sorted := m.table.SortColumn()
+		if sorted != wantSorted || (sorted && (col != wantCol || m.table.SortDescending() != wantDesc)) {
+			t.Fatalf("%s: sort = (col %d, sorted %v, desc %v), want (col %d, sorted %v, desc %v)",
+				step, col, sorted, m.table.SortDescending(), wantCol, wantSorted, wantDesc)
+		}
+	}
+
+	m, _ = press(t, m, sortKey)
+	wantState("1st press", 0, true, false) // col0 ascending
+	m, _ = press(t, m, sortKey)
+	wantState("2nd press", 0, true, true) // col0 descending
+	m, _ = press(t, m, sortKey)
+	wantState("3rd press", 1, true, false) // col1 ascending
+	m, _ = press(t, m, sortKey)
+	wantState("4th press", 1, true, true) // col1 descending
+	m, _ = press(t, m, sortKey)
+	wantState("5th press", 0, false, false) // past the last column → cleared
+	m, _ = press(t, m, sortKey)
+	wantState("6th press", 0, true, false) // cycle restarts at col0 ascending
+}
+
+// TestClearSortKeyRestoresOrder proves the sort.clear key (`S`) drops an active sort
+// back to the unsorted watch order in one press.
+func TestClearSortKeyRestoresOrder(t *testing.T) {
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
+	m = next.(Model)
+	wm := cmd().(watchMsg)
+	next, _ = m.Update(wm)
+	m = next.(Model)
+
+	m, _ = press(t, m, sortKey) // sort col0 ascending
+	if _, ok := m.table.SortColumn(); !ok {
+		t.Fatal("precondition: table should be sorted")
+	}
+	m, _ = press(t, m, tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}) // sort.clear
+	if _, ok := m.table.SortColumn(); ok {
+		t.Fatal("sort.clear should restore the unsorted watch order")
 	}
 }

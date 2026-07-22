@@ -65,13 +65,13 @@ const (
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
-// is ordered as shown and rendered enabled-only. Filter/search appear only in the
-// table context (they act on a resource table, no-ops on the menu), while drill-in
-// appears only in the menu context (opening the selected resource); namespace,
-// help and quit are always-relevant and shown in both.
+// is ordered as shown and rendered enabled-only. Filter/search/sort appear only in
+// the table context (they act on a resource table, no-ops on the menu), while
+// drill-in appears only in the menu context (opening the selected resource);
+// namespace, help and quit are always-relevant and shown in both.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:  {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

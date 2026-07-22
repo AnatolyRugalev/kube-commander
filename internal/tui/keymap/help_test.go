@@ -106,6 +106,12 @@ func TestShortHelpContext(t *testing.T) {
 	if !table[ActionFilter.Describe()] || !table[ActionSearchNext.Describe()] {
 		t.Error("table context should offer filter and next-match")
 	}
+	if !table[ActionSort.Describe()] {
+		t.Error("table context should offer sort")
+	}
+	if menu[ActionSort.Describe()] {
+		t.Error("menu context should not offer sort (no table to sort)")
+	}
 	if table[ActionDrillIn.Describe()] {
 		t.Error("table context should not offer drill-in")
 	}
@@ -135,9 +141,9 @@ func TestShortHelpContext(t *testing.T) {
 // first-seen column order and registry order within a column, dropping disabled.
 func TestHelpMapFullHelp(t *testing.T) {
 	full := DefaultKeymap().HelpMap().FullHelp()
-	// Registry has four namespaces: nav.* then app.* then ns.* then mouse.*.
-	if len(full) != 4 {
-		t.Fatalf("FullHelp columns = %d; want 4", len(full))
+	// Registry has five namespaces: nav.* then app.* then ns.* then mouse.* then sort.*.
+	if len(full) != 5 {
+		t.Fatalf("FullHelp columns = %d; want 5", len(full))
 	}
 	// Total enabled bindings equals the whole registry (all default-bound).
 	total := 0
@@ -163,7 +169,7 @@ func TestHelpMapFullHelp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
-	if cols := km.HelpMap().FullHelp(); len(cols) != 3 {
-		t.Errorf("FullHelp after disabling nav.* columns = %d; want 3 (app + ns + mouse)", len(cols))
+	if cols := km.HelpMap().FullHelp(); len(cols) != 4 {
+		t.Errorf("FullHelp after disabling nav.* columns = %d; want 4 (app + ns + mouse + sort)", len(cols))
 	}
 }
