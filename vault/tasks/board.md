@@ -7,7 +7,12 @@ _Last updated: 2026-07-22 — FB-mouse-optin landed: mouse capture is now off by
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-13b** Column sort — keymap actions + app wiring (#85)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+      notes: Second/final slice of the split M2-13. Register the `sort.*` keymap
+      action(s), route to `table.SortBy`/`ClearSort`, render the header sort indicator
+      from `SortColumn`/`SortDescending`, regenerate `docs/keybindings.md`. Must not
+      re-implement ordering or sort `full.Rows` (D94). Closes #85. Depends on: M2-13a (done).
 
 ## Blocked
 
@@ -69,14 +74,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **M2-13b** Column sort — keymap actions + app wiring (#85)
-      status: todo | owner: — | added: 2026-07-22
-      notes: Second/final slice of the split M2-13. Register the `sort.*` keymap
-      action(s), route to `table.SortBy` on the table's current/selected column
-      (+ `ClearSort`), render the header sort indicator from `SortColumn`/
-      `SortDescending`, regenerate `docs/keybindings.md`. Must not re-implement
-      ordering or sort `full.Rows` (D94). Closes #85. Depends on: M2-13a (done).
 
 - [ ] **FB-nav-menu-toggle** Make the left menu pane optional — a keybind to show/hide it (#feedback 2026-07-22-status-bar-top / D96)
       status: todo | owner: — | added: 2026-07-22
