@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) have landed. Remaining: modal, config persistence, migration, sort, teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) have landed. Remaining: config persistence, migration, sort, remaining teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 
@@ -47,7 +47,7 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 - [ ] Vim keys and their fallbacks both navigate every list/table; help overlay shows both.
 - [ ] Rebinding an action in config takes effect; invalid keymaps fail load with a clear error; no raw-key matching remains in view code.
 - [ ] Old config migrates cleanly; malformed/legacy files handled gracefully.
-- [~] teatest coverage for update loop, menu reconcile, and modal flows. (Update loop + menu reconcile — M2-14a; filter flow — M2-14c; error-toast/degrade-gracefully — M2-14d; all driven through the real program; modal flow deferred to M2-14b, blocked by the gated M2-10.)
+- [~] teatest coverage for update loop, menu reconcile, and modal flows. (Update loop + menu reconcile — M2-14a; filter flow — M2-14c; error-toast/degrade-gracefully — M2-14d; all driven through the real program; modal flow deferred to M2-14b — the modal component landed (M2-10/D88) but needs an M3 action to wire it into the shell before the flow can be driven end-to-end.)
 - [ ] No mutex-guarded UI state; concurrency is message-driven only.
 
 ## Depends on

@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-21 — FB-hintbar-dedicated landed: the focus-aware key hint moved off the status bar onto its own always-visible `hintbar` row below it (D87), so it is never dropped under width pressure nor hidden behind an error toast. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M2-10 landed: the confirm/prompt modal component (`internal/tui/components/modal`, D88) replacing the original's racy tcell popup — a picker-sibling overlay driven through nav.drillIn/nav.back, component-only until an M3 action wires it. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
-      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-22
-      notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
-      message-driven overlay: confirm (y/n) + text prompt, resolved through keymap
-      actions, returns a result msg. No mutex, no shared popup state (the whole
-      point). Depends on: M2-03, M2-07a.
+_(none)_
 
 ## Blocked
 
@@ -97,14 +92,17 @@ messages.
 
 - [ ] **M2-14b** teatest coverage: modal confirm flow
       status: todo | owner: — | added: 2026-07-20
-      notes: Split from M2-14 — the modal-flow half. Drive a modal confirm (y/n)
-      flow with teatest/v2 (M0-05 harness). Depends on: M2-10 (the modal itself),
-      which the open dogfood human-task gates — do this once M2-10 lands.
+      notes: Split from M2-14 — the modal-flow half. Drive a modal confirm flow
+      with teatest/v2 (M0-05 harness). The modal component landed (M2-10/D88), but
+      it is not yet wired into the app shell (D88: wiring lands with the M3 action
+      that needs a confirm). So this teatest needs that app wiring first — do it
+      once a confirm is reachable through the running program.
 
 _Remaining M3–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
 
+- [x] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`): a Kind-stamped, centered/bordered overlay replacing the original's racy tcell popup (REWRITE_PLAN motivation). Two modes on one Model — `ShowConfirm` (yes/no) and `ShowPrompt` (single-line text over an owned bubbles `textinput`) — driven **only** through resolved keymap actions (nav.drillIn accepts → `ConfirmedMsg`, nav.back declines → `CancelledMsg`; Enter/Esc, the modal convention of keybindings.md — no dedicated y/n actions, no raw-key matching, D11/D88). Emits its own message types so it never imports the root (D56); holds no shared mutable state (principle 1). Sibling of the picker (D65/M2-08a): same clamped-and-centered geometry + overlay approach, `Prompting()`-gated `UpdatePrompt` as the single raw-key entry point. Component-only — the app-shell wiring lands with the M3 action that needs a confirm (D88), which also decides copy/default. Tests: hidden-empty-view + inactive-ignores-actions, confirm renders title/message, accept→ConfirmedMsg(empty value), decline→CancelledMsg, prompt seeds/reports-Prompting, prompt captures typed text into ConfirmedMsg.Value, UpdatePrompt inert in confirm mode, Hide dismisses + reopen-clean — done 2026-07-22 (D88)
 - [x] **FB-hintbar-dedicated** Board (deferred remainder of feedback `2026-07-21-06`/D85): promoted the persistent, focus-aware key hint off the status bar onto its own always-visible bottom row (D87). New `hintbar` component (`internal/tui/components/hintbar`) renders the registry-generated `help.ShortHelpContextView(ctx)` string clamped to width on a line of its own; the root's `syncHints` now feeds `m.hintbar` instead of `m.status`. The status bar dropped `SetShortHelp` and its right-align/gap logic — it renders only its left segment (context · namespace · filter · spinner) or a full-line error toast, clamped to width. Layout reserves one extra bottom row (`hintBarHeight`; `bodyH = height - statusBarHeight - hintBarHeight`, mirrored in `bodyHeight()` for mouse mapping); vertical stack is body · status · hint. The hint is now never dropped under width pressure nor hidden behind an error toast (the two D85 failures). Welcome page keeps its own in-pane hint. Tests: hintbar set/render/clamp/empty-inert; statusbar tests updated for the dropped hint; `TestHintsAreFocusAware` reads the hintbar in isolation; new `TestHintPersistsThroughErrorToast` (error toast on the bar, hint still in the composed view) — done 2026-07-21 (D87)
 - [x] **FB-menu-config-03** Third/final slice of feedback `2026-07-21-02` (D83): **app wiring** for the per-context menu. The launcher (`cmd/kubecom/run.go`) resolves the active context once (`kube.ContextName`, reused for the status bar), then `loadMenuExtras` reads `config.MenuPath(ctx)` → `config.LoadMenuFile`: a blank/unresolved context or a missing file yields no extras (default menu, no error); only a malformed/unreadable file returns an error, which the launcher logs (`slog.Warn`) and turns into a `*tui.ErrorMsg` — the app still launches on the default menu (principle 3). The tui shell gained two options: `WithMenuExtras([]config.MenuResource)` (applied in `NewWithKeymap` via `menu.AddExtras` before discovery, so a discovered twin dedupes against the extra — FB-menu-config-02) and `WithStartupError(*ErrorMsg)` (surfaced as a transient status-bar toast, batched into `Init` alongside the discovery start). `Init` now `tea.Batch`es the startup-error cmd with the discovery-start cmd (still nil when neither is set, so the inert-without-discoverer contract holds). tui now imports config (no cycle: config→keymap only). README Configuration gained a "Per-context menu" subsection (file location, schema, degrade-to-default note). Tests: `loadMenuExtras` blank-context/missing-file/valid-file/malformed-file (cmd); `TestMenuExtrasFoldedIn` (an extra CRD appears in the menu) + `TestStartupErrorSurfacesToast` (Init emits the toast → status bar HasError) (tui) — done 2026-07-21 (D83)
 - [x] **FB-menu-config-02** Second slice of feedback `2026-07-21-02` (D83): per-context menu **merge**. The menu package gained `AddExtras([]config.MenuResource)` — maps each entry to a resource `Item` (`extraItem`: GVK/GVR from group/version/resource, `Namespaced`; Title falls back Title→Kind→Resource; Section defaults to the trailing `Custom Resources` bucket; `Available: true` like a seed row) and merges it in via `insertExtra`, which places it after the last item of its section so the D77 one-header-per-section contiguity holds (a new section is appended, starting its own contiguous run; the namespace seam is never split). Dedup is by GVR against seed rows, earlier extras, and (since extras land before discovery) any discovered twin — Reconcile's existing seen-set (D57) covers extras already in the slice, so a later discovered resource fills the extra's twin metadata instead of double-listing. Selection is preserved by re-resolving the cursor's GVR/kind after the slice grows, mirroring Reconcile. `menu` now imports `config` (no cycle: config→keymap only). Component-level only; app wiring is FB-menu-config-03. Tests: map-into-custom, title fallback (Title/Kind/Resource), dedup-against-seed+itself, sections-stay-contiguous (+one-header-per-section), preserves-selection, discovered-twin-no-duplicate, empty-noop — done 2026-07-21

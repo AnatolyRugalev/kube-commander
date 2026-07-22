@@ -2142,3 +2142,31 @@ lives on its own dedicated row **below** the status bar — the `hintbar` compon
 just when the user needed it (narrow terminal, active error). **Consequence:** keep the
 hint on the hintbar line; a leg adding another persistent bottom element must budget its
 own row (adjust `bodyH`/`bodyHeight` together) rather than crowding the status or hint line.
+
+### D88 — The confirm/prompt modal resolves accept/decline through nav.drillIn / nav.back (Enter/Esc), not dedicated y/n actions
+
+M2-10 landed the confirm/prompt overlay (`internal/tui/components/modal`) that
+replaces the original's racy tcell popup. It is a sibling of the picker (D65): a
+Kind-stamped, centered, bordered box driven **only** through resolved
+`keymap.Action`s, emitting its own `ConfirmedMsg`/`CancelledMsg` (never importing
+the root, D56), holding no shared mutable state (principle 1).
+
+- **Accept = `nav.drillIn` (Enter), decline = `nav.back` (Esc).** There are no
+  `confirm.yes`/`confirm.no` actions and no raw `y`/`n` matching — the
+  Enter/Esc-consistent modal convention of `knowledge/keybindings.md`, same as the
+  picker. A future leg adding a confirm must route through these actions, **not**
+  reintroduce raw-key `y`/`n` handling (D11). The board's "(y/n)" was the semantic
+  (a yes/no question), not a keybinding mandate.
+- **Two modes on one Model.** `ShowConfirm(kind,title,message)` → `ConfirmedMsg`
+  with empty `Value`; `ShowPrompt(kind,title,message,initial)` → focuses an owned
+  `textinput`, `ConfirmedMsg.Value` carries the entered text. `Prompting()` gates
+  raw text to `UpdatePrompt` (the single raw-key entry point), mirroring the
+  picker's `Filtering()`/`UpdateFilter`.
+- **Component-only, like the picker was (M2-08a).** Nothing triggers a confirm yet
+  (delete/scale/… are M3); the app-shell wiring lands **with the M3 action that
+  needs it**, which decides the copy and (for destructive actions) whether Enter
+  should default to accept. Do not wire an unused confirm into the shell before then.
+
+**Consequence:** any M3 destructive/parameterised action gets its confirmation by
+owning a `modal.Model` on the root, calling `ShowConfirm`/`ShowPrompt`, and handling
+`ConfirmedMsg`/`CancelledMsg` — no new keymap actions, no raw y/n.
