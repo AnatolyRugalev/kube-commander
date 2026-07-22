@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — watch degrades to list-only for un-watchable kinds (D104); feedback inbox empty. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M3 (actions & viewers) expanded into ordered leg-sized slices M3-01…M3-15 (D105); M3 is the active milestone. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices
-      status: in-progress | owner: claude-opus | added: 2026-07-22
+_(none)_
 
 ## Blocked
 
@@ -76,14 +75,97 @@ messages.
       notes: Split from M2-14 — the modal-flow half. Drive a modal confirm flow
       with teatest/v2 (M0-05 harness). The modal component landed (M2-10/D88), but
       it is not yet wired into the app shell (D88: wiring lands with the M3 action
-      that needs a confirm). So this teatest needs that app wiring first — do it
-      once a confirm is reachable through the running program.
+      that needs a confirm). So this teatest needs that app wiring first — **M3-09**
+      (delete via confirm) lands it; do this once M3-09 makes a confirm reachable
+      through the running program.
 
-_Remaining M3–M5 items to be expanded when those milestones open. See milestone files for scope._
+### M3 — Actions & Viewers
+M3 makes kubecom *operate*: in-TUI viewers + the curated action set, killing nearly
+all kubectl shell-outs. The **kube layer already has every verb** — logs stream
+(M1-07c/d), describe (M1-07b), YAML (M1-07a), delete/scale/rollout-restart/cordon/
+drain/suspend (M1-06*), background port-forward (M1-08). So M3 is almost entirely
+the **TUI surface**: reusable read-only viewers, wiring actions through the M2-10
+confirm modal (D88), an actions surface off the reserved nav keys (D10), and the two
+sanctioned suspend flows (exec, edit). Built bottom-up (D52 rhythm): the shared
+viewer + the actions surface first, then each viewer/action as its own leg. Every
+overlay composites over the base browse view (D95); zero shared mutable UI state
+(principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
+is a default, not a contract — re-split any slice that proves > ~300 lines.
+
+- [ ] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`):
+      wraps `bubbles/viewport` v2 as a scrollable, keymap-routed (vim nav + `gg`/`G` +
+      `Ctrl+u/d`, D10), read-only text pane with a title bar; returns a **bare box**
+      overlaid via `overlayCenter`/`browseBody` (D95), never replacing the base.
+      status: todo | owner: — | added: 2026-07-22
+      notes: The shared substrate for the YAML/describe/logs/secret viewers. In-viewer
+      `/` search (`n`/`N`) can reuse the M2-09 filter pattern or land in a follow-up
+      slice — keep the first cut to scroll + render. Component-only, hermetic; no app
+      wiring (a viewer isn't reachable until M3-02 gives actions a home).
+- [ ] **M3-02** Action surface + M3 keymap: an **actions menu** (reuse the generic
+      picker keyed by a distinct Kind, like the resource palette D100) listing the
+      actions applicable to the selected row, plus named keymap entries for the M3
+      actions **off the reserved nav keys** (`h j k l n g G /`, D10) — behind a leader
+      / the actions menu. Regenerate `docs/keybindings.md`; update `knowledge/keybindings.md`.
+      status: todo | owner: — | added: 2026-07-22
+      notes: Gives every subsequent viewer/action a reachable trigger. Wire it to
+      dispatch a typed "run action X on selected row" intent; the individual legs
+      (M3-03…) handle each intent. No behavior beyond opening the menu + routing yet.
+- [ ] **M3-03** YAML viewer wired: actions-menu/keymap → `kube.GetYAML` (M1-07a) →
+      M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
+      notes: Simplest viewer (single fetch, no stream) — the first end-to-end proof of
+      the M3-01+M3-02 pair against a real object. Errors degrade to a status-bar toast (D74).
+- [ ] **M3-04** Describe viewer wired: actions-menu/keymap → `kube.Describe` (M1-07b)
+      → M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
+      (M1-07c) streamed into the M3-01 viewer via a msg pump (D53). Pods first.
+      status: todo | owner: — | added: 2026-07-22
+      notes: Reuse the channel→msg pump shape (M2-02/D53) so log lines stream without
+      blocking `Update`; a generation guard drops a superseded stream's lines.
+- [ ] **M3-06** Logs viewer — follow + reconnect: wire the M1-07d reconnecting/resuming
+      follow into the viewer; a `logs.follow` toggle; auto-scroll while following.
+      status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-07** Logs — container picker + pod-owning kinds (#84): container picker for
+      multi-container pods (reuse the picker); enable logs for Deployment/RS/StatefulSet/
+      DaemonSet/Job by resolving a backing pod. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-08** Secret viewer (#89): reveal/base64-decode secret data with an explicit
+      reveal gesture + copy-to-clipboard. status: todo | owner: — | added: 2026-07-22
+      notes: Values start hidden; reveal is deliberate. Copy reuses the mouse/clipboard
+      story (D86/D97) or an OSC-52 write — decide in the leg and record it.
+- [ ] **M3-09** Delete action wired through the confirm modal: root owns a `modal.Model`,
+      `ShowConfirm` on the selected row, `ConfirmedMsg` → `kube.Delete`, result → status
+      bar (D74/D88). **Unblocks M2-14b.** status: todo | owner: — | added: 2026-07-22
+      notes: First confirm wiring — D88's "the M3 action that needs it wires the modal
+      into the shell". No new keymap actions, no raw y/n (accept = `nav.drillIn`, decline
+      = `nav.back`). UID precondition already guards the row-snapshot race (M1-06a/D35).
+- [ ] **M3-10** Scale + rollout-restart wired: scale via `ShowPrompt` (replicas) →
+      `kube.Scale`; rollout-restart via `ShowConfirm` → `kube.RolloutRestart`; results
+      to the status bar. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-11** Cordon/uncordon + drain wired: cordon/uncordon (`kube.Cordon`/`Uncordon`)
+      and drain (`kube.Drain`, confirm) on nodes; the long eviction loop reports progress
+      to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
+      menu (#83). status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-13** Port-forward manager: start (prompt ports) via the M1-08 background
+      forward; a panel listing active forwards with their local:remote ports; stop a
+      forward; stop all on exit. status: todo | owner: — | added: 2026-07-22
+      notes: The forward runs in a background goroutine that only sends msgs (principle 1);
+      the panel is an overlay. May split into start/list/stop slices if > ~300 lines.
+- [ ] **M3-14** Exec shell: `tea.ExecProcess` suspend → `remotecommand` raw PTY (fallback
+      `kubectl exec` when the binary is present); container picker reuse; restore the TUI
+      on exit. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-22
+      notes: One of the only two sanctioned TUI-suspending actions (goals). New kube-layer
+      exec primitive may be its own sub-slice (mirrors the M1 verb-then-wire rhythm).
+- [ ] **M3-15** Edit: `tea.ExecProcess` suspend to `$EDITOR` on the object's YAML; apply
+      on save (server-side apply / update), report result. status: todo | owner: — | added: 2026-07-22
+      notes: The second sanctioned suspend action. Round-trip: `GetYAML` → temp file →
+      `$EDITOR` → apply the edited YAML; no-change / parse-error degrade without mutating.
+
+_Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
 
 
+- [x] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices M3-01…M3-15 — done 2026-07-22 (D105)
 - [x] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): kinds without the `watch` verb (e.g. componentstatuses) blanked/retry-looped — watch degrades to list-only polling — done 2026-07-22 (D104)
 - [x] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups failed list/watch — encode params with `metav1.ParameterCodec` — done 2026-07-22 (D103)
 - [x] **FB-nav-menu-popup** Left menu as an overlay popup — **retired won't-do-separately**, folded into the resource palette (D96 slice 3, resolving the… — done 2026-07-22 (D81, D96, D99, D100, D101)

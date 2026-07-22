@@ -1,7 +1,15 @@
 # M3 — Actions & Viewers
 
-**Status:** `todo`
+**Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 3
+
+_Scope expanded into ordered, leg-sized Backlog slices **M3-01 … M3-15** on the
+[board](../tasks/board.md) (M3-PLAN, D105). M3 is almost entirely the TUI surface —
+the kube layer already has every verb (logs/describe/YAML/actions/port-forward from
+M1) — so the slices wire those into a shared read-only viewer (M3-01), an actions
+surface off the reserved nav keys (M3-02), the viewers (M3-03…08), the confirm-modal
+action wiring (M3-09…12, M3-09 unblocks M2-14b), the port-forward panel (M3-13), and
+the exec/edit suspend flows (M3-14/15). Per-leg history: `vault/journal/`._
 
 ## Goal
 

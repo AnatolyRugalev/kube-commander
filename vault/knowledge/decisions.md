@@ -2602,3 +2602,37 @@ don't blank):
    parading the ERROR — this covers incomplete discovery verbs (guard 1's empty
    case) at runtime. A future leg must keep both guards; don't reintroduce the
    unconditional watch that blanked list-only kinds.
+
+### D105 — M3 (actions & viewers) decomposed into ordered, leg-sized Backlog slices
+**2026-07-22.** With M2's board section down to only blocked/deferred items
+(M2-14b is M3-gated per D88; M1-INT is deferred envtest), the next milestone M3 was
+still a single prose paragraph — no pickable leg. This planning leg turns the M3
+scope + exit criteria into a dependency-ordered task list **M3-01 … M3-15** (the
+D52/M2-PLAN precedent: "expanding a thin milestone section into concrete tasks is a
+leg in itself"). **Key framing — M3 is almost all TUI surface:** the kube layer
+already implements every verb (logs stream M1-07c/d, describe M1-07b, YAML M1-07a,
+delete/scale/rollout-restart/cordon/drain/suspend M1-06*, background port-forward
+M1-08), so M3 wires those into viewers, the confirm modal, an actions surface, and
+the two suspend flows — it does **not** re-implement action logic. **The slicing
+(built bottom-up):**
+- **M3-01** reusable read-only viewer/pager component (the shared substrate) →
+  **M3-02** action surface (actions menu reusing the picker, D100) + M3 keymap off
+  the reserved nav keys (D10) — these two land first because every viewer/action
+  needs a reachable trigger and a place to render.
+- Viewers on top of M3-01/02: **M3-03** YAML → **M3-04** describe → **M3-05**/**06**/
+  **07** logs (initial / follow+reconnect / container-picker+pod-owning-kinds #84) →
+  **M3-08** secret viewer (#89).
+- Actions through the M2-10 confirm modal (D88 — accept=`nav.drillIn`, decline=
+  `nav.back`, no raw y/n): **M3-09** delete (first confirm wiring; **unblocks M2-14b**)
+  → **M3-10** scale + rollout-restart → **M3-11** cordon/drain → **M3-12** cronjob
+  suspend/resume (#83).
+- **M3-13** port-forward manager panel (M1-08 background forward) · **M3-14** exec
+  shell (`tea.ExecProcess` + remotecommand) · **M3-15** `$EDITOR` edit — the two
+  suspend flows are the only sanctioned TUI-suspending actions (goals).
+**Constraints every M3 slice inherits (a future leg must not contradict):** overlays
+composite over the base browse view (D95), never replace it; zero shared mutable UI
+state (principle 1) — background streams/forwards only send msgs via the M2-02 pumps
+(D53); no raw-key matching — every action is a named keymap entry off the nav keys
+(D10/D11). Ordering is a default, not a contract — re-split any slice that proves
+> ~300 lines (the skill's split-and-take rule still applies per leg). Board-only;
+no code, `make check` green.
