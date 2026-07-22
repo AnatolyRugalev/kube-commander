@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — watch degrades to list-only for un-watchable kinds
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
