@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — FB-popups-overlay landed: help + namespace popups 
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-left-pane-width-smaller** Feedback (normal, `2026-07-22-left-pane-width-smaller`): left menu pane default too wide (`total/4`). Add a smaller cap so the default sizes closer to the menu's content (ellipsis truncation of long names already lands via D84); keep the `minMenuWidth` floor.
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
