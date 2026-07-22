@@ -156,6 +156,11 @@ const (
 	hintBarHeight = 1
 	minMenuWidth  = 20 // total incl. border
 	minTableWidth = 20 // total incl. border
+	// maxMenuWidth caps the menu pane so a wide terminal doesn't hand a quarter of
+	// the screen to a list whose content is far narrower. Sized close to the menu's
+	// real content (a bordered pane this wide fits the standard resource names;
+	// longer ones — CRDs, MutatingWebhookConfiguration — ellipsis-truncate, D84).
+	maxMenuWidth = 28 // total incl. border
 
 	// errorDisplay is how long a surfaced error stays in the status bar before it
 	// auto-clears (a transient toast). A stale-generation guard (statusErrGen)
@@ -1008,8 +1013,10 @@ func (m *Model) resize() {
 }
 
 // menuPaneWidth is the menu pane's total width for a given terminal width: a
-// quarter of the screen, floored at minMenuWidth, but never so wide the table
-// pane drops below minTableWidth (on a narrow terminal the two split evenly).
+// quarter of the screen, floored at minMenuWidth and capped at maxMenuWidth so a
+// wide terminal keeps the pane close to the menu's content instead of over-wide,
+// but never so wide the table pane drops below minTableWidth (on a narrow
+// terminal the two split evenly).
 func menuPaneWidth(total int) int {
 	if total <= 0 {
 		return 0
@@ -1017,6 +1024,9 @@ func menuPaneWidth(total int) int {
 	w := total / 4
 	if w < minMenuWidth {
 		w = minMenuWidth
+	}
+	if w > maxMenuWidth {
+		w = maxMenuWidth
 	}
 	if w > total-minTableWidth {
 		w = total / 2

@@ -1706,3 +1706,38 @@ func TestMouseInertWhileOverlayOpen(t *testing.T) {
 		t.Fatal("a wheel event while an overlay is open should be inert")
 	}
 }
+
+func TestMenuPaneWidthNarrowsWideTerminals(t *testing.T) {
+	cases := []struct {
+		name  string
+		total int
+		want  int
+	}{
+		{"zero", 0, 0},
+		{"eighty-floors-at-min", 80, minMenuWidth}, // 80/4 == 20 == floor
+		{"wide-caps-at-max", 200, maxMenuWidth},     // 200/4 == 50, capped to 28
+		{"very-wide-caps-at-max", 400, maxMenuWidth},
+		{"narrow-even-split", 39, 19}, // floor(20) would starve table → total/2
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := menuPaneWidth(tc.total); got != tc.want {
+				t.Fatalf("menuPaneWidth(%d) = %d, want %d", tc.total, got, tc.want)
+			}
+		})
+	}
+	// The cap must never drop the pane below the floor, and the table must always
+	// keep at least minTableWidth once the terminal is wide enough to grant it.
+	for total := 1; total <= 500; total++ {
+		w := menuPaneWidth(total)
+		if w < 0 || w > total {
+			t.Fatalf("menuPaneWidth(%d) = %d out of range", total, w)
+		}
+		if total >= minMenuWidth+minTableWidth && w > total-minTableWidth {
+			t.Fatalf("menuPaneWidth(%d) = %d starves the table (< %d)", total, w, minTableWidth)
+		}
+		if w > maxMenuWidth {
+			t.Fatalf("menuPaneWidth(%d) = %d exceeds maxMenuWidth %d", total, w, maxMenuWidth)
+		}
+	}
+}
