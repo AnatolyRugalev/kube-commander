@@ -39,11 +39,12 @@ func TestOverlayToggleAndView(t *testing.T) {
 	}
 }
 
-// TestOverlayRendersAsCenteredModal proves the visible overlay is a bordered box
-// centered within the sized area (the picker-style popup), not a full-bleed page:
-// it carries the modal title and a rounded border, and is padded above/around
-// rather than starting flush at the top-left.
-func TestOverlayRendersAsCenteredModal(t *testing.T) {
+// TestOverlayRendersAsBorderedBox proves the visible overlay is a bordered modal
+// box (the picker-style popup), not a full-bleed page: it carries the modal title
+// and a rounded border, and — since the root now composites it over the base
+// browse view (overlayCenter, D95) — the box itself is no longer padded to fill
+// the whole area, but starts flush at its own top-left border.
+func TestOverlayRendersAsBorderedBox(t *testing.T) {
 	m := New(styles.Default(), keymap.DefaultKeymap())
 	m.SetWidth(80)
 	m.SetHeight(24)
@@ -58,12 +59,13 @@ func TestOverlayRendersAsCenteredModal(t *testing.T) {
 		t.Errorf("modal should be bordered; got:\n%s", view)
 	}
 	lines := strings.Split(view, "\n")
-	if len(lines) != 24 {
-		t.Fatalf("placed modal should fill the %d-row area; got %d rows", 24, len(lines))
+	// The bare box is smaller than the sized area (the root centers it over the
+	// base view), and its first line is the top border, not blank padding.
+	if len(lines) >= 24 {
+		t.Errorf("bare box should be smaller than the %d-row area; got %d rows", 24, len(lines))
 	}
-	// Centered vertically: the top rows are blank padding, the border starts lower.
-	if strings.TrimSpace(lines[0]) != "" {
-		t.Errorf("modal should be centered (blank top padding), got first line: %q", lines[0])
+	if !strings.Contains(lines[0], "╭") {
+		t.Errorf("bare box first line should be the top border, got: %q", lines[0])
 	}
 }
 

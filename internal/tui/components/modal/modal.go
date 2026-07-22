@@ -242,10 +242,11 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// View renders the modal centered over the screen area, or "" when the modal is
-// hidden or unsized. The box is a bordered frame with a title line, the message,
-// and — in prompt mode — the text input below it. Same overlay approach as the
-// picker and help modals so the layout behind it stays put.
+// View renders the modal as a bordered box, or "" when the modal is hidden or
+// unsized. The box is a bordered frame with a title line, the message, and — in
+// prompt mode — the text input below it. Same overlay approach as the picker and
+// help modals: the root model composites the box centered over the base browse
+// view (overlayCenter, D95) so the layout behind it stays put.
 func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""
@@ -258,6 +259,5 @@ func (m Model) View() string {
 		parts = append(parts, m.styles.App.Width(iw).MaxWidth(iw).Render(m.input.View()))
 	}
 	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	box := m.styles.PaneFocus.Render(body)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return m.styles.PaneFocus.Render(body)
 }

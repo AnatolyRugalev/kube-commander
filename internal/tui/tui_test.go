@@ -153,6 +153,26 @@ func TestHelpToggle(t *testing.T) {
 	}
 }
 
+// TestHelpModalCompositesOverBase proves the open help modal floats over the
+// two-pane browse view rather than replacing it (feedback
+// 2026-07-22-popups-should-overlay, D95): the composed view shows both the base
+// resource menu (the "Cluster" section header at the top of the left pane, above
+// the centered modal) and the modal's "Keybindings" title at the same time.
+func TestHelpModalCompositesOverBase(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, tea.Key{Code: '?', Text: "?"})
+	if !m.help.Visible() {
+		t.Fatal("app.help did not open the overlay")
+	}
+	view := m.View().Content
+	if !strings.Contains(view, "Keybindings") {
+		t.Errorf("composed view missing the help modal title; got:\n%s", view)
+	}
+	if !strings.Contains(view, "Cluster") {
+		t.Errorf("base resource menu should stay visible under the modal; got:\n%s", view)
+	}
+}
+
 // TestHelpQuitKeyClosesOverlay proves the quit key (`q`) dismisses the open help
 // modal instead of quitting the app — a modal owns the quit key until it closes.
 func TestHelpQuitKeyClosesOverlay(t *testing.T) {

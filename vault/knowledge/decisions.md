@@ -2329,3 +2329,32 @@ survives live updates. Load-bearing constraints for M2-13b and any later leg:
 / `ClearSort` and renders the header indicator from `SortColumn`/`SortDescending`;
 it must not re-implement ordering or sort `full.Rows`. Adding richer typing (real
 date/quantity parsing) is a superseding decision, not a silent change here.
+
+### D95 — Modals composite over the base browse view (a floating popup), never replace it; components return a bare box and the root overlays it
+
+`2026-07-22` (FB-popups-overlay, feedback `2026-07-22-popups-should-overlay`). A
+modal (help overlay, namespace picker, and — once wired — the M2-10 confirm modal)
+is a **popup floating over the two-pane browse layout**, not a page that takes over
+the body. The menu + table stay visible underneath. Load-bearing constraints:
+
+- **Modal components return a bare bordered box from `View()`** — just
+  `styles.PaneFocus.Render(body)`, no `lipgloss.Place` onto a blank area. A component
+  no longer pads itself to fill the screen; a blank-filled string would occlude the
+  base when composited. `View()` still returns `""` when hidden/unsized so the root
+  can call it unconditionally.
+- **The root model owns overlaying.** `Model.View()` always draws `browseBody()`
+  first, then, if a modal is open, composites the box centered on top via
+  `overlayCenter(base, box, width, bodyHeight)` (`internal/tui/overlay.go`). It uses
+  the lipgloss/v2 layer stack (`NewLayer`/`NewCompositor`/`NewCanvas`): base at the
+  origin (z0), box centered (z1), flattened onto a fixed `width×bodyH` canvas so the
+  result is always exactly the body area. The box occludes only its own rectangle;
+  every base cell outside it stays visible. `overlayCenter` returns the base
+  unchanged for an empty box or a non-positive area (degrade, principle 3).
+- **No dimming of the base yet** — the bordered box is visually distinct on its own;
+  a dimmed backdrop is an optional future refinement, not required by this decision.
+
+**Consequence:** any new modal must follow this shape — render a bare box and let
+the root overlay it through `overlayCenter`; do not switch `body = modal.View()` to
+replace the browse view, and do not re-add `lipgloss.Place` full-area padding inside
+a modal component. Wiring the M2-10 confirm modal into the shell (M2-14b / M3) uses
+the same `overlayCenter` path.

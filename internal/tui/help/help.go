@@ -79,20 +79,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the full help as a centered, bordered modal box over the body
-// area, and the empty string when hidden or not yet sized so the caller can lay
-// it out unconditionally. The box is framed with the focused-pane style and
-// titled, then placed centered within the (width × height) area — the same
-// overlay approach as the modal picker, so the browse view's status bar stays
-// visible below rather than the whole TUI being replaced.
+// View renders the full help as a bordered modal box, and the empty string when
+// hidden or not yet sized so the caller can lay it out unconditionally. The box
+// is framed with the focused-pane style and titled; the root model composites it
+// centered over the base browse view (overlayCenter, D95), so the two-pane layout
+// stays visible underneath rather than the whole TUI being replaced.
 func (m Model) View() string {
 	if !m.visible || m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	// Constrain the full-help layout to the modal's inner width so the framed,
-	// centered box never exceeds the screen. m is a value copy — mutating the
-	// embedded help's width here doesn't disturb the short-help width the status
-	// bar hint reads from the model the root owns.
+	// Constrain the full-help layout to the modal's inner width so the framed box
+	// never exceeds the screen. m is a value copy — mutating the embedded help's
+	// width here doesn't disturb the short-help width the status bar hint reads
+	// from the model the root owns.
 	inner := m.help
 	innerW := m.width - helpMargin
 	if innerW < 1 {
@@ -102,8 +101,7 @@ func (m Model) View() string {
 
 	title := m.styles.Header.Render(helpTitle)
 	body := lipgloss.JoinVertical(lipgloss.Left, title, inner.View(m.keys))
-	box := m.styles.PaneFocus.Render(body)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return m.styles.PaneFocus.Render(body)
 }
 
 // ShortHelpView renders the one-line status-bar hint (the curated, focus-agnostic

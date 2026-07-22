@@ -1142,6 +1142,20 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 // property of the View (v.AltScreen), not a program option — the v1-era
 // tea.WithAltScreen() no longer exists — so the root model, which owns View, is
 // where kubecom requests the alternate screen buffer (D70).
+// browseBody renders the two-pane browse layout: the resource menu (left) beside
+// the resource table (right). Until the user drills into a resource the right pane
+// shows the welcome page rather than a blank table; once a watch is live
+// (hasCurrent) the live table takes over the slot. The right pane's focus
+// (menu-vs-table focus switch) drives whichever stand-in is shown. This is the
+// base an open modal is composited over (View / overlayCenter, D95).
+func (m Model) browseBody() string {
+	right := m.table.View()
+	if !m.hasCurrent {
+		right = m.welcome.View(m.table.Focused())
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
+}
+
 func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		v := tea.NewView("")
@@ -1150,22 +1164,16 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	var body string
+	// The two-pane browse view is always drawn first; an open modal is composited
+	// centered on top of it (overlayCenter, D95) rather than replacing it, so the
+	// menu + table stay visible underneath the popup (feedback
+	// 2026-07-22-popups-should-overlay).
+	body := m.browseBody()
 	switch {
 	case m.help.Visible():
-		body = m.help.View()
+		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
 	case m.nsPicker.Active():
-		body = m.nsPicker.View()
-	default:
-		// Until the user drills into a resource the right pane shows the welcome
-		// page rather than a blank table; once a watch is live (hasCurrent) the live
-		// table takes over the slot. The right pane's focus (menu-vs-table focus
-		// switch) drives whichever stand-in is shown.
-		right := m.table.View()
-		if !m.hasCurrent {
-			right = m.welcome.View(m.table.Focused())
-		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
+		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View(), m.hintbar.View()))

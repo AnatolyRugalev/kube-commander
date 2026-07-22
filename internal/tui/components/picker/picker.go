@@ -336,8 +336,10 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// View renders the modal centered over the screen area, or "" when the picker is
-// hidden or unsized. The box is a bordered frame with a title line above the list.
+// View renders the picker as a bordered modal box, or "" when the picker is
+// hidden or unsized. The box is a bordered frame with a title line above the
+// list; the root model composites it centered over the base browse view
+// (overlayCenter, D95) so the two-pane layout stays visible underneath.
 func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""
@@ -350,6 +352,5 @@ func (m Model) View() string {
 	}
 	parts = append(parts, m.list.View())
 	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	box := m.styles.PaneFocus.Render(body)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return m.styles.PaneFocus.Render(body)
 }
