@@ -2170,3 +2170,23 @@ the root, D56), holding no shared mutable state (principle 1).
 **Consequence:** any M3 destructive/parameterised action gets its confirmation by
 owning a `modal.Model` on the root, calling `ShowConfirm`/`ShowPrompt`, and handling
 `ConfirmedMsg`/`CancelledMsg` — no new keymap actions, no raw y/n.
+
+### D89 — `Config.Save`/`SaveFile` are the config write-back primitives; M2-11's menu-customization scope is subsumed by the per-context menu files (D83)
+
+`2026-07-22` (M2-11a). The main config gained write-back to match Load: `Config.Save(io.Writer)`
+marshals via `sigs.k8s.io/yaml` (round-trips `keys:` today; what Save emits, Load reads
+back equal), and `Config.SaveFile(path)` persists it — `MkdirAll(dir, 0o700)`, marshal to a
+temp file in the **same** dir, `Chmod 0o600`, then `os.Rename` over the target so a crash
+mid-write never truncates the live config. It is user data, kept private like a kubeconfig.
+
+- **M2-11 narrows.** M2-11 (added 2026-07-19) predates D83: its "customized resource
+  list / order" belongs to the **per-context menu files** (`menus/<context>.yaml`, D83),
+  which already load on start (FB-menu-config-03). A future leg must **not** duplicate a
+  resource list into `config.yaml`. M2-11's genuine remainder is config write-back (this
+  leg) + last-namespace persistence + load-on-start wiring (M2-11b).
+- **Last namespace is per-context.** M2-11b decides where it lives (a per-context store,
+  not a single global field), since a namespace is meaningless across clusters — record
+  that choice when taking M2-11b.
+
+**Consequence:** persistence legs (M2-11b) and the M2-12 legacy migration write through
+`SaveFile`; don't hand-roll another YAML writer or a non-atomic overwrite.

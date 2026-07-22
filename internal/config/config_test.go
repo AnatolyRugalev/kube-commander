@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -71,6 +73,96 @@ func TestPath(t *testing.T) {
 	}
 	if !strings.HasSuffix(filepath.ToSlash(p), "kubecom/config.yaml") {
 		t.Errorf("Path = %q, want it to end with kubecom/config.yaml", p)
+	}
+}
+
+func TestSaveRoundTrips(t *testing.T) {
+	orig := &Config{Keys: map[string][]string{
+		"nav.down": {"j", "down"},
+		"app.quit": {"q"},
+	}}
+	var buf bytes.Buffer
+	if err := orig.Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := Load(&buf)
+	if err != nil {
+		t.Fatalf("Load(saved): %v", err)
+	}
+	if !reflect.DeepEqual(got.Keys, orig.Keys) {
+		t.Errorf("round-trip Keys = %v, want %v", got.Keys, orig.Keys)
+	}
+}
+
+func TestSaveEmptyRoundTripsToZeroConfig(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (&Config{}).Save(&buf); err != nil {
+		t.Fatalf("Save(empty): %v", err)
+	}
+	got, err := Load(&buf)
+	if err != nil {
+		t.Fatalf("Load(empty saved): %v", err)
+	}
+	if len(got.Keys) != 0 {
+		t.Errorf("round-trip empty Keys = %v, want empty", got.Keys)
+	}
+}
+
+func TestSaveFileCreatesParentAndRoundTrips(t *testing.T) {
+	// A parent dir that does not yet exist must be created (0o700).
+	dir := filepath.Join(t.TempDir(), "kubecom")
+	path := filepath.Join(dir, "config.yaml")
+	orig := &Config{Keys: map[string][]string{"app.quit": {"q"}}}
+	if err := orig.SaveFile(path); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	got, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile(saved): %v", err)
+	}
+	if !reflect.DeepEqual(got.Keys, orig.Keys) {
+		t.Errorf("round-trip Keys = %v, want %v", got.Keys, orig.Keys)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Errorf("config file perm = %o, want 600", perm)
+	}
+}
+
+func TestSaveFileReplacesAtomicallyWithoutLeftoverTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("keys:\n  nav.up: [k]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	next := &Config{Keys: map[string][]string{"nav.down": {"j"}}}
+	if err := next.SaveFile(path); err != nil {
+		t.Fatalf("SaveFile(overwrite): %v", err)
+	}
+	got, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if _, stale := got.Keys["nav.up"]; stale {
+		t.Errorf("old content survived overwrite: %v", got.Keys)
+	}
+	if !reflect.DeepEqual(got.Keys, next.Keys) {
+		t.Errorf("overwritten Keys = %v, want %v", got.Keys, next.Keys)
+	}
+	// The atomic temp file must be gone — only config.yaml should remain.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "config.yaml" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("dir entries = %v, want only [config.yaml]", names)
 	}
 }
 
