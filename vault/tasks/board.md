@@ -7,7 +7,15 @@ _Last updated: 2026-07-22 — FB-nav-menu-toggle landed: `menu.toggle` (`m`) hid
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style) (#feedback 2026-07-22-status-bar-top / D96)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+      notes: Second slice of D96. A `resources` hotkey opens the resource list as a
+      picker/overlay; `/` filters it by substring; Enter switches the table to that
+      kind and lands on its list — no persistent left pane needed. Reuse the existing
+      picker component (M2-08a) + `overlayCenter` (D95) and the menu's item set as the
+      source list; selecting drives the same `selectResource` path a menu drill-in
+      takes. Registry-driven keys (D11). This is what makes FB-nav-menu-toggle's
+      hidden-menu state fully usable.
 
 ## Blocked
 
@@ -70,15 +78,6 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style) (#feedback 2026-07-22-status-bar-top / D96)
-      status: todo | owner: — | added: 2026-07-22
-      notes: Second slice of D96. A `resources` hotkey opens the resource list as a
-      picker/overlay; `/` filters it by substring; Enter switches the table to that
-      kind and lands on its list — no persistent left pane needed. Reuse the existing
-      picker component (M2-08a) + `overlayCenter` (D95) and the menu's item set as the
-      source list; selecting drives the same `selectResource` path a menu drill-in
-      takes. Registry-driven keys (D11). This is what makes FB-nav-menu-toggle's
-      hidden-menu state fully usable.
 - [ ] **FB-nav-menu-popup** Left menu as an overlay popup rather than a fixed pane (#feedback 2026-07-22-status-bar-top / D96)
       status: todo | owner: — | added: 2026-07-22
       notes: Third/final slice of D96, after FB-nav-menu-toggle + FB-nav-resource-
