@@ -2190,3 +2190,28 @@ mid-write never truncates the live config. It is user data, kept private like a 
 
 **Consequence:** persistence legs (M2-11b) and the M2-12 legacy migration write through
 `SaveFile`; don't hand-roll another YAML writer or a non-atomic overwrite.
+
+### D90 — Per-context runtime state lives in its own `state/<context>.yaml` store, not in config.yaml or the menu file
+
+`2026-07-22` (M2-11b-1). Last-namespace persistence (and future per-context runtime
+values kubecom records for you) gets a **dedicated per-context state store**:
+`config.State` in `internal/config/state.go`, persisted to
+`os.UserConfigDir()/kubecom/state/<sanitized-context>.yaml` (`StateDir`/`StatePath`,
+reusing `menuFileName`'s context sanitization so a name can never escape the dir).
+`LoadState`/`LoadStateFile` (missing file → zero State, strict-unknown-field) and
+`Save`/`SaveFile` (atomic 0o600 via the shared `atomicWriteFile` extracted from
+`Config.SaveFile`) mirror the `Config`/`MenuConfig` API.
+
+- **Not `config.yaml`.** The main config is not per-context; a namespace name is
+  meaningless across clusters (D89 already flagged last-namespace as per-context).
+- **Not the per-context menu file.** That file is **user-authored** (hand-edited CRD
+  lists, comments); kubecom writing last-namespace into it on every namespace switch
+  would reformat/clobber the user's file. Runtime state kubecom rewrites freely must
+  be a separate file from config a human edits.
+- **Config-package only.** This leg is the store primitive + tests; the load-on-start
+  and persist-on-select wiring (a namespace-persister app seam + launcher glue, with
+  explicit `-n` overriding stored state for that run) is M2-11b-2.
+
+**Consequence:** any future per-context value kubecom persists on its own (not a
+user setting) belongs in `State`/`state/<context>.yaml` through `SaveFile`; do not
+add kubecom-written runtime fields to `config.yaml` or a menu file.

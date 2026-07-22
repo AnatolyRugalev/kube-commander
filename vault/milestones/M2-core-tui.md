@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) + config write-back primitives (M2-11a) have landed. Remaining: config load-on-start + last-namespace persistence (M2-11b), migration, sort, remaining teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) + config write-back primitives (M2-11a) + per-context state store (M2-11b-1) have landed. Remaining: last-namespace load-on-start + persist wiring (M2-11b-2), migration, sort, remaining teatest coverage. Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 

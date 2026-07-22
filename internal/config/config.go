@@ -94,6 +94,16 @@ func (c *Config) SaveFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("config: marshalling YAML: %w", err)
 	}
+	return atomicWriteFile(path, data)
+}
+
+// atomicWriteFile writes data to path, creating the parent directory (0o700) if
+// needed and replacing any existing file atomically: it writes to a temp file in
+// the same directory (so os.Rename stays on one filesystem), chmods it 0o600, and
+// renames it over path, so a crash mid-write never leaves a truncated file in
+// place. Shared by Config.SaveFile and State.SaveFile so every kubecom-written
+// user file is persisted the same private, crash-safe way (D89/D90).
+func atomicWriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("config: creating %s: %w", dir, err)
