@@ -7,7 +7,11 @@ _Last updated: 2026-07-22 — FB-nav-resource-palette landed: `resources.switch`
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-nav-menu-popup** Left menu as an overlay popup rather than a fixed pane (#feedback 2026-07-22-status-bar-top / D96)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+      notes: Third/final slice of D96, after FB-nav-menu-toggle + FB-nav-resource-
+      palette. Reassess-then step: decide whether the toggled menu becomes a floating
+      `overlayCenter` popup or folds into the resource palette now both have landed.
 
 ## Blocked
 
@@ -69,15 +73,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **FB-nav-menu-popup** Left menu as an overlay popup rather than a fixed pane (#feedback 2026-07-22-status-bar-top / D96)
-      status: todo | owner: — | added: 2026-07-22
-      notes: Third/final slice of D96, after FB-nav-menu-toggle + FB-nav-resource-
-      palette. Promote the toggled menu from a fixed left pane to a floating
-      `overlayCenter` popup (D95) so the default browse view is table + top status bar
-      only, with the menu summoned as an overlay. Largely converges with the resource
-      palette; may be folded into it once both land — reassess then. Depends on:
-      FB-nav-menu-toggle, FB-nav-resource-palette.
 
 - [ ] **M2-14b** teatest coverage: modal confirm flow
       status: todo | owner: — | added: 2026-07-20
