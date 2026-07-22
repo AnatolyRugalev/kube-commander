@@ -7,7 +7,13 @@ _Last updated: 2026-07-22 — M2-12b landed: one-shot legacy `~/.kubecom.yaml` m
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-13a** Table column-sort primitive (`internal/tui/components/table`, component-only)
+      status: in-progress | owner: claude-opus | added: 2026-07-22
+      notes: First slice of the split M2-13 (#85), mirroring the M2-11a/M2-12a
+      primitive-first rhythm. Sort as a view over the authoritative `full` set
+      (like filter): `SortBy`/`ClearSort` + accessors, stable + type-aware, no
+      keymap/app wiring. M2-13b adds the `sort.*` actions, app wiring, and the
+      header indicator. Depends on: M2-06.
 
 ## Blocked
 
