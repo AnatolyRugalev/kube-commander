@@ -2528,3 +2528,34 @@ palette) and any future picker preserve or supersede the contract:
 an `overlayCenter` menu popup) — that supersedes D99's fixed-pane half while keeping
 this Kind-routing + `selectResource` contract. A real column/kind cursor or richer
 palette scoring is out of scope here.
+
+### D101 — FB-nav-menu-popup (menu-as-overlay-popup) folded into the resource palette; retired won't-do-separately. Third slice of D96, resolving the reassess
+
+**2026-07-22 (FB-nav-menu-popup).** D96 triaged the "left pane is not a permanent
+fixture" direction into three slices and flagged the third — floating the whole
+sectioned menu as an `overlayCenter` popup — as one to **reassess once the toggle
+(D99) and palette (D100) landed** (D100's own Consequence: "may promote the toggled
+menu into this palette *or* an `overlayCenter` menu popup"). Both have landed; this
+is that reassessment, and the outcome is **fold, not build a third surface.** The
+D96 want is delivered:
+
+- **Pane-free resource switching is already the palette.** `resources.switch` (`:`,
+  D100) summons a modal, `/`-filterable list of every browsable kind over the base
+  view and drives `selectResource` — a *better* summoned-overlay navigator than a
+  floated menu (it filters; the sectioned menu does not), and it already works with
+  the menu hidden.
+- **"Default view = table only" is already the toggle.** `menu.toggle` (`m`, D99)
+  hands the full width to the table on demand; the menu re-shows with the same key.
+
+A second overlay that floats the entire sectioned menu (sections + namespace seam +
+active marker) would **duplicate the palette's job** with no recorded UX benefit and
+would itself need a fresh UX decision — the D81 (M1-04b) situation exactly.
+
+**Constraint:** do not build a separate floating-menu overlay on the strength of this
+old slice alone; the palette (D100) is kubecom's pane-free navigator, the left menu
+its always-available toggleable pane (D99). **Rejected** flipping the *default* to
+menu-hidden: a first launch would then show only a welcome/empty table with no
+visible navigator, hurting discoverability of a tool the human dogfoods (principle
+6/8) — the menu stays shown by default. Reopening this needs a new decision that
+supersedes D99/D100, not a revival of FB-nav-menu-popup. **Consequence:** the M2
+FB-nav-* line (D96) is complete; no menu-popup work remains.
