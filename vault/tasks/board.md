@@ -3,20 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — M2-11b-2 landed: last-namespace load-on-start + persist wiring (`WithNamespacePersister` seam, `-n` overrides stored scope for the run, D91); M2-11b is complete. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M2-12a landed: legacy `~/.kubecom.yaml` migration parse+report primitive (`config.Migrate` + `LegacyPath`; detect-and-report, not a field port — legacy menu lacks version/resource, themes have no v1 home, D92); M2-12b (launcher wiring) remains. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-12a** Legacy config migration — parse + map primitive (`internal/config/migrate.go`)
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
-      notes: First slice of the split M2-12 (mirrors the M2-11a primitive-first
-      rhythm). Config-package only, no app wiring. Parse the legacy `~/.kubecom.yaml`
-      (old protobuf-yaml shape: `menu` + `currentTheme`/`themes`) and produce a new
-      `*Config` + human-readable migration notes. Key constraint: a faithful offline
-      field-migration is impossible — the old `menu` entries have `group`/`kind` but
-      no `version`/`resource` (which `MenuResource` requires and only discovery can
-      resolve), and v1 has no runtime theming. So migration detects the legacy file,
-      carries what it can, and reports what the user must redo manually.
+_(none)_
 
 ## Blocked
 
@@ -106,6 +97,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-12a** Legacy config migration — parse + report primitive (`internal/config/migrate.go`): `LegacyPath()` (`~/.kubecom.yaml`) + `Migrate(io.Reader) (*Config, []string, error)`. First slice of the split M2-12 (config-package only, no app wiring). Inspecting the old protobuf-yaml shape (`pb.Config` = `menu` + `currentTheme`/`themes`) showed a faithful offline field-migration is impossible: the legacy `menu` stored `group`+`kind` but no `version`/`resource` (which `MenuResource` requires and only discovery resolves), and v1 has no runtime theming. So `Migrate` recognises the legacy file, returns the **zero Config** (keys never existed in it — nothing maps), and emits human-readable **notes** on what to redo by hand (legacy menu → per-context menu file; themes → dropped). Parsing is lenient (non-strict — leftover theme detail ignored, not rejected) so a legacy file never blocks start (principle 3); only unparseable YAML errors → D92. Tests: empty/whitespace→zero+no-notes, menu→count+kinds note (singular/plural), themes/currentTheme→dropped note, both→two notes, malformed-YAML errors, unknown-legacy-field ignored, `LegacyPath` base/dir — done 2026-07-22 (D92)
 - [x] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`). Completes M2-11b. The launcher resolves the active context's state (`loadState` → `config.LoadStateFile`, degrading a blank context / missing / malformed file to the zero State, D91) and picks the initial watch scope via `initialNamespace`: an explicit `-n` (`cmd.Flags().Changed("namespace")`, so `-n ""` counts) wins for the run and does not overwrite stored state; with no `-n`, the stored `LastNamespace` is restored. Added a `tui.NamespacePersister` app seam (`WithNamespacePersister`, mirroring `WithNamespaceLister`) — `handleNamespaceSelected` now persists the picked namespace off the update loop via `persistNamespace` (a `tea.Cmd`; the launcher's `statePersister` writes through `State.SaveFile`); a write failure degrades to a transient toast, never blocks, and the picked scope still applies. README gained a "Remembered namespace" subsection. Tests: initialNamespace precedence (explicit-wins / explicit-empty-wins / from-state), loadState (blank/missing/reads), statePersister round-trip (cmd); persist-on-select / sentinel-persists-unscoped / inert-without-persister / persist-error-toast (tui) — done 2026-07-22 (D91)
 - [x] **M2-11b-1** Config: per-context state store (`internal/config/state.go`): `State{LastNamespace}` + `StateDir`/`StatePath(context)` (reuses `menuFileName` context sanitization so a name can't escape `…/kubecom/state`; empty context errors) + `LoadState`/`LoadStateFile` (missing → zero, strict unknown-field) + `Save`/`SaveFile` (atomic 0o600 via a shared `atomicWriteFile` extracted from `Config.SaveFile`). First slice of the split M2-11b, mirroring the M2-11a primitive-first rhythm; config-package only, no app wiring. Chose a dedicated per-context state file over config.yaml (not per-context) or the user-authored menu file (kubecom must not clobber a hand-edited file) — D90. Tests: Save→Load + SaveFile→LoadStateFile round-trips (empty→zero, parent-dir creation + 0o600, atomic overwrite with no leftover temp), context sanitization stays inside StateDir, unknown-field + empty-context rejection — done 2026-07-22 (D90)
 - [x] **M2-11a** Config write-back primitives (`internal/config`): `Config.Save(io.Writer)` marshals via `sigs.k8s.io/yaml` (write-back counterpart of Load, round-trips `keys:`), `Config.SaveFile(path)` persists atomically — `MkdirAll(dir,0o700)`, temp file in the same dir, `Chmod 0o600`, `os.Rename` over the target (crash mid-write never truncates the live config). Split from M2-11 and narrowed it (D89): the "customized resource list/order" half is already delivered by the per-context menu files (D83), so M2-11's remainder is write-back (this) + last-namespace persistence (M2-11b). Config-package only, no app wiring. Tests: Save→Load round-trip (+empty→zero-config), SaveFile→LoadFile round-trip with parent-dir creation + 0o600 perm, atomic overwrite leaving no leftover temp file — done 2026-07-22 (D89)

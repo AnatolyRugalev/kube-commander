@@ -2240,3 +2240,32 @@ flag and the per-context state (D90) with this precedence:
 **Consequence:** future per-run overrides of a persisted setting follow this shape —
 gate on the flag being *set* (`Changed`), keep the override transient (don't write it
 back on startup), and persist only the user's in-UI change through the state store.
+
+### D92 — Legacy `~/.kubecom.yaml` migration is detect-and-report, not a field-for-field port: its menu can't be auto-mapped (no version/resource) and its themes have no v1 home
+
+`2026-07-22` (M2-12a). The 2020 `~/.kubecom.yaml` (protobuf-yaml `pb.Config`) held
+only two user-authored things — a resource `menu` and color `themes`/`currentTheme`
+— and **neither maps cleanly into kubecom v1**, so `config.Migrate` does **not**
+attempt a faithful field-for-field port:
+
+- **Menu entries can't be auto-migrated.** The old `menu` named a kind by
+  `group`+`kind` only; the v1 per-context menu (`MenuResource`) addresses a resource
+  by group/**version**/**resource**, which the old format never stored and only live
+  discovery can resolve. Writing a `MenuConfig` from the legacy data would fail its
+  own `validate()` (version+resource required). So legacy menu entries are
+  **reported**, not written — the user re-adds them in a per-context menu file (D83).
+- **Themes are dropped.** v1 uses a single fixed lipgloss theme (D6); there is no
+  runtime theming to migrate into.
+- **Keys never existed in the legacy file** — the one thing the new `Config` models —
+  so migration produces the **zero `Config`**. Returning it (not nil) is intentional:
+  the wiring writes it once to establish the new-format file so the one-shot runs once.
+
+`Migrate` parses the legacy YAML **leniently** (non-strict — leftover theme
+color/style detail is ignored, not rejected) and returns `(*Config, notes, error)`;
+only unparseable YAML errors, so a legacy file never blocks start (principle 3). The
+notes are surfaced to the user by the launcher wiring (M2-12b).
+
+**Consequence:** the "migration" exit criterion is met by recognising the old file
+and telling the user what to redo by hand — not by silently reconstructing a menu
+that would be wrong. No future leg should claim the legacy menu/themes port
+automatically, or write a `MenuConfig` with blank version/resource.

@@ -3,7 +3,7 @@
 **Status:** `in-progress`
 **Phase:** REWRITE_PLAN Phase 2
 
-_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) + config write-back primitives (M2-11a) + per-context last-namespace persistence (M2-11b, restored on start with `-n` override, D91) have landed. Remaining: migration (M2-12), sort (M2-13), remaining teatest coverage (M2-14b). Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
+_M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) + config write-back primitives (M2-11a) + per-context last-namespace persistence (M2-11b, restored on start with `-n` override, D91) have landed. The legacy-config migration parse+report primitive (M2-12a, `config.Migrate` — detect-and-report, not a field port, D92) has landed. Remaining: migration launcher wiring (M2-12b), sort (M2-13), remaining teatest coverage (M2-14b). Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
 
 ## Goal
 
