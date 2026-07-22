@@ -143,6 +143,16 @@ resources:
 An entry whose resource is already in the menu (a seed row or one discovery finds)
 is merged, never listed twice.
 
+#### Remembered namespace
+
+kubecom remembers the last namespace you selected, per kubeconfig context, and
+reopens on it next time. The choice is stored in
+`os.UserConfigDir()/kubecom/state/<context>.yaml` (`~/.config/kubecom/state/` on
+Linux) — a kubecom-managed file, separate from your config and menu files, so
+kubecom rewrites it freely without touching anything you hand-edit. Passing
+`-n`/`--namespace` overrides the remembered scope for that run (use `-n ""` to
+force all namespaces); switching namespace in the UI updates what's remembered.
+
 ## Contributing
 
 The rewrite is currently driven autonomously against the plan in

@@ -2215,3 +2215,28 @@ reusing `menuFileName`'s context sanitization so a name can never escape the dir
 **Consequence:** any future per-context value kubecom persists on its own (not a
 user setting) belongs in `State`/`state/<context>.yaml` through `SaveFile`; do not
 add kubecom-written runtime fields to `config.yaml` or a menu file.
+
+### D91 — Explicit `-n` overrides the stored last-namespace for that run; a namespace picked in the UI is persisted; the flag being *set* is what matters, not its value
+
+`2026-07-22` (M2-11b-2). The initial watch scope is resolved from the `-n`/`--namespace`
+flag and the per-context state (D90) with this precedence:
+
+- **Explicit `-n` wins for the run.** `cmd.Flags().Changed("namespace")` (not the
+  flag's value) decides — so `-n ""` explicitly forces all namespaces even when a
+  concrete namespace is stored. An explicit `-n` is a per-run override: it does
+  **not** overwrite the stored state on startup.
+- **With no `-n`, the stored last namespace is restored** (empty when none saved).
+- **A namespace picked in the UI is persisted** through a `tui.NamespacePersister`
+  seam (`WithNamespacePersister`; the launcher wires a `statePersister` bound to the
+  active context's `StatePath`). The write runs off the update loop (a `tea.Cmd`);
+  a failure degrades to a transient error toast (principle 3), never blocks input,
+  and the picked scope still applies for the session. A model built without the seam
+  (or with an unresolved context) is persistence-inert.
+- **A malformed/unreadable state file degrades to the zero State with a logged
+  warning** — no toast, no fatal launch. Unlike a hand-authored menu file (whose
+  corruption surfaces a toast, D83), the state file is kubecom-owned, so a corrupt
+  one is rare and the next namespace switch overwrites it cleanly.
+
+**Consequence:** future per-run overrides of a persisted setting follow this shape —
+gate on the flag being *set* (`Changed`), keep the override transient (don't write it
+back on startup), and persist only the user's in-UI change through the state store.

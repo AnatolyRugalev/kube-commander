@@ -16,10 +16,11 @@ import (
 // runOptions carries the resolved root-command flags into runTUI, so the launch
 // path is one testable function independent of cobra.
 type runOptions struct {
-	kubeconfig string // --kubeconfig: explicit kubeconfig path ("" = standard rules)
-	context    string // --context: kubeconfig context name ("" = current-context)
-	namespace  string // -n/--namespace: initial watch scope ("" = all namespaces)
-	configPath string // --config: kubecom config file ("" = user config dir)
+	kubeconfig   string // --kubeconfig: explicit kubeconfig path ("" = standard rules)
+	context      string // --context: kubeconfig context name ("" = current-context)
+	namespace    string // -n/--namespace: initial watch scope ("" = all namespaces)
+	namespaceSet bool   // whether -n was passed explicitly (vs. its "" default)
+	configPath   string // --config: kubecom config file ("" = user config dir)
 }
 
 // runTUI is the default action of bare `kubecom`: it resolves the keymap from the
@@ -90,6 +91,18 @@ func runTUI(opts runOptions) error {
 		startupErr = &e
 	}
 
+	// Resolve the initial watch scope and the namespace-persistence seam from the
+	// per-context state store (D90/M2-11b-2). An explicit -n wins for this run and
+	// does not touch the stored state (D91); with no -n, restore the last namespace
+	// kubecom recorded for this context. A picked namespace is written back through
+	// the persister (statePersister), so the next launch reopens on it.
+	state, statePath := loadState(ctxName)
+	namespace := initialNamespace(opts, state)
+	var persister tui.NamespacePersister
+	if statePath != "" {
+		persister = &statePersister{path: statePath, state: state}
+	}
+
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
 	// the alternate screen itself (via View.AltScreen — D70), so no program option
@@ -98,7 +111,8 @@ func runTUI(opts runOptions) error {
 		tui.WithWatcher(clients),
 		tui.WithDiscoverer(clients),
 		tui.WithNamespaceLister(clients),
-		tui.WithNamespace(opts.namespace),
+		tui.WithNamespace(namespace),
+		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
 		tui.WithVersion(version.Version),
 		tui.WithMenuExtras(menuExtras),
@@ -129,4 +143,60 @@ func loadMenuExtras(context string) ([]config.MenuResource, error) {
 		return nil, err
 	}
 	return mc.Resources, nil
+}
+
+// initialNamespace resolves the initial watch scope from the flags and the stored
+// per-context state (M2-11b-2/D91): an explicit -n wins for this run — including an
+// explicit `-n ""` meaning all namespaces — overriding whatever namespace kubecom
+// last recorded for the context; with no -n given, the stored last namespace is
+// restored (empty when none was ever saved).
+func initialNamespace(opts runOptions, state *config.State) string {
+	if opts.namespaceSet {
+		return opts.namespace
+	}
+	return state.LastNamespace
+}
+
+// loadState resolves the active context's per-context state file (D90) and the path
+// a picked namespace is persisted back to. It degrades rather than blocks
+// (principle 3): a blank/unresolved context yields the zero State and no path
+// (persistence disabled — kubecom cannot key state without a context); a missing
+// file yields the zero State (a context kubecom has never recorded state for starts
+// on defaults). A malformed/unreadable state file also degrades to the zero State,
+// logging a warning rather than surfacing a toast or failing launch — the state
+// file is kubecom-owned (kubecom writes it), so a corrupt one is rare and the next
+// namespace switch overwrites it cleanly.
+func loadState(context string) (state *config.State, path string) {
+	if strings.TrimSpace(context) == "" {
+		return &config.State{}, ""
+	}
+	p, err := config.StatePath(context)
+	if err != nil {
+		slog.Warn("state file", "context", context, "error", err)
+		return &config.State{}, ""
+	}
+	st, err := config.LoadStateFile(p)
+	if err != nil {
+		slog.Warn("state file", "context", context, "error", err)
+		return &config.State{}, p
+	}
+	return st, p
+}
+
+// statePersister is the launcher's namespace-persistence seam (tui.NamespacePersister):
+// it records a picked namespace to the active context's state file (D90/M2-11b-2).
+// It is bound to one context's resolved state path at construction, so the tui
+// package stays context-agnostic. The loaded State is retained and mutated in place
+// so future per-context fields (should State grow any) round-trip unchanged.
+type statePersister struct {
+	path  string
+	state *config.State
+}
+
+// PersistNamespace writes the given namespace as the context's last namespace,
+// atomically replacing the state file (config.State.SaveFile → atomicWriteFile,
+// 0o600). Called off the update loop by the shell whenever the picked scope changes.
+func (p *statePersister) PersistNamespace(ns string) error {
+	p.state.LastNamespace = ns
+	return p.state.SaveFile(p.path)
 }

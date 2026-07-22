@@ -959,6 +959,91 @@ func TestNamespaceAllSentinelResetsScope(t *testing.T) {
 	}
 }
 
+// fakePersister is a hermetic NamespacePersister recording the namespace it was last
+// asked to persist (and an optional error to return).
+type fakePersister struct {
+	got    string
+	called bool
+	err    error
+}
+
+func (f *fakePersister) PersistNamespace(ns string) error {
+	f.called = true
+	f.got = ns
+	return f.err
+}
+
+// namespacePersisterModel builds a sized model wired to fp (and a lister) for the
+// namespace-persistence tests.
+func namespacePersisterModel(fp *fakePersister) Model {
+	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}), WithNamespacePersister(fp))
+	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	return sz.(Model)
+}
+
+// TestNamespaceSelectionPersists proves picking a namespace writes it through the
+// persister seam (M2-11b-2), off the update loop — so the next launch restores it.
+func TestNamespaceSelectionPersists(t *testing.T) {
+	fp := &fakePersister{}
+	m := namespacePersisterModel(fp)
+	_, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	if cmd == nil {
+		t.Fatal("selecting a namespace should issue a persist command")
+	}
+	cmd() // run the off-loop write
+	if !fp.called || fp.got != "kube-system" {
+		t.Fatalf("persisted namespace = %q (called=%v), want kube-system", fp.got, fp.called)
+	}
+}
+
+// TestNamespaceSentinelPersistsUnscoped proves selecting the all-namespaces sentinel
+// persists the empty (unscoped) scope, not the literal sentinel label.
+func TestNamespaceSentinelPersistsUnscoped(t *testing.T) {
+	fp := &fakePersister{}
+	m := namespacePersisterModel(fp)
+	_, cmd := m.Update(picker.SelectedMsg{Value: namespaceAllItem})
+	if cmd == nil {
+		t.Fatal("selecting the sentinel should issue a persist command")
+	}
+	cmd()
+	if !fp.called || fp.got != "" {
+		t.Fatalf("persisted namespace = %q (called=%v), want \"\" (unscoped)", fp.got, fp.called)
+	}
+}
+
+// TestNamespacePersistInertWithoutPersister proves a model with no persister does
+// not attempt to persist: picking a namespace still applies but issues no command.
+func TestNamespacePersistInertWithoutPersister(t *testing.T) {
+	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}))
+	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m := sz.(Model)
+	next, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	if cmd != nil {
+		t.Fatal("no persister should issue no persist command")
+	}
+	if next.(Model).namespace != "kube-system" {
+		t.Fatal("the picked scope should still apply without a persister")
+	}
+}
+
+// TestNamespacePersistErrorSurfacesToast proves a persister write failure degrades
+// to a transient error toast (principle 3) rather than crashing — the picked scope
+// still applies for the session.
+func TestNamespacePersistErrorSurfacesToast(t *testing.T) {
+	fp := &fakePersister{err: context.DeadlineExceeded}
+	m := namespacePersisterModel(fp)
+	next, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	if cmd == nil {
+		t.Fatal("selecting a namespace should issue a persist command")
+	}
+	if _, ok := cmd().(ErrorMsg); !ok {
+		t.Fatalf("a persist failure should surface an ErrorMsg, got %T", cmd())
+	}
+	if next.(Model).namespace != "kube-system" {
+		t.Fatal("the picked scope should still apply despite the persist failure")
+	}
+}
+
 // menuSeamNamespace renders the sized menu and returns the namespace the seam row
 // shows ("(all)" when unscoped), read back from the rendered view.
 func menuSeamNamespace(t *testing.T, m Model) string {

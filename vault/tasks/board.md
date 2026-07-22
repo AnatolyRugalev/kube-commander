@@ -3,20 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — M2-11b-1 landed: per-context state store (`config.State`, `state/<context>.yaml`, atomic 0o600, D90); M2-11b split so its remainder (M2-11b-2: last-namespace load-on-start + persist wiring) is the next config leg. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — M2-11b-2 landed: last-namespace load-on-start + persist wiring (`WithNamespacePersister` seam, `-n` overrides stored scope for the run, D91); M2-11b is complete. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`)
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
-      notes: Second slice of M2-11b after M2-11b-1 landed the per-context state store
-      (`config.State`/`StatePath`/`Load`+`SaveStateFile`, D90). Wire the launcher to
-      load the active context's state on start and use its `LastNamespace` as the
-      initial watch scope when `-n` is not given; add a namespace-persister seam to the
-      app (mirroring `WithWatcher`/`WithNamespaceLister`) so `handleNamespaceSelected`
-      persists the newly-picked namespace through `State.SaveFile`. Decide the -n-vs-state
-      precedence (explicit `-n` should win for that run) and record it. Depends on:
-      M2-11b-1, M2-08c.
+_(none)_
 
 ## Blocked
 
@@ -103,6 +94,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`). Completes M2-11b. The launcher resolves the active context's state (`loadState` → `config.LoadStateFile`, degrading a blank context / missing / malformed file to the zero State, D91) and picks the initial watch scope via `initialNamespace`: an explicit `-n` (`cmd.Flags().Changed("namespace")`, so `-n ""` counts) wins for the run and does not overwrite stored state; with no `-n`, the stored `LastNamespace` is restored. Added a `tui.NamespacePersister` app seam (`WithNamespacePersister`, mirroring `WithNamespaceLister`) — `handleNamespaceSelected` now persists the picked namespace off the update loop via `persistNamespace` (a `tea.Cmd`; the launcher's `statePersister` writes through `State.SaveFile`); a write failure degrades to a transient toast, never blocks, and the picked scope still applies. README gained a "Remembered namespace" subsection. Tests: initialNamespace precedence (explicit-wins / explicit-empty-wins / from-state), loadState (blank/missing/reads), statePersister round-trip (cmd); persist-on-select / sentinel-persists-unscoped / inert-without-persister / persist-error-toast (tui) — done 2026-07-22 (D91)
 - [x] **M2-11b-1** Config: per-context state store (`internal/config/state.go`): `State{LastNamespace}` + `StateDir`/`StatePath(context)` (reuses `menuFileName` context sanitization so a name can't escape `…/kubecom/state`; empty context errors) + `LoadState`/`LoadStateFile` (missing → zero, strict unknown-field) + `Save`/`SaveFile` (atomic 0o600 via a shared `atomicWriteFile` extracted from `Config.SaveFile`). First slice of the split M2-11b, mirroring the M2-11a primitive-first rhythm; config-package only, no app wiring. Chose a dedicated per-context state file over config.yaml (not per-context) or the user-authored menu file (kubecom must not clobber a hand-edited file) — D90. Tests: Save→Load + SaveFile→LoadStateFile round-trips (empty→zero, parent-dir creation + 0o600, atomic overwrite with no leftover temp), context sanitization stays inside StateDir, unknown-field + empty-context rejection — done 2026-07-22 (D90)
 - [x] **M2-11a** Config write-back primitives (`internal/config`): `Config.Save(io.Writer)` marshals via `sigs.k8s.io/yaml` (write-back counterpart of Load, round-trips `keys:`), `Config.SaveFile(path)` persists atomically — `MkdirAll(dir,0o700)`, temp file in the same dir, `Chmod 0o600`, `os.Rename` over the target (crash mid-write never truncates the live config). Split from M2-11 and narrowed it (D89): the "customized resource list/order" half is already delivered by the per-context menu files (D83), so M2-11's remainder is write-back (this) + last-namespace persistence (M2-11b). Config-package only, no app wiring. Tests: Save→Load round-trip (+empty→zero-config), SaveFile→LoadFile round-trip with parent-dir creation + 0o600 perm, atomic overwrite leaving no leftover temp file — done 2026-07-22 (D89)
 - [x] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`): a Kind-stamped, centered/bordered overlay replacing the original's racy tcell popup (REWRITE_PLAN motivation). Two modes on one Model — `ShowConfirm` (yes/no) and `ShowPrompt` (single-line text over an owned bubbles `textinput`) — driven **only** through resolved keymap actions (nav.drillIn accepts → `ConfirmedMsg`, nav.back declines → `CancelledMsg`; Enter/Esc, the modal convention of keybindings.md — no dedicated y/n actions, no raw-key matching, D11/D88). Emits its own message types so it never imports the root (D56); holds no shared mutable state (principle 1). Sibling of the picker (D65/M2-08a): same clamped-and-centered geometry + overlay approach, `Prompting()`-gated `UpdatePrompt` as the single raw-key entry point. Component-only — the app-shell wiring lands with the M3 action that needs a confirm (D88), which also decides copy/default. Tests: hidden-empty-view + inactive-ignores-actions, confirm renders title/message, accept→ConfirmedMsg(empty value), decline→CancelledMsg, prompt seeds/reports-Prompting, prompt captures typed text into ConfirmedMsg.Value, UpdatePrompt inert in confirm mode, Hide dismisses + reopen-clean — done 2026-07-22 (D88)

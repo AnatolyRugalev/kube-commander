@@ -38,7 +38,11 @@ kubeconfig, context, and namespace are selectable with the flags below. The
 		// Errors are surfaced by Execute; don't also dump usage on a runtime
 		// error, and keep args-validation errors terse.
 		SilenceUsage: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Record whether -n was passed explicitly: an explicit namespace wins for
+			// this run over the stored last-namespace (D91), and "" from the flag's
+			// default must be distinguishable from "" the user typed.
+			opts.namespaceSet = cmd.Flags().Changed("namespace")
 			return runTUI(opts)
 		},
 	}

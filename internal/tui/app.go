@@ -59,6 +59,18 @@ type NamespaceLister interface {
 	Namespaces(ctx context.Context) ([]string, error)
 }
 
+// NamespacePersister records the last-selected namespace for the active context so
+// the next launch can restore it as the initial watch scope (M2-11b-2). It is the
+// write side of the per-context state store (config.State/state.go, D90); the
+// launcher, which alone knows the resolved context and its state-file path, wires a
+// persister already bound to that context, so the tui package stays storage- and
+// context-agnostic. A model built without one (the default, or an unresolved
+// context) is persistence-inert: switching namespace applies for the session but is
+// not remembered.
+type NamespacePersister interface {
+	PersistNamespace(ns string) error
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -90,6 +102,14 @@ func WithNamespace(ns string) Option {
 // picker. Without it the ns.switch action is inert (the picker never opens).
 func WithNamespaceLister(l NamespaceLister) Option {
 	return func(m *Model) { m.nsLister = l }
+}
+
+// WithNamespacePersister wires the per-context state writer the shell calls when
+// the user picks a namespace, so the choice is restored on the next launch
+// (M2-11b-2). Without it (or with a nil persister) namespace switches are not
+// persisted — inert, exactly like the pre-wiring app and the hermetic tests.
+func WithNamespacePersister(p NamespacePersister) Option {
+	return func(m *Model) { m.nsPersister = p }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -213,8 +233,11 @@ type Model struct {
 	hasCurrent bool
 
 	// nsLister seeds the namespace picker (nil → ns.switch inert). nsPicker (below,
-	// with the other components) is the modal itself.
-	nsLister NamespaceLister
+	// with the other components) is the modal itself. nsPersister records a picked
+	// namespace to the per-context state file so the next launch restores it (nil →
+	// persistence-inert, M2-11b-2).
+	nsLister    NamespaceLister
+	nsPersister NamespacePersister
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -648,10 +671,30 @@ func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.C
 	m.status.SetNamespace(ns)
 	m.menu.SetNamespace(ns)    // keep the seam row's scope current
 	m.welcome.SetNamespace(ns) // keep the welcome scope current if shown pre-drill-in
+	persist := m.persistNamespace(ns)
 	if m.hasCurrent && m.watcher != nil {
-		return m.selectResource(m.current)
+		model, cmd := m.selectResource(m.current)
+		return model, tea.Batch(persist, cmd)
 	}
-	return m, nil
+	return m, persist
+}
+
+// persistNamespace records the picked namespace as this context's last namespace so
+// the next launch restores it (M2-11b-2). The file write runs off the update loop
+// (a tea.Cmd) so persistence never blocks input; a write failure surfaces as a
+// transient toast (ErrorMsg) but is otherwise non-fatal — the chosen scope still
+// applies for this session (principle 3). With no persister wired it is a no-op.
+func (m Model) persistNamespace(ns string) tea.Cmd {
+	if m.nsPersister == nil {
+		return nil
+	}
+	p := m.nsPersister
+	return func() tea.Msg {
+		if err := p.PersistNamespace(ns); err != nil {
+			return NewErrorMsg("persist namespace", err)
+		}
+		return nil
+	}
 }
 
 // routePickerKey resolves one keypress while the namespace picker is open. The
