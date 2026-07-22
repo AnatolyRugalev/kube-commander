@@ -153,6 +153,17 @@ kubecom rewrites it freely without touching anything you hand-edit. Passing
 `-n`/`--namespace` overrides the remembered scope for that run (use `-n ""` to
 force all namespaces); switching namespace in the UI updates what's remembered.
 
+#### Migrating from the 2020 kube-commander
+
+If you have an old `~/.kubecom.yaml` from the original kube-commander, kubecom
+migrates it once on first start — when no `config.yaml` exists yet. The old file
+only held a custom resource menu and color themes, neither of which maps directly
+to kubecom v1 (the menu stored no API version/resource, and v1 uses a single fixed
+theme), so migration writes a fresh default `config.yaml` and shows a brief startup
+notice listing what to re-add by hand: recreate the menu resources in a per-context
+menu file (above). Your old `~/.kubecom.yaml` is left untouched. A malformed legacy
+file is ignored and never blocks launch.
+
 ## Contributing
 
 The rewrite is currently driven autonomously against the plan in

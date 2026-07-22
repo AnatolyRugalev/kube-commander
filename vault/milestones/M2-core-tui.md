@@ -46,7 +46,7 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
 - [x] Namespace + filter work; scrolling and Home/End behave. (ns picker M2-08c; table filter + n/N search M2-09b/D80; vertical+horizontal scroll and top/bottom in the table.)
 - [ ] Vim keys and their fallbacks both navigate every list/table; help overlay shows both.
 - [ ] Rebinding an action in config takes effect; invalid keymaps fail load with a clear error; no raw-key matching remains in view code.
-- [ ] Old config migrates cleanly; malformed/legacy files handled gracefully.
+- [x] Old config migrates cleanly; malformed/legacy files handled gracefully. (One-shot `~/.kubecom.yaml` migration wired into the launcher — M2-12a primitive + M2-12b launcher wiring; detect-and-report, one-shot on config absence, malformed/unreadable degrades to no migration and never blocks, D92/D93.)
 - [~] teatest coverage for update loop, menu reconcile, and modal flows. (Update loop + menu reconcile — M2-14a; filter flow — M2-14c; error-toast/degrade-gracefully — M2-14d; all driven through the real program; modal flow deferred to M2-14b — the modal component landed (M2-10/D88) but needs an M3 action to wire it into the shell before the flow can be driven end-to-end.)
 - [ ] No mutex-guarded UI state; concurrency is message-driven only.
 

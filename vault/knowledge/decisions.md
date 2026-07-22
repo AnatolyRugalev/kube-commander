@@ -2269,3 +2269,31 @@ notes are surfaced to the user by the launcher wiring (M2-12b).
 and telling the user what to redo by hand — not by silently reconstructing a menu
 that would be wrong. No future leg should claim the legacy menu/themes port
 automatically, or write a `MenuConfig` with blank version/resource.
+
+### D93 — Legacy migration is one-shot, gated on `config.yaml` **absence**; migration notes preempt the single startup-toast slot
+
+`2026-07-22` (M2-12b). The launcher (`cmd/kubecom/run.go` `maybeMigrate`) runs the
+D92 `config.Migrate` on first start only, and never blocks launch (principle 3):
+
+- **One-shot is gated on the new config's absence, checked with `os.Stat`** — not
+  `config.LoadFile`, which maps a missing file to the zero config and so hides the
+  present/absent distinction. A present `config.yaml` (migrated earlier, or
+  hand-authored) suppresses migration; kubecom never overwrites it. A `Stat` error
+  other than not-exist also suppresses migration (don't risk clobbering).
+- **Degrade paths write nothing and surface nothing:** an absent legacy
+  `~/.kubecom.yaml`, a malformed/unreadable legacy file, or a failed write of the new
+  config all leave no `config.yaml` behind (so a fixed file migrates on a later
+  start) and only log. A successful migration writes the new config **once** (even an
+  empty legacy file → `{}` config) so the one-shot is satisfied.
+- **The shell has a single startup-toast slot** (`WithStartupError`, one
+  `*tui.ErrorMsg`). When both a migration report and a per-context menu-config error
+  exist, the **migration notes take the slot** (first-start is the more notable, rarer
+  event); the menu error is still `slog.Warn`-logged, so it is never lost. A future
+  leg adding another startup-time toast source must preserve this: log every source,
+  and don't silently drop one because the slot is taken — widen the seam to carry
+  multiple messages if genuine coincidence becomes common.
+
+**Consequence:** migration is safe to re-attempt every launch (it self-suppresses
+once a config exists) and never a launch blocker. Any leg that changes when the
+launcher writes `config.yaml`, or adds a startup toast, must keep migration one-shot
+and keep every degraded fault logged.

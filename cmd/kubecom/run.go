@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -48,6 +50,14 @@ func runTUI(opts runOptions) error {
 		}
 		path = p
 	}
+
+	// One-shot legacy-config migration (M2-12b): before loading the config, if no
+	// new-format config exists yet at path and a legacy ~/.kubecom.yaml is present,
+	// migrate it — write a fresh config once (a present config then suppresses
+	// re-migration) and carry the "what to redo by hand" notes into a startup toast.
+	// Degrades to no migration and never blocks launch (principle 3, D92).
+	startupErr := maybeMigrate(path)
+
 	cfg, err := config.LoadFile(path)
 	if err != nil {
 		return err
@@ -84,11 +94,15 @@ func runTUI(opts runOptions) error {
 		Context:    opts.context,
 	})
 	menuExtras, menuErr := loadMenuExtras(ctxName)
-	var startupErr *tui.ErrorMsg
 	if menuErr != nil {
 		slog.Warn("menu config", "context", ctxName, "error", menuErr)
-		e := tui.NewErrorMsg("menu config", menuErr)
-		startupErr = &e
+		// The shell surfaces a single startup toast; a first-start migration report
+		// (rare, and the more notable event) wins that slot. The menu error is always
+		// logged above, so it is never lost even when it does not take the toast.
+		if startupErr == nil {
+			e := tui.NewErrorMsg("menu config", menuErr)
+			startupErr = &e
+		}
 	}
 
 	// Resolve the initial watch scope and the namespace-persistence seam from the
@@ -143,6 +157,67 @@ func loadMenuExtras(context string) ([]config.MenuResource, error) {
 		return nil, err
 	}
 	return mc.Resources, nil
+}
+
+// maybeMigrate runs the one-shot legacy-config migration on first start (M2-12b).
+// When no new-format config exists yet at configPath and a legacy ~/.kubecom.yaml
+// is present, it parses that file (config.Migrate), writes a fresh new-format
+// config once, and returns the migration notes as a transient startup toast so the
+// user learns what could not be carried over automatically (D92). A present config
+// makes migration a no-op, so it runs at most once per config file (one-shot).
+//
+// It degrades rather than blocks (principle 3): a present config, an absent legacy
+// file, or a malformed/unreadable legacy file all yield no migration and no toast,
+// logging a warning where a fault was swallowed. It never returns an error —
+// migration must never keep kubecom from launching. A malformed/unreadable legacy
+// file writes no config (so a later start migrates a fixed file); a failed write of
+// the new config likewise leaves migration to re-run next start.
+func maybeMigrate(configPath string) *tui.ErrorMsg {
+	// A present new-format config means migration already ran (or the user authored
+	// one): never overwrite it. os.Stat rather than config.LoadFile, which maps a
+	// missing file to the zero config and so hides the present/absent distinction
+	// this one-shot turns on.
+	if _, err := os.Stat(configPath); err == nil {
+		return nil // config exists → one-shot already satisfied.
+	} else if !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("migration: stat config", "path", configPath, "error", err)
+		return nil // cannot tell if it exists → do not risk clobbering it.
+	}
+
+	legacyPath, err := config.LegacyPath()
+	if err != nil {
+		slog.Warn("migration: locating legacy config", "error", err)
+		return nil
+	}
+	f, err := os.Open(legacyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // no legacy file to migrate from — the common case.
+	}
+	if err != nil {
+		slog.Warn("migration: opening legacy config", "path", legacyPath, "error", err)
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+
+	cfg, notes, err := config.Migrate(f)
+	if err != nil {
+		// Unparseable legacy YAML: no migration and no config written, so a later
+		// start migrates a fixed file. Never blocks (D92).
+		slog.Warn("migration: parsing legacy config", "path", legacyPath, "error", err)
+		return nil
+	}
+	if err := cfg.SaveFile(configPath); err != nil {
+		// Could not persist the migrated config; skip the toast and let migration
+		// re-run on the next start rather than reporting a migration that did not stick.
+		slog.Warn("migration: writing new config", "path", configPath, "error", err)
+		return nil
+	}
+	slog.Info("migrated legacy config", "from", legacyPath, "to", configPath, "notes", len(notes))
+	if len(notes) == 0 {
+		return nil // migrated (e.g. an empty legacy file) with nothing to report.
+	}
+	e := tui.NewErrorMsg("migrated ~/.kubecom.yaml", errors.New(strings.Join(notes, " ")))
+	return &e
 }
 
 // initialNamespace resolves the initial watch scope from the flags and the stored

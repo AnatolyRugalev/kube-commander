@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
@@ -103,6 +104,101 @@ func writeStateFile(t *testing.T, context, body string) {
 	}
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write state file: %v", err)
+	}
+}
+
+// writeLegacyConfig points $HOME at a temp dir and writes body to the legacy
+// ~/.kubecom.yaml, so maybeMigrate resolves a real legacy file. It uses
+// config.LegacyPath so the same resolution the launcher uses is exercised.
+func writeLegacyConfig(t *testing.T, body string) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	path, err := config.LegacyPath()
+	if err != nil {
+		t.Fatalf("LegacyPath: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+}
+
+// TestMaybeMigrateNoLegacyFile proves a fresh install with no legacy ~/.kubecom.yaml
+// performs no migration and writes no config: nothing to migrate is the common case.
+func TestMaybeMigrateNoLegacyFile(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // an empty home: no legacy file present.
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if toast := maybeMigrate(cfgPath); toast != nil {
+		t.Fatalf("no legacy file should migrate nothing, got toast %+v", toast)
+	}
+	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+		t.Fatalf("no legacy file should write no config; stat err = %v", err)
+	}
+}
+
+// TestMaybeMigrateExistingConfigSuppresses proves a present new-format config makes
+// migration a no-op (one-shot): the legacy file is left for the user and the config
+// is not overwritten, even though a legacy file exists.
+func TestMaybeMigrateExistingConfigSuppresses(t *testing.T) {
+	writeLegacyConfig(t, "menu:\n  - kind: Certificate\n")
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("keys:\n  app.quit: [x]\n"), 0o600); err != nil {
+		t.Fatalf("seed existing config: %v", err)
+	}
+	if toast := maybeMigrate(cfgPath); toast != nil {
+		t.Fatalf("existing config should suppress migration, got toast %+v", toast)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(data), "app.quit") {
+		t.Fatalf("existing config must not be overwritten, got %q", string(data))
+	}
+}
+
+// TestMaybeMigrateReportsNotes proves a legacy file with content that cannot be
+// carried over (menu resources, themes) is migrated: a fresh config is written and
+// the notes are surfaced as a startup toast.
+func TestMaybeMigrateReportsNotes(t *testing.T) {
+	writeLegacyConfig(t, "menu:\n  - kind: Certificate\ncurrentTheme: dark\n")
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	toast := maybeMigrate(cfgPath)
+	if toast == nil {
+		t.Fatal("a legacy file with menu/theme content should surface migration notes")
+	}
+	if msg := toast.Message(); !strings.Contains(msg, "menu") || !strings.Contains(msg, "theme") {
+		t.Fatalf("toast should report the un-migratable menu and theme, got %q", msg)
+	}
+	if _, err := os.Stat(cfgPath); err != nil {
+		t.Fatalf("migration should write the new config once, stat err = %v", err)
+	}
+}
+
+// TestMaybeMigrateEmptyLegacyNoNotes proves an empty legacy file still establishes
+// the new config (so migration is one-shot) but surfaces no toast — there is
+// nothing to report.
+func TestMaybeMigrateEmptyLegacyNoNotes(t *testing.T) {
+	writeLegacyConfig(t, "")
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if toast := maybeMigrate(cfgPath); toast != nil {
+		t.Fatalf("an empty legacy file has nothing to report, got toast %+v", toast)
+	}
+	if _, err := os.Stat(cfgPath); err != nil {
+		t.Fatalf("migration should still write the new config to be one-shot, stat err = %v", err)
+	}
+}
+
+// TestMaybeMigrateMalformedLegacyDegrades proves an unparseable legacy file degrades
+// to no migration and writes no config (so a later start can migrate a fixed file)
+// — it never blocks launch (D92).
+func TestMaybeMigrateMalformedLegacyDegrades(t *testing.T) {
+	writeLegacyConfig(t, "menu: [oops\n")
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if toast := maybeMigrate(cfgPath); toast != nil {
+		t.Fatalf("a malformed legacy file should not surface a toast, got %+v", toast)
+	}
+	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
+		t.Fatalf("a malformed legacy file must write no config; stat err = %v", err)
 	}
 }
 
