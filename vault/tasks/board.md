@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — all four dogfood feedback items addressed (overlay
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups fail list/watch — encode params with `metav1.ParameterCodec`
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
