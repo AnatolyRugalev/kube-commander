@@ -2570,3 +2570,18 @@ YYYY-MM-DD (Dnn, …)` — no prose, no continuation lines; the full detail is t
 journal entry for that leg. Same for backlog `notes:` — keep them short. Re-collapsed
 the Done section on this leg (93 items preserved, ~50KB → ~17KB). Wired into
 CLAUDE.md step 7 and the `do-rewrite-leg` skill.
+
+### D103 — List/watch params encode with metav1.ParameterCodec, not scheme.ParameterCodec
+**2026-07-22.** `tableRequest` (shared by List and Watch, `internal/kube/table.go`)
+must encode `VersionedParams` with **`metav1.ParameterCodec`**
+(`k8s.io/apimachinery/pkg/apis/meta/v1`), **never** `scheme.ParameterCodec`
+(`client-go/kubernetes/scheme`). The built-in clientset scheme only knows built-in
+GroupVersions, so it cannot convert `metav1.ListOptions`/watch params to an
+arbitrary CRD GroupVersion (`gateway.networking.k8s.io/v1`, `traefik.io/v1alpha1`,
+…) and fails every non-built-in CRD group with "v1.ListOptions is not suitable for
+converting to …" — directly defeating the discovery-driven "generic over any
+resource incl. CRDs" goal (#76/#87). `metav1.ParameterCodec` converts params for
+any GroupVersion (it is what `client-go/dynamic` uses) and works for built-ins too,
+so it is a strict improvement. Hermetic tests must exercise a **non-built-in** GVR
+(the built-in-only fixtures are why this slipped past `make check`). A future leg
+must not switch this back.

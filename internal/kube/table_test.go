@@ -162,6 +162,39 @@ func TestGetTableClusterScoped(t *testing.T) {
 	}
 }
 
+func TestGetTableNonBuiltinGroup(t *testing.T) {
+	// Regression for the CRD list/watch bug: a resource whose GroupVersion is not
+	// in the built-in clientset scheme (e.g. a CRD like gateway.networking.k8s.io
+	// or traefik.io) must still list. The bug was encoding VersionedParams with
+	// scheme.ParameterCodec (built-in scheme only), which cannot convert
+	// metav1.ListOptions to an arbitrary CRD GroupVersion and fails with
+	// "v1.ListOptions is not suitable for converting to ...". Encoding with
+	// metav1.ParameterCodec converts params for any GroupVersion, so this passes.
+	gvr := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	client := newTableRESTClient(gvr.GroupVersion(), "/apis/example.com/v1", podsTableJSON)
+
+	// A non-empty ListOptions ensures params are actually encoded onto the request.
+	opts := metav1.ListOptions{LabelSelector: "app=demo", ResourceVersion: "42"}
+	tbl, err := getTable(context.Background(), client, gvr, true, "web", opts)
+	if err != nil {
+		t.Fatalf("getTable(non-built-in group): %v", err)
+	}
+	if len(tbl.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(tbl.Rows))
+	}
+	if client.Req == nil {
+		t.Fatal("no request recorded")
+	}
+	if got, want := client.Req.URL.Path, "/apis/example.com/v1/namespaces/web/widgets"; got != want {
+		t.Errorf("path = %q, want %q", got, want)
+	}
+	// The list controls must have been encoded into the query, proving params
+	// converted for the non-built-in GroupVersion rather than erroring.
+	if got := client.Req.URL.Query().Get("labelSelector"); got != "app=demo" {
+		t.Errorf("labelSelector = %q, want %q", got, "app=demo")
+	}
+}
+
 func TestRestClientForGV(t *testing.T) {
 	c, err := NewClients(&rest.Config{Host: "https://localhost:6443"})
 	if err != nil {

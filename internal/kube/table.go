@@ -120,6 +120,13 @@ func decodeTableRV(raw []byte) (*Table, string, error) {
 // the opts (Watch/ResourceVersion). namespaced selects whether the request is
 // scoped to namespace; opts carries the usual list/watch controls
 // (label/field selectors, limit, resourceVersion, watch).
+//
+// Params are encoded with metav1.ParameterCodec, NOT scheme.ParameterCodec: the
+// built-in clientset scheme only knows built-in GroupVersions and cannot convert
+// metav1.ListOptions to an arbitrary CRD GroupVersion, so it breaks every
+// non-built-in CRD group. metav1.ParameterCodec converts list/watch params for
+// any GroupVersion (it is what client-go/dynamic uses) and works for built-ins
+// too — do not switch this back.
 func tableRequest(
 	client rest.Interface,
 	gvr schema.GroupVersionResource,
@@ -130,7 +137,7 @@ func tableRequest(
 	return client.Get().
 		NamespaceIfScoped(namespace, namespaced).
 		Resource(gvr.Resource).
-		VersionedParams(&opts, scheme.ParameterCodec).
+		VersionedParams(&opts, metav1.ParameterCodec).
 		SetHeader("Accept", tableAcceptHeader)
 }
 

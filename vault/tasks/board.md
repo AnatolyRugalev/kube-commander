@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — all four dogfood feedback items addressed (overlay popups, mouse opt-in, narrower menu, top status bar + nav palette/toggle); Done section re-collapsed to one line each (D102). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — fixed CRD list/watch (metav1.ParameterCodec, D103); one dogfood feedback item remains (watch-unsupported list-only). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups fail list/watch — encode params with `metav1.ParameterCodec`
-      status: in-progress | owner: claude-opus | added: 2026-07-22
+_(none)_
 
 ## Blocked
 
@@ -84,6 +83,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups failed list/watch — encode params with `metav1.ParameterCodec` — done 2026-07-22 (D103)
 - [x] **FB-nav-menu-popup** Left menu as an overlay popup — **retired won't-do-separately**, folded into the resource palette (D96 slice 3, resolving the… — done 2026-07-22 (D81, D96, D99, D100, D101)
 - [x] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style), D96 slice 2 / D100 — done 2026-07-22 (D11, D65, D95, D96, D99, D100)
 - [x] **FB-nav-menu-toggle** Make the left menu pane optional (D96 slice 1) — done 2026-07-22 (D11, D96, D99)
