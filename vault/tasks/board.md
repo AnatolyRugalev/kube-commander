@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — M2-12a landed: legacy `~/.kubecom.yaml` migration 
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-12b** Legacy config migration — launcher wiring (first-start, one-shot)
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
