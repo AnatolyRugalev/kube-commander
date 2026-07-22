@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — M3 (actions & viewers) expanded into ordered leg-s
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
 
 ## Blocked
 
