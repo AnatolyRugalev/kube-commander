@@ -7,7 +7,12 @@ _Last updated: 2026-07-21 — FB-hintbar-dedicated landed: the focus-aware key h
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
+      status: in-progress | owner: claude-opus | added: 2026-07-19 | claimed: 2026-07-22
+      notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
+      message-driven overlay: confirm (y/n) + text prompt, resolved through keymap
+      actions, returns a result msg. No mutex, no shared popup state (the whole
+      point). Depends on: M2-03, M2-07a.
 
 ## Blocked
 
@@ -69,13 +74,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **M2-10** Confirm/prompt modal (`internal/tui/components/modal`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: Replaces the old racy tcell popup (REWRITE_PLAN motivation). A
-      message-driven overlay: confirm (y/n) + text prompt, resolved through keymap
-      actions, returns a result msg. No mutex, no shared popup state (the whole
-      point). Depends on: M2-03, M2-07a.
 
 - [ ] **M2-11** Config: menu customization persistence (`internal/config`)
       status: todo | owner: — | added: 2026-07-19
