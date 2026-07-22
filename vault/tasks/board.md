@@ -7,7 +7,12 @@ _Last updated: 2026-07-22 — M2-11a landed: config write-back primitives (`Conf
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-11b-1** Config: per-context state store (`internal/config/state.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-22
+      notes: First slice of M2-11b (mirrors the M2-11a primitive-first rhythm). Adds a
+      per-context runtime-state store — separate from user-authored config.yaml/menu
+      files so kubecom rewrites it freely — holding the last-used namespace. Config
+      package only, no app wiring (that is M2-11b-2).
 
 ## Blocked
 
@@ -70,16 +75,16 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-11b** Config: last-namespace persistence + load-on-start wiring (`internal/config`, `internal/tui`)
+- [ ] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`)
       status: todo | owner: — | added: 2026-07-22
-      notes: Remainder of M2-11 after M2-11a landed the `Save`/`SaveFile` primitives
-      and D89 narrowed the scope (the "customized resource list/order" half is already
-      delivered by the per-context menu files, D83 — do **not** duplicate it into
-      `config.yaml`). Wire the app to load config on start and persist the last-used
-      namespace across restarts (last namespace is per-context, so decide where it
-      lives — per-context menu file vs a new per-context store — when taking this;
-      record it). `UnmarshalStrict` already rejects typos (D49). Depends on: M2-11a,
-      M2-08c.
+      notes: Second slice of M2-11b after M2-11b-1 landed the per-context state store
+      (`config.State`/`StatePath`/`Load`+`SaveStateFile`, D90). Wire the launcher to
+      load the active context's state on start and use its `LastNamespace` as the
+      initial watch scope when `-n` is not given; add a namespace-persister seam to the
+      app (mirroring `WithWatcher`/`WithNamespaceLister`) so `handleNamespaceSelected`
+      persists the newly-picked namespace through `State.SaveFile`. Decide the -n-vs-state
+      precedence (explicit `-n` should win for that run) and record it. Depends on:
+      M2-11b-1, M2-08c.
 
 - [ ] **M2-12** Legacy config migration (`internal/config/migrate.go`)
       status: todo | owner: — | added: 2026-07-19
