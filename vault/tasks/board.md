@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — FB-left-pane-width-smaller landed: the left menu pane now caps at `maxMenuWidth` (28) so a wide terminal keeps it close to the menu's content instead of over-wide, while the `minMenuWidth` floor and narrow-terminal even-split are unchanged (long names already ellipsis-truncate, D84). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — FB-status-bar-top landed: the status bar moved to the top row and now names the browsed resource type (GVK.Kind) alongside context · namespace; the optional/popup-menu + command-palette direction was triaged into FB-nav-menu-toggle / FB-nav-menu-popup / FB-nav-resource-palette and the navigation model recorded (D96). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-status-bar-top** Feedback (`2026-07-22-status-bar-top-and-optional-left-panel`): move the status bar to the top and show the browsed resource type; triage the optional/popup-menu + command-palette direction into board tasks.
-      status: in-progress | owner: claude-opus | added: 2026-07-22
+_(none)_
 
 ## Blocked
 
@@ -79,6 +78,34 @@ messages.
       `SortDescending`, regenerate `docs/keybindings.md`. Must not re-implement
       ordering or sort `full.Rows` (D94). Closes #85. Depends on: M2-13a (done).
 
+- [ ] **FB-nav-menu-toggle** Make the left menu pane optional — a keybind to show/hide it (#feedback 2026-07-22-status-bar-top / D96)
+      status: todo | owner: — | added: 2026-07-22
+      notes: First slice of the D96 navigation direction. Add a `menu.toggle` keymap
+      action (registry, no hard-coded key — D11) that hides/shows the left menu pane
+      on demand; when hidden the table (+ top status bar) takes the full width, and
+      focus lives on the table. `resize()`/`menuPaneWidth` account for a zero-width
+      menu; hidden-menu nav must still reach the resource switch (depends on
+      FB-nav-resource-palette for a pane-free way to change resource, but the toggle
+      itself can land first with the menu re-showable by the same key). Regenerate
+      `docs/keybindings.md`. Keeps zero shared mutable UI state (principle 1).
+- [ ] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style) (#feedback 2026-07-22-status-bar-top / D96)
+      status: todo | owner: — | added: 2026-07-22
+      notes: Second slice of D96. A `resources` hotkey opens the resource list as a
+      picker/overlay; `/` filters it by substring; Enter switches the table to that
+      kind and lands on its list — no persistent left pane needed. Reuse the existing
+      picker component (M2-08a) + `overlayCenter` (D95) and the menu's item set as the
+      source list; selecting drives the same `selectResource` path a menu drill-in
+      takes. Registry-driven keys (D11). This is what makes FB-nav-menu-toggle's
+      hidden-menu state fully usable.
+- [ ] **FB-nav-menu-popup** Left menu as an overlay popup rather than a fixed pane (#feedback 2026-07-22-status-bar-top / D96)
+      status: todo | owner: — | added: 2026-07-22
+      notes: Third/final slice of D96, after FB-nav-menu-toggle + FB-nav-resource-
+      palette. Promote the toggled menu from a fixed left pane to a floating
+      `overlayCenter` popup (D95) so the default browse view is table + top status bar
+      only, with the menu summoned as an overlay. Largely converges with the resource
+      palette; may be folded into it once both land — reassess then. Depends on:
+      FB-nav-menu-toggle, FB-nav-resource-palette.
+
 - [ ] **M2-14b** teatest coverage: modal confirm flow
       status: todo | owner: — | added: 2026-07-20
       notes: Split from M2-14 — the modal-flow half. Drive a modal confirm flow
@@ -91,6 +118,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **FB-status-bar-top** Feedback (normal, `2026-07-22-status-bar-top-and-optional-left-panel`): first concrete slice + direction triage. **Now:** the status bar moved from the bottom to the **top** row (`View()` stacks status · body · hint line) and now names the **browsed resource type** — `kube.Resource.GVK.Kind` (e.g. `Pod`) is set from `selectResource` via new `statusbar.SetResourceType`, rendered in the left segment as `context · namespace · <kind> · filter`, skipped before the first drill-in. Mouse click Y-mapping now offsets by `statusBarHeight` (the body starts one row down) so click-to-open/select still hit the right rows. **Direction triage:** the optional-menu / popup-menu / command-palette-switch ask was split into FB-nav-menu-toggle, FB-nav-resource-palette, FB-nav-menu-popup (ordered, in M2 Backlog) and the target navigation model recorded as D96 (left pane is not a permanent fixture; keeps D11 registry + principle 1). Feedback file deleted. Tests: `TestStatusBarShowsBrowsedResourceType` (no type pre-drill-in, `Pod` after); mouse-click tests' Y coords bumped +1 for the top status bar. — done 2026-07-22 (D96)
 - [x] **FB-left-pane-width-smaller** Feedback (normal, `2026-07-22-left-pane-width-smaller`): the left menu pane's `total/4` default ate room the table needs on wide terminals. Added a `maxMenuWidth = 28` constant (total incl. border, sized close to the standard resource-name content) and a cap in `menuPaneWidth` between the existing `minMenuWidth` floor and the narrow-terminal even-split guard, so a wide terminal keeps the menu near its content width instead of a full quarter of the screen. On an 80-col terminal the pane stays at the 20-col floor (unchanged); a 200-col terminal drops from 50 to 28, handing the freed columns to the table. Long item names already ellipsis-truncate to one line (D84), so no widening-to-fit is needed; a config option for the width was declined as out of scope (feedback said it's welcome-not-required). No new decision — a UX default constant, not a cross-cutting constraint. Tests: `TestMenuPaneWidthNarrowsWideTerminals` (zero, 80→floor, 200/400→cap, 39→even-split) plus a 1..500 sweep asserting the pane never starves the table, never exceeds the cap, and stays in range. — done 2026-07-22
 - [x] **FB-popups-overlay** Feedback (high, `2026-07-22-popups-should-overlay`): the help overlay and namespace picker **replaced** the browse body (`Model.View()` set `body = help/nsPicker.View()`), so the menu + table vanished behind the modal. Now each modal **floats over** the base. New `internal/tui/overlay.go` `overlayCenter(base, box, width, height)` composites via the lipgloss/v2 layer stack (`NewLayer`/`NewCompositor`/`NewCanvas`) — base at the origin, box centered on top (z1), flattened onto a fixed `width×height` canvas so the box occludes only its own rectangle and base cells around it stay visible; empty box / non-positive area → base unchanged (degrade). The three modal components (`help`, `picker`, `modal`) now return the **bare** box from `View()` (`styles.PaneFocus.Render(body)`, no `lipgloss.Place` full-area padding). `Model.View()` renders `browseBody()` (extracted: menu + table/welcome) first, then overlays the open help/namespace box via `overlayCenter`. The confirm modal is converted too (unwired, D88) so it already floats when M2-14b/M3 wires it. No base dimming (deferred refinement). Tests: overlay keeps-base-visible + degrades (unit); help renders a bordered box; `TestHelpModalCompositesOverBase` (base "Cluster" menu + "Keybindings" title both visible). — done 2026-07-22 (D95)
 - [x] **M2-13a** Table column-sort primitive (`internal/tui/components/table`, component-only). First slice of the split M2-13 (#85), primitive-first (M2-11a/M2-12a rhythm). Sort as a view over the authoritative `full` row set, layered onto `applyFilter` (`full → filter → sort → measure`) so it re-applies on every watch delta (a new row lands in sorted position) and `ClearSort` restores the watch order. API: `SortBy(visibleCol)` (stable; same column toggles asc↔desc, new column starts ascending, out-of-range ignored, selection preserved by UID), `ClearSort`, `SortColumn`/`SortDescending` accessors (for M2-13b's header indicator). `sortCol` is a visible-column position or -1 (unsorted); `New` starts -1, `SetTable` resets it (a sort for one resource's columns must not carry to another). Type-aware only where cheap — integer/number compare numerically (9 < 10), everything else incl. date columns (kubectl ages) as case-insensitive text (D94). Unfiltered display path now copies rows instead of aliasing `full.Rows`, so a re-sort never scrambles the authoritative set. No keymap/app wiring — not runtime-reachable until M2-13b. Tests: text asc+toggle-desc, numeric-by-value, preserves-selection-by-UID, survives-watch-delta, SetTable-resets, ClearSort-restores, out-of-range-noop, empty-table-noop — done 2026-07-22 (D94)

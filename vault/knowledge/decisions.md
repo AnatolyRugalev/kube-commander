@@ -2358,3 +2358,33 @@ the root overlay it through `overlayCenter`; do not switch `body = modal.View()`
 replace the browse view, and do not re-add `lipgloss.Place` full-area padding inside
 a modal component. Wiring the M2-10 confirm modal into the shell (M2-14b / M3) uses
 the same `overlayCenter` path.
+
+### D96 — Status bar sits at the **top**; the target navigation model is an optional/popup menu with a command-palette resource switch (left pane is not a permanent fixture)
+
+`2026-07-22` (FB-status-bar-top, feedback
+`2026-07-22-status-bar-top-and-optional-left-panel`). Two load-bearing constraints
+this decision locks, plus a direction the follow-on legs implement:
+
+- **The status bar renders at the top row of the screen**, not the bottom. The root
+  `View()` stacks status (top) · two-pane body · hint line (bottom). Any layout work
+  that touches vertical stacking must keep the status bar on top and must keep mouse
+  Y-mapping offset by `statusBarHeight` (the body starts one row down —
+  `handleMouseClick` subtracts it before resolving a row; a future top-anchored
+  element shifts that offset again).
+- **The status bar names the browsed resource type** (`kube.Resource.GVK.Kind`, e.g.
+  `Pod`) alongside context · namespace, set from `selectResource`
+  (`statusbar.SetResourceType`). The bar must always say what the table is listing;
+  a leg that changes what resource the table shows keeps this current.
+- **Direction (not yet built, queued as FB-nav-* board tasks): the left menu is not a
+  permanent fixed pane.** The target navigation model is a **toggleable / popup**
+  menu (a keybind shows/hides it; later it becomes an `overlayCenter` popup per D95)
+  plus a **command-palette resource switch** (`<resources hotkey>` → `/` filter →
+  Enter switches the table to that kind, k9s-`:`-style) so the app can be browsed
+  pane-free with just the top status bar + table. A future leg must not treat the
+  always-visible left pane as load-bearing; it is on a path to becoming optional.
+  All of it stays on the keymap registry (no hard-coded keys, D11) and the
+  zero-shared-mutable-state model (principle 1).
+
+**Consequence:** the top status bar + resource-type display is delivered by this
+leg. The optional-menu toggle, the popup menu, and the command-palette switch are
+FB-nav-menu-toggle / FB-nav-menu-popup / FB-nav-resource-palette on the board.

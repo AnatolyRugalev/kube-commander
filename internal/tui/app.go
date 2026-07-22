@@ -145,9 +145,10 @@ func WithStartupError(e *ErrorMsg) Option {
 	return func(m *Model) { m.startupErr = e }
 }
 
-// Layout constants. The status bar takes one line at the bottom; the two browse
-// panes split the width, the menu (left) sized as a fraction with sensible floors
-// so the table (right) always keeps room.
+// Layout constants. The status bar takes one line at the top (feedback
+// 2026-07-22-status-bar-top) and the dedicated key-hint line one at the bottom;
+// the two browse panes split the width between them, the menu (left) sized as a
+// fraction with sensible floors so the table (right) always keeps room.
 const (
 	statusBarHeight = 1
 	// hintBarHeight is the dedicated key-hint line pinned below the status bar
@@ -510,7 +511,8 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.current = r
 	m.hasCurrent = true
 
-	m.menu.SetActive(r) // mark the opened resource distinctly from the nav cursor
+	m.status.SetResourceType(r.GVK.Kind) // name the browsed kind on the top status bar
+	m.menu.SetActive(r)                  // mark the opened resource distinctly from the nav cursor
 	m.menu.Blur()
 	m.table.Focus()
 	m.syncHints() // focus is now the table → table-context hints
@@ -877,9 +879,9 @@ func (m Model) overlayActive() bool {
 	return m.help.Visible() || m.nsPicker.Active() || m.filtering
 }
 
-// bodyHeight is the height of the two-pane body above the status bar and hint line
-// — the region mouse clicks map within; a click on the status-bar/hint lines (or
-// off-screen) is ignored.
+// bodyHeight is the height of the two-pane body between the top status bar and the
+// bottom hint line — the region mouse clicks map within; a click on the
+// status-bar/hint lines (or off-screen) is ignored.
 func (m Model) bodyHeight() int {
 	h := m.height - statusBarHeight - hintBarHeight
 	if h < 0 {
@@ -935,13 +937,18 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.overlayActive() || msg.Button != tea.MouseLeft {
 		return m, nil
 	}
-	if msg.Y < 0 || msg.Y >= m.bodyHeight() {
-		return m, nil // the status-bar line (or off-screen); nothing to select.
+	// The status bar occupies the top row now (feedback 2026-07-22-status-bar-top),
+	// so the body starts one row down: map the screen Y to a body-relative Y before
+	// resolving a row. A click on the status-bar line (y<0) or the hint line / below
+	// (y>=bodyHeight) selects nothing.
+	y := msg.Y - statusBarHeight
+	if y < 0 || y >= m.bodyHeight() {
+		return m, nil
 	}
 	if m.inMenu(msg.X) {
-		return m.clickMenu(msg.Y)
+		return m.clickMenu(y)
 	}
-	return m.clickTable(msg.Y)
+	return m.clickTable(y)
 }
 
 // clickMenu selects the resource row under the click and opens it. The click's
@@ -1143,10 +1150,10 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model. Until the first WindowSizeMsg it renders nothing so
-// the layout is never sized to a zero terminal. Normally it lays the menu and
-// table panes side by side over the status bar and the dedicated key-hint line;
-// when the help overlay is open it takes the body area, the status bar and hint
-// line staying pinned below.
+// the layout is never sized to a zero terminal. Normally it stacks the status bar
+// (top), the two-pane body (menu + table side by side), and the dedicated key-hint
+// line (bottom); when the help overlay is open it is composited over the body area,
+// the status bar staying pinned above and the hint line below.
 //
 // Every returned view sets AltScreen: in bubbletea v2 full-screen mode is a
 // property of the View (v.AltScreen), not a program option — the v1-era
@@ -1186,7 +1193,7 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
 	}
 
-	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, body, m.status.View(), m.hintbar.View()))
+	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))
 	v.AltScreen = true
 	// Enable mouse (click + wheel) the same way AltScreen is enabled — a per-View
 	// property in bubbletea v2, not a program option. The root model owns View, so

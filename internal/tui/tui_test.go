@@ -1590,9 +1590,10 @@ func TestProgramErrorToastDegradesGracefully(t *testing.T) {
 func TestMouseClickMenuOpensResource(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
-	// Menu display rows (offset 0): row0 header "Cluster", row1 namespaces, row2
-	// nodes. Content row = Y-1, so Y=3 lands on the "nodes" item.
-	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 3, Button: tea.MouseLeft})
+	// Screen row 0 is the top status bar; the body starts at row 1. Menu display
+	// rows (offset 0): row0 header "Cluster", row1 namespaces, row2 nodes. Content
+	// row = Y-statusBarHeight-1, so Y=4 lands on the "nodes" item.
+	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 4, Button: tea.MouseLeft})
 	m = next.(Model)
 	if m.menu.Cursor() != 1 {
 		t.Fatalf("click should move the menu cursor to the clicked item (nodes, idx 1), got %d", m.menu.Cursor())
@@ -1615,8 +1616,9 @@ func TestMouseClickMenuHeaderInert(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
 	before := m.menu.Cursor()
-	// Y=1 → content row 0 → the "Cluster" section header.
-	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 1, Button: tea.MouseLeft})
+	// Screen row 0 is the top status bar; Y=2 → body row 1 → content row 0 → the
+	// "Cluster" section header.
+	next, cmd := m.Update(tea.MouseClickMsg{X: 3, Y: 2, Button: tea.MouseLeft})
 	m = next.(Model)
 	if m.menu.Cursor() != before || cmd != nil {
 		t.Fatal("clicking a section header should be inert (no selection, no command)")
@@ -1652,9 +1654,10 @@ func TestMouseClickTableSelectsRow(t *testing.T) {
 	// Move focus off the table to prove the click moves it back.
 	m.table.Blur()
 	m.menu.Focus()
-	// Table pane starts at X=menuPaneWidth(80)=20; content row 0 is the column
-	// header, so Y=3 (content row 2) selects data row 1 (pod-b).
-	next, _ = m.Update(tea.MouseClickMsg{X: 30, Y: 3, Button: tea.MouseLeft})
+	// Table pane starts at X=menuPaneWidth(80)=20; screen row 0 is the top status
+	// bar, so Y=4 → body row 3 → content row 2 (row 0 is the column header) selects
+	// data row 1 (pod-b).
+	next, _ = m.Update(tea.MouseClickMsg{X: 30, Y: 4, Button: tea.MouseLeft})
 	m = next.(Model)
 	if m.table.Cursor() != 1 {
 		t.Fatalf("clicking the second data row should select row 1, got %d", m.table.Cursor())
@@ -1685,6 +1688,27 @@ func TestMouseWheelScrollsPaneUnderPointer(t *testing.T) {
 	// Scrolling is a read gesture — the menu stays focused, no pane switch.
 	if !m.menu.Focused() {
 		t.Fatal("scroll-wheel should not change focus")
+	}
+}
+
+// TestStatusBarShowsBrowsedResourceType proves drilling into a resource names its
+// kind on the status bar alongside context · namespace (feedback
+// 2026-07-22-status-bar-top): before any drill-in the bar shows no resource type,
+// and after opening a resource its GVK.Kind appears in the bar's view.
+func TestStatusBarShowsBrowsedResourceType(t *testing.T) {
+	fw := &fakeWatcher{}
+	m := sizedWith(t, WithWatcher(fw))
+	if strings.Contains(m.status.View(), "Pod") {
+		t.Fatalf("status bar named a resource type before any drill-in: %q", m.status.View())
+	}
+	podRes := kube.Resource{
+		GVK: schema.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		GVR: schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+	}
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: podRes})
+	m = next.(Model)
+	if !strings.Contains(m.status.View(), "Pod") {
+		t.Fatalf("status bar should name the browsed kind (Pod) after drill-in, got %q", m.status.View())
 	}
 }
 

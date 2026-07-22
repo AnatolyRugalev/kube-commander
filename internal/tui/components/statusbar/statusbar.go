@@ -37,12 +37,13 @@ type Model struct {
 	styles  styles.Styles
 	spinner spinner.Model
 
-	context     string
-	namespace   string
-	errText     string
-	filter      string
-	discovering bool
-	width       int
+	context      string
+	namespace    string
+	resourceType string
+	errText      string
+	filter       string
+	discovering  bool
+	width        int
 }
 
 // New builds a status bar rendering through the given styles. The spinner takes
@@ -58,6 +59,12 @@ func (m *Model) SetContext(ctx string) { m.context = ctx }
 
 // SetNamespace sets the displayed namespace (empty renders nothing).
 func (m *Model) SetNamespace(ns string) { m.namespace = ns }
+
+// SetResourceType sets the displayed resource type — the kind currently being
+// browsed (e.g. "Pod"), shown alongside context · namespace so the bar always
+// names what the table is listing (feedback 2026-07-22-status-bar-top). Empty
+// renders nothing (before the first drill-in there is no resource yet).
+func (m *Model) SetResourceType(kind string) { m.resourceType = kind }
 
 // SetFilter sets the filter indicator shown in the left segment — the live filter
 // prompt while the user is typing, or the committed "/query" indicator once a
@@ -145,9 +152,9 @@ func (m Model) View() string {
 	return m.styles.StatusBar.Width(m.width).MaxWidth(m.width).Render(line)
 }
 
-// leftSegment builds the "context · namespace · [spinner] discovering…" run,
-// skipping empty pieces so a missing namespace doesn't leave a dangling
-// separator.
+// leftSegment builds the "context · namespace · resourceType · filter · [spinner]
+// discovering…" run, skipping empty pieces so a missing namespace (or a
+// pre-drill-in empty resource type) doesn't leave a dangling separator.
 func (m Model) leftSegment() string {
 	var parts []string
 	if m.context != "" {
@@ -155,6 +162,9 @@ func (m Model) leftSegment() string {
 	}
 	if m.namespace != "" {
 		parts = append(parts, m.namespace)
+	}
+	if m.resourceType != "" {
+		parts = append(parts, m.resourceType)
 	}
 	if m.filter != "" {
 		parts = append(parts, m.filter)
