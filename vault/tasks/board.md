@@ -7,7 +7,13 @@ _Last updated: 2026-07-22 — M2-10 landed: the confirm/prompt modal component (
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-11a** Config write-back primitives (`internal/config`)
+      status: in-progress | owner: claude-opus | added: 2026-07-22
+      notes: First slice of M2-11. Add `Config.Save(io.Writer)` + `SaveFile(path)`
+      round-tripping the config through `sigs.k8s.io/yaml` (the `keys:` field today),
+      creating the parent dir and writing atomically (temp + rename). Config-package
+      only, fully testable, no app wiring. Prereq for both M2-11b persistence and the
+      M2-12 migration write. Depends on: M2-01c.
 
 ## Blocked
 
@@ -70,13 +76,16 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-11** Config: menu customization persistence (`internal/config`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: Extend the M2-01c `Config` struct with the menu/browse fields
-      (customized resource list, order, last namespace) + `Save`/`SaveFile`
-      (round-trips the `keys:` field). Wire the app to load on start and persist
-      changes. `UnmarshalStrict` already rejects typos (D49). Depends on: M2-05,
-      M2-07.
+- [ ] **M2-11b** Config: last-namespace persistence + load-on-start wiring (`internal/config`, `internal/tui`)
+      status: todo | owner: — | added: 2026-07-22
+      notes: Remainder of M2-11 after M2-11a landed the `Save`/`SaveFile` primitives
+      and D89 narrowed the scope (the "customized resource list/order" half is already
+      delivered by the per-context menu files, D83 — do **not** duplicate it into
+      `config.yaml`). Wire the app to load config on start and persist the last-used
+      namespace across restarts (last namespace is per-context, so decide where it
+      lives — per-context menu file vs a new per-context store — when taking this;
+      record it). `UnmarshalStrict` already rejects typos (D49). Depends on: M2-11a,
+      M2-08c.
 
 - [ ] **M2-12** Legacy config migration (`internal/config/migrate.go`)
       status: todo | owner: — | added: 2026-07-19
