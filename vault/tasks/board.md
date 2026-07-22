@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — FB-left-pane-width-smaller landed: the left menu p
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-status-bar-top** Feedback (`2026-07-22-status-bar-top-and-optional-left-panel`): move the status bar to the top and show the browsed resource type; triage the optional/popup-menu + command-palette direction into board tasks.
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
