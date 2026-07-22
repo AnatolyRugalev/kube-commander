@@ -7,7 +7,8 @@ _Last updated: 2026-07-22 — fixed CRD list/watch (metav1.ParameterCodec, D103)
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): resources without the `watch` verb (e.g. componentstatuses) blank the view / retry-loop — degrade to list-only
+      status: in-progress | owner: claude-opus | added: 2026-07-22
 
 ## Blocked
 
