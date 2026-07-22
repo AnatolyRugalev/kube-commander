@@ -7,7 +7,16 @@ _Last updated: 2026-07-22 — M2-11b-2 landed: last-namespace load-on-start + pe
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-12a** Legacy config migration — parse + map primitive (`internal/config/migrate.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+      notes: First slice of the split M2-12 (mirrors the M2-11a primitive-first
+      rhythm). Config-package only, no app wiring. Parse the legacy `~/.kubecom.yaml`
+      (old protobuf-yaml shape: `menu` + `currentTheme`/`themes`) and produce a new
+      `*Config` + human-readable migration notes. Key constraint: a faithful offline
+      field-migration is impossible — the old `menu` entries have `group`/`kind` but
+      no `version`/`resource` (which `MenuResource` requires and only discovery can
+      resolve), and v1 has no runtime theming. So migration detects the legacy file,
+      carries what it can, and reports what the user must redo manually.
 
 ## Blocked
 
@@ -70,12 +79,15 @@ messages.
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
-- [ ] **M2-12** Legacy config migration (`internal/config/migrate.go`)
-      status: todo | owner: — | added: 2026-07-19
-      notes: One-shot migration from the old `~/.kubecom.yaml` (protobuf-yaml theme
-      config) to the new plain-YAML config on first start; malformed/legacy files
-      degrade gracefully (principle 3), never block start. Inspect the `master`
-      branch's `config/` for the old shape. Depends on: M2-11.
+- [ ] **M2-12b** Legacy config migration — launcher wiring (first-start, one-shot)
+      status: todo | owner: — | added: 2026-07-22
+      notes: Second slice of the split M2-12. Wire the M2-12a `Migrate` primitive into
+      the launcher: on first start, if the new `config.yaml` is absent and a legacy
+      `~/.kubecom.yaml` exists, run migration, write the new config once (so it is
+      one-shot — a present new config suppresses re-migration), and surface the
+      migration notes to the user (startup toast via `WithStartupError`, and/or log).
+      A malformed/unreadable legacy file degrades to no migration and never blocks
+      start (principle 3). Depends on: M2-12a.
 
 - [ ] **M2-13** Column sort (#85)
       status: todo | owner: — | added: 2026-07-19
