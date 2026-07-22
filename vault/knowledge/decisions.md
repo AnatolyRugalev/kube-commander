@@ -2585,3 +2585,20 @@ any GroupVersion (it is what `client-go/dynamic` uses) and works for built-ins t
 so it is a strict improvement. Hermetic tests must exercise a **non-built-in** GVR
 (the built-in-only fixtures are why this slipped past `make check`). A future leg
 must not switch this back.
+
+### D104 — Watch degrades to list-only polling for kinds that can't be watched
+**2026-07-22.** `watchLoop` (`internal/kube/watch.go`) must not blank the view or
+retry-loop when a kind lacks the `watch` verb (e.g. `componentstatuses`, some
+aggregated/legacy resources). Two guards, both required (principle 3 — degrade,
+don't blank):
+1. **Verb-driven:** if `r.Verbs` is **known and lacks `watch`** it never opens a
+   stream — it re-Lists on `listPollInterval` (10s), emitting a fresh RESET each
+   cycle. An **empty** verb set is *unknown* (the seed menu carries no verbs
+   pre-discovery), so it is **not** treated as list-only — it still tries to watch
+   so cold-start browsing of core kinds stays live.
+2. **Server-driven backstop:** if the watch request itself returns **405
+   MethodNotAllowed** (`apierrors.IsMethodNotSupported`), the loop flips to that
+   same list-only polling mode instead of paced-retrying the doomed watch or
+   parading the ERROR — this covers incomplete discovery verbs (guard 1's empty
+   case) at runtime. A future leg must keep both guards; don't reintroduce the
+   unconditional watch that blanked list-only kinds.

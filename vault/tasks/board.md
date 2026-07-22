@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — fixed CRD list/watch (metav1.ParameterCodec, D103); one dogfood feedback item remains (watch-unsupported list-only). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-22 — watch degrades to list-only for un-watchable kinds (D104); feedback inbox empty. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): resources without the `watch` verb (e.g. componentstatuses) blank the view / retry-loop — degrade to list-only
-      status: in-progress | owner: claude-opus | added: 2026-07-22
+_(none)_
 
 ## Blocked
 
@@ -84,6 +83,7 @@ _Remaining M3–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): kinds without the `watch` verb (e.g. componentstatuses) blanked/retry-looped — watch degrades to list-only polling — done 2026-07-22 (D104)
 - [x] **FB-crd-parametercodec** Feedback (high, `2026-07-22-crd-list-watch-parametercodec`): non-built-in CRD groups failed list/watch — encode params with `metav1.ParameterCodec` — done 2026-07-22 (D103)
 - [x] **FB-nav-menu-popup** Left menu as an overlay popup — **retired won't-do-separately**, folded into the resource palette (D96 slice 3, resolving the… — done 2026-07-22 (D81, D96, D99, D100, D101)
 - [x] **FB-nav-resource-palette** Command-palette resource switch (k9s `:`-style), D96 slice 2 / D100 — done 2026-07-22 (D11, D65, D95, D96, D99, D100)

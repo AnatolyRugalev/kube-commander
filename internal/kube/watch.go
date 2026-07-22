@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
@@ -52,6 +53,11 @@ const (
 	// watchRetryBackoff paces reconnect attempts so a server that immediately
 	// closes every watch cannot spin the loop hot.
 	watchRetryBackoff = 2 * time.Second
+	// listPollInterval paces the re-List loop for kinds that don't support the
+	// watch verb (e.g. componentstatuses) — there is no stream to follow, so the
+	// loop degrades to periodic List+RESET so the rows stay fresh-ish without
+	// hammering the apiserver (principle 3: degrade, don't blank).
+	listPollInterval = 10 * time.Second
 )
 
 // errExpired signals the watch's resourceVersion is too old — HTTP 410 Gone /
@@ -89,6 +95,13 @@ func (c *Clients) Watch(ctx context.Context, r Resource, namespace string, opts 
 // clean end or a resumable drop reconnects from the last resourceVersion with no
 // re-list; a 410/Expired forces a fresh List (and RESET). It owns `out` and
 // closes it on return.
+//
+// Kinds that don't advertise the watch verb (e.g. componentstatuses, some
+// aggregated/legacy resources) never open a stream: the loop degrades to a
+// periodic List+RESET (`listPollInterval`) so the rows still show instead of
+// blanking the view (principle 3). If discovery's verbs are incomplete and the
+// server itself rejects the watch as unsupported (405 MethodNotAllowed), the loop
+// flips to that same list-only mode rather than paced-retrying the doomed watch.
 func (c *Clients) watchLoop(ctx context.Context, client rest.Interface, r Resource, namespace string, opts metav1.ListOptions, out chan<- WatchEvent) {
 	defer close(out)
 
@@ -96,6 +109,11 @@ func (c *Clients) watchLoop(ctx context.Context, client rest.Interface, r Resour
 		rv       string
 		cols     []Column
 		needList = true
+		// listOnly: this kind can't be watched, so poll-refresh via List instead.
+		// Only when the discovered verbs are *known* and lack "watch" — an empty
+		// verb set is "unknown" (e.g. the seed menu, pre-discovery), so we still
+		// try to watch and let the server's 405 (below) degrade it if it can't.
+		listOnly = len(r.Verbs) > 0 && !hasVerb(r.Verbs, "watch")
 	)
 	for {
 		if ctx.Err() != nil {
@@ -120,8 +138,25 @@ func (c *Clients) watchLoop(ctx context.Context, client rest.Interface, r Resour
 			needList = false
 		}
 
+		if listOnly {
+			// No watch stream to follow — re-List on an interval so the rows
+			// stay fresh without a stream (and without a retry-looping error).
+			if !sleep(ctx, listPollInterval) {
+				return
+			}
+			needList = true
+			continue
+		}
+
 		stream, err := openTableWatch(ctx, client, r.GVR, r.Namespaced, namespace, opts, rv)
 		if err != nil {
+			// Discovery verbs said watch was allowed but the server disagrees
+			// (405): degrade to list-only polling rather than parade the error
+			// and retry a watch that will never succeed.
+			if apierrors.IsMethodNotSupported(err) {
+				listOnly = true
+				continue
+			}
 			if !sendWatch(ctx, out, WatchEvent{Type: WatchError, Err: err}) {
 				return
 			}

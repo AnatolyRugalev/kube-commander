@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -210,7 +211,8 @@ func TestWatchLoopListThenWatch(t *testing.T) {
 	defer cancel()
 
 	out := make(chan WatchEvent, watchChanBuffer)
-	go c.watchLoop(ctx, client, Resource{GVR: gvr, Namespaced: true}, "web", metav1.ListOptions{}, out)
+	r := Resource{GVR: gvr, Namespaced: true, Verbs: metav1.Verbs{"get", "list", "watch"}}
+	go c.watchLoop(ctx, client, r, "web", metav1.ListOptions{}, out)
 
 	reset := recvEvent(t, out)
 	if reset.Type != WatchReset {
@@ -234,6 +236,129 @@ func TestWatchLoopListThenWatch(t *testing.T) {
 		// Drain any already-buffered events, then require closure.
 		for range out { //nolint:revive // draining to closure
 		}
+	}
+}
+
+// TestWatchLoopListOnlyKindListsWithoutWatching drives the loop for a Resource
+// whose discovered Verbs lack "watch" (e.g. componentstatuses). It must List and
+// emit the rows as a RESET but never open a watch stream (no watch=true request)
+// and never parade a watch ERROR — degrade to list-only, don't blank (principle 3).
+func TestWatchLoopListOnlyKindListsWithoutWatching(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "componentstatuses"}
+
+	var (
+		mu        sync.Mutex
+		watchSeen bool
+	)
+	client := &restfake.RESTClient{
+		NegotiatedSerializer: scheme.Codecs,
+		GroupVersion:         gvr.GroupVersion(),
+		VersionedAPIPath:     "/api/v1",
+		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Query().Get("watch") == "true" {
+				mu.Lock()
+				watchSeen = true
+				mu.Unlock()
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(bytes.NewReader([]byte(podsTableJSON))),
+			}, nil
+		}),
+	}
+
+	c := &Clients{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Verbs list/get but not watch — the loop must not try to stream.
+	r := Resource{GVR: gvr, Namespaced: false, Verbs: metav1.Verbs{"get", "list"}}
+	out := make(chan WatchEvent, watchChanBuffer)
+	go c.watchLoop(ctx, client, r, "", metav1.ListOptions{}, out)
+
+	reset := recvEvent(t, out)
+	if reset.Type != WatchReset {
+		t.Fatalf("first event = %q, want RESET (list-only kinds still show rows)", reset.Type)
+	}
+	if len(reset.Rows) != 2 {
+		t.Fatalf("RESET carried %d rows, want 2 from the List", len(reset.Rows))
+	}
+
+	// No further event may arrive promptly: the loop is now parked on the poll
+	// interval, not parading a watch error. (Any ERROR would come back at once.)
+	select {
+	case ev := <-out:
+		t.Fatalf("unexpected event %q after RESET; list-only must not parade errors", ev.Type)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	mu.Lock()
+	seen := watchSeen
+	mu.Unlock()
+	if seen {
+		t.Error("a watch=true request was made for a kind without the watch verb")
+	}
+
+	cancel()
+	for range out { //nolint:revive // drain to closure
+	}
+}
+
+// TestWatchLoopServerRejectsWatchDegradesToListOnly covers incomplete discovery
+// verbs: the Resource claims "watch", but the server rejects the watch with 405
+// MethodNotAllowed. The loop must show the listed rows (RESET) and then degrade to
+// list-only rather than retry-loop the doomed watch or parade the ERROR.
+func TestWatchLoopServerRejectsWatchDegradesToListOnly(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "componentstatuses"}
+	const notSupported = `{"kind":"Status","apiVersion":"v1","status":"Failure",` +
+		`"message":"watch is not supported on resources of kind \"componentstatuses\"",` +
+		`"reason":"MethodNotAllowed","code":405}`
+
+	client := &restfake.RESTClient{
+		NegotiatedSerializer: scheme.Codecs,
+		GroupVersion:         gvr.GroupVersion(),
+		VersionedAPIPath:     "/api/v1",
+		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Query().Get("watch") == "true" {
+				return &http.Response{
+					StatusCode: http.StatusMethodNotAllowed,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(bytes.NewReader([]byte(notSupported))),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(bytes.NewReader([]byte(podsTableJSON))),
+			}, nil
+		}),
+	}
+
+	c := &Clients{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Verbs claim watch, but the server will refuse it (405).
+	r := Resource{GVR: gvr, Namespaced: false, Verbs: metav1.Verbs{"get", "list", "watch"}}
+	out := make(chan WatchEvent, watchChanBuffer)
+	go c.watchLoop(ctx, client, r, "", metav1.ListOptions{}, out)
+
+	reset := recvEvent(t, out)
+	if reset.Type != WatchReset {
+		t.Fatalf("first event = %q, want RESET", reset.Type)
+	}
+
+	// The 405 must have degraded the loop to list-only: no ERROR event surfaces,
+	// the loop parks on the poll interval instead of retrying the watch.
+	select {
+	case ev := <-out:
+		t.Fatalf("unexpected event %q after RESET; a 405 watch must degrade, not parade/retry", ev.Type)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	cancel()
+	for range out { //nolint:revive // drain to closure
 	}
 }
 
