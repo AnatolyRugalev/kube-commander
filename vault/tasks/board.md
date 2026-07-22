@@ -7,7 +7,16 @@ _Last updated: 2026-07-22 — M2-11b-1 landed: per-context state store (`config.
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`)
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-22
+      notes: Second slice of M2-11b after M2-11b-1 landed the per-context state store
+      (`config.State`/`StatePath`/`Load`+`SaveStateFile`, D90). Wire the launcher to
+      load the active context's state on start and use its `LastNamespace` as the
+      initial watch scope when `-n` is not given; add a namespace-persister seam to the
+      app (mirroring `WithWatcher`/`WithNamespaceLister`) so `handleNamespaceSelected`
+      persists the newly-picked namespace through `State.SaveFile`. Decide the -n-vs-state
+      precedence (explicit `-n` should win for that run) and record it. Depends on:
+      M2-11b-1, M2-08c.
 
 ## Blocked
 
@@ -69,17 +78,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **M2-11b-2** Config: last-namespace load-on-start + persist wiring (`internal/tui`, `cmd/kubecom`)
-      status: todo | owner: — | added: 2026-07-22
-      notes: Second slice of M2-11b after M2-11b-1 landed the per-context state store
-      (`config.State`/`StatePath`/`Load`+`SaveStateFile`, D90). Wire the launcher to
-      load the active context's state on start and use its `LastNamespace` as the
-      initial watch scope when `-n` is not given; add a namespace-persister seam to the
-      app (mirroring `WithWatcher`/`WithNamespaceLister`) so `handleNamespaceSelected`
-      persists the newly-picked namespace through `State.SaveFile`. Decide the -n-vs-state
-      precedence (explicit `-n` should win for that run) and record it. Depends on:
-      M2-11b-1, M2-08c.
 
 - [ ] **M2-12** Legacy config migration (`internal/config/migrate.go`)
       status: todo | owner: — | added: 2026-07-19
