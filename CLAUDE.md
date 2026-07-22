@@ -71,8 +71,9 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
    (`vault/journal/YYYY-MM-DD.N.md`); move the task to `done` (or split the
    remainder back to Backlog); tick any milestone exit criteria now met and keep
    the milestone's `Status:` line current. **The journal is the changelog** —
-   `Status:` and the board's `Last updated:` line are one sentence each, never a
-   per-leg narrative (D67).
+   `Status:`, the board's `Last updated:` line, and each **Done entry** are one
+   line each, never a per-leg narrative (D67/D102). A Done entry is `- [x] **ID**
+   <short title> — done YYYY-MM-DD (Dnn, …)`.
 8. **Commit + push** to `v1` with a clear message. Stop; report the next suggested leg.
 
 ## Decision authority

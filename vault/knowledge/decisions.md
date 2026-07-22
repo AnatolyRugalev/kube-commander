@@ -2559,3 +2559,14 @@ visible navigator, hurting discoverability of a tool the human dogfoods (princip
 6/8) — the menu stays shown by default. Reopening this needs a new decision that
 supersedes D99/D100, not a revival of FB-nav-menu-popup. **Consequence:** the M2
 FB-nav-* line (D96) is complete; no menu-popup work remains.
+
+### D102 — Board Done entries are one line too (extends D67)
+**2026-07-22.** D67 kept the milestone `Status:` and the board `Last updated:`
+lines terse, but did not name the **Done list**, so legs drifted back to writing a
+full journal-length paragraph per completed item — the board reswelled from ~17KB
+to ~50KB (35 of 93 Done entries over 400 chars), and it is read on every Orient.
+Rule: a **Done entry is one line** — `- [x] **ID** <short title> — done
+YYYY-MM-DD (Dnn, …)` — no prose, no continuation lines; the full detail is the
+journal entry for that leg. Same for backlog `notes:` — keep them short. Re-collapsed
+the Done section on this leg (93 items preserved, ~50KB → ~17KB). Wired into
+CLAUDE.md step 7 and the `do-rewrite-leg` skill.

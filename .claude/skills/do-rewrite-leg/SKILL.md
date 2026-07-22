@@ -102,8 +102,10 @@ if not already in context. Follow these steps in order.
 
 ## 7. Journal, board & milestone
 
-- Move the task to **Done** in `board.md` (with the date). If part remains,
-  split the remainder back into Backlog as new small items.
+- Move the task to **Done** in `board.md` as a **one-line entry** — `- [x] **ID**
+  <short title> — done YYYY-MM-DD (Dnn, …)` — never a paragraph; the full detail
+  lives in the journal (D67/D102). If part remains, split the remainder back into
+  Backlog as new small items.
 - Write one new journal file `vault/journal/YYYY-MM-DD.N.md` (`N` = next unused
   sequence number for today) using the template below.
 - Update the active **milestone file**: tick exit criteria now met; keep its
