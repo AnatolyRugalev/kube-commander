@@ -7,7 +7,11 @@ _Last updated: 2026-07-23 — M3-04 wired the describe viewer (reusing D108's vi
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
+      (M1-07c) streamed into the M3-01 viewer via a msg pump (D53). Pods first.
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+      notes: Reuse the channel→msg pump shape (M2-02/D53) so log lines stream without
+      blocking `Update`; a generation guard drops a superseded stream's lines.
 
 ## Blocked
 
@@ -92,11 +96,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
-      (M1-07c) streamed into the M3-01 viewer via a msg pump (D53). Pods first.
-      status: todo | owner: — | added: 2026-07-22
-      notes: Reuse the channel→msg pump shape (M2-02/D53) so log lines stream without
-      blocking `Update`; a generation guard drops a superseded stream's lines.
 - [ ] **M3-06** Logs viewer — follow + reconnect: wire the M1-07d reconnecting/resuming
       follow into the viewer; a `logs.follow` toggle; auto-scroll while following.
       status: todo | owner: — | added: 2026-07-22
