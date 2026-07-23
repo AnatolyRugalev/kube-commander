@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — FB-gray-out-empty-types: dismissed the soft/low "g
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (`kube.Cordon`/`Uncordon`) — direct,
+      idempotent, no confirm — on Node rows; result to the status bar. status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -83,9 +84,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (`kube.Cordon`/`Uncordon`) — direct,
-      idempotent, no confirm — on Node rows; result to the status bar. status: todo | owner: — | added: 2026-07-23
-      notes: Split from M3-11. Mirrors the D117 seam pattern but simpler (no modal — idempotent).
 - [ ] **M3-11b** Drain wired (`kube.Drain`, confirm) on Node rows: the long eviction loop
       reports progress to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-23
       notes: Split from M3-11 (M3-11a does cordon/uncordon). The confirm reuses D115/D117;
