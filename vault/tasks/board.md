@@ -3,11 +3,13 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-06 made the logs viewer follow + reconnect (opens tailing, `logs.follow`/`f` toggle, pause-on-up-scroll, D110); M3-07 (container picker + pod-owning kinds) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-06 made the logs viewer follow + reconnect (opens tailing, `logs.follow`/`f` toggle, pause-on-up-scroll, D110); M3-07 split into M3-07a (container picker) + M3-07b (pod-owning kinds), M3-07a in progress. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-07a** Logs — container picker for multi-container pods (#84): resolve a pod's
+      containers before streaming; a multi-container pod prompts which to stream (reuse the
+      picker), a single-container pod streams directly. status: in-progress | owner: claude-opus | added: 2026-07-23
 
 ## Blocked
 
@@ -92,9 +94,11 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-07** Logs — container picker + pod-owning kinds (#84): container picker for
-      multi-container pods (reuse the picker); enable logs for Deployment/RS/StatefulSet/
-      DaemonSet/Job by resolving a backing pod. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-07b** Logs — pod-owning kinds (#84): enable logs for Deployment/RS/StatefulSet/
+      DaemonSet/Job/RC by resolving a backing pod (label selector → newest ready pod), then
+      reuse M3-07a's container resolution/picker. status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-07. Depends on M3-07a's container-resolution plumbing. The
+      non-pod "not yet available" degrade in openLogsViewer is replaced by pod resolution.
 - [ ] **M3-08** Secret viewer (#89): reveal/base64-decode secret data with an explicit
       reveal gesture + copy-to-clipboard. status: todo | owner: — | added: 2026-07-22
       notes: Values start hidden; reveal is deliberate. Copy reuses the mouse/clipboard
