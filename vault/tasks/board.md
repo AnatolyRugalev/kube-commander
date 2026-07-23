@@ -7,7 +7,12 @@ _Last updated: 2026-07-23 — M3-09 wired delete through the confirm modal: the 
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-14b** teatest coverage: modal confirm flow
+      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-23
+      notes: Split from M2-14. Drive the delete confirm flow with teatest/v2 (M0-05
+      harness) end-to-end through the running program — `x` → modal opens → enter
+      (accept, runs the delete) / esc (decline) — asserting the modal opens, captures
+      input, and resolves. Unblocked by M3-09/D115 (delete wired into the app shell).
 
 ## Blocked
 
@@ -69,15 +74,6 @@ messages.
       `menu.Reconcile` (M2-05b) — no-op/seed on total failure (principle 3);
       `spinner.TickMsg` forwarded to the status bar; `app.quit` cancels the pass.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
-
-- [ ] **M2-14b** teatest coverage: modal confirm flow
-      status: todo | owner: — | added: 2026-07-20
-      notes: Split from M2-14 — the modal-flow half. Drive a modal confirm flow
-      with teatest/v2 (M0-05 harness). **Now unblocked**: M3-09 (D115) wired the
-      confirm modal into the app shell (the delete flow: `x` → confirm → accept runs
-      the delete), so a full-program teatest can now drive `x` → enter (accept) /
-      esc (decline) through the running program and assert the modal opens, captures
-      input, and resolves.
 
 ### M3 — Actions & Viewers
 M3 makes kubecom *operate*: in-TUI viewers + the curated action set, killing nearly
