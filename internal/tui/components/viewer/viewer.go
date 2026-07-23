@@ -56,6 +56,7 @@ type Model struct {
 	viewport viewport.Model
 	kind     string // stamped into ClosedMsg
 	title    string // shown above the content
+	content  string // the accumulated text (so AppendContent can grow it in place)
 
 	active bool // whether the viewer is shown (captures input) — "" View when false
 	width  int  // full screen width  (the box is centered within it)
@@ -86,9 +87,32 @@ func (m *Model) SetTitle(t string) { m.title = t }
 // SetContent replaces the displayed text and resets the scroll position to the top,
 // so opening a viewer always starts at the first line regardless of a prior scroll.
 func (m *Model) SetContent(text string) {
+	m.content = text
 	m.viewport.SetContent(text)
 	m.viewport.GotoTop()
 }
+
+// AppendContent adds one more block of text (a single log line, M3-05) to the
+// displayed content without disturbing the scroll position: the accumulated buffer
+// grows and the viewport re-renders in place, so a reader scrolled partway through a
+// streaming log stays where they are. It is the streaming counterpart to SetContent
+// (which resets to the top for a fresh open). Auto-scroll-while-following is a later
+// slice's concern (M3-06 uses AtBottom); this cut only grows the buffer. An empty
+// first block seeds the buffer with the block; subsequent blocks are newline-joined.
+func (m *Model) AppendContent(line string) {
+	if m.content == "" {
+		m.content = line
+	} else {
+		m.content += "\n" + line
+	}
+	m.viewport.SetContent(m.content)
+}
+
+// Empty reports whether the viewer has no content yet — used by the streaming logs
+// viewer (M3-05) to decide whether a terminal stream error should close an
+// empty box (an open failure, nothing shown yet) or leave the partial lines already
+// on screen (a mid-stream drop after some output).
+func (m Model) Empty() bool { return m.content == "" }
 
 // SetSize records the full screen size; the box is sized and centered within it, and
 // the inner viewport is sized to the box's content area.

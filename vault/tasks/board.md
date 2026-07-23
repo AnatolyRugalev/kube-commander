@@ -3,15 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-04 wired the describe viewer (reusing D108's viewer seam pattern); M3-05 (logs viewer, initial) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-05 wired the initial logs viewer (streaming pump, pods first, D109); M3-06 (logs follow + reconnect) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
-      (M1-07c) streamed into the M3-01 viewer via a msg pump (D53). Pods first.
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
-      notes: Reuse the channel→msg pump shape (M2-02/D53) so log lines stream without
-      blocking `Update`; a generation guard drops a superseded stream's lines.
+_(none)_
 
 ## Blocked
 
@@ -140,6 +136,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-05** Logs viewer wired (initial, no follow): `res.logs`/`L` → `LogStreamer` seam (`kube.Logs`, M1-07c) streamed line-by-line into the shared M3-01 viewer via a gen-tagged pump (D53); pods first, `stopLogStream` teardown, open-failure closes/mid-stream error keeps lines — done 2026-07-23 (D109)
 - [x] **M3-04** Describe viewer wired: `res.describe`/`d` → `Describer` seam (`kube.Describe`, M1-07b) → shared M3-01 viewer overlay; async render + gen-guard (shared viewerGen), error degrades to a toast — done 2026-07-23 (D108)
 - [x] **M3-03** YAML viewer wired: `res.yaml`/`y` → `YAMLGetter` seam (`kube.GetYAML`) → shared M3-01 viewer overlay; async fetch + gen-guard, error degrades to a toast — done 2026-07-23 (D108)
 - [x] **M3-02** Action surface + M3 keymap: actions menu (Kind `"action"` picker) + direct keys (`a d y L e x`) → typed `rowActionMsg` intent — done 2026-07-23 (D107)

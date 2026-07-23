@@ -2697,3 +2697,30 @@ everything else — and the viewer composites over the base browse view via
 Constraints a later viewer leg must not silently break: reach kube through a seam
 (no client in tui), keep the fetch async + gen-guarded, degrade on error, and capture
 input the same way rather than adding a bespoke key path.
+
+### D109 — Streaming viewer legs pump a kube channel line-by-line into the shared viewer via a gen-tagged pump, cancel on close/supersede, and append preserving scroll
+**2026-07-23 (M3-05).** The logs viewer is the first *streaming* viewer, so it
+extends D108's one-shot-fetch shape with the channel→msg pump rhythm (M2-02/D53) that
+M3-06 (follow) and M3-07 (container picker / pod-owning kinds) build on. The
+constraints a later streaming-viewer leg must not silently break: (1) the stream is
+reached through a **channel-returning seam** on the shell (`LogStreamer.Logs`, wired
+with `WithLogStreamer`; `*kube.Clients` satisfies it) — as with the D108 seams the tui
+package constructs no client and a model without it is viewer-inert. (2) The channel is
+pumped **one item per `tea.Cmd`** (`logPump` in `msg.go`, mirroring `watchPump`): a
+`LogLineMsg` appends and re-issues the pump, a `LogClosedMsg` (EOF of a non-following
+stream) ends the chain, a stream error is bridged to a classified `ErrorMsg`. `Update`
+never blocks on more than one receive. (3) Each pumped item rides the **shared
+`viewerGen`** wrapped in a `logMsg{gen,msg}` (the watchMsg pattern), so a line from a
+superseded viewer — closed, or replaced by a newer viewer of *any* kind — is dropped
+and its chain stopped. (4) The stream runs on a **cancellable context torn down by
+`stopLogStream`** — called before starting a new stream, when the viewer closes, when a
+one-shot (YAML/describe) viewer supersedes it, and on quit — the log twin of the watch's
+cancel-on-reselect. (5) Lines append via **`viewer.AppendContent`, which preserves the
+scroll position** (no auto-scroll — a reader scrolled partway stays put); follow-mode
+auto-scroll (via `viewer.AtBottom`) is M3-06's concern. (6) Error handling refines
+D108 for a stream: an **open failure closes the empty box** (nothing shown yet) + a
+toast, but a **mid-stream error after lines already showed keeps them on screen**
+(`viewer.Empty` gates this) — partial output is not discarded. Scope: **pods first** —
+the pod-owning kinds the actions menu lists for logs degrade to a "not yet available"
+toast until M3-07 resolves their backing pod; `LogOptions{}` (whole log, default
+container, no follow) is the initial cut.

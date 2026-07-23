@@ -112,6 +112,42 @@ func watchPump(ch <-chan kube.WatchEvent) tea.Cmd {
 	}
 }
 
+// LogLineMsg is one log line from a pod's log stream (M3-05), carried into the
+// update loop verbatim from a kube.LogEvent's Line (the trailing newline stripped —
+// the viewer joins lines itself). A stream error is *not* delivered as a LogLineMsg —
+// the log pump bridges it to a classified ErrorMsg — so a consumer of LogLineMsg only
+// ever sees a data line.
+type LogLineMsg struct {
+	Line string
+}
+
+// LogClosedMsg tells the model a Logs channel has closed and the pump has stopped —
+// for a non-following stream (M3-05) this is the normal end of the log (EOF). Like
+// WatchClosedMsg it is the pump's terminal message: the model must not re-issue the
+// pump after receiving it, or it would busy-loop receiving from a closed channel.
+type LogClosedMsg struct{}
+
+// logPump reads one event from a kube.Logs channel and returns it as a message: a
+// line becomes a LogLineMsg, a terminal error event (Err set) becomes a classified
+// ErrorMsg, and a closed channel becomes a LogClosedMsg. The model re-issues logPump
+// after each LogLineMsg to pull the next line (one receive per Cmd — Update never
+// blocks on more than one, M2-02/D53), and stops re-issuing on LogClosedMsg or the
+// bridged ErrorMsg (a LogEvent with Err set is always the stream's last event, so the
+// channel closes right after; the model does not re-pump past an error). The whole
+// receive happens inside the returned tea.Cmd, off the update goroutine.
+func logPump(ch <-chan kube.LogEvent) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return LogClosedMsg{}
+		}
+		if ev.Err != nil {
+			return NewErrorMsg("logs", ev.Err)
+		}
+		return LogLineMsg{Line: ev.Line}
+	}
+}
+
 // discoveryPump reads the single result from a kube.StartDiscovery channel and
 // returns it as a DiscoveryReadyMsg (the discovery channel delivers exactly once
 // on a cap-1 buffer, D8). A total failure is carried inside the result — the

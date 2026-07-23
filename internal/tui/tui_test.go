@@ -2567,3 +2567,256 @@ func TestDescribeViewerStaleRenderDropped(t *testing.T) {
 		t.Fatal("a stale-generation render should be dropped, not shown")
 	}
 }
+
+// fakeLogStreamer is a hermetic LogStreamer: it hands back a channel preloaded with a
+// preset sequence of log events (then closed, the EOF of a non-following stream), or
+// fails the open with err. It records the object it was asked for so a test can assert
+// the selected row was addressed.
+type fakeLogStreamer struct {
+	events []kube.LogEvent // delivered in order, then the channel closes
+	err    error           // an open failure (Logs returns it, no channel)
+	calls  int
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeLogStreamer) Logs(_ context.Context, ref kube.ObjectRef, _ kube.LogOptions) (<-chan kube.LogEvent, error) {
+	f.calls++
+	f.gotRef = ref
+	if f.err != nil {
+		return nil, f.err
+	}
+	ch := make(chan kube.LogEvent, len(f.events))
+	for _, e := range f.events {
+		ch <- e
+	}
+	close(ch)
+	return ch, nil
+}
+
+// logsViewerModel drills into a pods table (Kind Pod) with a live row and the given
+// streamer wired, so a viewer test has a concrete selected row and a stream seam.
+// Mirrors yamlViewerModel/describeViewerModel.
+func logsViewerModel(t *testing.T, streamer LogStreamer) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithLogStreamer(streamer))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// logsKey is the default res.logs direct key (`L`).
+var logsKey = tea.Key{Code: 'L', Text: "L"}
+
+// drainLogPump runs the log-pump chain to completion: it delivers each logMsg the
+// pump produces back through Update, appending a line and re-issuing the pump, until
+// a non-line pump message (a closed channel or a bridged error) ends the chain,
+// returning the final model. Only a LogLineMsg continues the chain — a closed/error
+// message is delivered (so its effect, e.g. the error toast, is applied) and then the
+// loop stops rather than following the resulting cmd (which is not a pump: a nil for a
+// clean close, the toast's clear-timer for an error). It is the test-side equivalent
+// of Bubble Tea servicing the pump.
+func drainLogPump(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for i := 0; cmd != nil; i++ {
+		if i > 100 {
+			t.Fatal("log pump did not terminate")
+		}
+		lm, ok := cmd().(logMsg)
+		if !ok {
+			break // not a pump message — stop draining.
+		}
+		next, nextCmd := m.Update(lm)
+		m = next.(Model)
+		if _, isLine := lm.msg.(LogLineMsg); !isLine {
+			break // closed/error message delivered; the chain ends here.
+		}
+		cmd = nextCmd
+	}
+	return m
+}
+
+// TestLogsViewerOpensAndStreamsContent drives the whole M3-05 path: the `L` key
+// dispatches the logs intent, handling it opens the viewer and starts the Logs stream
+// against the selected row, and each streamed line is appended into the viewer content.
+func TestLogsViewerOpensAndStreamsContent(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "line one"}, {Line: "line two"}}}
+	m := logsViewerModel(t, s)
+
+	// `L` dispatches the intent; feed it back in to open the viewer + start the stream.
+	_, cmd := press(t, m, logsKey)
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("res.logs produced %T, want rowActionMsg", cmd())
+	}
+	if intent.Action != rowActionLogs {
+		t.Fatalf("intent action = %q, want %q", intent.Action, rowActionLogs)
+	}
+	next, pumpCmd := m.Update(intent)
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("handling the logs intent should open the viewer")
+	}
+	if pumpCmd == nil {
+		t.Fatal("opening the logs viewer should issue a log-pump command")
+	}
+	if s.calls != 1 {
+		t.Fatalf("Logs called %d times, want 1", s.calls)
+	}
+	if s.gotRef.Name == "" {
+		t.Error("Logs should be addressed to the selected row's object")
+	}
+
+	m = drainLogPump(t, m, pumpCmd)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should stay open across the stream")
+	}
+	view := m.View().Content
+	if !strings.Contains(view, "line one") || !strings.Contains(view, "line two") {
+		t.Fatalf("viewer should show the streamed log lines: %q", view)
+	}
+}
+
+// TestLogsViewerCloses proves nav.back (esc) dismisses the viewer and tears the log
+// stream down (its ClosedMsg, delivered back through Update, hides it).
+func TestLogsViewerCloses(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
+	m := logsViewerModel(t, s)
+	_, cmd := press(t, m, logsKey)
+	next, pumpCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	m = drainLogPump(t, m, pumpCmd)
+	if !m.viewer.Active() {
+		t.Fatal("precondition: the viewer should be open")
+	}
+
+	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if closeCmd == nil {
+		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
+	}
+	next, _ = m.Update(closeCmd())
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("delivering the viewer's ClosedMsg should hide it")
+	}
+	if m.logCh != nil || m.logCancel != nil {
+		t.Fatal("closing the viewer should tear down the log stream")
+	}
+}
+
+// TestLogsViewerOpenErrorDegrades proves a Logs open failure closes the viewer and
+// surfaces a transient status-bar toast rather than leaving an empty box (D74).
+func TestLogsViewerOpenErrorDegrades(t *testing.T) {
+	s := &fakeLogStreamer{err: errors.New("forbidden")}
+	m := logsViewerModel(t, s)
+	_, cmd := press(t, m, logsKey)
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("an open failure should not leave the viewer showing an empty box")
+	}
+	if !m.status.HasError() {
+		t.Fatal("an open failure should surface a status-bar toast")
+	}
+}
+
+// TestLogsViewerStreamErrorKeepsShownLines proves a mid-stream error after some lines
+// already showed leaves those lines on screen (the viewer stays open) while surfacing
+// a toast — a streaming viewer degrades without discarding partial output.
+func TestLogsViewerStreamErrorKeepsShownLines(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "before the drop"}, {Err: errors.New("connection reset")}}}
+	m := logsViewerModel(t, s)
+	_, cmd := press(t, m, logsKey)
+	next, pumpCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	m = drainLogPump(t, m, pumpCmd)
+	if !m.viewer.Active() {
+		t.Fatal("a mid-stream error after output should leave the viewer open")
+	}
+	if !strings.Contains(m.View().Content, "before the drop") {
+		t.Fatal("the lines shown before the error should remain on screen")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a stream error should surface a status-bar toast")
+	}
+}
+
+// TestLogsViewerInertWithoutStreamer proves the logs intent is a no-op with no
+// streamer wired (the viewer never opens) — the pre-wiring app and hermetic tests
+// stay inert.
+func TestLogsViewerInertWithoutStreamer(t *testing.T) {
+	m := openPodTable(t, "Pod") // no WithLogStreamer
+	_, cmd := press(t, m, logsKey)
+	next, pumpCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("the logs viewer should not open without a streamer wired")
+	}
+	if pumpCmd != nil {
+		t.Fatal("no streamer → no log-pump command")
+	}
+}
+
+// TestLogsViewerNonPodDegrades proves the "Pods first" scope: logs on a pod-owning
+// kind the actions menu also lists (here a Deployment) degrades to a toast rather than
+// opening an empty viewer — resolving a backing pod is a later slice (M3-07).
+func TestLogsViewerNonPodDegrades(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithLogStreamer(s))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("deployments", "Deployment")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg))
+	m = next.(Model)
+
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	next, _ = m.Update(rowActionMsg{Action: rowActionLogs, Resource: m.current, Object: row.Object})
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("logs on a non-pod kind should not open the viewer yet (M3-07)")
+	}
+	if s.calls != 0 {
+		t.Fatal("logs on a non-pod kind should not call the streamer")
+	}
+	if !m.status.HasError() {
+		t.Fatal("logs on a non-pod kind should surface a not-yet-available toast")
+	}
+}
+
+// TestLogsViewerStaleLineDropped proves the generation guard: a line from a stream
+// whose viewer was superseded by a newer open is dropped rather than appended to the
+// current content.
+func TestLogsViewerStaleLineDropped(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "stale line"}}}
+	m := logsViewerModel(t, s)
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	intent := rowActionMsg{Action: rowActionLogs, Resource: m.current, Object: row.Object}
+
+	// First open → gen-N stream; grab its first pumped line without delivering it.
+	next, firstPump := m.Update(intent)
+	m = next.(Model)
+	stale, ok := firstPump().(logMsg)
+	if !ok {
+		t.Fatalf("first pump produced %T, want logMsg", firstPump())
+	}
+
+	// Second open → viewerGen bumps; the first stream's line is now stale.
+	next, _ = m.Update(intent)
+	m = next.(Model)
+	if stale.gen == m.viewerGen {
+		t.Fatalf("precondition: stale line gen %d should differ from current %d", stale.gen, m.viewerGen)
+	}
+
+	next, _ = m.Update(stale) // deliver the stale line
+	m = next.(Model)
+	if strings.Contains(m.View().Content, "stale line") {
+		t.Fatal("a stale-generation log line should be dropped, not shown")
+	}
+}

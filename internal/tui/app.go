@@ -99,6 +99,21 @@ type Describer interface {
 	Describe(r kube.Resource, ref kube.ObjectRef) (string, error)
 }
 
+// LogStreamer is the narrow slice of the kube layer the shell needs to open the
+// logs viewer (M3-05): stream a pod's logs onto a channel until the passed context
+// is cancelled or the stream ends (M1-07c's Logs). *kube.Clients satisfies it. As
+// with the other viewer seams the shell depends on this interface, not the concrete
+// client, so the tui package never constructs a client and the model is driveable in
+// hermetic tests with a fake streamer. A model built without one (the default) is
+// logs-viewer-inert: the res.logs action is a no-op (the viewer never opens), which
+// is what the pre-wiring app and the non-viewer tests want. Unlike the one-shot YAML
+// and describe seams the result is a channel the shell pumps line by line (D53), so a
+// large or slow log never blocks the update loop; a cancellable context tears the
+// stream's goroutine down when the viewer closes or a newer viewer supersedes it.
+type LogStreamer interface {
+	Logs(ctx context.Context, ref kube.ObjectRef, opts kube.LogOptions) (<-chan kube.LogEvent, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -152,6 +167,13 @@ func WithYAMLGetter(g YAMLGetter) Option {
 // action is inert (the viewer never opens).
 func WithDescriber(d Describer) Option {
 	return func(m *Model) { m.describer = d }
+}
+
+// WithLogStreamer wires the kube client the shell uses to stream a pod's logs into
+// the read-only logs viewer (M3-05). Without it the res.logs action is inert (the
+// viewer never opens).
+func WithLogStreamer(s LogStreamer) Option {
+	return func(m *Model) { m.logStreamer = s }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -303,6 +325,18 @@ type Model struct {
 	yamlGetter YAMLGetter
 	describer  Describer
 	viewerGen  int
+
+	// logStreamer streams a pod's logs into the same shared viewer (M3-05; nil → the
+	// res.logs action is inert). Unlike the one-shot YAML/describe fetches a log stream
+	// is a channel pumped line by line (D53): logCh is re-read to pull the next line and
+	// logCancel tears the stream's goroutine down when the viewer closes or a newer
+	// viewer supersedes it. Each pumped line rides the shared viewerGen (a logMsg), so a
+	// line from a superseded stream — one whose viewer was closed or replaced — is
+	// dropped rather than appended to the wrong content, exactly as watchGen guards the
+	// table watch. logCh/logCancel are touched only from the single-threaded update loop.
+	logStreamer LogStreamer
+	logCh       <-chan kube.LogEvent
+	logCancel   context.CancelFunc
 
 	// resByLabel maps each entry of the resource command palette (resPicker) back to
 	// its kube.Resource. The picker is generic over strings (D65), so the palette
@@ -582,10 +616,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
 
+	case logMsg:
+		return m.handleLogMsg(msg)
+
 	case viewer.ClosedMsg:
-		// The viewer dismissed itself (nav.back). Hide it and return focus to the
-		// browse view underneath (the table keeps whatever selection it had).
+		// The viewer dismissed itself (nav.back). Hide it, tear down any live log
+		// stream feeding it, and return focus to the browse view underneath (the table
+		// keeps whatever selection it had).
 		m.viewer.Hide()
+		m.stopLogStream()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -993,6 +1032,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openYAMLViewer(msg)
 	case rowActionDescribe:
 		return m.openDescribeViewer(msg)
+	case rowActionLogs:
+		return m.openLogsViewer(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
@@ -1028,6 +1069,7 @@ func (m Model) openYAMLViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.yamlGetter == nil {
 		return m, nil
 	}
+	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
 	m.viewerGen++
 	gen := m.viewerGen
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
@@ -1081,6 +1123,7 @@ func (m Model) openDescribeViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.describer == nil {
 		return m, nil
 	}
+	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
 	m.viewerGen++
 	gen := m.viewerGen
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
@@ -1109,6 +1152,115 @@ func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) 
 	}
 	m.viewer.SetContent(msg.content)
 	return m, nil
+}
+
+// logMsg wraps one message from the log pump with the viewerGen of the viewer open
+// that started the stream. The model tags every pumped line this way so a line from a
+// stream already superseded — its viewer closed, or a newer viewer (of any kind)
+// opened and bumped viewerGen — can be dropped rather than appended to the current
+// content, and its pump chain stopped (mirroring watchMsg's stale-delta guard). gen
+// must equal the model's viewerGen or the message is ignored.
+type logMsg struct {
+	gen int
+	msg tea.Msg
+}
+
+// openLogsViewer opens the read-only logs viewer over the selected row's object
+// (M3-05) and starts streaming its logs into the shared viewer. It shows the viewer
+// immediately (empty, so the gesture feels instant) and pumps the log channel line by
+// line off the update loop (D53), appending each line as it lands — a large or slow
+// log never blocks Update. With no streamer wired it is logs-viewer-inert (a no-op).
+// This first cut is pods only ("Pods first"): the pod-owning kinds (Deployment/RS/…)
+// the actions menu also lists for logs resolve their backing pod in a later slice
+// (M3-07), so a non-pod kind degrades to the "not yet available" toast here rather
+// than opening an empty viewer. The stream runs on a cancellable context torn down
+// when the viewer closes or a newer viewer supersedes it (stopLogStream); its lines
+// are tagged with a fresh viewerGen so a superseded stream's lines are dropped
+// (handleLogMsg). An open failure degrades to a status-bar toast + closes the viewer
+// (D74); a mid-stream error after some lines already showed leaves them on screen.
+func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.logStreamer == nil {
+		return m, nil
+	}
+	if msg.Resource.GVK.Kind != "Pod" {
+		// Pod-owning kinds (Deployment/RS/StatefulSet/DaemonSet/Job/RC) are listed by
+		// the actions menu for logs but resolving their backing pod is M3-07; keep the
+		// routing observable until then rather than opening an empty viewer.
+		label := "logs for " + msg.Resource.GVK.Kind
+		return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
+	}
+	m.stopLogStream() // cancel any prior stream before starting a new one.
+	m.viewerGen++
+	gen := m.viewerGen
+	m.viewer.SetTitle("Logs " + viewerTitle(msg.Resource, msg.Object))
+	m.viewer.SetContent("") // clear any prior object's content before the stream lands.
+	m.viewer.Show()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ref := msg.Object
+	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{})
+	if err != nil {
+		cancel()
+		m.viewer.Hide()
+		return m, m.surfaceError(NewErrorMsg("logs", err))
+	}
+	m.logCancel = cancel
+	m.logCh = ch
+	return m, m.pumpLogs(gen)
+}
+
+// pumpLogs issues the tea.Cmd that pulls the next line from the current log channel,
+// tagged with the viewer generation that started the stream so a line from a
+// superseded viewer is recognisable as stale. It returns nil when no stream is active.
+func (m Model) pumpLogs(gen int) tea.Cmd {
+	ch := m.logCh
+	if ch == nil {
+		return nil
+	}
+	pump := logPump(ch)
+	return func() tea.Msg { return logMsg{gen: gen, msg: pump()} }
+}
+
+// handleLogMsg applies one log-pump message to the viewer and re-issues the pump to
+// pull the next line — the one-receive-per-Cmd loop that keeps Update from ever
+// blocking (M2-02/D53). A message from a superseded stream (wrong gen) or one that
+// arrives after the viewer closed is dropped and its chain stops. A line is appended
+// preserving the scroll position (AppendContent); a closed channel ends the chain (the
+// normal EOF of a non-following stream); a bridged stream error degrades — it surfaces
+// a transient status-bar toast (D74) and closes the viewer only if nothing was shown
+// yet (an open failure), leaving any partial lines on screen for a mid-stream drop.
+func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
+	if l.gen != m.viewerGen || !m.viewer.Active() {
+		return m, nil // superseded viewer or closed; drop and stop this chain.
+	}
+	switch inner := l.msg.(type) {
+	case LogLineMsg:
+		m.viewer.AppendContent(inner.Line)
+		return m, m.pumpLogs(l.gen)
+	case LogClosedMsg:
+		m.stopLogStream() // stream ended (EOF); release the context, keep the lines shown.
+		return m, nil
+	case ErrorMsg:
+		empty := m.viewer.Empty()
+		m.stopLogStream()
+		if empty {
+			m.viewer.Hide() // nothing shown yet (an open failure) → close the empty box.
+		}
+		return m, m.surfaceError(inner)
+	}
+	return m, nil
+}
+
+// stopLogStream cancels the live log stream (if any) and clears its handles, so the
+// stream's goroutine is torn down and no stale line is pumped. Safe to call with no
+// stream active. Called before starting a new stream, when the viewer closes, and on
+// quit — the log twin of the watch's cancel-on-reselect teardown.
+func (m *Model) stopLogStream() {
+	if m.logCancel != nil {
+		m.logCancel()
+		m.logCancel = nil
+	}
+	m.logCh = nil
 }
 
 // viewerTitle labels the viewer with the browsed kind and the object's name
@@ -1572,6 +1724,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		if m.discoveryCancel != nil {
 			m.discoveryCancel() // and any in-flight discovery pass.
 		}
+		m.stopLogStream() // and any in-flight log stream.
 		return m, tea.Quit
 	case keymap.ActionHelp:
 		m.help.Toggle()
@@ -1647,6 +1800,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionQuit {
 		m.viewer.Hide()
+		m.stopLogStream() // tear down any log stream feeding the viewer.
 		return m, nil
 	}
 	var cmd tea.Cmd
