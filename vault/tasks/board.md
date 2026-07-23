@@ -7,7 +7,10 @@ _Last updated: 2026-07-23 — M3-08b completed the secret viewer: a per-entry cu
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-09** Delete action wired through the confirm modal (root owns a `modal.Model`,
+      `ShowConfirm` on the selected row → `ConfirmedMsg` → `kube.Delete`, result to the
+      status bar; accept = `nav.drillIn`, decline = `nav.back`, no raw y/n). **Unblocks M2-14b.**
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
