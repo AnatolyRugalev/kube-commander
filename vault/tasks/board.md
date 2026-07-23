@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-02 landed the actions surface + M3 keymap (D107
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-03** YAML viewer wired: actions-menu/keymap → `kube.GetYAML` (M1-07a) →
+      M3-01 viewer overlay. status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -92,10 +93,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-03** YAML viewer wired: actions-menu/keymap → `kube.GetYAML` (M1-07a) →
-      M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
-      notes: Simplest viewer (single fetch, no stream) — the first end-to-end proof of
-      the M3-01+M3-02 pair against a real object. Errors degrade to a status-bar toast (D74).
 - [ ] **M3-04** Describe viewer wired: actions-menu/keymap → `kube.Describe` (M1-07b)
       → M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
 - [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
