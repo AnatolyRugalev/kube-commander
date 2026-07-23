@@ -7,7 +7,9 @@ _Last updated: 2026-07-23 — M3-10 wired scale (prompt → `kube.Scale`) + roll
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (`kube.Cordon`/`Uncordon`) — direct,
+      idempotent, no confirm — on Node rows; result to the status bar.
+      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -83,9 +85,11 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-11** Cordon/uncordon + drain wired: cordon/uncordon (`kube.Cordon`/`Uncordon`)
-      and drain (`kube.Drain`, confirm) on nodes; the long eviction loop reports progress
-      to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-22
+- [ ] **M3-11b** Drain wired (`kube.Drain`, confirm) on Node rows: the long eviction loop
+      reports progress to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-11 (M3-11a did cordon/uncordon). The confirm reuses D115/D117;
+      the drain progress stream (mirror the log pump) + cancel-on-quit is the new piece. A
+      DrainOptions default (Force/IgnoreDaemonSets/DeleteEmptyDirData) must be decided in the leg.
 - [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
       menu (#83). status: todo | owner: — | added: 2026-07-22
 - [ ] **M3-13** Port-forward manager: start (prompt ports) via the M1-08 background
