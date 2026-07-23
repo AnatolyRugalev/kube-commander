@@ -2990,3 +2990,33 @@ not silently contradict:
    exposes only `DrainStream`. The channel closing cleanly (no terminal `Err` event) is
    the success terminator; a terminal `DrainEvent{Err}` degrades to an error toast (D74).
    The next long-running mutating/streaming action should follow this shape.
+
+### D122 — Port-forward is a tracked background handle observed via messages, not a stream pump; started behind a ports prompt, Pod-only for now, cancel-all-on-exit
+**2026-07-23 (M3-13a).** The Port-forward action starts M1-08's `kube.PortForward`
+(SPDY to the pod's portforward subresource, no kubectl binary, D2) as a **long-lived
+background handle** the shell tracks — a different shape from both the one-shot mutating
+actions (D120) and the drain's step-by-step pump (D121). Constraints a later leg must
+not silently contradict:
+1. **The shell depends on an interface, not the concrete handle.** `ActiveForward`
+   (`Ready`/`Done`/`Err`/`Ports`/`Stop`) is the subset of `*kube.PortForward` the shell
+   observes, so the flow is hermetically fakeable (D18). Because `kube.Clients.PortForward`
+   returns the concrete `*kube.PortForward` (which satisfies `ActiveForward`) rather than
+   the interface, the launcher adapts it with `tui.PortForwarderFunc` — the first seam that
+   needs an adapter rather than `*kube.Clients` satisfying it directly. `PortForwarder`
+   (`WithPortForwarder`, nil → inert).
+2. **Lifecycle flows in through messages, never a mutex (principle 1) and never a
+   channel *pump*.** Unlike the drain (one receive per Cmd re-issued each step), a
+   forward has two lifecycle edges: a Cmd `select`s on `Ready()`/`Done()` and reports
+   the first (`forwardReadyMsg`/`forwardDoneMsg`); on ready the shell reads the bound
+   `Ports()` and arms a second Cmd blocking on `Done()`. Each forward carries a stable
+   `id` so a message finds its entry after the tracked slice shifts.
+3. **Started behind a ports prompt; several concurrent forwards are tracked.** The
+   prompt reuses the D117 prompt-mode modal + shared `mutateRes`/`mutateRef` stash
+   (only one modal is up at a time). Multiple forwards accumulate in `m.forwards`;
+   **all are cancelled on quit** (`stopForwards`, cancel-on-exit — the third teardown
+   after `stopLogStream`/`stopDrain`). Each forward owns a `context.CancelFunc`;
+   cancelling it ends the forward cleanly (the kube handle bridges ctx→Stop), so a
+   user/quit stop reads as a neutral notice, a transport failure as an error toast (D74).
+4. **Pod-only for M3-13a.** `kube.PortForward` posts to the pod subresource, so the
+   Port-forward action applies to `Pod` only for now; the listing panel + stop-individual
+   is M3-13b, and Service→endpoint-pod resolution (mirroring `PodForOwner`, D112) is M3-13c.

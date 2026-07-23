@@ -2110,10 +2110,10 @@ func kindResource(resource, kind string) kube.Resource {
 
 // openPodTable drills into a pods resource (Kind Pod) with a two-row live table so
 // an actions test has a concrete selected row to act on.
-func openPodTable(t *testing.T, kind string) Model {
+func openPodTable(t *testing.T, kind string, opts ...Option) Model {
 	t.Helper()
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
-	m := sizedWith(t, WithWatcher(fw))
+	m := sizedWith(t, append([]Option{WithWatcher(fw)}, opts...)...)
 	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", kind)})
 	m = next.(Model)
 	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
@@ -4856,5 +4856,204 @@ func TestProgramModalConfirmDeclineNoDelete(t *testing.T) {
 	}
 	if row, _ := fm.table.SelectedRow(); row.Object.Name != "pod-b" {
 		t.Fatalf("the swallowed nav must not move the selection: selected %q, want pod-b", row.Object.Name)
+	}
+}
+
+// fakeForward is a hermetic ActiveForward: its Ready/Done channels are driven by the
+// test, Ports returns preset bound pairs, and Stop is counted. It stands in for
+// *kube.PortForward so the M3-13a flow is exercised without a cluster (D18).
+type fakeForward struct {
+	readyCh chan struct{}
+	doneCh  chan struct{}
+	ports   []kube.ForwardedPort
+	err     error
+	stops   int
+}
+
+func newFakeForward() *fakeForward {
+	return &fakeForward{readyCh: make(chan struct{}), doneCh: make(chan struct{})}
+}
+
+func (f *fakeForward) Ready() <-chan struct{}              { return f.readyCh }
+func (f *fakeForward) Done() <-chan struct{}               { return f.doneCh }
+func (f *fakeForward) Err() error                          { return f.err }
+func (f *fakeForward) Ports() ([]kube.ForwardedPort, error) { return f.ports, nil }
+func (f *fakeForward) Stop()                               { f.stops++ }
+
+// fakePortForwarder is a hermetic PortForwarder: it records the ctx/ref/ports it was
+// asked to forward (so a test can assert the selected row and the parsed specs) and
+// returns a preset handle or error.
+type fakePortForwarder struct {
+	err      error
+	calls    int
+	gotCtx   context.Context
+	gotRef   kube.ObjectRef
+	gotPorts []string
+	handle   *fakeForward
+}
+
+func (f *fakePortForwarder) PortForward(ctx context.Context, ref kube.ObjectRef, ports []string) (ActiveForward, error) {
+	f.calls++
+	f.gotCtx = ctx
+	f.gotRef = ref
+	f.gotPorts = ports
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.handle, nil
+}
+
+// TestPortForwardOpensPrompt proves the port-forward intent opens the ports prompt
+// over the selected Pod (naming the target) rather than forwarding outright.
+func TestPortForwardOpensPrompt(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	row, _ := m.table.SelectedRow()
+
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+	if !m.modal.Active() || !m.modal.Prompting() {
+		t.Fatal("the port-forward intent should open the modal in prompt mode")
+	}
+	if m.modal.Kind() != portForwardModalKind {
+		t.Fatalf("modal kind = %q, want %q", m.modal.Kind(), portForwardModalKind)
+	}
+	if pf.calls != 0 {
+		t.Fatal("opening the prompt must not start a forward yet")
+	}
+	if view := m.View().Content; !strings.Contains(view, row.Object.Name) {
+		t.Fatalf("the port-forward prompt should name the target row %q: %q", row.Object.Name, view)
+	}
+}
+
+// TestPortForwardLifecycle drives start → ready → done: submitting the ports starts a
+// tracked forward addressed to the selected Pod with the parsed specs; a Ready fills
+// its bound ports; a Done removes it.
+func TestPortForwardLifecycle(t *testing.T) {
+	fw := newFakeForward()
+	fw.ports = []kube.ForwardedPort{{Local: 8080, Remote: 80}}
+	pf := &fakePortForwarder{handle: fw}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	row, _ := m.table.SelectedRow()
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+
+	next, cmd := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "8080:80"})
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("submitting the prompt should hide the modal")
+	}
+	if cmd == nil {
+		t.Fatal("a submitted port-forward should issue the wait command")
+	}
+	if pf.calls != 1 {
+		t.Fatalf("PortForward should be called once, got %d", pf.calls)
+	}
+	if pf.gotRef.Name != row.Object.Name {
+		t.Fatalf("PortForward addressed %q, want the selected row %q", pf.gotRef.Name, row.Object.Name)
+	}
+	if len(pf.gotPorts) != 1 || pf.gotPorts[0] != "8080:80" {
+		t.Fatalf("PortForward ports = %v, want [8080:80]", pf.gotPorts)
+	}
+	if len(m.forwards) != 1 {
+		t.Fatalf("the started forward should be tracked, got %d", len(m.forwards))
+	}
+	id := m.forwards[0].id
+
+	// Ready fills the bound ports and re-arms the Done wait.
+	next, readyCmd := m.Update(forwardReadyMsg{id: id})
+	m = next.(Model)
+	if !m.forwards[0].ready {
+		t.Fatal("Ready should mark the forward ready")
+	}
+	if got := m.forwards[0].bound; len(got) != 1 || got[0].Local != 8080 || got[0].Remote != 80 {
+		t.Fatalf("Ready should fill the bound ports, got %v", got)
+	}
+	if readyCmd == nil {
+		t.Fatal("Ready should re-arm the Done wait")
+	}
+
+	// Done removes the forward and reports it stopped.
+	next, _ = m.Update(forwardDoneMsg{id: id})
+	m = next.(Model)
+	if len(m.forwards) != 0 {
+		t.Fatalf("Done should drop the ended forward, got %d", len(m.forwards))
+	}
+}
+
+// TestPortForwardBlankPromptDegrades proves a blank ports entry surfaces an error and
+// starts nothing.
+func TestPortForwardBlankPromptDegrades(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "   "})
+	m = next.(Model)
+	if pf.calls != 0 {
+		t.Fatal("a blank ports entry must not start a forward")
+	}
+	if len(m.forwards) != 0 {
+		t.Fatal("a blank ports entry must track no forward")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a blank ports entry should surface a status-bar error")
+	}
+}
+
+// TestPortForwardStartErrorDegrades proves a start error (a malformed spec kube
+// rejects, or a transport failure) degrades to a toast and tracks no forward.
+func TestPortForwardStartErrorDegrades(t *testing.T) {
+	pf := &fakePortForwarder{err: errors.New("bad port spec")}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "not-a-port"})
+	m = next.(Model)
+	if pf.calls != 1 {
+		t.Fatalf("PortForward should be attempted once, got %d", pf.calls)
+	}
+	if len(m.forwards) != 0 {
+		t.Fatal("a failed start must track no forward")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a failed start should surface a status-bar error")
+	}
+}
+
+// TestPortForwardInertWithoutForwarder proves the port-forward intent is a no-op with
+// no forwarder wired: no prompt opens and no command is issued.
+func TestPortForwardInertWithoutForwarder(t *testing.T) {
+	m := openPodTable(t, "Pod") // no WithPortForwarder
+	next, cmd := dispatchRowAction(t, m, rowActionPortForward)
+	if next.modal.Active() {
+		t.Fatal("with no forwarder wired the port-forward intent must not open a modal")
+	}
+	if cmd != nil {
+		t.Fatal("with no forwarder wired the port-forward intent must not issue a command")
+	}
+}
+
+// TestPortForwardStopsOnQuit proves every running forward is torn down when the app
+// quits (cancel-on-exit): the forward's context is done and the set is cleared.
+func TestPortForwardStopsOnQuit(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "80"})
+	m = next.(Model)
+	if pf.gotCtx == nil {
+		t.Fatal("the forward should have been started with a context")
+	}
+	if pf.gotCtx.Err() != nil {
+		t.Fatal("the forward context should be live before quit")
+	}
+
+	// Quit tears down every forward via stopForwards (cancel-on-exit); the cancel acts
+	// on the context the forwarder captured regardless of the returned model copy.
+	quit, _ := m.handleAction(keymap.ActionQuit)
+	if pf.gotCtx.Err() == nil {
+		t.Fatal("quitting should cancel the running forward's context")
+	}
+	if len(quit.(Model).forwards) != 0 {
+		t.Fatal("quitting should clear the tracked forwards")
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -137,6 +138,9 @@ func runTUI(opts runOptions) error {
 		tui.WithCordoner(clients),
 		tui.WithSuspender(clients),
 		tui.WithDrainer(clients),
+		tui.WithPortForwarder(tui.PortForwarderFunc(func(ctx context.Context, ref kube.ObjectRef, ports []string) (tui.ActiveForward, error) {
+			return clients.PortForward(ctx, ref, ports)
+		})),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),

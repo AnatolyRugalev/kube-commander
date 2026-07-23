@@ -82,7 +82,7 @@ var rowActions = []rowActionMeta{
 	{rowActionDrain, "Drain", "", kindIn("Node")},
 	{rowActionSuspend, "Suspend", "", kindIn("CronJob")},
 	{rowActionResume, "Resume", "", kindIn("CronJob")},
-	{rowActionPortForward, "Port-forward", "", kindIn("Pod", "Service")},
+	{rowActionPortForward, "Port-forward", "", kindIn("Pod")},
 	{rowActionExec, "Exec shell", "", kindIn("Pod")},
 	{rowActionEdit, "Edit", keymap.ActionEdit, canEdit},
 	{rowActionDelete, "Delete", keymap.ActionDelete, canDelete},

@@ -234,6 +234,44 @@ type Drainer interface {
 	DrainStream(ctx context.Context, nodeRes kube.Resource, node kube.ObjectRef, opts kube.DrainOptions) <-chan kube.DrainEvent
 }
 
+// ActiveForward is the behaviour the shell drives on a running background
+// port-forward (M3-13a) — the subset of *kube.PortForward's lifecycle it observes:
+// Ready fires once the local listeners are up (after which Ports reports the bound
+// local:remote pairs), Done fires when forwarding ends (Err then reports the cause,
+// nil for a clean stop), and Stop tears it down. It is an interface, not the
+// concrete handle, so the flow is driveable in hermetic tests with a fake (D18);
+// *kube.PortForward satisfies it.
+type ActiveForward interface {
+	Ready() <-chan struct{}
+	Done() <-chan struct{}
+	Err() error
+	Ports() ([]kube.ForwardedPort, error)
+	Stop()
+}
+
+// PortForwarder is the narrow slice of the kube layer the shell needs to start a
+// background port-forward (M3-13a): forward local ports to the selected Pod via
+// M1-08's PortForward, returning an ActiveForward the shell observes and stops. The
+// dial happens on the handle's own goroutine, so this never blocks the update loop
+// (principle 4); the shell learns of readiness/termination through messages, never a
+// mutex (principle 1). A model built without one is forward-inert: the Port-forward
+// action is a no-op. Because kube.Clients.PortForward returns the concrete
+// *kube.PortForward (which satisfies ActiveForward) rather than the interface, the
+// launcher adapts it with PortForwarderFunc.
+type PortForwarder interface {
+	PortForward(ctx context.Context, ref kube.ObjectRef, ports []string) (ActiveForward, error)
+}
+
+// PortForwarderFunc adapts a plain function to a PortForwarder, so the launcher can
+// wrap kube.Clients.PortForward — whose concrete *kube.PortForward return type does
+// not satisfy the interface method's ActiveForward return directly — in one line.
+type PortForwarderFunc func(ctx context.Context, ref kube.ObjectRef, ports []string) (ActiveForward, error)
+
+// PortForward calls the wrapped function, satisfying PortForwarder.
+func (f PortForwarderFunc) PortForward(ctx context.Context, ref kube.ObjectRef, ports []string) (ActiveForward, error) {
+	return f(ctx, ref, ports)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -357,6 +395,14 @@ func WithSuspender(s Suspender) Option {
 // confirm modal never opens).
 func WithDrainer(d Drainer) Option {
 	return func(m *Model) { m.drainer = d }
+}
+
+// WithPortForwarder wires the kube client the shell uses to start a background
+// port-forward to the selected Pod once its ports prompt is submitted (M3-13a).
+// Without it the Port-forward action is inert (the prompt never opens). The launcher
+// passes a PortForwarderFunc wrapping kube.Clients.PortForward.
+func WithPortForwarder(p PortForwarder) Option {
+	return func(m *Model) { m.portForwarder = p }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -648,6 +694,20 @@ type Model struct {
 	drainRes    kube.Resource
 	drainRef    kube.ObjectRef
 	drainLabel  string
+
+	// portForwarder starts a background port-forward to the selected Pod once its
+	// ports prompt is submitted (M3-13a; nil → the Port-forward action is inert, no
+	// prompt opens). Its target is stashed in mutateRes/mutateRef between the prompt
+	// opening and the submit landing, like scale (only one modal is ever up at a time).
+	// forwards holds the running forwards; each carries its own context cancel and the
+	// ActiveForward handle. Lifecycle (Ready → bound ports, Done → removal) flows in
+	// through messages, never a mutex (principle 1); forwardSeq stamps a stable id on
+	// each so a Ready/Done message finds its entry after the slice shifts. On quit
+	// stopForwards cancels them all (cancel-on-exit). The listing panel + stop-individual
+	// is M3-13b; all fields are touched only from the single-threaded update loop.
+	portForwarder PortForwarder
+	forwards      []*forward
+	forwardSeq    int
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -958,6 +1018,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case drainMsg:
 		return m.handleDrainMsg(msg)
+
+	case forwardReadyMsg:
+		return m.handleForwardReady(msg)
+
+	case forwardDoneMsg:
+		return m.handleForwardDone(msg)
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
@@ -1424,6 +1490,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.runSuspend(msg, false)
 	case rowActionDrain:
 		return m.openDrainConfirm(msg)
+	case rowActionPortForward:
+		return m.openPortForwardPrompt(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}
@@ -1483,6 +1551,8 @@ func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd)
 		return m.runRolloutRestart()
 	case drainModalKind:
 		return m.runDrain()
+	case portForwardModalKind:
+		return m.runPortForward(msg.Value)
 	}
 	return m, nil
 }
@@ -1843,6 +1913,185 @@ func (m *Model) stopDrain() {
 		m.drainCancel = nil
 	}
 	m.drainCh = nil
+}
+
+// portForwardModalKind stamps the ports prompt the Port-forward action opens, so
+// modal.ConfirmedMsg routes back to runPortForward (M3-13a) — the same one-modal-
+// many-kinds dispatch scale/delete/drain use.
+const portForwardModalKind = "portForward"
+
+// forward is one running background port-forward the shell tracks (M3-13a): the
+// stable id, the human label for the status message (and the M3-13b panel), the
+// requested port specs, the bound local:remote pairs (filled once Ready fires), the
+// ActiveForward handle, and the context cancel that stops it. Held in m.forwards and
+// torn down by stopForwards on quit. Touched only from the single-threaded update loop.
+type forward struct {
+	id     int
+	label  string
+	specs  []string
+	bound  []kube.ForwardedPort
+	handle ActiveForward
+	cancel context.CancelFunc
+	ready  bool
+}
+
+// forwardReadyMsg reports that a started forward's local listeners are up (its bound
+// ports are then readable). forwardDoneMsg reports it ended — a clean stop (Err nil)
+// or a fatal transport error. Both carry the forward's stable id so the handler finds
+// its entry regardless of slice order.
+type forwardReadyMsg struct{ id int }
+type forwardDoneMsg struct {
+	id  int
+	err error
+}
+
+// openPortForwardPrompt opens the modal's ports prompt over the selected Pod before
+// forwarding it (M3-13a). It stashes the target (resource + the row's ObjectRef) in
+// the shared mutate stash and shows a single-line prompt; nav.drillIn submits the
+// typed spec (ConfirmedMsg with Value → runPortForward), nav.back cancels — no raw
+// keys, the field captures input (D11). With no port-forwarder wired it is inert (a
+// no-op), exactly as the Port-forward entry is absent from a non-Pod kind's menu.
+func (m Model) openPortForwardPrompt(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.portForwarder == nil {
+		return m, nil
+	}
+	m.mutateRes = msg.Resource
+	m.mutateRef = msg.Object
+	target := viewerTitle(msg.Resource, msg.Object)
+	cmd := m.modal.ShowPrompt(portForwardModalKind, "Port-forward", "Ports for "+target+" (e.g. 8080:80):", "")
+	return m, cmd
+}
+
+// runPortForward parses the submitted port spec and starts the stashed forward off
+// the update loop. The specs use kubectl's syntax ("8080:80", "80", ":80"), space-
+// or comma-separated for several at once. A blank entry, or a spec kube.PortForward
+// rejects (empty/malformed), degrades to a transient error toast (D74) and starts
+// nothing — the modal is already hidden, so the user re-invokes to retry. On success
+// the forward is tracked and its lifecycle observed via waitForward. Inert if the
+// forwarder went away or no target is stashed.
+func (m Model) runPortForward(value string) (tea.Model, tea.Cmd) {
+	if m.portForwarder == nil || m.mutateRef.Name == "" {
+		return m, nil
+	}
+	label := viewerTitle(m.mutateRes, m.mutateRef)
+	specs := strings.Fields(strings.ReplaceAll(value, ",", " "))
+	if len(specs) == 0 {
+		return m, m.surfaceError(ErrorMsg{Context: "port-forward " + label + ": enter at least one port (e.g. 8080:80)"})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h, err := m.portForwarder.PortForward(ctx, m.mutateRef, specs)
+	if err != nil {
+		cancel()
+		return m, m.surfaceError(NewErrorMsg("port-forward "+label, err))
+	}
+	m.forwardSeq++
+	f := &forward{id: m.forwardSeq, label: label, specs: specs, handle: h, cancel: cancel}
+	m.forwards = append(m.forwards, f)
+	return m, tea.Batch(m.surfaceNotice("port-forward "+label+"…"), waitForward(f.id, h))
+}
+
+// waitForward blocks on the forward's Ready and Done channels and reports whichever
+// fires first — a forwardReadyMsg once listeners are up, or a forwardDoneMsg if it
+// ended before ever becoming ready (a dial failure). It runs on the Cmd's own
+// goroutine (principle 1) so the update loop never blocks; handleForwardReady re-arms
+// the Done wait via waitForwardDone.
+func waitForward(id int, h ActiveForward) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-h.Ready():
+			return forwardReadyMsg{id: id}
+		case <-h.Done():
+			return forwardDoneMsg{id: id, err: h.Err()}
+		}
+	}
+}
+
+// waitForwardDone blocks until the (already-ready) forward ends and reports the
+// cause. Issued after Ready so a live forward's eventual stop/failure is observed.
+func waitForwardDone(id int, h ActiveForward) tea.Cmd {
+	return func() tea.Msg {
+		<-h.Done()
+		return forwardDoneMsg{id: id, err: h.Err()}
+	}
+}
+
+// handleForwardReady marks the forward ready, reads its bound local:remote ports,
+// flashes a neutral status notice naming them, and arms the Done wait. A forward
+// removed before this lands (a race with stopForwards) is dropped. A Ports read error
+// is non-fatal — the forward is up; the notice just falls back to the requested specs.
+func (m Model) handleForwardReady(msg forwardReadyMsg) (tea.Model, tea.Cmd) {
+	f := m.forwardByID(msg.id)
+	if f == nil {
+		return m, nil
+	}
+	f.ready = true
+	if bound, err := f.handle.Ports(); err == nil {
+		f.bound = bound
+	}
+	return m, tea.Batch(m.surfaceNotice("forwarding "+f.label+" "+forwardPortsLabel(f)), waitForwardDone(f.id, f.handle))
+}
+
+// handleForwardDone removes the ended forward and reports the outcome: a fatal
+// transport error degrades to a transient error toast (D74), a clean stop to a neutral
+// notice. Cancelling the forward's context (stopForwards, or a future stop gesture)
+// ends it cleanly, so a user-stopped forward reads as a plain notice.
+func (m Model) handleForwardDone(msg forwardDoneMsg) (tea.Model, tea.Cmd) {
+	f := m.forwardByID(msg.id)
+	if f == nil {
+		return m, nil
+	}
+	label := f.label
+	f.cancel() // release the context bridged to Stop; idempotent.
+	m.removeForward(msg.id)
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("port-forward "+label, msg.err))
+	}
+	return m, m.surfaceNotice("stopped port-forward " + label)
+}
+
+// forwardByID returns the tracked forward with the given id, or nil if it is gone.
+func (m Model) forwardByID(id int) *forward {
+	for _, f := range m.forwards {
+		if f.id == id {
+			return f
+		}
+	}
+	return nil
+}
+
+// removeForward drops the forward with the given id, preserving the order of the rest
+// (the M3-13b panel lists them in start order).
+func (m *Model) removeForward(id int) {
+	out := make([]*forward, 0, len(m.forwards))
+	for _, f := range m.forwards {
+		if f.id != id {
+			out = append(out, f)
+		}
+	}
+	m.forwards = out
+}
+
+// stopForwards cancels every running forward and clears the set, so all background
+// forward goroutines are torn down on quit (cancel-on-exit). Safe with none active.
+func (m *Model) stopForwards() {
+	for _, f := range m.forwards {
+		f.cancel()
+	}
+	m.forwards = nil
+}
+
+// forwardPortsLabel renders a forward's ports for the status notice: the bound
+// local:remote pairs once Ready has filled them (e.g. "localhost:8080 → 80"), else the
+// requested specs as typed.
+func forwardPortsLabel(f *forward) string {
+	if len(f.bound) == 0 {
+		return strings.Join(f.specs, " ")
+	}
+	parts := make([]string, len(f.bound))
+	for i, p := range f.bound {
+		parts[i] = fmt.Sprintf("localhost:%d → %d", p.Local, p.Remote)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -2861,6 +3110,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		}
 		m.stopLogStream() // and any in-flight log stream.
 		m.stopDrain()     // and any in-flight node drain (cancel-on-quit, M3-11b).
+		m.stopForwards()  // and every background port-forward (cancel-on-exit, M3-13a).
 		return m, tea.Quit
 	case keymap.ActionHelp:
 		m.help.Toggle()
