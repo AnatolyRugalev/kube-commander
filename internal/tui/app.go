@@ -84,6 +84,21 @@ type YAMLGetter interface {
 	GetYAML(ctx context.Context, r kube.Resource, ref kube.ObjectRef) (string, error)
 }
 
+// Describer is the narrow slice of the kube layer the shell needs to open the
+// describe viewer (M3-04): render a table row's object as `kubectl describe`
+// output (M1-07b's Describe). *kube.Clients satisfies it. As with YAMLGetter the
+// shell depends on this interface, not the concrete client, so the tui package
+// never constructs a client and the model is driveable in hermetic tests with a
+// fake describer. A model built without one (the default) is describe-viewer-inert:
+// the res.describe action is a no-op (the viewer never opens), which is what the
+// pre-wiring app and the non-viewer tests want. Unlike GetYAML, Describe takes no
+// context — kubectl's describe package exposes no context-aware entry point (D2's
+// describe note), so the seam matches that shape and the shell abandons a stale
+// result via the viewerGen guard rather than cancellation.
+type Describer interface {
+	Describe(r kube.Resource, ref kube.ObjectRef) (string, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -130,6 +145,13 @@ func WithNamespacePersister(p NamespacePersister) Option {
 // (the viewer never opens).
 func WithYAMLGetter(g YAMLGetter) Option {
 	return func(m *Model) { m.yamlGetter = g }
+}
+
+// WithDescriber wires the kube client the shell uses to render an object's describe
+// output for the read-only describe viewer (M3-04). Without it the res.describe
+// action is inert (the viewer never opens).
+func WithDescriber(d Describer) Option {
+	return func(m *Model) { m.describer = d }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -273,7 +295,13 @@ type Model struct {
 	// viewer open so an async fetch (yamlLoadedMsg) that returns after the user closed
 	// the viewer, or opened a newer one, is dropped rather than populating the wrong
 	// content — the same stale-message guard watchGen/seqGen give their async work.
+	// describer renders an object's describe output for the same shared viewer (M3-04;
+	// nil → the res.describe action is inert). Both viewer fetches share viewerGen: the
+	// viewer is one component, so opening either kind bumps the generation and drops any
+	// other in-flight fetch (a describe open supersedes a pending YAML fetch and vice
+	// versa).
 	yamlGetter YAMLGetter
+	describer  Describer
 	viewerGen  int
 
 	// resByLabel maps each entry of the resource command palette (resPicker) back to
@@ -550,6 +578,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
+
+	case describeLoadedMsg:
+		return m.handleDescribeLoaded(msg)
 
 	case viewer.ClosedMsg:
 		// The viewer dismissed itself (nav.back). Hide it and return focus to the
@@ -960,6 +991,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	switch msg.Action {
 	case rowActionYAML:
 		return m.openYAMLViewer(msg)
+	case rowActionDescribe:
+		return m.openDescribeViewer(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
@@ -1019,6 +1052,60 @@ func (m Model) handleYAMLLoaded(msg yamlLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.viewer.Hide()
 		return m, m.surfaceError(NewErrorMsg("get yaml", msg.err))
+	}
+	m.viewer.SetContent(msg.content)
+	return m, nil
+}
+
+// describeLoadedMsg carries the outcome of the async Describe render issued when the
+// describe viewer opens (M3-04). gen ties it to the viewer open that requested it, so
+// a render that lands after the user closed the viewer (or opened a newer one — of
+// either kind) is dropped rather than populating stale content (the viewerGen guard,
+// mirroring yamlLoadedMsg).
+type describeLoadedMsg struct {
+	gen     int
+	content string
+	err     error
+}
+
+// openDescribeViewer opens the read-only describe viewer over the selected row's
+// object (M3-04): it shows the viewer immediately (empty, so the gesture feels
+// instant) and kicks off the Describe render off the update loop, seeding the content
+// when it lands. With no describer wired it is describe-viewer-inert (a no-op). The
+// render is tagged with a fresh viewerGen so a superseded/stale result is dropped
+// (handleDescribeLoaded). A render error degrades to a status-bar toast and closes the
+// viewer (D74) rather than leaving an empty box. Describe takes no context (D2's
+// describe note), so — unlike GetYAML — there is nothing to thread through; the
+// generation guard is the sole staleness defence.
+func (m Model) openDescribeViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.describer == nil {
+		return m, nil
+	}
+	m.viewerGen++
+	gen := m.viewerGen
+	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
+	m.viewer.SetContent("") // clear any prior object's content before the render lands.
+	m.viewer.Show()
+	describer := m.describer
+	r, ref := msg.Resource, msg.Object
+	return m, func() tea.Msg {
+		content, err := describer.Describe(r, ref)
+		return describeLoadedMsg{gen: gen, content: content, err: err}
+	}
+}
+
+// handleDescribeLoaded seeds the open viewer with the rendered describe output. A
+// result whose gen no longer matches (a newer open superseded it) or that arrives
+// after the viewer closed is dropped. A render error degrades: it closes the viewer
+// and surfaces a transient status-bar toast (D74), never breaking the layout or
+// leaving an empty box.
+func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen || !m.viewer.Active() {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.viewer.Hide()
+		return m, m.surfaceError(NewErrorMsg("describe", msg.err))
 	}
 	m.viewer.SetContent(msg.content)
 	return m, nil

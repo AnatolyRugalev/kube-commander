@@ -2388,3 +2388,182 @@ func TestYAMLViewerStaleFetchDropped(t *testing.T) {
 		t.Fatal("a stale-generation fetch should be dropped, not shown")
 	}
 }
+
+// fakeDescriber is a hermetic Describer: it returns a preset describe string (or
+// error) and records the object it was asked for so a test can assert the selected
+// row was addressed. Like kube.Describe it takes no context.
+type fakeDescriber struct {
+	text   string
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeDescriber) Describe(r kube.Resource, ref kube.ObjectRef) (string, error) {
+	f.calls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.text, f.err
+}
+
+// describeViewerModel drills into a pods table (Kind Pod) with a live row and the
+// given describer wired, so a viewer test has a concrete selected row and a render
+// seam. Mirrors yamlViewerModel.
+func describeViewerModel(t *testing.T, describer Describer) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithDescriber(describer))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// describeKey is the default res.describe direct key (`d`).
+var describeKey = tea.Key{Code: 'd', Text: "d"}
+
+// TestDescribeViewerOpensAndShowsContent drives the whole M3-04 path: the `d` key
+// dispatches the describe intent, handling it opens the viewer and issues the Describe
+// render against the selected row, and the rendered output lands in the viewer content.
+func TestDescribeViewerOpensAndShowsContent(t *testing.T) {
+	d := &fakeDescriber{text: "Name:         web-1\nNamespace:    default\nStatus:       Running\n"}
+	m := describeViewerModel(t, d)
+
+	// `d` dispatches the intent; feed it back in to trigger the viewer + render.
+	_, cmd := press(t, m, describeKey)
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("res.describe produced %T, want rowActionMsg", cmd())
+	}
+	next, fetchCmd := m.Update(intent)
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("handling the describe intent should open the viewer")
+	}
+	if fetchCmd == nil {
+		t.Fatal("opening the describe viewer should issue a Describe render command")
+	}
+	loaded, ok := fetchCmd().(describeLoadedMsg)
+	if !ok {
+		t.Fatalf("render produced %T, want describeLoadedMsg", fetchCmd())
+	}
+	if d.calls != 1 {
+		t.Fatalf("Describe called %d times, want 1", d.calls)
+	}
+	if d.gotRef.Name == "" {
+		t.Error("Describe should be addressed to the selected row's object")
+	}
+
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should stay open once its content lands")
+	}
+	// The rendered describe output is composited over the browse view (overlayCenter).
+	view := m.View().Content
+	if !strings.Contains(view, "Status:") {
+		t.Fatalf("viewer should show the rendered describe output: %q", view)
+	}
+}
+
+// TestDescribeViewerCloses proves nav.back (esc) dismisses the viewer (its ClosedMsg,
+// delivered back through Update, hides it) and returns to the browse view.
+func TestDescribeViewerCloses(t *testing.T) {
+	d := &fakeDescriber{text: "Name: web-1\n"}
+	m := describeViewerModel(t, d)
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(fetchCmd().(describeLoadedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("precondition: the viewer should be open")
+	}
+
+	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if closeCmd == nil {
+		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
+	}
+	next, _ = m.Update(closeCmd())
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("delivering the viewer's ClosedMsg should hide it")
+	}
+}
+
+// TestDescribeViewerRenderErrorDegrades proves a Describe failure closes the viewer
+// and surfaces a transient status-bar toast rather than leaving an empty box (D74).
+func TestDescribeViewerRenderErrorDegrades(t *testing.T) {
+	d := &fakeDescriber{err: errors.New("not found")}
+	m := describeViewerModel(t, d)
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer opens immediately, before the render resolves")
+	}
+	loaded := fetchCmd().(describeLoadedMsg)
+	if loaded.err == nil {
+		t.Fatal("the render should carry the describer's error")
+	}
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("a render error should close the viewer")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a render error should surface a status-bar toast")
+	}
+}
+
+// TestDescribeViewerInertWithoutDescriber proves the describe intent is a no-op with
+// no describer wired (the viewer never opens) — the pre-wiring app and hermetic tests
+// stay inert.
+func TestDescribeViewerInertWithoutDescriber(t *testing.T) {
+	m := openPodTable(t, "Pod") // no WithDescriber
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("the describe viewer should not open without a describer wired")
+	}
+	if fetchCmd != nil {
+		t.Fatal("no describer → no render command")
+	}
+}
+
+// TestDescribeViewerStaleRenderDropped proves the generation guard: a render that
+// lands after a newer viewer open (or after the viewer closed) is dropped rather than
+// overwriting the current content.
+func TestDescribeViewerStaleRenderDropped(t *testing.T) {
+	d := &fakeDescriber{text: "Name: web-1\n"}
+	m := describeViewerModel(t, d)
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	intent := rowActionMsg{Action: rowActionDescribe, Resource: m.current, Object: row.Object}
+
+	// First open → gen-N render (dispatched directly; a key press would route to the
+	// open viewer, which is the point — a re-open comes from the intent, not the key).
+	next, firstFetch := m.Update(intent)
+	m = next.(Model)
+	stale := firstFetch().(describeLoadedMsg)
+
+	// Second open → gen bumps; the first render is now stale.
+	next, _ = m.Update(intent)
+	m = next.(Model)
+	if stale.gen == m.viewerGen {
+		t.Fatalf("precondition: stale render gen %d should differ from current %d", stale.gen, m.viewerGen)
+	}
+
+	next, _ = m.Update(stale) // deliver the stale result
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should still be open")
+	}
+	if strings.Contains(m.View().Content, "Name: web-1") {
+		t.Fatal("a stale-generation render should be dropped, not shown")
+	}
+}
