@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-09 wired delete through the confirm modal: the root owns one `modal.Model`, `res.delete`/`x` `ShowConfirm`s it on the selected row, accept (`nav.drillIn`) runs `kube.Delete` and reports to the status bar (error toast / neutral notice), decline (`nav.back`/quit) closes it — no raw y/n (D115); this **unblocks M2-14b**. Top-unblocked next: M2-14b (modal-flow teatest) or M3-10 (scale + rollout-restart). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M2-14b added full-program (teatest/v2) coverage of the M3-09 confirm-modal flow: `x` → modal opens → `enter` accepts (runs the delete) / `esc` declines (no delete), syncing the async accept on a side-effect signal, never Quit-ordering (D116). Top-unblocked next: M3-10 (scale + rollout-restart). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-14b** teatest coverage: modal confirm flow
-      status: in-progress | owner: claude-opus | added: 2026-07-20 | claimed: 2026-07-23
-      notes: Split from M2-14. Drive the delete confirm flow with teatest/v2 (M0-05
-      harness) end-to-end through the running program — `x` → modal opens → enter
-      (accept, runs the delete) / esc (decline) — asserting the modal opens, captures
-      input, and resolves. Unblocked by M3-09/D115 (delete wired into the app shell).
+_(none)_
 
 ## Blocked
 
@@ -116,6 +111,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M2-14b** teatest coverage: modal confirm flow — full-program (teatest/v2) delete confirm: `x`→open→`enter` accept (delete runs) / `esc` decline (no delete), async accept synced on a side-effect signal not Quit-ordering — done 2026-07-23 (D116)
 - [x] **M3-09** Delete action wired through the confirm modal (`res.delete`/`x` → `modal.ShowConfirm` on the selected row → accept `nav.drillIn` runs `kube.Delete` (row's UID guards the snapshot race), result to the status bar (error toast / neutral notice); decline `nav.back`/quit closes it, no raw y/n; `Deleter` seam + `WithDeleter`) — **unblocks M2-14b** — done 2026-07-23 (D115)
 - [x] **M3-08b** Secret viewer — copy the selected value to the clipboard (#89): per-entry cursor (`nav.up`/`nav.down` select, not scroll; `> ` gutter marks it, `EnsureLineVisible` keeps it on screen), `secret.copy` (`c`) yanks the selected decoded value via `tea.SetClipboard` OSC-52 (masked or revealed), neutral status-bar notice `copied "key" (N bytes)` (new `SetNotice` channel) — done 2026-07-23 (D114)
 - [x] **M3-08a** Secret viewer — reveal/base64-decode (#89): `SecretGetter` seam (`kube.SecretData`, typed clientset → decoded + key-sorted entries) → shared M3-01 viewer; values masked on open (`key: •••• (N bytes)`), the registered `secret.reveal` (`r`) gesture toggles reveal (viewer-only, re-renders the same fetched data), `WithSecretGetter` gates it; copy split to M3-08b — done 2026-07-23 (D113)

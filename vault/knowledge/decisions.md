@@ -2869,3 +2869,23 @@ composited **first** in `View`'s overlay switch (topmost). Without a `Deleter` w
 (`WithDeleter`) the action is inert — the modal never opens — so the pre-wiring app
 and non-action tests stay quiet. This **unblocks M2-14b** (the modal-flow teatest now
 has a reachable confirm through the running program).
+
+### D116 — Full-program teatest of an async modal resolve syncs on a side-effect signal, never Quit-ordering
+**2026-07-23 (M2-14b).** The confirm modal accepts/declines through an **async
+round-trip** (KeyMsg → `ConfirmedMsg`/`CancelledMsg` cmd → the root hides the modal
+and, on accept, runs the action off the update loop — D115). A full-program test
+(teatest/v2, the M0-05 harness) therefore **must not** assert on state that a trailing
+`tea.Quit()` would race the resolving message for: `Send(enter)` then `Send(Quit)`
+lets Quit win, so the delete may never run in the final model. The constraint a future
+modal-flow teatest (M3-10 scale, M3-11 cordon/drain, M3-12 suspend/resume) must not
+break: **synchronise on the action's own side effect** — the mutating seam records the
+call on a channel (`signalDeleter.called`) the test blocks on before Quit — not on
+message ordering. Two corollaries reused across these tests: (1) a modal's **message
+line is byte-scannable** in `teatest.Output()` (foreground-only `styles.App`), so
+`WaitFor("Delete Pod pod-b?")` is a valid barrier that the open resolved — unlike the
+background-filled status bar / selected table row, whose cells a plain byte scan misses
+(assert those on `FinalModel`). (2) The modal's **async close on decline is not
+final-model-assertable** (it races Quit); prove the close via the accept path (the modal
+is hidden in `handleModalConfirmed` strictly before the delete cmd fires) and the
+direct-Update decline test, and let the decline teatest assert only the race-free facts
+(no delete ran; a swallowed nav left the selection put).

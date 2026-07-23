@@ -3938,3 +3938,147 @@ func TestDeleteModalSwallowsNav(t *testing.T) {
 		t.Fatal("the table selection must not move while the confirm modal is up")
 	}
 }
+
+// signalDeleter is a fakeDeleter that also announces on a channel the moment Delete
+// is invoked, so a full-program (teatest) test can block on the delete actually
+// running before it inspects state — the deterministic barrier the accept flow needs.
+// The confirm accept resolves through an async round-trip (KeyMsg → ConfirmedMsg cmd →
+// runDelete cmd → Delete), so a plain Send(enter)+Quit would race the Quit ahead of
+// the delete; receiving on `called` guarantees the whole chain ran first. The field
+// writes precede the channel send, and the test reads them only after receiving, so
+// the receive's happens-before makes the read race-free (go test -race clean).
+type signalDeleter struct {
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+	called chan struct{}
+}
+
+func (s *signalDeleter) Delete(_ context.Context, r kube.Resource, ref kube.ObjectRef, _ metav1.DeleteOptions) error {
+	s.calls++
+	s.gotRes = r
+	s.gotRef = ref
+	if s.called != nil {
+		s.called <- struct{}{}
+	}
+	return s.err
+}
+
+// TestProgramModalConfirmAcceptRunsDelete is the M2-14b full-program (teatest/v2, the
+// M0-05 harness) coverage of the confirm-modal accept flow M3-09 wired (D115), driving
+// the whole chain through the running bubbletea program rather than hand-threaded
+// Update calls: a live `x` over the selected row opens the confirm modal, a nav key is
+// swallowed by the open modal (input capture), and `enter` (nav.drillIn) accepts —
+// ConfirmedMsg closes the modal and runs kube.Delete against the selected row. The
+// signalDeleter is the sync barrier: receiving on `called` proves the async
+// KeyMsg→ConfirmedMsg→runDelete→Delete chain fully executed before the program quits,
+// so the final-model assertions are deterministic (the modal is hidden in
+// handleModalConfirmed strictly before the delete cmd fires). Proves the modal opens,
+// captures input, and resolves — end to end through the program.
+func TestProgramModalConfirmAcceptRunsDelete(t *testing.T) {
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	d := &signalDeleter{called: make(chan struct{}, 1)}
+	tm := teatest.NewTestModel(t, New(WithWatcher(fw), WithDeleter(d)), teatest.WithInitialTermSize(80, 24))
+
+	// Browse layout draws first (a seed kind in the left pane).
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Node"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// Drill into pods; the preloaded RESET populates the table so an unselected row
+	// ("pod-a"; the selected "pod-b" is background-filled and a byte scan misses it)
+	// renders — the same reason the other program tests key on an unselected row.
+	tm.Send(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("pod-a"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// Live `x` opens the confirm modal over the selected row (pod-b). The modal's
+	// message line is foreground-only styled (styles.App), so a plain byte scan sees
+	// it — unlike the background-filled status bar. Waiting on it is the barrier that
+	// the `x`→rowActionMsg→openDeleteConfirm chain resolved before we send more keys.
+	tm.Send(tea.KeyPressMsg(deleteKey))
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Delete Pod pod-b?"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// A nav key is swallowed by the open modal (input capture); then enter accepts.
+	tm.Send(tea.KeyPressMsg(tea.Key{Code: 'j', Text: "j"}))
+	tm.Send(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+
+	// Block until the delete actually runs — the deterministic barrier before Quit.
+	select {
+	case <-d.called:
+	case <-time.After(3 * time.Second):
+		t.Fatal("accepting the confirm modal should run the delete through the program")
+	}
+	tm.Send(tea.Quit())
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+
+	if d.calls != 1 {
+		t.Fatalf("Delete should run exactly once through the program, got %d", d.calls)
+	}
+	// The delete addressed the selected row, its UID riding through for the snapshot
+	// guard (M1-06a/D35) — not whatever a swallowed nav might have moved to.
+	if d.gotRef.Name != "pod-b" || d.gotRef.UID != "b" {
+		t.Fatalf("Delete addressed %+v, want the selected row pod-b (uid b)", d.gotRef)
+	}
+	fm, ok := tm.FinalModel(t).(Model)
+	if !ok {
+		t.Fatalf("final model is %T, want Model", tm.FinalModel(t))
+	}
+	if fm.modal.Active() {
+		t.Fatal("accepting the confirm modal should have hidden it")
+	}
+	if row, _ := fm.table.SelectedRow(); row.Object.Name != "pod-b" {
+		t.Fatalf("the swallowed nav must not move the selection: selected %q, want pod-b", row.Object.Name)
+	}
+}
+
+// TestProgramModalConfirmDeclineNoDelete is the M2-14b full-program (teatest/v2)
+// coverage of the confirm-modal decline flow: a live `x` opens the modal, a nav key is
+// swallowed (capture), and `esc` (nav.back) declines — no kube.Delete runs. The
+// deterministic assertions are that no delete ever fired (decline never deletes,
+// regardless of the async CancelledMsg/Quit interleave) and that the swallowed nav left
+// the selection put. The modal's async close on CancelledMsg races the trailing Quit so
+// it is not asserted here on the final model; that close is proven deterministically by
+// the accept test above (modal hidden after accept) and by the direct-Update
+// TestDeleteConfirmDeclineDoesNothing. A deleter is wired so a decline that wrongly ran
+// the delete would be caught.
+func TestProgramModalConfirmDeclineNoDelete(t *testing.T) {
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	d := &signalDeleter{called: make(chan struct{}, 1)}
+	tm := teatest.NewTestModel(t, New(WithWatcher(fw), WithDeleter(d)), teatest.WithInitialTermSize(80, 24))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Node"))
+	}, teatest.WithDuration(3*time.Second))
+
+	tm.Send(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("pod-a"))
+	}, teatest.WithDuration(3*time.Second))
+
+	// Open the confirm modal, wait for it (barrier), swallow a nav, then decline.
+	tm.Send(tea.KeyPressMsg(deleteKey))
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("Delete Pod pod-b?"))
+	}, teatest.WithDuration(3*time.Second))
+	tm.Send(tea.KeyPressMsg(tea.Key{Code: 'j', Text: "j"}))
+	tm.Send(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+
+	tm.Send(tea.Quit())
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+
+	if d.calls != 0 {
+		t.Fatalf("declining the confirm modal must not delete anything, got %d calls", d.calls)
+	}
+	fm, ok := tm.FinalModel(t).(Model)
+	if !ok {
+		t.Fatalf("final model is %T, want Model", tm.FinalModel(t))
+	}
+	if row, _ := fm.table.SelectedRow(); row.Object.Name != "pod-b" {
+		t.Fatalf("the swallowed nav must not move the selection: selected %q, want pod-b", row.Object.Name)
+	}
+}
