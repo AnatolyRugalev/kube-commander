@@ -82,26 +82,33 @@ in-list drill in/out — matching how the original mapped `Enter`/`Right`/`Left`
 ## Actions (must not use reserved keys)
 
 Legacy pod actions collided with navigation (`l` logs, `s` shell, `f`
-port-forward). Resolve by moving actions **behind a leader / actions menu** so the
-nav keys stay clean and the action set is discoverable. Proposed (finalize in M3):
+port-forward). Resolved by moving actions **behind a leader / actions menu** so the
+nav keys stay clean and the action set is discoverable. **Finalized in M3-02**
+(D107): the actions menu (`a`) lists the actions applicable to the selected row's
+kind; the most-used actions also have a direct key; the rest are menu-only.
 
-| Action | Proposed binding |
-|--------|------------------|
-| Open actions menu for selection | `a` (or leader `<space>`) |
-| Describe | `d` |
-| View YAML | `y` |
-| Logs | via actions menu / `L` |
-| Previous logs | via actions menu |
-| Exec shell | via actions menu |
-| Port-forward | via actions menu |
-| Edit (`$EDITOR`) | `e` |
-| Delete | `x` or `Del` (confirm) |
-| Help overlay | `?` |
-| Namespace picker | `:` ns, or keep `Ctrl+n` |
-| Context switcher | `:` ctx (M4) |
+| Action | Binding | Notes |
+|--------|---------|-------|
+| Open actions menu for selection | `a` (`actions.menu`) | lists the applicable actions for the selected row |
+| Describe | `d` (`res.describe`) | any kind |
+| View YAML | `y` (`res.yaml`) | any kind |
+| Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
+| Edit (`$EDITOR`) | `e` (`res.edit`) | any kind with `update`/`patch` |
+| Delete | `x` (`res.delete`) | any kind with `delete` (confirm) |
+| Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |
+| Cordon · Uncordon · Drain | via actions menu | Node |
+| Suspend · Resume | via actions menu | CronJob (#83) |
+| Port-forward · Exec shell | via actions menu | Pod (+Service for forward) |
+| Reveal secret | via actions menu | Secret (#89) |
+| Help overlay | `?` | |
+| Namespace picker | `Ctrl+n` (`ns.switch`) | |
+| Resource palette | `:` (`resources.switch`) | |
+| Context switcher | `:` ctx (M4) | |
 
-`d y e x a` don't collide with reserved nav keys. Exact final map is an M3
-deliverable; keep it in this file and generate the help/keybindings doc from it.
+`a d y e x` and `L` don't collide with reserved nav keys. The direct keys and the
+menu both dispatch one typed `rowActionMsg` intent (D107); each later M3 leg
+(M3-03…) wires the real viewer/action. The generated
+[`docs/keybindings.md`](../../docs/keybindings.md) is the shipping map.
 
 ## Rules for implementers
 - Every binding registered via `bubbles/key.Binding` with **both** the vim key and

@@ -52,6 +52,17 @@ const (
 	ActionSort         Action = "sort.column"
 	ActionClearSort    Action = "sort.clear"
 	ActionToggleMenu   Action = "menu.toggle"
+	// M3 row actions (operate on the selected resource row). ActionActions opens
+	// the actions menu (D107); the rest are direct-key shortcuts for the most-used
+	// actions, all off the reserved nav keys (D10). The full curated action set
+	// (scale, cordon, drain, suspend, exec, …) is reachable through the actions
+	// menu rather than a key of its own (see vault/knowledge/keybindings.md).
+	ActionActions  Action = "actions.menu"
+	ActionDescribe Action = "res.describe"
+	ActionYAML     Action = "res.yaml"
+	ActionLogs     Action = "res.logs"
+	ActionEdit     Action = "res.edit"
+	ActionDelete   Action = "res.delete"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -84,6 +95,12 @@ var actionMeta = []struct {
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
 	{ActionToggleMenu, "Toggle left menu pane"},
+	{ActionActions, "Open actions menu for the selected row"},
+	{ActionDescribe, "Describe the selected row"},
+	{ActionYAML, "View the selected row as YAML"},
+	{ActionLogs, "View logs for the selected row"},
+	{ActionEdit, "Edit the selected row in $EDITOR"},
+	{ActionDelete, "Delete the selected row"},
 }
 
 var registered = func() map[Action]string {
@@ -140,6 +157,12 @@ var defaultBindings = map[Action][]string{
 	ActionSort:         {"s"},
 	ActionClearSort:    {"S"},
 	ActionToggleMenu:   {"m"},
+	ActionActions:      {"a"},
+	ActionDescribe:     {"d"},
+	ActionYAML:         {"y"},
+	ActionLogs:         {"L"},
+	ActionEdit:         {"e"},
+	ActionDelete:       {"x"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

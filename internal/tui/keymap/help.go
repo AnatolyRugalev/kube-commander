@@ -71,7 +71,7 @@ const (
 // namespace, help and quit are always-relevant and shown in both.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:  {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

@@ -3,19 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-22 — M3-01 landed the shared read-only viewer component (D106); M3-02 (action surface + keymap) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-02 landed the actions surface + M3 keymap (D107); M3-03 (YAML viewer wired) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-02** Action surface + M3 keymap: an **actions menu** (reuse the generic
-      picker keyed by a distinct Kind, like the resource palette D100) listing the
-      actions applicable to the selected row, plus named keymap entries for the M3
-      actions **off the reserved nav keys** (`h j k l n g G /`, D10) — behind a leader
-      / the actions menu. Regenerate `docs/keybindings.md`; update `knowledge/keybindings.md`.
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
-      notes: Gives every subsequent viewer/action a reachable trigger. Wire it to
-      dispatch a typed "run action X on selected row" intent; the individual legs
-      (M3-03…) handle each intent. No behavior beyond opening the menu + routing yet.
+_(none)_
 
 ## Blocked
 
@@ -155,6 +147,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-02** Action surface + M3 keymap: actions menu (Kind `"action"` picker) + direct keys (`a d y L e x`) → typed `rowActionMsg` intent — done 2026-07-23 (D107)
 - [x] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`): keymap-routed scrollable text overlay, bare box, `ClosedMsg` — done 2026-07-22 (D106)
 - [x] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices M3-01…M3-15 — done 2026-07-22 (D105)
 - [x] **FB-watch-unsupported-list-only** Feedback (normal, `2026-07-22-watch-unsupported-resource-list-only`): kinds without the `watch` verb (e.g. componentstatuses) blanked/retry-looped — watch degrades to list-only polling — done 2026-07-22 (D104)

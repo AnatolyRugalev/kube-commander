@@ -2097,3 +2097,114 @@ func TestClearSortKeyRestoresOrder(t *testing.T) {
 		t.Fatal("sort.clear should restore the unsorted watch order")
 	}
 }
+
+// kindResource is gvrResource with the GVK.Kind set, so the row-action
+// applicability predicates (which key on kind, M3-02) resolve.
+func kindResource(resource, kind string) kube.Resource {
+	r := gvrResource(resource)
+	r.GVK = schema.GroupVersionKind{Kind: kind}
+	return r
+}
+
+// openPodTable drills into a pods resource (Kind Pod) with a two-row live table so
+// an actions test has a concrete selected row to act on.
+func openPodTable(t *testing.T, kind string) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", kind)})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// actionsKey is the default actions.menu key (`a`).
+var actionsKey = tea.Key{Code: 'a', Text: "a"}
+
+// TestActionsMenuListsApplicableActions proves the actions.menu key opens the
+// picker over the selected row and lists exactly the actions applicable to the
+// browsed kind: a Pod offers Logs and Exec but not the node-only Cordon/Drain.
+func TestActionsMenuListsApplicableActions(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m, _ = press(t, m, actionsKey)
+	if !m.actPicker.Active() {
+		t.Fatal("actions.menu key should open the actions picker over the selected row")
+	}
+	for _, title := range []string{"View YAML", "Describe", "Logs", "Exec shell", "Delete"} {
+		if _, ok := m.actByLabel[title]; !ok {
+			t.Errorf("Pod actions menu should list %q", title)
+		}
+	}
+	for _, title := range []string{"Cordon", "Drain", "Suspend"} {
+		if _, ok := m.actByLabel[title]; ok {
+			t.Errorf("Pod actions menu should not list node/cronjob action %q", title)
+		}
+	}
+}
+
+// TestActionsMenuKindSpecific proves applicability tracks the kind: a Node offers
+// Cordon/Drain but not Logs/Exec.
+func TestActionsMenuKindSpecific(t *testing.T) {
+	m := openPodTable(t, "Node")
+	m, _ = press(t, m, actionsKey)
+	for _, title := range []string{"Cordon", "Uncordon", "Drain"} {
+		if _, ok := m.actByLabel[title]; !ok {
+			t.Errorf("Node actions menu should list %q", title)
+		}
+	}
+	for _, title := range []string{"Logs", "Exec shell", "Scale"} {
+		if _, ok := m.actByLabel[title]; ok {
+			t.Errorf("Node actions menu should not list %q", title)
+		}
+	}
+}
+
+// TestActionsMenuInertWithoutResource proves the actions key is a no-op before a
+// resource table is open (the welcome page is showing): there is no row to act on.
+func TestActionsMenuInertWithoutResource(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m, _ = press(t, m, actionsKey)
+	if m.actPicker.Active() {
+		t.Fatal("actions.menu should be inert with no resource table open")
+	}
+}
+
+// TestActionDirectKeyDispatchesIntent proves a direct-key M3 action (here `y`,
+// res.yaml) dispatches a rowActionMsg carrying the action and the selected row's
+// object, without opening the menu.
+func TestActionDirectKeyDispatchesIntent(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	_, cmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
+	if cmd == nil {
+		t.Fatal("res.yaml key produced no command")
+	}
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("res.yaml produced %T, want rowActionMsg", cmd())
+	}
+	if intent.Action != rowActionYAML {
+		t.Errorf("intent action = %q, want %q", intent.Action, rowActionYAML)
+	}
+	if intent.Object.Name == "" {
+		t.Error("intent should carry the selected row's object identity")
+	}
+}
+
+// TestActionsMenuSelectionDispatchesIntent proves picking an action from the menu
+// dispatches the same rowActionMsg intent and closes the menu.
+func TestActionsMenuSelectionDispatchesIntent(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m, _ = press(t, m, actionsKey)
+	next, cmd := m.Update(picker.SelectedMsg{Kind: actionPickerKind, Value: "Describe"})
+	m = next.(Model)
+	if m.actPicker.Active() {
+		t.Fatal("picking an action should close the actions menu")
+	}
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("action selection produced %T, want rowActionMsg", cmd())
+	}
+	if intent.Action != rowActionDescribe {
+		t.Errorf("intent action = %q, want %q", intent.Action, rowActionDescribe)
+	}
+}

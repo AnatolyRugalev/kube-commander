@@ -202,6 +202,7 @@ type Model struct {
 	hintbar   hintbar.Model
 	nsPicker  picker.Model
 	resPicker picker.Model
+	actPicker picker.Model
 	welcome   welcome.Model
 
 	// context is the resolved kube context name and version the build version;
@@ -253,6 +254,12 @@ type Model struct {
 	// resource selectResource watches (FB-nav-resource-palette). It holds no shared
 	// mutable state — only the update loop touches it.
 	resByLabel map[string]kube.Resource
+
+	// actByLabel maps each entry of the actions menu (actPicker) back to its
+	// rowAction, rebuilt each time the menu opens from the actions applicable to the
+	// browsed kind (openActionsMenu). Mirrors resByLabel for the resource palette
+	// (D107); only the update loop touches it.
+	actByLabel map[string]rowAction
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -334,6 +341,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		hintbar:     hintbar.New(s),
 		nsPicker:    picker.New(s, "namespace"),
 		resPicker:   picker.New(s, "resource"),
+		actPicker:   picker.New(s, actionPickerKind),
 		welcome:     welcome.New(s),
 		filterInput: fi,
 	}
@@ -341,6 +349,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		opt(&m)
 	}
 	m.resPicker.SetTitle("Switch resource")
+	m.actPicker.SetTitle("Actions")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -486,18 +495,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleNamespacesLoaded(msg)
 
 	case picker.SelectedMsg:
-		if msg.Kind == resourcePickerKind {
+		switch msg.Kind {
+		case resourcePickerKind:
 			return m.handleResourceSelected(msg)
+		case actionPickerKind:
+			return m.handleActionSelected(msg)
+		default:
+			return m.handleNamespaceSelected(msg)
 		}
-		return m.handleNamespaceSelected(msg)
 
 	case picker.CancelledMsg:
-		if msg.Kind == resourcePickerKind {
+		switch msg.Kind {
+		case resourcePickerKind:
 			m.resPicker.Hide()
-			return m, nil
+		case actionPickerKind:
+			m.actPicker.Hide()
+		default:
+			m.nsPicker.Hide()
 		}
-		m.nsPicker.Hide()
 		return m, nil
+
+	case rowActionMsg:
+		return m.handleRowAction(msg)
 
 	case spinner.TickMsg:
 		// The status bar owns the discovery spinner; forward its ticks so the
@@ -754,6 +773,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.nsPicker
 	case m.resPicker.Active():
 		return &m.resPicker
+	case m.actPicker.Active():
+		return &m.actPicker
 	}
 	return nil
 }
@@ -812,6 +833,97 @@ func (m Model) handleResourceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cm
 		return m, nil
 	}
 	return m.selectResource(r)
+}
+
+// actionPickerKind is the Kind stamped on the actions menu's picker
+// (picker.New(s, "action")). Every picker emits the same SelectedMsg/CancelledMsg
+// types (D65), so the root branches on this Kind to route a picked action to
+// dispatchRowAction rather than the namespace/resource paths.
+const actionPickerKind = "action"
+
+// openActionsMenu opens the M3 actions menu (D107): a picker listing the actions
+// applicable to the browsed kind, over the selected table row. It is inert unless a
+// resource table is showing (hasCurrent) with a row selected — the actions operate
+// on a concrete object. The applicable titles come from the row-action registry
+// (rowActionTitles), and actByLabel resolves the picked title back to its action.
+// Picking one (or a direct key) dispatches a rowActionMsg the individual M3 legs
+// handle; this leg only opens the menu and routes.
+func (m Model) openActionsMenu() (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	if _, ok := m.table.SelectedRow(); !ok {
+		return m, nil
+	}
+	titles, byTitle := rowActionTitles(m.current)
+	if len(titles) == 0 {
+		return m, nil
+	}
+	m.actByLabel = byTitle
+	m.actPicker.SetItems(titles)
+	m.actPicker.Show()
+	return m, nil
+}
+
+// handleActionSelected applies an action picked from the actions menu: it closes the
+// menu and dispatches the chosen row action's intent. The picked title is resolved
+// through actByLabel (built when the menu opened); a title with no mapping — the
+// menu can only list titles it mapped, so this is defensive — closes it without
+// dispatching.
+func (m Model) handleActionSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.actPicker.Hide()
+	act, ok := m.actByLabel[msg.Value]
+	if !ok {
+		return m, nil
+	}
+	return m.dispatchRowAction(act)
+}
+
+// triggerRowActionKey handles a direct-key M3 action (describe/yaml/logs/edit/
+// delete). It resolves the keymap.Action to its rowAction and dispatches it against
+// the selected row — but only when the action applies to the browsed kind, so e.g.
+// `L` (logs) on a non-pod kind is inert, exactly as the entry is absent from that
+// kind's actions menu. Inert with no resource table open or no row selected.
+func (m Model) triggerRowActionKey(a keymap.Action) (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	act, ok := keyToRowAction[a]
+	if !ok || !rowActionApplies(act, m.current) {
+		return m, nil
+	}
+	return m.dispatchRowAction(act)
+}
+
+// dispatchRowAction emits the typed rowActionMsg intent for act on the selected
+// row's object (D107). It is a no-op with no resource table open or no row selected.
+// The intent is carried as a Cmd (not applied inline) so the routing is uniform for
+// both entry points (a direct key and an actions-menu pick) and each later M3 leg
+// handles its intent in one place.
+func (m Model) dispatchRowAction(act rowAction) (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		return m, nil
+	}
+	intent := rowActionMsg{Action: act, Resource: m.current, Object: row.Object}
+	return m, func() tea.Msg { return intent }
+}
+
+// handleRowAction is the placeholder landing for a dispatched row action. M3-02
+// lands only the actions surface + routing (D107): each subsequent M3 leg (M3-03…)
+// replaces this branch — or adds its own case ahead of it — with the real viewer or
+// action for its intent. Until then it surfaces a transient status-bar toast naming
+// the action and target, so the routing is observable and the dogfooder sees the
+// action was recognised rather than the key seeming dead (D68).
+func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	label := rowActionTitle(msg.Action)
+	if msg.Object.Name != "" {
+		label += " " + msg.Object.Name
+	}
+	return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
 }
 
 // routePickerKey resolves one keypress while a modal picker (namespace switcher or
@@ -1024,7 +1136,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -1193,6 +1305,7 @@ func (m *Model) resize() {
 	// the modal.
 	m.nsPicker.SetSize(m.width, bodyH)
 	m.resPicker.SetSize(m.width, bodyH)
+	m.actPicker.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -1308,6 +1421,11 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.table.ClearSort()
 		}
 		return m, nil
+	case keymap.ActionActions:
+		return m.openActionsMenu()
+	case keymap.ActionDescribe, keymap.ActionYAML, keymap.ActionLogs,
+		keymap.ActionEdit, keymap.ActionDelete:
+		return m.triggerRowActionKey(a)
 	}
 	return m.routeNav(a)
 }
@@ -1394,6 +1512,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
 	case m.resPicker.Active():
 		body = overlayCenter(body, m.resPicker.View(), m.width, m.bodyHeight())
+	case m.actPicker.Active():
+		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))

@@ -2653,3 +2653,23 @@ view. Mouse-wheel scroll on the viewport is off (input flows through actions).
 future viewer leg **feeds this component**; it must not re-implement scroll/framing
 or match raw keys. In-viewer `/` search (`n`/`N`) is a deliberately deferred
 follow-up slice, not part of M3-01.
+
+### D107 — M3 row actions dispatch a typed `rowActionMsg` intent; applicability is a kind-keyed registry
+**2026-07-23 (M3-02).** The M3 action surface is split from the individual
+viewers/actions: this leg lands only **opening the actions menu and routing**, no
+action behaviour. The curated action set lives in one registry
+(`internal/tui/rowaction.go`, `rowActions`): each entry is a `rowAction` id, a menu
+title, an optional bound `keymap.Action` (the direct-key shortcut), and a
+kind/verb-keyed applicability predicate. The **actions menu** (`actPicker`, a
+`picker.Model` of Kind `"action"`, D65/D100) lists exactly the applicable titles for
+the browsed kind over the selected row; the direct keys (`res.describe` `d`,
+`res.yaml` `y`, `res.logs` `L`, `res.edit` `e`, `res.delete` `x`, and
+`actions.menu` `a`) are the only M3 keys — all off the reserved nav set (D10), the
+rest of the set is menu-only. Both entry points funnel through **one typed intent**,
+`rowActionMsg{Action, Resource, Object}`, dispatched as a `tea.Cmd`. A future M3 leg
+(M3-03…) handles its intent by adding a case to (or replacing) `handleRowAction`,
+which for now surfaces a transient "not yet available" toast so routing is
+observable (D68). Constraints a later leg must not silently break: keys stay in the
+keymap (no raw-key match, D11); a new action is a `rowActions` row (+ its handler),
+not a bespoke picker or key path; applicability by kind lives in the registry, not
+scattered in the shell.

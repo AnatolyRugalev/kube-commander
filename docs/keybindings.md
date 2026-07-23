@@ -65,3 +65,19 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `menu.toggle` | `m` | Toggle left menu pane |
+
+## actions
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `actions.menu` | `a` | Open actions menu for the selected row |
+
+## res
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `res.describe` | `d` | Describe the selected row |
+| `res.yaml` | `y` | View the selected row as YAML |
+| `res.logs` | `L` | View logs for the selected row |
+| `res.edit` | `e` | Edit the selected row in $EDITOR |
+| `res.delete` | `x` | Delete the selected row |
