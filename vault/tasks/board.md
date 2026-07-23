@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-11b: Node Drain wired via a `Drainer` seam (con
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
+      menu (#83). status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -83,8 +84,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
-      menu (#83). status: todo | owner: — | added: 2026-07-22
 - [ ] **M3-13** Port-forward manager: start (prompt ports) via the M1-08 background
       forward; a panel listing active forwards with their local:remote ports; stop a
       forward; stop all on exit. status: todo | owner: — | added: 2026-07-22
