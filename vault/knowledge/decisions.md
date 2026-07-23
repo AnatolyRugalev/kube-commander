@@ -2966,3 +2966,27 @@ verbs on one interface (they share `setUnschedulable`); the outcome is a neutral
 notice (`cordoned`/`uncordoned <node>`) on success or an error toast (D74) on
 failure, and the Node's `Unschedulable` status flips via the live watch stream, not
 by touching the table (as with every mutating action, D115).
+
+### D121 — Drain policy default: IgnoreDaemonSets on, Force/DeleteEmptyDirData off (refuse over silent data loss); progress streams like the log pump
+**2026-07-23 (M3-11b).** The Drain action (unlike cordon/uncordon, which are
+idempotent and dispatch directly, D120) evicts pods, so it is **confirm-gated**
+(D115) — the second shape of the M3 mutating split. Two constraints a later leg must
+not silently contradict:
+1. **`defaultDrainOptions = {IgnoreDaemonSets: true}`** is kubecom's drain policy.
+   `IgnoreDaemonSets` is on because every real cluster runs never-evictable DaemonSet
+   pods (CNI, kube-proxy, agents) — without it *every* drain is refused, a useless
+   default. `Force` and `DeleteEmptyDirData` stay **off**: those are the data-loss
+   flags (evicting an unmanaged pod's only copy; discarding emptyDir contents), so the
+   strict default **refuses the drain upfront** naming the blocking pod
+   (`DrainCandidates`) rather than silently destroying data. A future leg that surfaces
+   these as per-drain toggles must default them off — never Force-by-default.
+2. **A long-running action streams progress like a log stream, not a one-shot
+   done-message.** `kube.DrainStream` (the channel twin of `Drain`, which is now a thin
+   consumer of it so the two never diverge) emits a `DrainEvent` per step; the shell
+   pumps it via `drainPump` (mirroring `logPump`/D53) tagged with a `drainGen` so a
+   superseded/cancelled drain's steps are dropped, reports each step to the status bar,
+   and tears the stream down on quit via `stopDrain` (the mutating twin of
+   `stopLogStream`, cancel-on-quit). The `Drainer` seam (`WithDrainer`, nil → inert)
+   exposes only `DrainStream`. The channel closing cleanly (no terminal `Err` event) is
+   the success terminator; a terminal `DrainEvent{Err}` degrades to an error toast (D74).
+   The next long-running mutating/streaming action should follow this shape.

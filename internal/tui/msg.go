@@ -148,6 +148,43 @@ func logPump(ch <-chan kube.LogEvent) tea.Cmd {
 	}
 }
 
+// DrainProgressMsg is one progress step from a streaming node drain (M3-11b),
+// carried into the update loop verbatim from a kube.DrainEvent's Message ("evicted
+// ns/web (2/5)"). A drain failure is *not* delivered as a DrainProgressMsg — the
+// drain pump bridges it to a DrainDoneMsg with Err set — so a consumer of
+// DrainProgressMsg only ever sees a progress line.
+type DrainProgressMsg struct {
+	Message string
+}
+
+// DrainDoneMsg tells the model a drain finished: Err nil is a clean success (the
+// DrainStream channel closed with no terminal error), a non-nil Err the wrapped
+// failure. Like the log pump's terminal messages it ends the pump chain — the
+// model must not re-issue drainPump after it.
+type DrainDoneMsg struct {
+	Err error
+}
+
+// drainPump reads one event from a kube.DrainStream channel and returns it as a
+// message: a progress event becomes a DrainProgressMsg, a terminal error event
+// (Err set) becomes a DrainDoneMsg carrying it, and a cleanly closed channel
+// becomes a DrainDoneMsg with no Err (the success terminator). The model re-issues
+// drainPump after each DrainProgressMsg to pull the next step (one receive per Cmd,
+// M2-02/D53), and stops on either DrainDoneMsg. The whole receive happens inside
+// the returned tea.Cmd, off the update goroutine.
+func drainPump(ch <-chan kube.DrainEvent) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return DrainDoneMsg{} // channel closed cleanly → drain succeeded
+		}
+		if ev.Err != nil {
+			return DrainDoneMsg{Err: ev.Err}
+		}
+		return DrainProgressMsg{Message: ev.Message}
+	}
+}
+
 // discoveryPump reads the single result from a kube.StartDiscovery channel and
 // returns it as a DiscoveryReadyMsg (the discovery channel delivers exactly once
 // on a cap-1 buffer, D8). A total failure is carried inside the result — the

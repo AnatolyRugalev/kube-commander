@@ -4350,6 +4350,219 @@ func TestCordonInertWithoutCordoner(t *testing.T) {
 	}
 }
 
+// fakeDrainer is a hermetic Drainer: its DrainStream returns a channel pre-loaded
+// with a fixed sequence of events (then closed), and it records the target and the
+// ctx so a test can assert the selected Node was drained with the expected options
+// and that the drain is cancelled on quit.
+type fakeDrainer struct {
+	events  []kube.DrainEvent
+	calls   int
+	gotRes  kube.Resource
+	gotRef  kube.ObjectRef
+	gotOpts kube.DrainOptions
+	ctx     context.Context
+}
+
+func (f *fakeDrainer) DrainStream(ctx context.Context, r kube.Resource, node kube.ObjectRef, opts kube.DrainOptions) <-chan kube.DrainEvent {
+	f.calls++
+	f.ctx = ctx
+	f.gotRes = r
+	f.gotRef = node
+	f.gotOpts = opts
+	ch := make(chan kube.DrainEvent, len(f.events))
+	for _, ev := range f.events {
+		ch <- ev
+	}
+	close(ch)
+	return ch
+}
+
+// acceptModal accepts the open confirm modal (enter → nav.drillIn → ConfirmedMsg)
+// and delivers the ConfirmedMsg back through Update, returning the resulting model
+// and the command the confirmed action issued. It mirrors the delete accept flow.
+func acceptModal(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if confirmCmd == nil {
+		t.Fatal("accepting the modal should emit a confirmed command")
+	}
+	confirmed, ok := confirmCmd().(modal.ConfirmedMsg)
+	if !ok {
+		t.Fatalf("accept produced %T, want modal.ConfirmedMsg", confirmCmd())
+	}
+	next, cmd := m.Update(confirmed)
+	return next.(Model), cmd
+}
+
+// runDrainToDone drives the drain pump chain to completion by pulling one event at a
+// time straight off the model's live channel (bypassing the batched notice timer),
+// delivering each drainMsg back through Update until the terminal DrainDoneMsg lands.
+// It is the test-side equivalent of Bubble Tea servicing the pump.
+func runDrainToDone(t *testing.T, m Model) Model {
+	t.Helper()
+	for i := 0; ; i++ {
+		if i > 200 {
+			t.Fatal("drain pump did not terminate")
+		}
+		cmd := m.pumpDrain(m.drainGen)
+		if cmd == nil {
+			break // no active drain (already torn down).
+		}
+		dm, ok := cmd().(drainMsg)
+		if !ok {
+			t.Fatalf("drain pump produced %T, want drainMsg", cmd())
+		}
+		next, _ := m.Update(dm)
+		m = next.(Model)
+		if _, prog := dm.msg.(DrainProgressMsg); !prog {
+			break // DrainDoneMsg delivered; the chain ends here.
+		}
+	}
+	return m
+}
+
+// TestDrainOpensConfirmModal proves the drain intent opens the confirm modal over the
+// selected Node (naming the target) rather than draining outright — no DrainStream yet.
+func TestDrainOpensConfirmModal(t *testing.T) {
+	d := &fakeDrainer{}
+	m := nodeModel(t, WithDrainer(d))
+	row, _ := m.table.SelectedRow()
+
+	m, _ = dispatchRowAction(t, m, rowActionDrain)
+	if !m.modal.Active() {
+		t.Fatal("the drain intent should open the confirm modal")
+	}
+	if m.modal.Kind() != drainModalKind {
+		t.Fatalf("modal kind = %q, want %q", m.modal.Kind(), drainModalKind)
+	}
+	if d.calls != 0 {
+		t.Fatal("opening the confirm modal must not start a drain yet")
+	}
+	if view := m.View().Content; !strings.Contains(view, row.Object.Name) {
+		t.Fatalf("the confirm modal should name the target Node %q: %q", row.Object.Name, view)
+	}
+}
+
+// TestDrainConfirmRunsDrain drives the whole accept path: open the modal, accept
+// (enter → nav.drillIn) → the modal closes and DrainStream runs against the selected
+// Node with the default options, its progress pumps to the status bar, and the clean
+// close surfaces a success notice.
+func TestDrainConfirmRunsDrain(t *testing.T) {
+	d := &fakeDrainer{events: []kube.DrainEvent{
+		{Message: "cordoned node-1; evicting 1 pod(s)"},
+		{Message: "evicted ns/web (1/1)"},
+		{Message: "removed ns/web (1/1)"},
+	}}
+	m := nodeModel(t, WithDrainer(d))
+	row, _ := m.table.SelectedRow()
+
+	m, _ = dispatchRowAction(t, m, rowActionDrain)
+	m, drainCmd := acceptModal(t, m)
+	if m.modal.Active() {
+		t.Fatal("accepting the modal should hide it")
+	}
+	if drainCmd == nil {
+		t.Fatal("a confirmed drain should start the drain stream")
+	}
+	if d.calls != 1 {
+		t.Fatalf("DrainStream should be called exactly once, got %d", d.calls)
+	}
+	if d.gotRef.Name != row.Object.Name {
+		t.Fatalf("DrainStream addressed %+v, want the selected Node %+v", d.gotRef, row.Object)
+	}
+	if !d.gotOpts.IgnoreDaemonSets || d.gotOpts.Force || d.gotOpts.DeleteEmptyDirData {
+		t.Fatalf("drain options = %+v, want the strict default (IgnoreDaemonSets only)", d.gotOpts)
+	}
+	if m.drainCh == nil {
+		t.Fatal("a started drain should hold a live progress channel")
+	}
+	m = runDrainToDone(t, m)
+	if m.drainCh != nil {
+		t.Fatal("a finished drain should tear down its channel")
+	}
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful drain should surface a neutral status notice, no error")
+	}
+}
+
+// TestDrainDeclineDoesNothing proves declining (esc → nav.back) closes the modal
+// without starting a drain.
+func TestDrainDeclineDoesNothing(t *testing.T) {
+	d := &fakeDrainer{}
+	m := nodeModel(t, WithDrainer(d))
+	m, _ = dispatchRowAction(t, m, rowActionDrain)
+
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("declining the modal should emit a cancelled command")
+	}
+	cancelled, ok := cancelCmd().(modal.CancelledMsg)
+	if !ok {
+		t.Fatalf("decline produced %T, want modal.CancelledMsg", cancelCmd())
+	}
+	next, _ := m.Update(cancelled)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("declining the modal should hide it")
+	}
+	if d.calls != 0 {
+		t.Fatal("a declined confirm must not start a drain")
+	}
+}
+
+// TestDrainErrorDegrades proves a drain that fails (a terminal DrainEvent with Err —
+// e.g. a blocking pod refusal or RBAC) degrades to a transient status-bar error toast
+// (D74) rather than breaking the layout.
+func TestDrainErrorDegrades(t *testing.T) {
+	d := &fakeDrainer{events: []kube.DrainEvent{
+		{Err: errors.New("cannot evict ns/loose (unmanaged)")},
+	}}
+	m := nodeModel(t, WithDrainer(d))
+	m, _ = dispatchRowAction(t, m, rowActionDrain)
+	m, _ = acceptModal(t, m)
+
+	m = runDrainToDone(t, m)
+	if !m.status.HasError() {
+		t.Fatal("a failed drain should surface a status-bar error toast")
+	}
+}
+
+// TestDrainCancelsOnQuit proves an in-flight drain is cancelled when the app quits
+// (cancel-on-quit): the drain's context is done after the quit action runs.
+func TestDrainCancelsOnQuit(t *testing.T) {
+	d := &fakeDrainer{events: []kube.DrainEvent{{Message: "cordoned node-1; evicting 1 pod(s)"}}}
+	m := nodeModel(t, WithDrainer(d))
+	m, _ = dispatchRowAction(t, m, rowActionDrain)
+	m, _ = acceptModal(t, m)
+	if d.ctx == nil {
+		t.Fatal("the drain should have been started with a context")
+	}
+	if d.ctx.Err() != nil {
+		t.Fatal("the drain context should be live before quit")
+	}
+
+	// Quit tears down the in-flight drain via stopDrain (cancel-on-quit); the cancel
+	// acts on the shared cancel func the model holds, so the side effect lands on the
+	// drainer's stored context regardless of the returned model copy.
+	_, _ = m.handleAction(keymap.ActionQuit)
+	if d.ctx.Err() == nil {
+		t.Fatal("quitting should cancel the in-flight drain's context")
+	}
+}
+
+// TestDrainInertWithoutDrainer proves the drain intent is a no-op with no drainer
+// wired: no confirm modal opens and no command is issued.
+func TestDrainInertWithoutDrainer(t *testing.T) {
+	m := nodeModel(t) // no WithDrainer
+	next, cmd := dispatchRowAction(t, m, rowActionDrain)
+	if next.modal.Active() {
+		t.Fatal("with no drainer wired the drain intent must not open a modal")
+	}
+	if cmd != nil {
+		t.Fatal("with no drainer wired the drain intent must not issue a command")
+	}
+}
+
 // signalDeleter is a fakeDeleter that also announces on a channel the moment Delete
 // is invoked, so a full-program (teatest) test can block on the delete actually
 // running before it inspects state — the deterministic barrier the accept flow needs.

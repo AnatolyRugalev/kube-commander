@@ -39,7 +39,7 @@ set, killing nearly all kubectl shell-outs.
 
 - [x] Logs/describe/YAML render in-TUI for the relevant kinds; no external pager needed. (logs cover pods + pod-owning kinds via a resolved backing pod, M3-05…07b/D112; describe M3-04, YAML M3-03)
 - [x] Secret contents viewable with explicit reveal + copy. (reveal/decode masked on open, `secret.reveal`/`r`, M3-08a/D113; per-entry cursor + `secret.copy`/`c` OSC-52 clipboard yank, M3-08b/D114)
-- [ ] Each workload action works with a confirmation step and reports success/failure to the status bar. (delete M3-09/D115; scale prompt + rollout-restart confirm M3-10/D117; cordon/uncordon M3-11a — direct, no confirm since idempotent, D120; drain M3-11b + suspend/resume M3-12 remain)
+- [ ] Each workload action works with a confirmation step and reports success/failure to the status bar. (delete M3-09/D115; scale prompt + rollout-restart confirm M3-10/D117; cordon/uncordon M3-11a — direct, no confirm since idempotent, D120; drain M3-11b — confirm + streamed eviction progress, D121; suspend/resume M3-12 remains)
 - [ ] Port-forwards run in background, are listed, and stop cleanly on exit.
 - [ ] Exec drops into a working shell and restores the TUI afterward.
 - [ ] Edit round-trips through `$EDITOR`.

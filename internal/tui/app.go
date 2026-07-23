@@ -205,6 +205,20 @@ type Cordoner interface {
 	Uncordon(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
 }
 
+// Drainer is the narrow slice of the kube layer the shell needs to run the drain
+// action on a Node (M3-11b): stream the drain's progress (cordon → evict → wait)
+// over a channel via M1-06e-2's DrainStream, so the long eviction loop reports to
+// the status bar without blocking the update loop (D53). *kube.Clients satisfies
+// it. As with the other mutating seams the shell depends on the interface, not the
+// concrete client, so the tui package constructs no client and the flow is
+// driveable in hermetic tests with a fake drainer. A model built without one is
+// drain-inert: the Drain action opens no confirm modal. Unlike cordon/uncordon
+// (idempotent, D120) a drain evicts pods, so — like delete/rollout-restart — it is
+// gated behind the confirm modal (D115).
+type Drainer interface {
+	DrainStream(ctx context.Context, nodeRes kube.Resource, node kube.ObjectRef, opts kube.DrainOptions) <-chan kube.DrainEvent
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -314,6 +328,13 @@ func WithRolloutRestarter(r RolloutRestarter) Option {
 // actions dispatch directly — cordoning is idempotent, so there is no confirm modal.
 func WithCordoner(c Cordoner) Option {
 	return func(m *Model) { m.cordoner = c }
+}
+
+// WithDrainer wires the kube client the shell uses to drain the selected Node once
+// the confirm modal is accepted (M3-11b). Without it the Drain action is inert (the
+// confirm modal never opens).
+func WithDrainer(d Drainer) Option {
+	return func(m *Model) { m.drainer = d }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -579,6 +600,25 @@ type Model struct {
 	// held between an open modal and an accept because there is no modal. Touched only
 	// from the single-threaded update loop.
 	cordoner Cordoner
+
+	// drainer streams a node drain's progress once the confirm modal is accepted
+	// (M3-11b; nil → the Drain action is inert, no modal opens). Unlike the one-shot
+	// mutating actions a drain is long-running and pumped step by step (D53): drainCh
+	// is re-read to pull the next progress event and drainCancel tears the drain's
+	// goroutine down on quit or when a newer drain supersedes it (stopDrain) — the
+	// mutating twin of stopLogStream's cancel-on-close. drainGen tags each pumped
+	// event so a step from a superseded/cancelled drain is dropped rather than
+	// reported to the status bar (mirroring viewerGen for the log stream). drainRes/
+	// drainRef stash the confirm's target (the ConfirmedMsg carries only the modal
+	// Kind, D88), and drainLabel the human node name for the final status message.
+	// All touched only from the single-threaded update loop.
+	drainer     Drainer
+	drainCh     <-chan kube.DrainEvent
+	drainCancel context.CancelFunc
+	drainGen    int
+	drainRes    kube.Resource
+	drainRef    kube.ObjectRef
+	drainLabel  string
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -883,6 +923,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cordonDoneMsg:
 		return m.handleCordonDone(msg)
+
+	case drainMsg:
+		return m.handleDrainMsg(msg)
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
@@ -1343,6 +1386,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.runCordon(msg, true)
 	case rowActionUncordon:
 		return m.runCordon(msg, false)
+	case rowActionDrain:
+		return m.openDrainConfirm(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}
@@ -1400,6 +1445,8 @@ func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd)
 		return m.runScale(msg.Value)
 	case rolloutRestartModalKind:
 		return m.runRolloutRestart()
+	case drainModalKind:
+		return m.runDrain()
 	}
 	return m, nil
 }
@@ -1598,6 +1645,118 @@ func (m Model) handleCordonDone(msg cordonDoneMsg) (tea.Model, tea.Cmd) {
 		return m, m.surfaceError(NewErrorMsg(verb+" "+msg.label, msg.err))
 	}
 	return m, m.surfaceNotice(past + " " + msg.label)
+}
+
+// drainModalKind stamps the confirm modal the drain action opens, so
+// modal.ConfirmedMsg routes back to runDrain — the same one-modal-many-kinds
+// pattern delete/scale/rollout established (D115). Unlike cordon/uncordon (D120) a
+// drain evicts pods, so it needs the confirm.
+const drainModalKind = "drain"
+
+// defaultDrainOptions is kubecom's drain policy (M3-11b). IgnoreDaemonSets is on
+// because virtually every real cluster runs DaemonSet pods (CNI, kube-proxy, log/
+// metric agents) that are never evictable anyway — without it every drain would be
+// refused, which is useless as a default — while Force and DeleteEmptyDirData stay
+// off: those are the data-loss-risking flags (evicting an unmanaged pod's only
+// copy, discarding an emptyDir's contents), so the strict default *refuses* upfront
+// with a message naming the blocking pod (DrainCandidates) rather than silently
+// destroying data. A future leg can surface these as toggles on the confirm (D121).
+var defaultDrainOptions = kube.DrainOptions{IgnoreDaemonSets: true}
+
+// drainMsg wraps one message from the drain pump with the drainGen of the drain
+// that started it, so a step from a drain already superseded (a newer drain started,
+// bumping drainGen) or cancelled (quit) is dropped rather than reported, and its
+// pump chain stopped — mirroring logMsg's stale-stream guard.
+type drainMsg struct {
+	gen int
+	msg tea.Msg
+}
+
+// openDrainConfirm opens the confirm modal over the selected Node before draining it
+// (M3-11b): it stashes the target (resource + the row's ObjectRef) and shows a yes/no
+// confirm naming what will happen. nav.drillIn accepts (ConfirmedMsg → runDrain),
+// nav.back declines (CancelledMsg → nothing happens) — no raw y/n (D11). With no
+// drainer wired it is drain-inert (a no-op), exactly as the Drain entry is absent
+// from a non-Node kind's actions menu.
+func (m Model) openDrainConfirm(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.drainer == nil {
+		return m, nil
+	}
+	m.drainRes = msg.Resource
+	m.drainRef = msg.Object
+	target := viewerTitle(msg.Resource, msg.Object)
+	m.modal.ShowConfirm(drainModalKind, "Drain", "Drain "+target+"? Its pods will be evicted.")
+	return m, nil
+}
+
+// runDrain starts the stashed node drain once the confirm is accepted (M3-11b): it
+// opens a cancellable DrainStream on the shared defaultDrainOptions, bumps drainGen
+// so a prior in-flight drain's pumped steps are dropped, flashes a starting notice,
+// and begins pumping the progress channel step by step (D53) — a long eviction loop
+// never blocks Update. stopDrain first cancels any prior drain; on quit the same
+// teardown cancels this one (cancel-on-quit). Inert if the drainer went away or no
+// target is stashed, so an empty ref never reaches the kube layer.
+func (m Model) runDrain() (tea.Model, tea.Cmd) {
+	if m.drainer == nil || m.drainRef.Name == "" {
+		return m, nil
+	}
+	m.stopDrain() // supersede any prior drain before starting a new one.
+	m.drainGen++
+	gen := m.drainGen
+	m.drainLabel = viewerTitle(m.drainRes, m.drainRef)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.drainCancel = cancel
+	m.drainCh = m.drainer.DrainStream(ctx, m.drainRes, m.drainRef, defaultDrainOptions)
+	return m, tea.Batch(m.surfaceNotice("draining "+m.drainLabel+"…"), m.pumpDrain(gen))
+}
+
+// pumpDrain issues the tea.Cmd that pulls the next progress event from the current
+// drain channel, tagged with the drainGen that started it so a step from a
+// superseded/cancelled drain is recognisable as stale. Returns nil when no drain is
+// active.
+func (m Model) pumpDrain(gen int) tea.Cmd {
+	ch := m.drainCh
+	if ch == nil {
+		return nil
+	}
+	pump := drainPump(ch)
+	return func() tea.Msg { return drainMsg{gen: gen, msg: pump()} }
+}
+
+// handleDrainMsg applies one drain-pump message and re-issues the pump to pull the
+// next step — the one-receive-per-Cmd loop that keeps Update from blocking on a long
+// drain (D53). A message from a superseded/cancelled drain (wrong gen) is dropped and
+// its chain stops. A progress step flashes a neutral status notice and re-pumps; a
+// DrainDoneMsg ends the chain, reporting a failure as a transient error toast (D74)
+// or a success as a neutral notice, and tears the stream down (stopDrain).
+func (m Model) handleDrainMsg(d drainMsg) (tea.Model, tea.Cmd) {
+	if d.gen != m.drainGen {
+		return m, nil // superseded or cancelled drain; drop and stop this chain.
+	}
+	switch inner := d.msg.(type) {
+	case DrainProgressMsg:
+		return m, tea.Batch(m.surfaceNotice(inner.Message), m.pumpDrain(d.gen))
+	case DrainDoneMsg:
+		label := m.drainLabel
+		m.stopDrain()
+		if inner.Err != nil {
+			return m, m.surfaceError(NewErrorMsg("drain "+label, inner.Err))
+		}
+		return m, m.surfaceNotice("drained " + label)
+	}
+	return m, nil
+}
+
+// stopDrain cancels the live drain (if any) and clears its handles, so the drain's
+// goroutine is torn down and no stale step is pumped. Safe to call with no drain
+// active. Called before starting a new drain, on completion, and on quit — the
+// mutating twin of stopLogStream.
+func (m *Model) stopDrain() {
+	if m.drainCancel != nil {
+		m.drainCancel()
+		m.drainCancel = nil
+	}
+	m.drainCh = nil
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -2615,6 +2774,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.discoveryCancel() // and any in-flight discovery pass.
 		}
 		m.stopLogStream() // and any in-flight log stream.
+		m.stopDrain()     // and any in-flight node drain (cancel-on-quit, M3-11b).
 		return m, tea.Quit
 	case keymap.ActionHelp:
 		m.help.Toggle()

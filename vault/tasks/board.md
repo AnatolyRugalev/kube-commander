@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-11a: Node cordon/uncordon wired via a `Cordoner` seam, dispatched directly (no confirm — idempotent, D120), result to the status bar. Top-unblocked next: M3-11b (drain). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-11b: Node Drain wired via a `Drainer` seam (confirm modal, D115), streaming eviction progress to the status bar through a `drainPump` (cancel-on-quit, D121). Top-unblocked next: M3-12 (cronjob suspend/resume). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-11b** Drain wired (`kube.Drain`, confirm) on Node rows: eviction progress → status bar, cancels on quit
-      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -106,6 +105,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-11b** Drain wired: `Drainer` seam (`WithDrainer`) → `kube.DrainStream` (channel twin of `Drain`) on Node rows behind the D115 confirm modal; `drainPump` (mirrors the log pump, `drainGen`-tagged) streams cordon→evict→remove progress to the status bar, terminal error toast / clean-close success notice, `stopDrain` cancel-on-quit; default `{IgnoreDaemonSets:true}` (Force/DeleteEmptyDirData off) — done 2026-07-23 (D121)
 - [x] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (both verbs, `WithCordoner`) → `kube.Cordon`/`Uncordon` on Node rows, dispatched **directly** (idempotent — no confirm modal, no target stash, D120), result to the status bar (neutral notice / error toast) — done 2026-07-23 (D120)
 - [x] **FB-gray-out-empty-types** Feedback (low/soft, `2026-07-23-gray-out-empty-resource-types`): triaged the "gray out empty left-menu resource types" idea — **dismissed** (D119): the eager per-type-count version is forbidden (fights lazy-list D8/principle 4), the cheap opportunistic variant declined for now (marginal revisit-only value vs a namespace-keyed cache + hot-path plumbing + a third menu visual state needing a real-terminal UX check) — done 2026-07-23 (D119)
 - [x] **FB-k9s-not-prior-art** Feedback (normal, `2026-07-23-k9s-not-prior-art`): reworded the README "Special thanks" k9s line from "prior art in the Kubernetes-TUI space" to "a contemporary Kubernetes TUI in the same space" (k9s is a ~2019-2020 peer, not a predecessor); split M3-11 → M3-11a/M3-11b — done 2026-07-23 (D118)

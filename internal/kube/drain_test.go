@@ -382,6 +382,69 @@ func TestDrain(t *testing.T) {
 	}
 }
 
+// TestDrainStreamReportsProgress proves the streaming drain emits a progress event
+// for the cordon+plan and one per pod evicted/removed, then closes the channel
+// cleanly (no terminal Err) — the success terminator the TUI pump reads as done.
+func TestDrainStreamReportsProgress(t *testing.T) {
+	fastDrainTiming(t)
+	dc := newDynamicFake(nodeObj("node-1", false))
+	cs := k8sfake.NewSimpleClientset(pod("ns", "web", controlledBy("ReplicaSet")))
+	cs.PrependReactor("create", "pods", evictReactor(func(p ObjectRef) (bool, error) {
+		if err := cs.Tracker().Delete(podsGVR, p.Namespace, p.Name); err != nil {
+			return true, err
+		}
+		return true, nil
+	}))
+
+	c := &Clients{Dynamic: dc, Clientset: cs}
+	var msgs []string
+	var termErr error
+	for ev := range c.DrainStream(context.Background(), nodesResource, ObjectRef{Name: "node-1"}, DrainOptions{}) {
+		if ev.Err != nil {
+			termErr = ev.Err
+			continue
+		}
+		msgs = append(msgs, ev.Message)
+	}
+	if termErr != nil {
+		t.Fatalf("DrainStream terminal error = %v, want nil", termErr)
+	}
+	joined := strings.Join(msgs, " | ")
+	// cordon plan, then an evicted line, then a removed line — all naming the pod.
+	if !strings.Contains(joined, "cordoned node-1") || !strings.Contains(joined, "evicting 1 pod") {
+		t.Errorf("progress = %q, want a cordon+plan line", joined)
+	}
+	if !strings.Contains(joined, "evicted ns/web") || !strings.Contains(joined, "removed ns/web") {
+		t.Errorf("progress = %q, want evicted+removed lines naming the pod", joined)
+	}
+	if !nodeUnschedulable(t, dc, "node-1") {
+		t.Error("node not cordoned after DrainStream")
+	}
+}
+
+// TestDrainStreamRefusalIsTerminalError proves a refused drain (a DaemonSet pod
+// without IgnoreDaemonSets) emits a single terminal Err event naming the blocking
+// pod and never cordons — the streaming mirror of TestDrainRefusesBeforeCordon.
+func TestDrainStreamRefusalIsTerminalError(t *testing.T) {
+	dc := newDynamicFake(nodeObj("node-1", false))
+	cs := k8sfake.NewSimpleClientset(pod("ns", "agent", controlledBy("DaemonSet")))
+	c := &Clients{Dynamic: dc, Clientset: cs}
+
+	var got []DrainEvent
+	for ev := range c.DrainStream(context.Background(), nodesResource, ObjectRef{Name: "node-1"}, DrainOptions{}) {
+		got = append(got, ev)
+	}
+	if len(got) != 1 || got[0].Err == nil {
+		t.Fatalf("events = %+v, want a single terminal error event", got)
+	}
+	if !strings.Contains(got[0].Err.Error(), "agent") {
+		t.Errorf("terminal error = %v, want it to name the blocking pod", got[0].Err)
+	}
+	if nodeUnschedulable(t, dc, "node-1") {
+		t.Error("node cordoned despite the drain being refused")
+	}
+}
+
 // TestDrainRefusesBeforeCordon proves the ordering guarantee: a drain that would
 // be refused (a DaemonSet pod without IgnoreDaemonSets) errors out *without*
 // cordoning the node, so no cordon is left behind.

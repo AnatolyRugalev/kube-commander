@@ -181,24 +181,88 @@ func podReason(p *corev1.Pod, why string) string {
 // grace periods overlap rather than serialize. The overall deadline is ctx's;
 // errors are wrapped, never panicked (#86).
 func (c *Clients) Drain(ctx context.Context, nodeRes Resource, node ObjectRef, opts DrainOptions) error {
-	candidates, err := c.DrainCandidates(ctx, node, opts)
-	if err != nil {
-		return err // already wrapped, names the node and the blocking pods
-	}
-	if err := c.Cordon(ctx, nodeRes, node); err != nil {
-		return fmt.Errorf("kube: draining node %q: cordon: %w", node.Name, err)
-	}
-	for _, pod := range candidates {
-		if err := c.evictPod(ctx, pod); err != nil {
-			return fmt.Errorf("kube: draining node %q: %w", node.Name, err)
-		}
-	}
-	for _, pod := range candidates {
-		if err := c.waitPodDeleted(ctx, pod); err != nil {
-			return fmt.Errorf("kube: draining node %q: %w", node.Name, err)
+	for ev := range c.DrainStream(ctx, nodeRes, node, opts) {
+		if ev.Err != nil {
+			return ev.Err // already wrapped by DrainStream
 		}
 	}
 	return nil
+}
+
+// DrainEvent is one progress update from a streaming drain (M3-11b). A plain
+// event carries a human Message ("evicted ns/web (2/5)"); the *terminal* event
+// carries a non-nil Err and is the drain's last event before the channel closes.
+// A drain that finishes cleanly emits no terminal event — the channel simply
+// closes after the last progress Message, exactly as a finished log stream closes
+// its channel (msg.go's logPump). It mirrors kube.LogEvent so the TUI can pump it
+// line-by-line off the update loop (D53) and report each step to the status bar.
+type DrainEvent struct {
+	Message string
+	Err     error
+}
+
+// DrainStream runs Drain's sequence — candidates → cordon → evict → wait — on a
+// background goroutine and reports its progress over the returned channel, so a
+// long drain (eviction retries against a PodDisruptionBudget, deletion polls) can
+// stream to the UI without blocking it. It is the channel twin of Drain: Drain is
+// now a thin consumer of this stream, so the two never diverge and drain_test.go's
+// full-sequence coverage exercises this core.
+//
+// Ordering and error wrapping match Drain exactly: candidates are computed before
+// the cordon (a refused drain never leaves a cordon behind), a DrainCandidates
+// refusal is emitted verbatim (it already names the node and the blocking pods),
+// and cordon/evict/wait failures are wrapped with the node context. Each emit
+// races the caller's ctx: a cancelled or timed-out ctx (the TUI's cancel-on-quit,
+// or a drain timeout) ends the goroutine promptly rather than blocking on a send
+// no one will receive. The channel is unbuffered — the consumer pulls one event
+// per pump (D53) — and always closed on return, so the pump sees the close as the
+// success terminator. Errors are wrapped, never panicked (#86).
+func (c *Clients) DrainStream(ctx context.Context, nodeRes Resource, node ObjectRef, opts DrainOptions) <-chan DrainEvent {
+	ch := make(chan DrainEvent)
+	go func() {
+		defer close(ch)
+		// emit sends one event unless ctx is done first; it reports whether the
+		// send landed so the sequence stops the moment the consumer goes away.
+		emit := func(ev DrainEvent) bool {
+			select {
+			case ch <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		candidates, err := c.DrainCandidates(ctx, node, opts)
+		if err != nil {
+			emit(DrainEvent{Err: err}) // already wrapped; names the node + blockers
+			return
+		}
+		if err := c.Cordon(ctx, nodeRes, node); err != nil {
+			emit(DrainEvent{Err: fmt.Errorf("kube: draining node %q: cordon: %w", node.Name, err)})
+			return
+		}
+		if !emit(DrainEvent{Message: fmt.Sprintf("cordoned %s; evicting %d pod(s)", node.Name, len(candidates))}) {
+			return
+		}
+		for i, pod := range candidates {
+			if err := c.evictPod(ctx, pod); err != nil {
+				emit(DrainEvent{Err: fmt.Errorf("kube: draining node %q: %w", node.Name, err)})
+				return
+			}
+			if !emit(DrainEvent{Message: fmt.Sprintf("evicted %s/%s (%d/%d)", pod.Namespace, pod.Name, i+1, len(candidates))}) {
+				return
+			}
+		}
+		for i, pod := range candidates {
+			if err := c.waitPodDeleted(ctx, pod); err != nil {
+				emit(DrainEvent{Err: fmt.Errorf("kube: draining node %q: %w", node.Name, err)})
+				return
+			}
+			if !emit(DrainEvent{Message: fmt.Sprintf("removed %s/%s (%d/%d)", pod.Namespace, pod.Name, i+1, len(candidates))}) {
+				return
+			}
+		}
+	}()
+	return ch
 }
 
 // evictPod requests eviction of one pod through the policy/v1 Eviction API — the
