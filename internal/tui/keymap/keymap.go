@@ -77,6 +77,14 @@ const (
 	// viewer is up and works whether or not the value is on-screen (masked or
 	// revealed) — copying is itself a deliberate gesture; elsewhere it is inert.
 	ActionCopySecret Action = "secret.copy"
+	// ActionForwards toggles the port-forward panel (M3-13b): a global overlay
+	// listing the active background forwards with their bound local:remote ports.
+	// It is app-global, not row-scoped — forwards outlive the row they started on.
+	ActionForwards Action = "forwards.panel"
+	// ActionStopForwards stops every active port-forward at once from the panel
+	// (M3-13b). It is meaningful only while the panel is up; elsewhere it is inert
+	// (the panel's per-forward stop is nav.drillIn on the selected entry).
+	ActionStopForwards Action = "forwards.stopAll"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -118,6 +126,8 @@ var actionMeta = []struct {
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
+	{ActionForwards, "Toggle the port-forward panel"},
+	{ActionStopForwards, "Stop all port-forwards (in the panel)"},
 }
 
 var registered = func() map[Action]string {
@@ -183,6 +193,8 @@ var defaultBindings = map[Action][]string{
 	ActionLogsFollow:   {"f"},
 	ActionRevealSecret: {"r"},
 	ActionCopySecret:   {"c"},
+	ActionForwards:     {"F"},
+	ActionStopForwards: {"X"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

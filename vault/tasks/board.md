@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-13a: port-forward start wired via a `PortForwar
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-13b** Port-forward panel: an overlay listing active forwards with their
+      local:remote ports; stop the selected forward; stop-all gesture. status: in-progress | owner: claude-opus | added: 2026-07-23
 
 ## Blocked
 
@@ -83,10 +84,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-13b** Port-forward panel: an overlay listing active forwards with their
-      local:remote ports; stop the selected forward; stop-all gesture. status: todo | owner: — | added: 2026-07-23
-      notes: Split from M3-13. Reads the model's active-forward set (M3-13a); the panel
-      is an overlay compositing over the browse view (D95), no raw-key matching (D11).
 - [ ] **M3-13c** Port-forward for Services: resolve a Service to a backing endpoint pod
       before forwarding (mirrors M3-07b's `PodForOwner`), re-add Service to the
       Port-forward action's applicability. status: todo | owner: — | added: 2026-07-23
