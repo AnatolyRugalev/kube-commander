@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-08b completed the secret viewer: a per-entry cursor (`nav.up`/`nav.down` select, not scroll) + `secret.copy` (`c`) yanks the selected decoded value to the clipboard via bubbletea's OSC-52, masked or revealed, with a neutral status-bar notice (D114); the M3 secret exit criterion is now met. Top-unblocked next: M3-09 (delete via confirm modal, unblocks M2-14b). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-09 wired delete through the confirm modal: the root owns one `modal.Model`, `res.delete`/`x` `ShowConfirm`s it on the selected row, accept (`nav.drillIn`) runs `kube.Delete` and reports to the status bar (error toast / neutral notice), decline (`nav.back`/quit) closes it — no raw y/n (D115); this **unblocks M2-14b**. Top-unblocked next: M2-14b (modal-flow teatest) or M3-10 (scale + rollout-restart). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-09** Delete action wired through the confirm modal (root owns a `modal.Model`,
-      `ShowConfirm` on the selected row → `ConfirmedMsg` → `kube.Delete`, result to the
-      status bar; accept = `nav.drillIn`, decline = `nav.back`, no raw y/n). **Unblocks M2-14b.**
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -76,11 +73,11 @@ messages.
 - [ ] **M2-14b** teatest coverage: modal confirm flow
       status: todo | owner: — | added: 2026-07-20
       notes: Split from M2-14 — the modal-flow half. Drive a modal confirm flow
-      with teatest/v2 (M0-05 harness). The modal component landed (M2-10/D88), but
-      it is not yet wired into the app shell (D88: wiring lands with the M3 action
-      that needs a confirm). So this teatest needs that app wiring first — **M3-09**
-      (delete via confirm) lands it; do this once M3-09 makes a confirm reachable
-      through the running program.
+      with teatest/v2 (M0-05 harness). **Now unblocked**: M3-09 (D115) wired the
+      confirm modal into the app shell (the delete flow: `x` → confirm → accept runs
+      the delete), so a full-program teatest can now drive `x` → enter (accept) /
+      esc (decline) through the running program and assert the modal opens, captures
+      input, and resolves.
 
 ### M3 — Actions & Viewers
 M3 makes kubecom *operate*: in-TUI viewers + the curated action set, killing nearly
@@ -95,12 +92,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-09** Delete action wired through the confirm modal: root owns a `modal.Model`,
-      `ShowConfirm` on the selected row, `ConfirmedMsg` → `kube.Delete`, result → status
-      bar (D74/D88). **Unblocks M2-14b.** status: todo | owner: — | added: 2026-07-22
-      notes: First confirm wiring — D88's "the M3 action that needs it wires the modal
-      into the shell". No new keymap actions, no raw y/n (accept = `nav.drillIn`, decline
-      = `nav.back`). UID precondition already guards the row-snapshot race (M1-06a/D35).
 - [ ] **M3-10** Scale + rollout-restart wired: scale via `ShowPrompt` (replicas) →
       `kube.Scale`; rollout-restart via `ShowConfirm` → `kube.RolloutRestart`; results
       to the status bar. status: todo | owner: — | added: 2026-07-22
@@ -129,6 +120,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-09** Delete action wired through the confirm modal (`res.delete`/`x` → `modal.ShowConfirm` on the selected row → accept `nav.drillIn` runs `kube.Delete` (row's UID guards the snapshot race), result to the status bar (error toast / neutral notice); decline `nav.back`/quit closes it, no raw y/n; `Deleter` seam + `WithDeleter`) — **unblocks M2-14b** — done 2026-07-23 (D115)
 - [x] **M3-08b** Secret viewer — copy the selected value to the clipboard (#89): per-entry cursor (`nav.up`/`nav.down` select, not scroll; `> ` gutter marks it, `EnsureLineVisible` keeps it on screen), `secret.copy` (`c`) yanks the selected decoded value via `tea.SetClipboard` OSC-52 (masked or revealed), neutral status-bar notice `copied "key" (N bytes)` (new `SetNotice` channel) — done 2026-07-23 (D114)
 - [x] **M3-08a** Secret viewer — reveal/base64-decode (#89): `SecretGetter` seam (`kube.SecretData`, typed clientset → decoded + key-sorted entries) → shared M3-01 viewer; values masked on open (`key: •••• (N bytes)`), the registered `secret.reveal` (`r`) gesture toggles reveal (viewer-only, re-renders the same fetched data), `WithSecretGetter` gates it; copy split to M3-08b — done 2026-07-23 (D113)
 - [x] **M3-07b** Logs — pod-owning kinds (#84): `PodResolver` seam (`kube.PodForOwner`) resolves a Deployment/RS/StatefulSet/DaemonSet/Job/RC to a backing pod (dynamic Get → `spec.selector` → newest Ready pod, fallback newest); `openLogsViewer` resolves off the update loop then feeds the pod into the shared `resolveContainersFor` (M3-07a container path), titled as a Pod; `WithPodResolver` gates it (no resolver → the M3-05…07a not-yet-available toast) — done 2026-07-23 (D112)

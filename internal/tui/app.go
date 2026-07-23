@@ -17,6 +17,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/hintbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
@@ -153,6 +154,20 @@ type PodResolver interface {
 	PodForOwner(ctx context.Context, res kube.Resource, ref kube.ObjectRef) (kube.ObjectRef, error)
 }
 
+// Deleter is the narrow slice of the kube layer the shell needs to run the delete
+// action (M3-09): remove the object a table row references (M1-06a's Delete).
+// *kube.Clients satisfies it. As with the viewer seams the shell depends on this
+// interface, not the concrete client, so the tui package never constructs a client
+// and the delete flow is driveable in hermetic tests with a fake deleter. A model
+// built without one (the default) is delete-inert: the res.delete action opens no
+// confirm modal, which is what the pre-wiring app and the non-action tests want.
+// The signature matches kube.Delete so the UID-precondition row-snapshot guard
+// (M1-06a/D35) rides through unchanged — the shell passes the selected row's ref
+// (carrying its UID) so a stale row deletes only that exact object.
+type Deleter interface {
+	Delete(ctx context.Context, r kube.Resource, ref kube.ObjectRef, opts metav1.DeleteOptions) error
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -234,6 +249,13 @@ func WithPodResolver(r PodResolver) Option {
 // is inert (the viewer never opens).
 func WithSecretGetter(g SecretGetter) Option {
 	return func(m *Model) { m.secretGetter = g }
+}
+
+// WithDeleter wires the kube client the shell uses to delete the selected row's
+// object once the confirm modal is accepted (M3-09). Without it the res.delete
+// action is inert (the confirm modal never opens).
+func WithDeleter(d Deleter) Option {
+	return func(m *Model) { m.deleter = d }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -329,6 +351,7 @@ type Model struct {
 	actPicker picker.Model
 	ctrPicker picker.Model
 	viewer    viewer.Model
+	modal     modal.Model
 	welcome   welcome.Model
 
 	// context is the resolved kube context name and version the build version;
@@ -465,6 +488,18 @@ type Model struct {
 	// (D107); only the update loop touches it.
 	actByLabel map[string]rowAction
 
+	// deleter runs the delete action once the confirm modal is accepted (M3-09; nil
+	// → the res.delete action is inert, the modal never opens). deleteRes/deleteRef
+	// stash the target the open confirm applies to: modal.ConfirmedMsg carries only
+	// the modal's Kind (no payload in confirm mode, D88), so the resource + the row's
+	// ObjectRef (its UID guards the snapshot race, M1-06a/D35) are held here between
+	// the modal opening and the accept landing. Consulted only while the delete modal
+	// is up (deleteModalKind), so a stale value left from a declined one is harmless.
+	// Touched only from the single-threaded update loop.
+	deleter   Deleter
+	deleteRes kube.Resource
+	deleteRef kube.ObjectRef
+
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
 	// and it re-scopes to whatever is showing. filtering is whether it is open and
@@ -553,6 +588,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		actPicker:   picker.New(s, actionPickerKind),
 		ctrPicker:   picker.New(s, containerPickerKind),
 		viewer:      viewer.New(s, viewerKindYAML),
+		modal:       modal.New(s),
 		welcome:     welcome.New(s),
 		filterInput: fi,
 	}
@@ -743,6 +779,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case rowActionMsg:
 		return m.handleRowAction(msg)
+
+	case modal.ConfirmedMsg:
+		return m.handleModalConfirmed(msg)
+
+	case modal.CancelledMsg:
+		// The confirm modal was declined (nav.back) or dismissed. Hide it; the stashed
+		// delete target is left untouched (harmless — runDelete only fires on accept).
+		m.modal.Hide()
+		return m, nil
+
+	case deleteDoneMsg:
+		return m.handleDeleteDone(msg)
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
@@ -1195,12 +1243,89 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openLogsViewer(msg)
 	case rowActionSecret:
 		return m.openSecretViewer(msg)
+	case rowActionDelete:
+		return m.openDeleteConfirm(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
 		label += " " + msg.Object.Name
 	}
 	return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
+}
+
+// deleteModalKind stamps the confirm modal the delete action opens so
+// modal.ConfirmedMsg/CancelledMsg route back to the delete flow. It is the first
+// confirm wiring (D88's "the M3 action that needs it wires the modal into the
+// shell"); later mutating actions (M3-10…12) reuse the same modal with their own
+// kinds.
+const deleteModalKind = "delete"
+
+// deleteDoneMsg carries the outcome of the async kube.Delete issued once the confirm
+// modal is accepted (M3-09). label is the human target ("Pod default/web-1") for the
+// status-bar result. Unlike the viewer fetches there is no generation guard: a delete
+// is a one-shot fire-and-report with no overlay to leave stale — its result only ever
+// flashes a transient status message, and a superseded one is harmless.
+type deleteDoneMsg struct {
+	label string
+	err   error
+}
+
+// openDeleteConfirm opens the confirm modal over the selected row before deleting it
+// (M3-09): it stashes the target (resource + the row's ObjectRef, whose UID guards
+// the snapshot race — M1-06a/D35) and shows a yes/no confirm. nav.drillIn accepts
+// (ConfirmedMsg → the delete runs), nav.back declines (CancelledMsg → nothing
+// happens) — no raw y/n (D11). With no deleter wired it is delete-inert (a no-op),
+// exactly as the res.delete key is absent from a kind whose menu omits Delete.
+func (m Model) openDeleteConfirm(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.deleter == nil {
+		return m, nil
+	}
+	m.deleteRes = msg.Resource
+	m.deleteRef = msg.Object
+	target := viewerTitle(msg.Resource, msg.Object)
+	m.modal.ShowConfirm(deleteModalKind, "Delete", "Delete "+target+"?")
+	return m, nil
+}
+
+// handleModalConfirmed runs the action the accepted modal stands for. Delete is the
+// only wired kind so far (M3-09); later mutating actions add their own case. The
+// modal is hidden first — the accept resolves it — then the kube call is issued off
+// the update loop, its result reported to the status bar (handleDeleteDone).
+func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd) {
+	m.modal.Hide()
+	switch msg.Kind {
+	case deleteModalKind:
+		return m.runDelete()
+	}
+	return m, nil
+}
+
+// runDelete issues the stashed delete off the update loop and reports its outcome via
+// deleteDoneMsg. The deleted row leaves the table on its own — the delete triggers a
+// watch DELETED event the live table already folds in (ApplyEvent) — so nothing here
+// touches the table. Inert if the deleter went away or no target is stashed (a
+// declined-then-somehow-reentered modal), so an empty ref never reaches kube.Delete.
+func (m Model) runDelete() (tea.Model, tea.Cmd) {
+	if m.deleter == nil || m.deleteRef.Name == "" {
+		return m, nil
+	}
+	deleter, r, ref := m.deleter, m.deleteRes, m.deleteRef
+	label := viewerTitle(r, ref)
+	return m, func() tea.Msg {
+		err := deleter.Delete(context.Background(), r, ref, metav1.DeleteOptions{})
+		return deleteDoneMsg{label: label, err: err}
+	}
+}
+
+// handleDeleteDone reports a completed delete: a failure (NotFound, RBAC, or a UID
+// Conflict from the row-snapshot guard) degrades to a transient status-bar error
+// toast (D74), a success to a neutral status notice. Either way the layout never
+// breaks and the row itself leaves via the watch stream, not this handler.
+func (m Model) handleDeleteDone(msg deleteDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("delete "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice("deleted " + msg.label)
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -1951,7 +2076,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.modal.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -2125,6 +2250,9 @@ func (m *Model) resize() {
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
+	// The confirm modal (M3-09) is a small centered overlay; it too sits within the
+	// body area so the top status line and bottom hint line stay visible around it.
+	m.modal.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -2168,6 +2296,13 @@ func (m Model) scheduleTimeout() tea.Cmd {
 // is routed to the focused pane, with nav.left/nav.right also switching focus
 // between panes.
 func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	// The confirm modal (M3-09) captures input while it is up and takes precedence
+	// over every other surface: nav.drillIn accepts, nav.back/app.quit decline, and
+	// everything else is swallowed so the browse panes underneath never move (the
+	// help/viewer capture pattern). It consumes actions, never raw keys (D11).
+	if m.modal.Active() {
+		return m.handleModalAction(a)
+	}
 	// The read-only viewer (M3-03) captures input while it is up: it scrolls on
 	// navigation and closes on nav.back/quit, and swallows everything else so the
 	// browse panes underneath never move (mirroring the help modal's capture).
@@ -2254,6 +2389,21 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.triggerRowActionKey(a)
 	}
 	return m.routeNav(a)
+}
+
+// handleModalAction routes a resolved action to the open confirm modal (M3-09).
+// app.quit dismisses it (a decline — quit never deletes, matching how the help modal
+// and viewer own the quit key while open); every other action is fed to the modal,
+// which accepts on nav.drillIn (ConfirmedMsg) and declines on nav.back (CancelledMsg)
+// and swallows the rest. The root hides the modal when either result lands.
+func (m Model) handleModalAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	if a == keymap.ActionQuit {
+		m.modal.Hide()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.modal, cmd = m.modal.Update(a)
+	return m, cmd
 }
 
 // handleViewerAction routes a resolved action to the open read-only viewer (M3-03).
@@ -2422,6 +2572,11 @@ func (m Model) View() tea.View {
 	// 2026-07-22-popups-should-overlay).
 	body := m.browseBody()
 	switch {
+	case m.modal.Active():
+		// The confirm modal (M3-09) is the topmost overlay: it opens over the browse
+		// view (never over another overlay), so listing it first keeps the switch's
+		// single-overlay invariant while giving it precedence.
+		body = overlayCenter(body, m.modal.View(), m.width, m.bodyHeight())
 	case m.help.Visible():
 		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
 	case m.nsPicker.Active():

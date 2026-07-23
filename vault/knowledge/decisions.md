@@ -2842,3 +2842,30 @@ the non-error twin of `SetError`; an error outranks a notice in `View`) so a suc
 as success, not as the red error toast. A future leg must keep copy off the raw-key path,
 keep the value off-screen/out of the confirmation, and not reintroduce an error-styled
 success.
+
+### D115 — Delete wired through the confirm modal: root owns one `modal.Model` captured in `handleAction`, `ConfirmedMsg` routes by Kind, result to the status bar, no raw y/n
+**2026-07-23 (M3-09).** First confirm wiring — D88's "the M3 action that needs it
+wires the modal into the shell" — and the pattern the remaining mutating actions
+(M3-10 scale/rollout, M3-11 cordon/drain, M3-12 suspend/resume) must follow.
+Constraints a later leg must not silently break: (1) The root owns exactly **one**
+`modal.Model` (`modal.New(s)`, sized in `resize()`); each action `ShowConfirm`s it
+with its own **Kind** so `modal.ConfirmedMsg`/`CancelledMsg` route back by Kind
+(`deleteModalKind` = `"delete"`). (2) The modal captures input in **`handleAction`**
+(via `handleModalAction`), **before** the viewer check, so it is the topmost input
+surface: `nav.drillIn` accepts, `nav.back`/`app.quit` decline, everything else is
+swallowed — it consumes **actions, never raw keys** (D11), so accept/decline are the
+Enter/Esc-consistent gestures, **no raw y/n**. (3) The confirm carries **no payload**
+in confirm mode, so the action's target (resource + the row's `ObjectRef`, whose UID
+guards the snapshot race — M1-06a/D35) is **stashed on the model** (`deleteRes`/
+`deleteRef`) between the modal opening and the accept landing, keyed live off the
+modal's Kind. (4) The mutating kube call runs **off the update loop** on accept and
+reports its outcome via a done-message to the status bar — a failure (NotFound/RBAC/
+UID Conflict) as a transient **error toast** (D74), a success as a neutral **notice**
+(D114's `surfaceNotice`); the layout never breaks. (5) The affected row **leaves the
+table via the live watch stream** (the delete triggers a DELETED event `ApplyEvent`
+folds in), **not** by manual table mutation — a mutating action never edits the table
+directly. (6) The modal is added to `overlayActive()` (mouse inert while up) and
+composited **first** in `View`'s overlay switch (topmost). Without a `Deleter` wired
+(`WithDeleter`) the action is inert — the modal never opens — so the pre-wiring app
+and non-action tests stay quiet. This **unblocks M2-14b** (the modal-flow teatest now
+has a reachable confirm through the running program).

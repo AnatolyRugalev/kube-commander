@@ -17,6 +17,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
@@ -3740,5 +3741,200 @@ func TestCopyInertOnYAMLViewer(t *testing.T) {
 	}
 	if !m.viewer.Active() {
 		t.Fatal("secret.copy should not close the YAML viewer")
+	}
+}
+
+// fakeDeleter is a hermetic Deleter: it records the object it was asked to delete
+// (so a test can assert the selected row — with its UID — was addressed) and returns
+// a preset error. *kube.Clients is the real one; this stands in for the seam.
+type fakeDeleter struct {
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeDeleter) Delete(_ context.Context, r kube.Resource, ref kube.ObjectRef, _ metav1.DeleteOptions) error {
+	f.calls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+// deleteTableModel drills into a pods table with a deleter wired so a delete test has
+// a concrete selected row (carrying a UID) and a delete seam.
+func deleteTableModel(t *testing.T, d Deleter) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithDeleter(d))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// deleteKey is the default res.delete key (`x`).
+var deleteKey = tea.Key{Code: 'x', Text: "x"}
+
+// openDeleteModal presses the delete key over the selected row and delivers the
+// resulting rowActionMsg, returning the model with the confirm modal open.
+func openDeleteModal(t *testing.T, m Model) Model {
+	t.Helper()
+	m, cmd := press(t, m, deleteKey)
+	if cmd == nil {
+		t.Fatal("the delete key should dispatch a row-action intent")
+	}
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("delete key produced %T, want rowActionMsg", cmd())
+	}
+	next, _ := m.Update(intent)
+	return next.(Model)
+}
+
+// TestDeleteOpensConfirmModal proves the delete key opens the confirm modal over the
+// selected row (naming the target) rather than deleting outright — no kube call yet.
+func TestDeleteOpensConfirmModal(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	row, _ := m.table.SelectedRow()
+
+	m = openDeleteModal(t, m)
+	if !m.modal.Active() {
+		t.Fatal("the delete key should open the confirm modal")
+	}
+	if m.modal.Kind() != deleteModalKind {
+		t.Fatalf("modal kind = %q, want %q", m.modal.Kind(), deleteModalKind)
+	}
+	if d.calls != 0 {
+		t.Fatal("opening the confirm modal must not delete anything yet")
+	}
+	// The modal names the target so the user knows what they are confirming.
+	if view := m.View().Content; !strings.Contains(view, row.Object.Name) {
+		t.Fatalf("the confirm modal should name the target row %q: %q", row.Object.Name, view)
+	}
+}
+
+// TestDeleteConfirmRunsDelete drives the whole accept path: open the modal, accept
+// (enter → nav.drillIn) → the modal closes and kube.Delete runs against the selected
+// row (its UID rides through for the snapshot guard), and the success surfaces a
+// neutral status notice.
+func TestDeleteConfirmRunsDelete(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	row, _ := m.table.SelectedRow()
+	m = openDeleteModal(t, m)
+
+	// Accept: enter (nav.drillIn) emits ConfirmedMsg.
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if confirmCmd == nil {
+		t.Fatal("accepting the modal should emit a confirmed command")
+	}
+	confirmed, ok := confirmCmd().(modal.ConfirmedMsg)
+	if !ok {
+		t.Fatalf("accept produced %T, want modal.ConfirmedMsg", confirmCmd())
+	}
+	next, delCmd := m.Update(confirmed)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("accepting the modal should hide it")
+	}
+	if delCmd == nil {
+		t.Fatal("a confirmed delete should issue the kube.Delete command")
+	}
+	done, ok := delCmd().(deleteDoneMsg)
+	if !ok {
+		t.Fatalf("delete produced %T, want deleteDoneMsg", delCmd())
+	}
+	if d.calls != 1 {
+		t.Fatalf("Delete should be called exactly once, got %d", d.calls)
+	}
+	if d.gotRef.Name != row.Object.Name || d.gotRef.UID != row.Object.UID {
+		t.Fatalf("Delete addressed %+v, want the selected row %+v", d.gotRef, row.Object)
+	}
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() {
+		t.Fatal("a successful delete should surface a neutral status notice")
+	}
+	if m.status.HasError() {
+		t.Fatal("a successful delete should not surface an error")
+	}
+}
+
+// TestDeleteConfirmDeclineDoesNothing proves declining (esc → nav.back) closes the
+// modal without deleting.
+func TestDeleteConfirmDeclineDoesNothing(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	m = openDeleteModal(t, m)
+
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("declining the modal should emit a cancelled command")
+	}
+	cancelled, ok := cancelCmd().(modal.CancelledMsg)
+	if !ok {
+		t.Fatalf("decline produced %T, want modal.CancelledMsg", cancelCmd())
+	}
+	next, _ := m.Update(cancelled)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("declining the modal should hide it")
+	}
+	if d.calls != 0 {
+		t.Fatal("a declined confirm must not delete anything")
+	}
+}
+
+// TestDeleteErrorDegrades proves a failed delete (e.g. RBAC or a UID conflict from
+// the snapshot guard) degrades to a transient status-bar error toast (D74).
+func TestDeleteErrorDegrades(t *testing.T) {
+	d := &fakeDeleter{err: errors.New("forbidden")}
+	m := deleteTableModel(t, d)
+	m = openDeleteModal(t, m)
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	next, delCmd := m.Update(confirmCmd().(modal.ConfirmedMsg))
+	m = next.(Model)
+	done := delCmd().(deleteDoneMsg)
+	if done.err == nil {
+		t.Fatal("the delete result should carry the deleter's error")
+	}
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Fatal("a failed delete should surface a status-bar error toast")
+	}
+}
+
+// TestDeleteInertWithoutDeleter proves the delete key is a no-op with no deleter
+// wired: the confirm modal never opens.
+func TestDeleteInertWithoutDeleter(t *testing.T) {
+	m := openPodTable(t, "Pod") // no WithDeleter
+	m, cmd := press(t, m, deleteKey)
+	if cmd == nil {
+		t.Fatal("the delete key still dispatches an intent (routing stays observable)")
+	}
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("with no deleter wired the confirm modal must not open")
+	}
+}
+
+// TestDeleteModalSwallowsNav proves the open confirm modal captures input: a nav key
+// does not move the browse panes underneath it.
+func TestDeleteModalSwallowsNav(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	before, _ := m.table.SelectedRow()
+	m = openDeleteModal(t, m)
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"}) // nav.down
+	if !m.modal.Active() {
+		t.Fatal("a nav key must not close the modal")
+	}
+	after, _ := m.table.SelectedRow()
+	if after.Object.Name != before.Object.Name {
+		t.Fatal("the table selection must not move while the confirm modal is up")
 	}
 }
