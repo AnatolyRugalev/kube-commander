@@ -102,6 +102,7 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Port-forward · Exec shell | via actions menu | Pod (+Service for forward) |
 | Reveal secret | via actions menu | Secret (#89) — opens the secret viewer masked |
 | Reveal / hide secret values | `r` (`secret.reveal`) | secret viewer only; values start masked, `r` toggles reveal (M3-08a) |
+| Copy selected secret value | `c` (`secret.copy`) | secret viewer only; `j`/`k` move the entry cursor, `c` yanks the decoded value to the clipboard (OSC-52), masked or revealed (M3-08b) |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
 | Resource palette | `:` (`resources.switch`) | |

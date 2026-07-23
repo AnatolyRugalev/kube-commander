@@ -146,6 +146,12 @@ func (m Model) AtBottom() bool { return m.viewport.AtBottom() }
 // (re-)enabled, so a following log tails the newest output.
 func (m *Model) GotoBottom() { m.viewport.GotoBottom() }
 
+// EnsureLineVisible scrolls the viewport the minimum amount so line n (0-based,
+// into the current content) is on screen, leaving it where it is if already
+// visible. The secret viewer (M3-08b) calls it after moving the entry cursor so
+// the selected entry never scrolls out of view in a many-key Secret.
+func (m *Model) EnsureLineVisible(n int) { m.viewport.EnsureVisible(n, 0, 0) }
+
 // Update handles a resolved keymap action while the viewer is active. Navigation
 // scrolls the viewport (vim nav + gg/G + half/full page, D10); nav.back closes the
 // viewer (ClosedMsg) for the root model to hide. The viewer consumes actions, never

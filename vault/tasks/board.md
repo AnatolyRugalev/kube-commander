@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-08a landed the secret viewer: `SecretGetter`/`SecretData` (typed clientset, decoded + key-sorted) → shared viewer, values masked on open, `secret.reveal` (`r`) toggles reveal, `WithSecretGetter` gates it (D113); M3-08b (copy the revealed value) is the next unblocked slice and ticks the secret exit criterion. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-08b completed the secret viewer: a per-entry cursor (`nav.up`/`nav.down` select, not scroll) + `secret.copy` (`c`) yanks the selected decoded value to the clipboard via bubbletea's OSC-52, masked or revealed, with a neutral status-bar notice (D114); the M3 secret exit criterion is now met. Top-unblocked next: M3-09 (delete via confirm modal, unblocks M2-14b). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-08b** Secret viewer — copy the revealed value to the clipboard (#89)
-      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -93,12 +92,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-08b** Secret viewer — copy the revealed value to the clipboard (#89, split
-      from M3-08). status: todo | owner: — | added: 2026-07-23
-      notes: Split from M3-08 (M3-08a landed the reveal/decode viewer). Copy reuses the
-      mouse/clipboard story (D86/D97) or an OSC-52 write — decide in the leg and record
-      it. Needs a per-key selection model over the secret entries (M3-08a reveals all at
-      once); decide the selection gesture in the leg. Ticks the M3 secret exit criterion.
 - [ ] **M3-09** Delete action wired through the confirm modal: root owns a `modal.Model`,
       `ShowConfirm` on the selected row, `ConfirmedMsg` → `kube.Delete`, result → status
       bar (D74/D88). **Unblocks M2-14b.** status: todo | owner: — | added: 2026-07-22
@@ -133,6 +126,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-08b** Secret viewer — copy the selected value to the clipboard (#89): per-entry cursor (`nav.up`/`nav.down` select, not scroll; `> ` gutter marks it, `EnsureLineVisible` keeps it on screen), `secret.copy` (`c`) yanks the selected decoded value via `tea.SetClipboard` OSC-52 (masked or revealed), neutral status-bar notice `copied "key" (N bytes)` (new `SetNotice` channel) — done 2026-07-23 (D114)
 - [x] **M3-08a** Secret viewer — reveal/base64-decode (#89): `SecretGetter` seam (`kube.SecretData`, typed clientset → decoded + key-sorted entries) → shared M3-01 viewer; values masked on open (`key: •••• (N bytes)`), the registered `secret.reveal` (`r`) gesture toggles reveal (viewer-only, re-renders the same fetched data), `WithSecretGetter` gates it; copy split to M3-08b — done 2026-07-23 (D113)
 - [x] **M3-07b** Logs — pod-owning kinds (#84): `PodResolver` seam (`kube.PodForOwner`) resolves a Deployment/RS/StatefulSet/DaemonSet/Job/RC to a backing pod (dynamic Get → `spec.selector` → newest Ready pod, fallback newest); `openLogsViewer` resolves off the update loop then feeds the pod into the shared `resolveContainersFor` (M3-07a container path), titled as a Pod; `WithPodResolver` gates it (no resolver → the M3-05…07a not-yet-available toast) — done 2026-07-23 (D112)
 - [x] **M3-07a** Logs container picker for multi-container pods: `ContainerLister` seam (`kube.PodContainers`) resolves a pod's containers before streaming — multiple open the reused modal picker (`ctrPicker`) and the pick streams the chosen container, a single container streams directly; no lister → default container (no picker); streaming factored into `streamLogsInto`, container named in the title — done 2026-07-23 (D111)

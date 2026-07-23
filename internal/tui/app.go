@@ -429,6 +429,14 @@ type Model struct {
 	secretGetter   SecretGetter
 	secretData     kube.SecretData
 	secretRevealed bool
+	// secretSel is the entry cursor into secretData.Entries (M3-08b): the entry
+	// secret.copy copies and the one renderSecret marks with the cursor gutter.
+	// nav.up/nav.down move it while the secret viewer is up (secrets are small, so
+	// the cursor is more useful than a line scroll there). secretEntryLines maps
+	// each entry index to its 0-based output line so the selected entry can be kept
+	// on screen (EnsureLineVisible). Reset on every open/load.
+	secretSel        int
+	secretEntryLines []int
 
 	// logFollow is whether the open logs viewer is following (M3-06): the stream is
 	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
@@ -503,6 +511,11 @@ type Model struct {
 	// guard). Every surfaced error bumps it; only a clear tick whose gen still
 	// matches clears the bar.
 	statusErrGen int
+
+	// statusNoticeGen is statusErrGen's twin for the neutral (non-error) status
+	// notice — the transient success message the secret copy shows (M3-08b). Kept
+	// separate so an error and a notice clear on independent timers.
+	statusNoticeGen int
 
 	width  int
 	height int
@@ -583,6 +596,10 @@ type watchMsg struct {
 // error superseded it) and the clear is ignored — the newer error keeps its own
 // full display window.
 type errorClearMsg struct{ gen int }
+
+// noticeClearMsg auto-clears a transient status-bar notice after errorDisplay, the
+// neutral twin of errorClearMsg guarded by statusNoticeGen (M3-08b).
+type noticeClearMsg struct{ gen int }
 
 // startDiscoveryMsg is the private self-message Init emits to begin discovery.
 // Init cannot start it directly — a value receiver returning only a tea.Cmd
@@ -678,6 +695,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorClearMsg:
 		if msg.gen == m.statusErrGen {
 			m.status.ClearError()
+		}
+		return m, nil
+
+	case noticeClearMsg:
+		if msg.gen == m.statusNoticeGen {
+			m.status.ClearNotice()
 		}
 		return m, nil
 
@@ -816,6 +839,20 @@ func (m *Model) surfaceError(e ErrorMsg) tea.Cmd {
 	gen := m.statusErrGen
 	return tea.Tick(errorDisplay, func(time.Time) tea.Msg {
 		return errorClearMsg{gen: gen}
+	})
+}
+
+// surfaceNotice shows a neutral (non-error) transient message in the status bar and
+// arms its auto-clear timer — surfaceError's twin for a success confirmation (the
+// secret copy, M3-08b). It bumps statusNoticeGen so a stale clear timer can't wipe a
+// newer notice early, and returns the clear Cmd for the caller to batch. It mutates
+// the receiver, so callers pass the addressable model value they are about to return.
+func (m *Model) surfaceNotice(text string) tea.Cmd {
+	m.status.SetNotice(text)
+	m.statusNoticeGen++
+	gen := m.statusNoticeGen
+	return tea.Tick(errorDisplay, func(time.Time) tea.Msg {
+		return noticeClearMsg{gen: gen}
 	})
 }
 
@@ -1314,6 +1351,8 @@ func (m Model) openSecretViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	gen := m.viewerGen
 	m.secretRevealed = false // every open starts masked (the deliberate-reveal contract).
 	m.secretData = kube.SecretData{}
+	m.secretSel = 0
+	m.secretEntryLines = nil
 	m.viewer.SetKind(viewerKindSecret)
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
 	m.viewer.SetContent("") // clear any prior object's content before the fetch lands.
@@ -1341,7 +1380,8 @@ func (m Model) handleSecretLoaded(msg secretLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.secretData = msg.data
 	m.secretRevealed = false
-	m.viewer.SetContent(renderSecret(msg.data, false))
+	m.secretSel = 0
+	m = m.renderSecretViewer()
 	return m, nil
 }
 
@@ -1349,45 +1389,77 @@ func (m Model) handleSecretLoaded(msg secretLoadedMsg) (tea.Model, tea.Cmd) {
 // value's length is not leaked while it is masked.
 const secretMask = "••••••••"
 
+// secretCursor / secretGutter are the 2-cell prefix each entry line carries so the
+// selected entry (secretCursor) stands out from the rest (secretGutter). Both are
+// the same width so keys stay column-aligned as the cursor moves (M3-08b).
+const (
+	secretCursor = "> "
+	secretGutter = "  "
+)
+
 // renderSecret formats a secret's data for the viewer: a type header, then one line
-// per key. While masked (revealed == false) each value is a fixed mask followed by
-// its byte length, so the user sees the keys and can decide what to reveal without
-// the value ever leaking; revealed, the decoded value is shown verbatim (a multi-line
-// value is indented under its key so the block stays readable). Keys arrive sorted
-// from the kube layer.
-func renderSecret(data kube.SecretData, revealed bool) string {
+// per key with a cursor gutter marking the selected entry (sel, M3-08b). While masked
+// (revealed == false) each value is a fixed mask followed by its byte length, so the
+// user sees the keys and can decide what to reveal without the value ever leaking;
+// revealed, the decoded value is shown verbatim (a multi-line value is indented under
+// its key so the block stays readable). Keys arrive sorted from the kube layer. It
+// also returns each entry's 0-based output line (its key line) so the caller can keep
+// the selected entry on screen (nil when there are no entries).
+func renderSecret(data kube.SecretData, revealed bool, sel int) (string, []int) {
 	var b strings.Builder
 	typ := data.Type
 	if typ == "" {
 		typ = "(none)"
 	}
 	b.WriteString("Type: " + typ + "\n")
-	state := "hidden — press r to reveal"
+	state := "hidden — press r to reveal, c to copy"
 	if revealed {
-		state = "revealed — press r to hide"
+		state = "revealed — press r to hide, c to copy"
 	}
 	b.WriteString("Data: " + state + "\n\n")
 	if len(data.Entries) == 0 {
 		b.WriteString("(no data)\n")
-		return b.String()
+		return b.String(), nil
 	}
-	for _, e := range data.Entries {
+	line := 3 // Type, Data, blank already emitted.
+	entryLines := make([]int, len(data.Entries))
+	for i, e := range data.Entries {
+		entryLines[i] = line
+		gutter := secretGutter
+		if i == sel {
+			gutter = secretCursor
+		}
 		if !revealed {
-			fmt.Fprintf(&b, "%s: %s (%d bytes)\n", e.Key, secretMask, len(e.Value))
+			fmt.Fprintf(&b, "%s%s: %s (%d bytes)\n", gutter, e.Key, secretMask, len(e.Value))
+			line++
 			continue
 		}
 		if strings.Contains(e.Value, "\n") {
 			// A multi-line value (a cert, a kubeconfig) reads best under its key,
 			// each line indented so it is visually part of the entry.
-			b.WriteString(e.Key + ":\n")
-			for _, line := range strings.Split(e.Value, "\n") {
-				b.WriteString("  " + line + "\n")
+			b.WriteString(gutter + e.Key + ":\n")
+			line++
+			for _, l := range strings.Split(e.Value, "\n") {
+				b.WriteString(secretGutter + "  " + l + "\n")
+				line++
 			}
 			continue
 		}
-		b.WriteString(e.Key + ": " + e.Value + "\n")
+		b.WriteString(gutter + e.Key + ": " + e.Value + "\n")
+		line++
 	}
-	return b.String()
+	return b.String(), entryLines
+}
+
+// renderSecretViewer re-renders the open secret viewer from the current
+// data/reveal/cursor state and records the entry line offsets. It resets the scroll
+// to the top (SetContent), so callers that move the cursor follow it with
+// EnsureLineVisible to pull the selection back on screen.
+func (m Model) renderSecretViewer() Model {
+	content, lines := renderSecret(m.secretData, m.secretRevealed, m.secretSel)
+	m.secretEntryLines = lines
+	m.viewer.SetContent(content)
+	return m
 }
 
 // logMsg wraps one message from the log pump with the viewerGen of the viewer open
@@ -2203,7 +2275,39 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionRevealSecret {
 		if m.viewer.Kind() == viewerKindSecret {
 			m.secretRevealed = !m.secretRevealed
-			m.viewer.SetContent(renderSecret(m.secretData, m.secretRevealed))
+			m = m.renderSecretViewer()
+		}
+		return m, nil
+	}
+	// secret.copy (`c`) copies the selected entry's decoded value to the system
+	// clipboard via OSC-52 (M3-08b); it is inert on the other viewers and when the
+	// Secret has no data. Copy works masked or revealed — putting the value on the
+	// clipboard is itself the deliberate gesture, so it need not be on screen first;
+	// only the key + byte length are echoed (a neutral status notice), never the
+	// value.
+	if a == keymap.ActionCopySecret {
+		if m.viewer.Kind() == viewerKindSecret && m.secretSel < len(m.secretData.Entries) {
+			e := m.secretData.Entries[m.secretSel]
+			notice := m.surfaceNotice(fmt.Sprintf("copied %q (%d bytes)", e.Key, len(e.Value)))
+			return m, tea.Batch(tea.SetClipboard(e.Value), notice)
+		}
+		return m, nil
+	}
+	// nav.up/nav.down move the entry cursor while the secret viewer is up (M3-08b)
+	// rather than line-scrolling: a Secret's body is small, so walking entries is the
+	// useful gesture, and EnsureLineVisible keeps the selection on screen for a
+	// many-key Secret (half/full-page keys still scroll for a large revealed value).
+	if m.viewer.Kind() == viewerKindSecret && (a == keymap.ActionUp || a == keymap.ActionDown) {
+		if n := len(m.secretData.Entries); n > 0 {
+			if a == keymap.ActionUp && m.secretSel > 0 {
+				m.secretSel--
+			} else if a == keymap.ActionDown && m.secretSel < n-1 {
+				m.secretSel++
+			}
+			m = m.renderSecretViewer()
+			if m.secretSel < len(m.secretEntryLines) {
+				m.viewer.EnsureLineVisible(m.secretEntryLines[m.secretSel])
+			}
 		}
 		return m, nil
 	}

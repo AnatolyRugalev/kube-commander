@@ -2815,3 +2815,30 @@ gates it: without a getter wired the Reveal-secret action is inert (the viewer n
 (M3-08b)** are the deferred follow-up that ticks the M3 secret exit criterion — this leg is
 reveal only. A binary value renders as-is (read-only text); the copy slice can special-case
 it.
+
+### D114 — The secret viewer has an entry cursor (nav.up/down select, not scroll); `secret.copy` (`c`) yanks the selected value to the clipboard via bubbletea's OSC-52, masked or revealed
+**2026-07-23 (M3-08b, #89).** Copy completes D113's Secret viewer and ticks the M3
+secret exit criterion. Constraints a later leg must not silently break: (1) The viewer
+carries a **per-entry cursor** (`secretSel`, an index into the key-sorted
+`secretData.Entries`) reset to 0 on every open/load; `renderSecret(data, revealed, sel)`
+marks the selected entry with a 2-cell cursor gutter (`> ` vs `  `, equal-width so keys
+stay column-aligned) and returns each entry's 0-based output line so the selection can be
+kept on screen. (2) **While the secret viewer is up, `nav.up`/`nav.down` move the entry
+cursor rather than line-scrolling the viewport** — a Secret's body is small, so walking
+entries is the useful gesture; the selection is pulled back on screen with the viewer's new
+`EnsureLineVisible` (half/full-page keys still scroll for a large revealed value). This is
+viewer-kind-gated (`viewer.Kind()==viewerKindSecret`), so the YAML/describe/logs viewers
+keep their j/k line-scroll unchanged. (3) Copy is a **registered keymap action**
+`secret.copy` (`c`, D11 — no raw-key match), handled in `handleViewerAction` gated on the
+secret viewer; it writes the selected entry's **decoded value** to the system clipboard via
+**`tea.SetClipboard` (bubbletea v2's built-in OSC-52 command)** — no external clipboard
+dependency, works over SSH — and is inert on the other viewers and when the Secret has no
+entries. (4) **Copy works masked or revealed**: putting a value on the clipboard is itself
+the deliberate gesture, so it need not be revealed on screen first; the confirmation echoes
+only the key + byte length (`copied "key" (N bytes)`), never the value. (5) The
+confirmation is a **neutral status-bar notice** — a new transient channel on the status bar
+(`SetNotice`/`ClearNotice`, Accent-styled, auto-cleared on its own `statusNoticeGen` timer,
+the non-error twin of `SetError`; an error outranks a notice in `View`) so a success reads
+as success, not as the red error toast. A future leg must keep copy off the raw-key path,
+keep the value off-screen/out of the confirmation, and not reintroduce an error-styled
+success.

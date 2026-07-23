@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -3548,5 +3549,196 @@ func TestRevealInertOnYAMLViewer(t *testing.T) {
 	}
 	if !m.viewer.Active() {
 		t.Fatal("secret.reveal should not close the YAML viewer")
+	}
+}
+
+// copyKey is the default secret.copy key (`c`).
+var copyKey = tea.Key{Code: 'c', Text: "c"}
+
+// copiedClipboard runs a secret-copy batch and returns the string handed to
+// tea.SetClipboard. The batch also carries the notice auto-clear tick, which blocks
+// for errorDisplay, so each sub-command runs with a short timeout and only the
+// instant clipboard write is collected. setClipboardMsg is a string-kinded message,
+// so fmt.Sprint yields its content.
+func copiedClipboard(t *testing.T, cmd tea.Cmd) string {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("copy should return a command")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("copy cmd produced %T, want tea.BatchMsg", cmd())
+	}
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func(c tea.Cmd) { ch <- c() }(c)
+		select {
+		case msg := <-ch:
+			return fmt.Sprint(msg)
+		case <-time.After(200 * time.Millisecond):
+			// the blocking auto-clear tick — skip it and try the next sub-command.
+		}
+	}
+	t.Fatal("copy batch carried no clipboard write")
+	return ""
+}
+
+// loadedSecret opens the secret viewer over the selected row and delivers the fetch,
+// returning a model whose secret viewer is populated and masked.
+func loadedSecret(t *testing.T, g SecretGetter) Model {
+	t.Helper()
+	m := secretViewerModel(t, g)
+	m, fetchCmd := openSecret(t, m)
+	next, _ := m.Update(fetchCmd().(secretLoadedMsg))
+	return next.(Model)
+}
+
+// TestRenderSecretCursorAndLines unit-tests the render: the cursor gutter marks the
+// selected entry, the returned line offsets point at each entry's key line, the
+// masked render never contains a value, and a revealed multi-line value is indented
+// under its key with the offsets tracking it (M3-08b).
+func TestRenderSecretCursorAndLines(t *testing.T) {
+	data := kube.SecretData{
+		Type: "Opaque",
+		Entries: []kube.SecretEntry{
+			{Key: "password", Value: "s3cr3t"},
+			{Key: "token", Value: "line1\nline2"},
+		},
+	}
+
+	content, lines := renderSecret(data, false, 1)
+	if len(lines) != 2 {
+		t.Fatalf("want a line offset per entry, got %d", len(lines))
+	}
+	ls := strings.Split(content, "\n")
+	if !strings.HasPrefix(ls[lines[1]], secretCursor+"token") {
+		t.Fatalf("the cursor gutter should mark the selected entry: %q", ls[lines[1]])
+	}
+	if !strings.HasPrefix(ls[lines[0]], secretGutter+"password") {
+		t.Fatalf("an unselected entry should carry the plain gutter: %q", ls[lines[0]])
+	}
+	if strings.Contains(content, "s3cr3t") || strings.Contains(content, "line1") {
+		t.Fatalf("a masked render must not contain any value: %q", content)
+	}
+
+	content, lines = renderSecret(data, true, 0)
+	ls = strings.Split(content, "\n")
+	if !strings.HasPrefix(ls[lines[0]], secretCursor+"password") {
+		t.Fatalf("revealed cursor gutter wrong: %q", ls[lines[0]])
+	}
+	if !strings.Contains(content, "s3cr3t") {
+		t.Fatal("a revealed render should contain the single-line value")
+	}
+	if !strings.HasPrefix(ls[lines[1]], secretGutter+"token:") {
+		t.Fatalf("a multi-line entry's key line wrong: %q", ls[lines[1]])
+	}
+	if ls[lines[1]+1] != secretGutter+"  line1" {
+		t.Fatalf("a multi-line value should be indented under its key: %q", ls[lines[1]+1])
+	}
+}
+
+// TestSecretCopyCopiesSelectedValueMasked proves secret.copy puts the selected
+// entry's decoded value on the clipboard while the value stays masked on screen — a
+// copy is a deliberate gesture that need not reveal first — and surfaces a neutral
+// notice naming the key (never the value).
+func TestSecretCopyCopiesSelectedValueMasked(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{
+		Type: "Opaque",
+		Entries: []kube.SecretEntry{
+			{Key: "password", Value: "s3cr3t"},
+			{Key: "token", Value: "abc123"},
+		},
+	}}
+	m := loadedSecret(t, g)
+
+	if strings.Contains(m.View().Content, "s3cr3t") {
+		t.Fatal("precondition: the value must be masked before any reveal")
+	}
+	m, copyCmd := press(t, m, copyKey)
+	if got := copiedClipboard(t, copyCmd); got != "s3cr3t" {
+		t.Fatalf("copy should place the selected entry's decoded value on the clipboard, got %q", got)
+	}
+	view := m.View().Content
+	if !strings.Contains(view, "copied") || !strings.Contains(view, "password") {
+		t.Fatalf("copy should surface a notice naming the key: %q", view)
+	}
+	if strings.Contains(view, "s3cr3t") {
+		t.Fatal("copying must not reveal the value on screen")
+	}
+	if !m.status.HasNotice() {
+		t.Fatal("copy should set a status-bar notice")
+	}
+}
+
+// TestSecretCopyFollowsCursor proves nav.up/down move the entry cursor (not scroll)
+// and copy targets the selected entry, clamping at both ends.
+func TestSecretCopyFollowsCursor(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{
+		Type: "Opaque",
+		Entries: []kube.SecretEntry{
+			{Key: "password", Value: "s3cr3t"},
+			{Key: "token", Value: "abc123"},
+		},
+	}}
+	m := loadedSecret(t, g)
+
+	// down moves the entry cursor to the second entry.
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.secretSel != 1 {
+		t.Fatalf("nav.down should move the entry cursor to 1, got %d", m.secretSel)
+	}
+	m, copyCmd := press(t, m, copyKey)
+	if got := copiedClipboard(t, copyCmd); got != "abc123" {
+		t.Fatalf("copy should follow the cursor to the second entry, got %q", got)
+	}
+
+	// down clamps at the last entry.
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if m.secretSel != 1 {
+		t.Fatalf("nav.down should clamp at the last entry, got %d", m.secretSel)
+	}
+	// up walks back and clamps at the first entry.
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	if m.secretSel != 0 {
+		t.Fatalf("nav.up should clamp at the first entry, got %d", m.secretSel)
+	}
+}
+
+// TestSecretCopyInertWithoutEntries proves copy is a no-op (no command, no notice)
+// when the Secret has no data.
+func TestSecretCopyInertWithoutEntries(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{Type: "Opaque"}}
+	m := loadedSecret(t, g)
+	m, copyCmd := press(t, m, copyKey)
+	if copyCmd != nil {
+		t.Fatal("copy should be inert when the secret has no data")
+	}
+	if m.status.HasNotice() {
+		t.Fatal("an inert copy should not surface a notice")
+	}
+}
+
+// TestCopyInertOnYAMLViewer proves secret.copy is inert on a non-secret viewer.
+func TestCopyInertOnYAMLViewer(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "kind: Pod"}
+	m := yamlViewerModel(t, g)
+	_, cmd := press(t, m, yamlKey)
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	m = next.(Model)
+	m, copyCmd := press(t, m, copyKey)
+	if copyCmd != nil {
+		t.Fatal("secret.copy on the YAML viewer should be inert (no command)")
+	}
+	if m.status.HasNotice() {
+		t.Fatal("secret.copy on a non-secret viewer should not surface a notice")
+	}
+	if !m.viewer.Active() {
+		t.Fatal("secret.copy should not close the YAML viewer")
 	}
 }

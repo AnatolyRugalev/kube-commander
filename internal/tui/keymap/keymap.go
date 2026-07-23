@@ -72,6 +72,11 @@ const (
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
 	// it is inert.
 	ActionRevealSecret Action = "secret.reveal"
+	// ActionCopySecret copies the selected secret entry's decoded value to the
+	// system clipboard (M3-08b, OSC-52). It is meaningful only while the secret
+	// viewer is up and works whether or not the value is on-screen (masked or
+	// revealed) — copying is itself a deliberate gesture; elsewhere it is inert.
+	ActionCopySecret Action = "secret.copy"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -112,6 +117,7 @@ var actionMeta = []struct {
 	{ActionDelete, "Delete the selected row"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
+	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 }
 
 var registered = func() map[Action]string {
@@ -176,6 +182,7 @@ var defaultBindings = map[Action][]string{
 	ActionDelete:       {"x"},
 	ActionLogsFollow:   {"f"},
 	ActionRevealSecret: {"r"},
+	ActionCopySecret:   {"c"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

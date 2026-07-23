@@ -93,3 +93,4 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `secret.reveal` | `r` | Reveal / hide secret values in the secret viewer |
+| `secret.copy` | `c` | Copy the selected secret value to the clipboard |

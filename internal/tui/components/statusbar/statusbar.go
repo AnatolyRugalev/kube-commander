@@ -41,6 +41,7 @@ type Model struct {
 	namespace    string
 	resourceType string
 	errText      string
+	noticeText   string
 	filter       string
 	mouse        bool
 	discovering  bool
@@ -95,6 +96,19 @@ func (m *Model) ClearError() { m.errText = "" }
 // HasError reports whether a transient error message is currently shown.
 func (m Model) HasError() bool { return m.errText != "" }
 
+// SetNotice shows a transient neutral message in the bar (the secret-copy
+// confirmation, M3-08b) — the non-error twin of SetError. Like the error it is
+// flattened to a single line and takes over the whole bar while shown, but an error
+// outranks it (View prefers errText) so a failure is never hidden behind a notice.
+// The root model schedules the auto-clear; an empty string clears immediately.
+func (m *Model) SetNotice(text string) { m.noticeText = strings.Join(strings.Fields(text), " ") }
+
+// ClearNotice removes the transient notice, returning the bar to its normal content.
+func (m *Model) ClearNotice() { m.noticeText = "" }
+
+// HasNotice reports whether a transient notice is currently shown.
+func (m Model) HasNotice() bool { return m.noticeText != "" }
+
 // SetWidth informs the bar of the available terminal width so it can fill the line
 // and clamp overflow; wire it from the root model's WindowSizeMsg.
 func (m *Model) SetWidth(w int) { m.width = w }
@@ -144,13 +158,21 @@ func (m Model) View() string {
 	// A transient error takes over the whole bar: it is the most important thing to
 	// see, and giving it the full line keeps it on one line. It is clipped to the
 	// bar width *before* styling so the outer Width render can never wrap it onto a
-	// second line (D58).
-	if m.errText != "" {
+	// second line (D58). A neutral notice (secret copy, M3-08b) does the same but is
+	// outranked by an error, so a failure is never hidden behind a confirmation.
+	switch {
+	case m.errText != "":
 		errStr := m.errText
 		if m.width > 0 {
 			errStr = clipRunes(errStr, m.width)
 		}
 		line = m.styles.Error.Render(errStr)
+	case m.noticeText != "":
+		noticeStr := m.noticeText
+		if m.width > 0 {
+			noticeStr = clipRunes(noticeStr, m.width)
+		}
+		line = m.styles.Accent.Render(noticeStr)
 	}
 
 	if m.width <= 0 {
