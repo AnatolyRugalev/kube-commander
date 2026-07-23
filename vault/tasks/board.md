@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M2-14b added full-program (teatest/v2) coverage of
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-10** Scale + rollout-restart wired via the confirm/prompt modal
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -85,7 +86,7 @@ is a default, not a contract — re-split any slice that proves > ~300 lines.
 
 - [ ] **M3-10** Scale + rollout-restart wired: scale via `ShowPrompt` (replicas) →
       `kube.Scale`; rollout-restart via `ShowConfirm` → `kube.RolloutRestart`; results
-      to the status bar. status: todo | owner: — | added: 2026-07-22
+      to the status bar. status: in-progress (see In Progress) | owner: claude-opus | added: 2026-07-22
 - [ ] **M3-11** Cordon/uncordon + drain wired: cordon/uncordon (`kube.Cordon`/`Uncordon`)
       and drain (`kube.Drain`, confirm) on nodes; the long eviction loop reports progress
       to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-22
