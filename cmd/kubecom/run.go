@@ -128,6 +128,7 @@ func runTUI(opts runOptions) error {
 		tui.WithYAMLGetter(clients),
 		tui.WithDescriber(clients),
 		tui.WithLogStreamer(clients),
+		tui.WithContainerLister(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),

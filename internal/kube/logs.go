@@ -139,6 +139,29 @@ func (c *Clients) Logs(ctx context.Context, ref ObjectRef, opts LogOptions) (<-c
 	return out, nil
 }
 
+// PodContainers returns the names of a pod's regular containers, in spec order —
+// the set the logs container picker offers when a pod has more than one container
+// (`kubectl logs` requires -c to disambiguate a multi-container pod). It is the
+// same set kubectl's default-container logic counts, so a pod with a single
+// regular container needs no picker (the TUI streams it directly), while a
+// multi-container pod prompts which to stream. Only spec.containers are returned;
+// init- and ephemeral-container logs are a later refinement. An empty pod name is
+// rejected; a get error is wrapped, never panicked (#86).
+func (c *Clients) PodContainers(ctx context.Context, ref ObjectRef) ([]string, error) {
+	if ref.Name == "" {
+		return nil, fmt.Errorf("kube: pod containers: empty pod name")
+	}
+	pod, err := c.Clientset.CoreV1().Pods(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("kube: getting containers for pod %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	names := make([]string, 0, len(pod.Spec.Containers))
+	for i := range pod.Spec.Containers {
+		names = append(names, pod.Spec.Containers[i].Name)
+	}
+	return names, nil
+}
+
 // podLogOptions maps kubecom's LogOptions onto client-go's corev1.PodLogOptions.
 // Pure, so the mapping is unit-tested without a client; SinceTime is wrapped in a
 // metav1.Time (the API's second-granularity timestamp type).

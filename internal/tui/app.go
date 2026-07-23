@@ -114,6 +114,18 @@ type LogStreamer interface {
 	Logs(ctx context.Context, ref kube.ObjectRef, opts kube.LogOptions) (<-chan kube.LogEvent, error)
 }
 
+// ContainerLister is the narrow slice of the kube layer the shell needs to resolve a
+// pod's containers before streaming its logs (M3-07a): a multi-container pod must
+// prompt which container to read (`kubectl logs` requires -c to disambiguate), while
+// a single-container pod streams directly. *kube.Clients satisfies it via
+// PodContainers. Without it wired the shell falls back to streaming the pod's
+// default/sole container (the M3-05/06 behaviour, empty LogOptions.Container) — the
+// container picker is simply not offered, which keeps the pre-wiring app and the
+// non-picker hermetic tests inert without needing the extra seam.
+type ContainerLister interface {
+	PodContainers(ctx context.Context, ref kube.ObjectRef) ([]string, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -174,6 +186,13 @@ func WithDescriber(d Describer) Option {
 // viewer never opens).
 func WithLogStreamer(s LogStreamer) Option {
 	return func(m *Model) { m.logStreamer = s }
+}
+
+// WithContainerLister wires the kube client the shell uses to resolve a pod's
+// containers so a multi-container pod prompts which to stream (M3-07a). Without it
+// the logs viewer streams the pod's default/sole container directly (no picker).
+func WithContainerLister(l ContainerLister) Option {
+	return func(m *Model) { m.containerLister = l }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -267,6 +286,7 @@ type Model struct {
 	nsPicker  picker.Model
 	resPicker picker.Model
 	actPicker picker.Model
+	ctrPicker picker.Model
 	viewer    viewer.Model
 	welcome   welcome.Model
 
@@ -337,6 +357,18 @@ type Model struct {
 	logStreamer LogStreamer
 	logCh       <-chan kube.LogEvent
 	logCancel   context.CancelFunc
+
+	// containerLister resolves a pod's containers before streaming (M3-07a; nil → the
+	// logs viewer streams the default/sole container directly, no picker). When wired,
+	// opening logs on a pod first fetches its container names: a single container
+	// streams directly, multiple open ctrPicker so the user chooses which to stream.
+	// logStreamRes/logStreamRef stash the pod the picker's selection streams — the
+	// picker's SelectedMsg carries only the chosen container name (D65), so the object
+	// it applies to is held here between the picker opening and the pick landing. Touched
+	// only from the single-threaded update loop.
+	containerLister ContainerLister
+	logStreamRes    kube.Resource
+	logStreamRef    kube.ObjectRef
 
 	// logFollow is whether the open logs viewer is following (M3-06): the stream is
 	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
@@ -446,6 +478,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		nsPicker:    picker.New(s, "namespace"),
 		resPicker:   picker.New(s, "resource"),
 		actPicker:   picker.New(s, actionPickerKind),
+		ctrPicker:   picker.New(s, containerPickerKind),
 		viewer:      viewer.New(s, viewerKindYAML),
 		welcome:     welcome.New(s),
 		filterInput: fi,
@@ -455,6 +488,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	}
 	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
+	m.ctrPicker.SetTitle("Container")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -605,6 +639,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleResourceSelected(msg)
 		case actionPickerKind:
 			return m.handleActionSelected(msg)
+		case containerPickerKind:
+			return m.handleContainerSelected(msg)
 		default:
 			return m.handleNamespaceSelected(msg)
 		}
@@ -615,6 +651,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resPicker.Hide()
 		case actionPickerKind:
 			m.actPicker.Hide()
+		case containerPickerKind:
+			m.ctrPicker.Hide()
 		default:
 			m.nsPicker.Hide()
 		}
@@ -628,6 +666,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
+
+	case containersLoadedMsg:
+		return m.handleContainersLoaded(msg)
 
 	case logMsg:
 		return m.handleLogMsg(msg)
@@ -897,6 +938,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.resPicker
 	case m.actPicker.Active():
 		return &m.actPicker
+	case m.ctrPicker.Active():
+		return &m.ctrPicker
 	}
 	return nil
 }
@@ -1185,46 +1228,135 @@ type logMsg struct {
 	msg tea.Msg
 }
 
-// openLogsViewer opens the read-only logs viewer over the selected row's object
-// (M3-05) and starts streaming its logs into the shared viewer. It shows the viewer
-// immediately (empty, so the gesture feels instant) and pumps the log channel line by
-// line off the update loop (D53), appending each line as it lands — a large or slow
-// log never blocks Update. With no streamer wired it is logs-viewer-inert (a no-op).
-// This first cut is pods only ("Pods first"): the pod-owning kinds (Deployment/RS/…)
-// the actions menu also lists for logs resolve their backing pod in a later slice
-// (M3-07), so a non-pod kind degrades to the "not yet available" toast here rather
-// than opening an empty viewer. The stream runs on a cancellable context torn down
-// when the viewer closes or a newer viewer supersedes it (stopLogStream); its lines
-// are tagged with a fresh viewerGen so a superseded stream's lines are dropped
-// (handleLogMsg). An open failure degrades to a status-bar toast + closes the viewer
-// (D74); a mid-stream error after some lines already showed leaves them on screen.
+// containerPickerKind is the Kind stamped on the logs container picker
+// (picker.New(s, "container")). Every picker emits the same SelectedMsg/CancelledMsg
+// types (D65), so the root branches on this Kind to route a picked container into
+// streamLogsInto rather than the namespace/resource/action paths.
+const containerPickerKind = "container"
+
+// containersLoadedMsg carries the outcome of the async PodContainers fetch issued
+// when logs are opened over a pod with a container lister wired (M3-07a). gen ties it
+// to the viewerGen bumped when the fetch was requested, so a result that lands after
+// the user opened a newer viewer (of any kind, which bumps viewerGen) is dropped
+// rather than opening a stale stream. res/ref are the pod the fetch was for, threaded
+// back so the single-container fast path and the multi-container picker act on it.
+type containersLoadedMsg struct {
+	gen        int
+	res        kube.Resource
+	ref        kube.ObjectRef
+	containers []string
+	err        error
+}
+
+// openLogsViewer starts the logs flow over the selected row's object (M3-05/06/07a).
+// With no streamer wired it is logs-viewer-inert (a no-op). This cut is pods only
+// ("Pods first"): the pod-owning kinds the actions menu also lists resolve their
+// backing pod in a later slice (M3-07b), so a non-pod kind degrades to a toast rather
+// than opening an empty viewer.
+//
+// For a pod, a multi-container pod must say which container to stream (`kubectl logs`
+// requires -c). When a container lister is wired the pod's containers are resolved
+// first (off the update loop, tagged with a fresh viewerGen so a superseded request is
+// dropped): a single container streams directly, multiple open the container picker
+// (handleContainersLoaded). With no lister wired the shell streams the pod's
+// default/sole container directly (empty Container) — the M3-05/06 behaviour.
 func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.logStreamer == nil {
 		return m, nil
 	}
 	if msg.Resource.GVK.Kind != "Pod" {
 		// Pod-owning kinds (Deployment/RS/StatefulSet/DaemonSet/Job/RC) are listed by
-		// the actions menu for logs but resolving their backing pod is M3-07; keep the
+		// the actions menu for logs but resolving their backing pod is M3-07b; keep the
 		// routing observable until then rather than opening an empty viewer.
 		label := "logs for " + msg.Resource.GVK.Kind
 		return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
 	}
-	m.stopLogStream() // cancel any prior stream before starting a new one.
+	m.stopLogStream() // cancel any prior stream before resolving/starting a new one.
+	if m.containerLister == nil {
+		// No lister: stream the pod's default/sole container directly (M3-05/06).
+		m.viewerGen++
+		return m.streamLogsInto(msg.Resource, msg.Object, "", m.viewerGen)
+	}
+	// Resolve the pod's containers first; a multi-container pod needs the picker. The
+	// fetch rides a fresh viewerGen so any newer viewer/stream opened while it is in
+	// flight staleifies it (handleContainersLoaded drops a mismatched gen).
 	m.viewerGen++
 	gen := m.viewerGen
+	lister := m.containerLister
+	res, ref := msg.Resource, msg.Object
+	return m, func() tea.Msg {
+		names, err := lister.PodContainers(context.Background(), ref)
+		return containersLoadedMsg{gen: gen, res: res, ref: ref, containers: names, err: err}
+	}
+}
+
+// handleContainersLoaded acts on a resolved container set (M3-07a). A result whose gen
+// no longer matches (a newer viewer superseded it) is dropped. A fetch error, or a pod
+// that reports no containers, degrades to a status-bar toast (D74) without opening the
+// viewer. A single container streams directly (reusing the fetch's gen so the stream is
+// still guarded by the same generation); multiple open the container picker, stashing
+// the pod so the pick knows what to stream.
+func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen {
+		return m, nil // superseded by a newer viewer/stream open; drop.
+	}
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("logs", msg.err))
+	}
+	switch len(msg.containers) {
+	case 0:
+		label := "logs for " + msg.ref.Name
+		return m, m.surfaceError(ErrorMsg{Context: label + ": no containers"})
+	case 1:
+		return m.streamLogsInto(msg.res, msg.ref, msg.containers[0], msg.gen)
+	default:
+		m.logStreamRes = msg.res
+		m.logStreamRef = msg.ref
+		m.ctrPicker.SetItems(msg.containers)
+		m.ctrPicker.Show()
+		return m, nil
+	}
+}
+
+// handleContainerSelected streams the container the user picked from the container
+// picker (M3-07a): it closes the picker and opens the logs stream over the stashed pod
+// with the chosen container, on a fresh viewerGen (the pick is a new open). A picked
+// value applies to the pod recorded when the picker opened (logStreamRes/Ref).
+func (m Model) handleContainerSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.ctrPicker.Hide()
+	m.stopLogStream()
+	m.viewerGen++
+	return m.streamLogsInto(m.logStreamRes, m.logStreamRef, msg.Value, m.viewerGen)
+}
+
+// streamLogsInto opens the read-only logs viewer over ref (a pod of res) and starts
+// streaming container's logs into the shared viewer at generation gen. It shows the
+// viewer immediately (empty, so the gesture feels instant) and pumps the log channel
+// line by line off the update loop (D53), appending each line as it lands — a large or
+// slow log never blocks Update. The viewer opens following (like `kubectl logs -f`); a
+// non-empty container is named in the title so the user sees which one is tailing. The
+// stream runs on a cancellable context torn down when the viewer closes or a newer
+// viewer supersedes it (stopLogStream); its lines are tagged with gen so a superseded
+// stream's lines are dropped (handleLogMsg). An open failure degrades to a status-bar
+// toast + closes the viewer (D74); a mid-stream error after some lines already showed
+// leaves them on screen. container "" streams the pod's default/sole container.
+func (m Model) streamLogsInto(res kube.Resource, ref kube.ObjectRef, container string, gen int) (tea.Model, tea.Cmd) {
+	m.stopLogStream() // idempotent; ensures no prior stream survives this open.
 	m.viewer.SetKind(viewerKindLogs)
 	m.logFollow = true // the logs viewer opens following, like `kubectl logs -f`.
-	m.logTitle = "Logs " + viewerTitle(msg.Resource, msg.Object)
+	m.logTitle = "Logs " + viewerTitle(res, ref)
+	if container != "" {
+		m.logTitle += " · " + container
+	}
 	m.syncLogViewerTitle()
 	m.viewer.SetContent("") // clear any prior object's content before the stream lands.
 	m.viewer.Show()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ref := msg.Object
 	// Follow keeps the stream open and reconnects transparently across transport
 	// drops (M1-07d), so the viewer tails live output; stopLogStream cancels it on
 	// close/supersede/quit.
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true})
+	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true, Container: container})
 	if err != nil {
 		cancel()
 		m.viewer.Hide()
@@ -1529,7 +1661,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.viewer.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -1699,6 +1831,7 @@ func (m *Model) resize() {
 	m.nsPicker.SetSize(m.width, bodyH)
 	m.resPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
+	m.ctrPicker.SetSize(m.width, bodyH)
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
@@ -1964,6 +2097,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.resPicker.View(), m.width, m.bodyHeight())
 	case m.actPicker.Active():
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
+	case m.ctrPicker.Active():
+		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	}

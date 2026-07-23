@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-06 made the logs viewer follow + reconnect (opens tailing, `logs.follow`/`f` toggle, pause-on-up-scroll, D110); M3-07 split into M3-07a (container picker) + M3-07b (pod-owning kinds), M3-07a in progress. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-07a added the logs container picker: a multi-container pod resolves its containers and prompts which to stream, a single-container pod streams directly (D111); M3-07b (pod-owning kinds) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-07a** Logs — container picker for multi-container pods (#84): resolve a pod's
-      containers before streaming; a multi-container pod prompts which to stream (reuse the
-      picker), a single-container pod streams directly. status: in-progress | owner: claude-opus | added: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -137,6 +135,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-07a** Logs container picker for multi-container pods: `ContainerLister` seam (`kube.PodContainers`) resolves a pod's containers before streaming — multiple open the reused modal picker (`ctrPicker`) and the pick streams the chosen container, a single container streams directly; no lister → default container (no picker); streaming factored into `streamLogsInto`, container named in the title — done 2026-07-23 (D111)
 - [x] **M3-06** Logs viewer — follow + reconnect: opens tailing (`LogOptions{Follow:true}`, M1-07d) with auto-scroll; `logs.follow`/`f` toggles it (logs-viewer-only, per-open `viewer.SetKind`), a manual up-scroll pauses it, title marks `[following]`/`[paused]` — done 2026-07-23 (D110)
 - [x] **M3-05** Logs viewer wired (initial, no follow): `res.logs`/`L` → `LogStreamer` seam (`kube.Logs`, M1-07c) streamed line-by-line into the shared M3-01 viewer via a gen-tagged pump (D53); pods first, `stopLogStream` teardown, open-failure closes/mid-stream error keeps lines — done 2026-07-23 (D109)
 - [x] **M3-04** Describe viewer wired: `res.describe`/`d` → `Describer` seam (`kube.Describe`, M1-07b) → shared M3-01 viewer overlay; async render + gen-guard (shared viewerGen), error degrades to a toast — done 2026-07-23 (D108)

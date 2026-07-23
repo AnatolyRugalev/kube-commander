@@ -2918,3 +2918,227 @@ func TestLogsFollowInertOnYAMLViewer(t *testing.T) {
 		t.Fatal("logs.follow should not close the YAML viewer")
 	}
 }
+
+// fakeContainerLister is a hermetic ContainerLister: it returns a preset set of
+// container names (or an error) and records the object it was asked for, so a test
+// can drive the M3-07a container-resolution flow without a cluster.
+type fakeContainerLister struct {
+	names  []string
+	err    error
+	calls  int
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeContainerLister) PodContainers(_ context.Context, ref kube.ObjectRef) ([]string, error) {
+	f.calls++
+	f.gotRef = ref
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.names, nil
+}
+
+// logsModelWithContainers drills into a pods table with both a log streamer and a
+// container lister wired, so a test exercises the M3-07a resolve-then-stream flow.
+func logsModelWithContainers(t *testing.T, streamer LogStreamer, lister ContainerLister) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithLogStreamer(streamer), WithContainerLister(lister))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// openLogsFetch presses `L` and delivers the resulting logs intent, returning the
+// model and the async container-fetch cmd openLogsViewer issues when a lister is wired.
+func openLogsFetch(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	_, cmd := press(t, m, logsKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	return next.(Model), fetchCmd
+}
+
+// resolveContainers delivers the container-fetch cmd and returns the resulting model +
+// follow-on cmd (the log pump for a single container; nil once the picker is shown).
+func resolveContainers(t *testing.T, m Model, fetchCmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+	msg := fetchCmd()
+	clm, ok := msg.(containersLoadedMsg)
+	if !ok {
+		t.Fatalf("opening logs with a lister produced %T, want containersLoadedMsg", msg)
+	}
+	next, follow := m.Update(clm)
+	return next.(Model), follow
+}
+
+// TestLogsSingleContainerStreamsDirectly proves a single-container pod skips the
+// picker: resolving its one container streams it directly into the viewer, addressing
+// the stream to that container.
+func TestLogsSingleContainerStreamsDirectly(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
+	l := &fakeContainerLister{names: []string{"app"}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	if m.viewer.Active() {
+		t.Fatal("the viewer should not open until the container resolves")
+	}
+	m, pumpCmd := resolveContainers(t, m, fetchCmd)
+	if l.calls != 1 {
+		t.Fatalf("PodContainers called %d times, want 1", l.calls)
+	}
+	if m.ctrPicker.Active() {
+		t.Fatal("a single-container pod should not open the container picker")
+	}
+	if !m.viewer.Active() {
+		t.Fatal("a single-container pod should stream directly into the viewer")
+	}
+	if s.gotOpts.Container != "app" {
+		t.Fatalf("stream container = %q, want app", s.gotOpts.Container)
+	}
+	m = drainLogPump(t, m, pumpCmd)
+	if !strings.Contains(m.View().Content, "hello") {
+		t.Fatalf("the streamed line should show: %q", m.View().Content)
+	}
+}
+
+// TestLogsMultiContainerOpensPicker proves a multi-container pod prompts which
+// container to stream (the picker opens listing them) rather than streaming blindly.
+func TestLogsMultiContainerOpensPicker(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, follow := resolveContainers(t, m, fetchCmd)
+	if !m.ctrPicker.Active() {
+		t.Fatal("a multi-container pod should open the container picker")
+	}
+	if m.viewer.Active() {
+		t.Fatal("the viewer should not open until a container is picked")
+	}
+	if s.calls != 0 {
+		t.Fatal("no stream should start before a container is picked")
+	}
+	if follow != nil {
+		t.Fatal("opening the picker issues no follow-on command")
+	}
+	if m.ctrPicker.Len() != 2 {
+		t.Fatalf("the picker should list 2 containers, got %d", m.ctrPicker.Len())
+	}
+}
+
+// TestLogsContainerPickStreamsChosen proves picking a container from the picker opens
+// the logs viewer streaming exactly that container, its name shown in the title.
+func TestLogsContainerPickStreamsChosen(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "sidecar log"}}}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+
+	next, pumpCmd := m.Update(picker.SelectedMsg{Kind: containerPickerKind, Value: "sidecar"})
+	m = next.(Model)
+	if m.ctrPicker.Active() {
+		t.Fatal("picking a container should close the picker")
+	}
+	if !m.viewer.Active() {
+		t.Fatal("picking a container should open the logs viewer")
+	}
+	if s.gotOpts.Container != "sidecar" {
+		t.Fatalf("stream container = %q, want sidecar", s.gotOpts.Container)
+	}
+	if !strings.Contains(m.View().Content, "sidecar") {
+		t.Fatalf("the viewer title should name the chosen container: %q", m.View().Content)
+	}
+	m = drainLogPump(t, m, pumpCmd)
+	if !strings.Contains(m.View().Content, "sidecar log") {
+		t.Fatalf("the chosen container's log should show: %q", m.View().Content)
+	}
+}
+
+// TestLogsContainerPickerCancel proves dismissing the container picker (nav.back) hides
+// it without starting a stream or opening the viewer.
+func TestLogsContainerPickerCancel(t *testing.T) {
+	s := &fakeLogStreamer{}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+
+	next, _ := m.Update(picker.CancelledMsg{Kind: containerPickerKind})
+	m = next.(Model)
+	if m.ctrPicker.Active() {
+		t.Fatal("cancelling should hide the container picker")
+	}
+	if m.viewer.Active() {
+		t.Fatal("cancelling should not open the viewer")
+	}
+	if s.calls != 0 {
+		t.Fatal("cancelling should not start a stream")
+	}
+}
+
+// TestLogsContainerResolveErrorDegrades proves a PodContainers failure degrades to a
+// toast (D74) without opening the viewer or the picker or starting a stream.
+func TestLogsContainerResolveErrorDegrades(t *testing.T) {
+	s := &fakeLogStreamer{}
+	l := &fakeContainerLister{err: errors.New("forbidden")}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	if m.viewer.Active() || m.ctrPicker.Active() {
+		t.Fatal("a resolve error should open neither the viewer nor the picker")
+	}
+	if s.calls != 0 {
+		t.Fatal("a resolve error should not start a stream")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a resolve error should surface a status-bar toast")
+	}
+}
+
+// TestLogsNoContainersDegrades proves a pod that reports no containers degrades to a
+// toast rather than opening an empty viewer or a picker with nothing to choose.
+func TestLogsNoContainersDegrades(t *testing.T) {
+	s := &fakeLogStreamer{}
+	l := &fakeContainerLister{names: nil}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	if m.viewer.Active() || m.ctrPicker.Active() {
+		t.Fatal("no containers should open neither the viewer nor the picker")
+	}
+	if s.calls != 0 {
+		t.Fatal("no containers should not start a stream")
+	}
+	if !m.status.HasError() {
+		t.Fatal("no containers should surface a status-bar toast")
+	}
+}
+
+// TestLogsContainerFetchStaleDropped proves the generation guard: a container-resolution
+// result that lands after a newer viewer open (viewerGen bumped) is dropped, opening
+// nothing.
+func TestLogsContainerFetchStaleDropped(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	stale, ok := fetchCmd().(containersLoadedMsg)
+	if !ok {
+		t.Fatalf("fetch produced %T, want containersLoadedMsg", fetchCmd())
+	}
+	m.viewerGen++ // a newer viewer open supersedes the pending fetch.
+	next, _ := m.Update(stale)
+	m = next.(Model)
+	if m.ctrPicker.Active() || m.viewer.Active() {
+		t.Fatal("a stale-generation container fetch should be dropped, opening nothing")
+	}
+}

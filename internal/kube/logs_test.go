@@ -8,7 +8,84 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
+
+// podWith builds a fake pod with the given regular container names, for the
+// PodContainers tests.
+func podWith(namespace, name string, containers ...string) *corev1.Pod {
+	cs := make([]corev1.Container, 0, len(containers))
+	for _, c := range containers {
+		cs = append(cs, corev1.Container{Name: c})
+	}
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		Spec:       corev1.PodSpec{Containers: cs},
+	}
+}
+
+// TestPodContainersReturnsSpecOrder returns a multi-container pod's regular
+// container names in spec order — the set the logs container picker offers.
+func TestPodContainersReturnsSpecOrder(t *testing.T) {
+	c := &Clients{Clientset: k8sfake.NewSimpleClientset(
+		podWith("default", "web", "app", "sidecar", "proxy"),
+	)}
+	got, err := c.PodContainers(context.Background(), ObjectRef{Namespace: "default", Name: "web"})
+	if err != nil {
+		t.Fatalf("PodContainers: %v", err)
+	}
+	want := []string{"app", "sidecar", "proxy"}
+	if len(got) != len(want) {
+		t.Fatalf("PodContainers() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("PodContainers() = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestPodContainersSingle returns the sole container of a single-container pod (the
+// TUI streams it directly, no picker).
+func TestPodContainersSingle(t *testing.T) {
+	c := &Clients{Clientset: k8sfake.NewSimpleClientset(
+		podWith("kube-system", "coredns", "coredns"),
+	)}
+	got, err := c.PodContainers(context.Background(), ObjectRef{Namespace: "kube-system", Name: "coredns"})
+	if err != nil {
+		t.Fatalf("PodContainers: %v", err)
+	}
+	if len(got) != 1 || got[0] != "coredns" {
+		t.Fatalf("PodContainers() = %v, want [coredns]", got)
+	}
+}
+
+// TestPodContainersEmptyPodNameRejected rejects an empty pod name without touching
+// the API (a defensive guard mirroring Logs).
+func TestPodContainersEmptyPodNameRejected(t *testing.T) {
+	c := &Clients{}
+	if _, err := c.PodContainers(context.Background(), ObjectRef{Namespace: "default"}); err == nil {
+		t.Fatal("PodContainers should reject an empty pod name")
+	}
+}
+
+// TestPodContainersError wraps a get failure (RBAC denial, missing pod) rather than
+// panicking, so the shell degrades to a toast (principle 3).
+func TestPodContainersError(t *testing.T) {
+	cs := k8sfake.NewSimpleClientset()
+	cs.PrependReactor("get", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("forbidden")
+	})
+	c := &Clients{Clientset: cs}
+	if _, err := c.PodContainers(context.Background(), ObjectRef{Namespace: "default", Name: "web"}); err == nil {
+		t.Fatal("PodContainers should return an error when the get fails")
+	}
+}
 
 func ptrInt64(v int64) *int64 { return &v }
 

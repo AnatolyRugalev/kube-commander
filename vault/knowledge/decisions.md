@@ -2743,3 +2743,27 @@ to the tail; the toggle (or a fresh open) resumes it. (4) The viewer title carri
 `[following]`/`[paused]` marker so the mode is always visible (D68). This is the first
 viewer with a mode of its own; the same follow bool + kind-gated toggle is the shape
 M3-07 extends when it adds a container picker to the logs viewer.
+
+### D111 — Opening logs on a multi-container pod resolves the pod's containers first and prompts which to stream; a single-container pod streams directly
+**2026-07-23 (M3-07a).** `kubectl logs` requires `-c` to disambiguate a
+multi-container pod (the API server errors on an empty container name when a pod has
+more than one), so the logs viewer can no longer stream blindly. Constraints a later
+leg (M3-07b pod-owning kinds, exec/edit) must not silently break: (1) A **`ContainerLister`
+seam** (`PodContainers(ctx, ref) ([]string, error)`, `*kube.Clients` satisfies it via a
+pod Get returning `spec.containers` names in spec order) resolves a pod's containers.
+Only regular containers are offered — the set kubectl's default-container logic counts;
+init/ephemeral container logs are a deliberate later refinement. (2) The flow is
+**resolve-then-stream**: opening logs on a pod issues the fetch off the update loop
+(tagged with a fresh `viewerGen` so any newer viewer open staleifies it — the shared
+generation guard, D108/D109), then a **single** container streams directly (reusing that
+gen) while **multiple** open the reused modal picker (`containerPickerKind`), the pick
+streaming the chosen container. The pod the pick applies to is stashed
+(`logStreamRes`/`logStreamRef`) because the picker's `SelectedMsg` carries only the
+chosen string (D65). (3) With **no lister wired the shell streams the pod's default/sole
+container directly** (empty `LogOptions.Container`, the M3-05/06 behaviour) — the picker
+is simply not offered, keeping the pre-wiring app and non-picker hermetic tests inert
+without the extra seam. (4) The streaming half is factored into `streamLogsInto(res, ref,
+container, gen)` (shared by the no-lister path, the single-container path, and the
+picker-select path); a non-empty container is named in the viewer title (`Logs ns/pod ·
+container`). M3-07b resolves a backing pod *before* this container resolution, so the
+pod-owning-kinds slice feeds a resolved pod ref into the same `openLogsViewer` pod path.
