@@ -205,6 +205,21 @@ type Cordoner interface {
 	Uncordon(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
 }
 
+// Suspender is the narrow slice of the kube layer the shell needs to run the
+// suspend/resume actions on a CronJob (M3-12): flip its spec.suspend flag via
+// M1-06d's Suspend/Resume (each a merge patch, matching `kubectl patch cronjob
+// -p '{"spec":{"suspend":…}}'`). *kube.Clients satisfies it. As with the other
+// mutating seams the shell depends on the interface, not the concrete client, so
+// the tui package constructs no client and the flow is driveable in hermetic
+// tests. A model built without one is suspend-inert: the Suspend/Resume actions
+// are no-ops. Both operations are idempotent, so — like Cordon (D120) — there is
+// no UID precondition and no confirm modal (D115): the action dispatches directly
+// and reports its outcome to the status bar.
+type Suspender interface {
+	Suspend(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
+	Resume(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
+}
+
 // Drainer is the narrow slice of the kube layer the shell needs to run the drain
 // action on a Node (M3-11b): stream the drain's progress (cordon → evict → wait)
 // over a channel via M1-06e-2's DrainStream, so the long eviction loop reports to
@@ -328,6 +343,13 @@ func WithRolloutRestarter(r RolloutRestarter) Option {
 // actions dispatch directly — cordoning is idempotent, so there is no confirm modal.
 func WithCordoner(c Cordoner) Option {
 	return func(m *Model) { m.cordoner = c }
+}
+
+// WithSuspender wires the kube client the shell uses to suspend/resume the selected
+// CronJob (M3-12). Without it the Suspend/Resume actions are inert (no-ops). The
+// actions dispatch directly — suspending is idempotent, so there is no confirm modal.
+func WithSuspender(s Suspender) Option {
+	return func(m *Model) { m.suspender = s }
 }
 
 // WithDrainer wires the kube client the shell uses to drain the selected Node once
@@ -600,6 +622,13 @@ type Model struct {
 	// held between an open modal and an accept because there is no modal. Touched only
 	// from the single-threaded update loop.
 	cordoner Cordoner
+
+	// suspender runs the suspend/resume actions on a CronJob (M3-12; nil → the actions
+	// are inert). Like cordoner it needs no target stash: suspending is idempotent (no
+	// UID guard, D35) and has no confirm modal (D120), so the action dispatches straight
+	// from handleRowAction with the row's ref in hand. Touched only from the
+	// single-threaded update loop.
+	suspender Suspender
 
 	// drainer streams a node drain's progress once the confirm modal is accepted
 	// (M3-11b; nil → the Drain action is inert, no modal opens). Unlike the one-shot
@@ -923,6 +952,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cordonDoneMsg:
 		return m.handleCordonDone(msg)
+
+	case suspendDoneMsg:
+		return m.handleSuspendDone(msg)
 
 	case drainMsg:
 		return m.handleDrainMsg(msg)
@@ -1386,6 +1418,10 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.runCordon(msg, true)
 	case rowActionUncordon:
 		return m.runCordon(msg, false)
+	case rowActionSuspend:
+		return m.runSuspend(msg, true)
+	case rowActionResume:
+		return m.runSuspend(msg, false)
 	case rowActionDrain:
 		return m.openDrainConfirm(msg)
 	case rowActionDelete:
@@ -1640,6 +1676,56 @@ func (m Model) handleCordonDone(msg cordonDoneMsg) (tea.Model, tea.Cmd) {
 	verb, past := "cordon", "cordoned"
 	if !msg.cordon {
 		verb, past = "uncordon", "uncordoned"
+	}
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg(verb+" "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice(past + " " + msg.label)
+}
+
+// suspendDoneMsg carries the outcome of the async suspend/resume issued when the
+// CronJob action is dispatched (M3-12). suspend distinguishes the two so the status
+// message and error context read naturally. Like cordonDoneMsg it is one-shot
+// fire-and-report with no generation guard: the result only flashes a transient
+// status message, so a superseded one is harmless.
+type suspendDoneMsg struct {
+	label   string
+	suspend bool
+	err     error
+}
+
+// runSuspend dispatches the suspend (suspend==true) or resume (false) on the selected
+// CronJob off the update loop, reporting its outcome via suspendDoneMsg. Mirroring
+// runCordon (D120) there is **no confirm modal** (D115) and **no target stash**:
+// suspending is idempotent (D35), so the action fires straight from handleRowAction
+// with the row's ref in hand. With no suspender wired, or an empty ref (a row with no
+// name, guarded so an empty ref never reaches the kube layer), it is a no-op — exactly
+// as the Suspend/Resume entries are absent from a non-CronJob kind's actions menu. The
+// CronJob's suspended state flips in the table via the live watch stream, not here.
+func (m Model) runSuspend(msg rowActionMsg, suspend bool) (tea.Model, tea.Cmd) {
+	if m.suspender == nil || msg.Object.Name == "" {
+		return m, nil
+	}
+	suspender, r, ref := m.suspender, msg.Resource, msg.Object
+	label := viewerTitle(r, ref)
+	return m, func() tea.Msg {
+		var err error
+		if suspend {
+			err = suspender.Suspend(context.Background(), r, ref)
+		} else {
+			err = suspender.Resume(context.Background(), r, ref)
+		}
+		return suspendDoneMsg{label: label, suspend: suspend, err: err}
+	}
+}
+
+// handleSuspendDone reports a completed suspend/resume: a failure (NotFound, RBAC)
+// degrades to a transient error toast (D74), a success to a neutral status notice. The
+// CronJob's suspended state updates via the live watch stream, not here.
+func (m Model) handleSuspendDone(msg suspendDoneMsg) (tea.Model, tea.Cmd) {
+	verb, past := "suspend", "suspended"
+	if !msg.suspend {
+		verb, past = "resume", "resumed"
 	}
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg(verb+" "+msg.label, msg.err))

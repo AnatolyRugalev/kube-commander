@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-11b: Node Drain wired via a `Drainer` seam (confirm modal, D115), streaming eviction progress to the status bar through a `drainPump` (cancel-on-quit, D121). Top-unblocked next: M3-12 (cronjob suspend/resume). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-12: CronJob suspend/resume wired via a `Suspender` seam (`WithSuspender`) → `kube.Suspend`/`Resume`, dispatched directly (idempotent, no confirm modal, D120), result to the status bar. Top-unblocked next: M3-13 (port-forward manager). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
-      menu (#83). status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -104,6 +103,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-12** CronJob suspend/resume wired: `Suspender` seam (both verbs, `WithSuspender`) → `kube.Suspend`/`Resume` on CronJob rows, dispatched **directly** (idempotent — no confirm modal, no target stash, D120), result to the status bar (neutral notice / error toast) — done 2026-07-23 (D120)
 - [x] **M3-11b** Drain wired: `Drainer` seam (`WithDrainer`) → `kube.DrainStream` (channel twin of `Drain`) on Node rows behind the D115 confirm modal; `drainPump` (mirrors the log pump, `drainGen`-tagged) streams cordon→evict→remove progress to the status bar, terminal error toast / clean-close success notice, `stopDrain` cancel-on-quit; default `{IgnoreDaemonSets:true}` (Force/DeleteEmptyDirData off) — done 2026-07-23 (D121)
 - [x] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (both verbs, `WithCordoner`) → `kube.Cordon`/`Uncordon` on Node rows, dispatched **directly** (idempotent — no confirm modal, no target stash, D120), result to the status bar (neutral notice / error toast) — done 2026-07-23 (D120)
 - [x] **FB-gray-out-empty-types** Feedback (low/soft, `2026-07-23-gray-out-empty-resource-types`): triaged the "gray out empty left-menu resource types" idea — **dismissed** (D119): the eager per-type-count version is forbidden (fights lazy-list D8/principle 4), the cheap opportunistic variant declined for now (marginal revisit-only value vs a namespace-keyed cache + hot-path plumbing + a third menu visual state needing a real-terminal UX check) — done 2026-07-23 (D119)

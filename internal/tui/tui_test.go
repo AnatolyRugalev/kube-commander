@@ -2161,6 +2161,23 @@ func TestActionsMenuKindSpecific(t *testing.T) {
 	}
 }
 
+// TestActionsMenuCronJob proves a CronJob offers Suspend/Resume but not the
+// node-only Cordon/Drain (M3-12).
+func TestActionsMenuCronJob(t *testing.T) {
+	m := openPodTable(t, "CronJob")
+	m, _ = press(t, m, actionsKey)
+	for _, title := range []string{"Suspend", "Resume"} {
+		if _, ok := m.actByLabel[title]; !ok {
+			t.Errorf("CronJob actions menu should list %q", title)
+		}
+	}
+	for _, title := range []string{"Cordon", "Drain", "Logs"} {
+		if _, ok := m.actByLabel[title]; ok {
+			t.Errorf("CronJob actions menu should not list %q", title)
+		}
+	}
+}
+
 // TestActionsMenuInertWithoutResource proves the actions key is a no-op before a
 // resource table is open (the welcome page is showing): there is no row to act on.
 func TestActionsMenuInertWithoutResource(t *testing.T) {
@@ -4347,6 +4364,141 @@ func TestCordonInertWithoutCordoner(t *testing.T) {
 	}
 	if _, cmd := dispatchRowAction(t, m, rowActionUncordon); cmd != nil {
 		t.Fatal("with no cordoner wired the uncordon intent must not issue a command")
+	}
+}
+
+// fakeSuspender is a hermetic Suspender: it records which verb it was asked to run
+// and the object addressed (so a test can assert the selected CronJob row was
+// targeted) and returns a preset error for both verbs.
+type fakeSuspender struct {
+	err          error
+	suspendCalls int
+	resumeCalls  int
+	gotRes       kube.Resource
+	gotRef       kube.ObjectRef
+}
+
+func (f *fakeSuspender) Suspend(_ context.Context, r kube.Resource, ref kube.ObjectRef) error {
+	f.suspendCalls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+func (f *fakeSuspender) Resume(_ context.Context, r kube.Resource, ref kube.ObjectRef) error {
+	f.resumeCalls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+// cronJobModel drills into a CronJob table with the given options wired so a
+// suspend/resume test has a concrete selected row.
+func cronJobModel(t *testing.T, opts ...Option) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, append([]Option{WithWatcher(fw)}, opts...)...)
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("cronjobs", "CronJob")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// TestSuspendRunsSuspend drives the suspend path: the intent dispatches kube.Suspend
+// against the selected CronJob **directly** — no confirm modal (suspending is
+// idempotent, D120/D35) — and the success surfaces a neutral status notice.
+func TestSuspendRunsSuspend(t *testing.T) {
+	s := &fakeSuspender{}
+	m := cronJobModel(t, WithSuspender(s))
+	row, _ := m.table.SelectedRow()
+
+	m, cmd := dispatchRowAction(t, m, rowActionSuspend)
+	if m.modal.Active() {
+		t.Fatal("suspend is idempotent — it must not open a confirm modal")
+	}
+	if cmd == nil {
+		t.Fatal("the suspend intent should issue the kube.Suspend command")
+	}
+	done, ok := cmd().(suspendDoneMsg)
+	if !ok {
+		t.Fatalf("suspend produced %T, want suspendDoneMsg", cmd())
+	}
+	if s.suspendCalls != 1 {
+		t.Fatalf("Suspend should be called exactly once, got %d", s.suspendCalls)
+	}
+	if s.resumeCalls != 0 {
+		t.Fatal("suspend must not call Resume")
+	}
+	if s.gotRef.Name != row.Object.Name {
+		t.Fatalf("Suspend addressed %+v, want the selected row %+v", s.gotRef, row.Object)
+	}
+	if !done.suspend {
+		t.Fatal("the done message should mark this as a suspend, not a resume")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful suspend should surface a neutral status notice, no error")
+	}
+}
+
+// TestResumeRunsResume proves the resume intent dispatches kube.Resume (the reverse
+// verb) against the selected CronJob, also directly.
+func TestResumeRunsResume(t *testing.T) {
+	s := &fakeSuspender{}
+	m := cronJobModel(t, WithSuspender(s))
+	row, _ := m.table.SelectedRow()
+
+	m, cmd := dispatchRowAction(t, m, rowActionResume)
+	if cmd == nil {
+		t.Fatal("the resume intent should issue the kube.Resume command")
+	}
+	done, ok := cmd().(suspendDoneMsg)
+	if !ok {
+		t.Fatalf("resume produced %T, want suspendDoneMsg", cmd())
+	}
+	if s.resumeCalls != 1 || s.suspendCalls != 0 {
+		t.Fatalf("resume should call Resume once and Suspend zero, got %d/%d", s.resumeCalls, s.suspendCalls)
+	}
+	if s.gotRef.Name != row.Object.Name {
+		t.Fatalf("Resume addressed %+v, want the selected row %+v", s.gotRef, row.Object)
+	}
+	if done.suspend {
+		t.Fatal("the done message should mark this as a resume")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful resume should surface a neutral status notice, no error")
+	}
+}
+
+// TestSuspendErrorDegrades proves a failed suspend (e.g. RBAC, NotFound) degrades to a
+// transient status-bar error toast (D74).
+func TestSuspendErrorDegrades(t *testing.T) {
+	s := &fakeSuspender{err: errors.New("forbidden")}
+	m := cronJobModel(t, WithSuspender(s))
+	m, cmd := dispatchRowAction(t, m, rowActionSuspend)
+	done := cmd().(suspendDoneMsg)
+	if done.err == nil {
+		t.Fatal("the suspend result should carry the suspender's error")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Fatal("a failed suspend should surface a status-bar error toast")
+	}
+}
+
+// TestSuspendInertWithoutSuspender proves the suspend/resume intents are no-ops with
+// no suspender wired: no kube command is issued.
+func TestSuspendInertWithoutSuspender(t *testing.T) {
+	m := cronJobModel(t) // no WithSuspender
+	if _, cmd := dispatchRowAction(t, m, rowActionSuspend); cmd != nil {
+		t.Fatal("with no suspender wired the suspend intent must not issue a command")
+	}
+	if _, cmd := dispatchRowAction(t, m, rowActionResume); cmd != nil {
+		t.Fatal("with no suspender wired the resume intent must not issue a command")
 	}
 }
 

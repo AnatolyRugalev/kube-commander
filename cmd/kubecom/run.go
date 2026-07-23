@@ -135,6 +135,7 @@ func runTUI(opts runOptions) error {
 		tui.WithScaler(clients),
 		tui.WithRolloutRestarter(clients),
 		tui.WithCordoner(clients),
+		tui.WithSuspender(clients),
 		tui.WithDrainer(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
