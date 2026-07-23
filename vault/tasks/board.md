@@ -7,7 +7,7 @@ _Last updated: 2026-07-23 — FB-k9s-not-prior-art: reworded the README "Special
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-gray-out-empty-types** Feedback (low/soft, `2026-07-23-gray-out-empty-resource-types`): triage the "gray out empty resource types" idea — implement the cheap opportunistic variant or dismiss with a recorded decision. status: in-progress | owner: claude-opus | added: 2026-07-23
 
 ## Blocked
 
