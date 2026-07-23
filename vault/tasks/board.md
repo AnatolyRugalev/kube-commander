@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-05 wired the initial logs viewer (streaming pum
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-06** Logs viewer — follow + reconnect
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -92,9 +93,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-06** Logs viewer — follow + reconnect: wire the M1-07d reconnecting/resuming
-      follow into the viewer; a `logs.follow` toggle; auto-scroll while following.
-      status: todo | owner: — | added: 2026-07-22
 - [ ] **M3-07** Logs — container picker + pod-owning kinds (#84): container picker for
       multi-container pods (reuse the picker); enable logs for Deployment/RS/StatefulSet/
       DaemonSet/Job by resolving a backing pod. status: todo | owner: — | added: 2026-07-22
