@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-08a landed the secret viewer: `SecretGetter`/`S
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-08b** Secret viewer — copy the revealed value to the clipboard (#89)
+      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
 
 ## Blocked
 
