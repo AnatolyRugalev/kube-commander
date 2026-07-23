@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-07b enabled logs for pod-owning kinds: a Deploy
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-08a** Secret viewer — reveal/base64-decode with an explicit reveal gesture (#89)
+      status: in-progress | owner: claude-opus | added: 2026-07-23
 
 ## Blocked
 
@@ -92,10 +93,12 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-08** Secret viewer (#89): reveal/base64-decode secret data with an explicit
-      reveal gesture + copy-to-clipboard. status: todo | owner: — | added: 2026-07-22
-      notes: Values start hidden; reveal is deliberate. Copy reuses the mouse/clipboard
-      story (D86/D97) or an OSC-52 write — decide in the leg and record it.
+- [ ] **M3-08b** Secret viewer — copy the revealed value to the clipboard (#89, split
+      from M3-08). status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-08 (M3-08a landed the reveal/decode viewer). Copy reuses the
+      mouse/clipboard story (D86/D97) or an OSC-52 write — decide in the leg and record
+      it. Needs a per-key selection model over the secret entries (M3-08a reveals all at
+      once); decide the selection gesture in the leg. Ticks the M3 secret exit criterion.
 - [ ] **M3-09** Delete action wired through the confirm modal: root owns a `modal.Model`,
       `ShowConfirm` on the selected row, `ConfirmedMsg` → `kube.Delete`, result → status
       bar (D74/D88). **Unblocks M2-14b.** status: todo | owner: — | added: 2026-07-22
