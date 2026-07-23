@@ -7,7 +7,15 @@ _Last updated: 2026-07-22 — M3-01 landed the shared read-only viewer component
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-02** Action surface + M3 keymap: an **actions menu** (reuse the generic
+      picker keyed by a distinct Kind, like the resource palette D100) listing the
+      actions applicable to the selected row, plus named keymap entries for the M3
+      actions **off the reserved nav keys** (`h j k l n g G /`, D10) — behind a leader
+      / the actions menu. Regenerate `docs/keybindings.md`; update `knowledge/keybindings.md`.
+      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+      notes: Gives every subsequent viewer/action a reachable trigger. Wire it to
+      dispatch a typed "run action X on selected row" intent; the individual legs
+      (M3-03…) handle each intent. No behavior beyond opening the menu + routing yet.
 
 ## Blocked
 
@@ -92,15 +100,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-02** Action surface + M3 keymap: an **actions menu** (reuse the generic
-      picker keyed by a distinct Kind, like the resource palette D100) listing the
-      actions applicable to the selected row, plus named keymap entries for the M3
-      actions **off the reserved nav keys** (`h j k l n g G /`, D10) — behind a leader
-      / the actions menu. Regenerate `docs/keybindings.md`; update `knowledge/keybindings.md`.
-      status: todo | owner: — | added: 2026-07-22
-      notes: Gives every subsequent viewer/action a reachable trigger. Wire it to
-      dispatch a typed "run action X on selected row" intent; the individual legs
-      (M3-03…) handle each intent. No behavior beyond opening the menu + routing yet.
 - [ ] **M3-03** YAML viewer wired: actions-menu/keymap → `kube.GetYAML` (M1-07a) →
       M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
       notes: Simplest viewer (single fetch, no stream) — the first end-to-end proof of
