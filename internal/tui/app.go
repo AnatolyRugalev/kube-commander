@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,6 +169,27 @@ type Deleter interface {
 	Delete(ctx context.Context, r kube.Resource, ref kube.ObjectRef, opts metav1.DeleteOptions) error
 }
 
+// Scaler is the narrow slice of the kube layer the shell needs to run the scale
+// action (M3-10): set a scalable workload's replica count (M1-06b's Scale, which
+// patches the /scale subresource so it is uniform across Deployment/RS/StatefulSet/
+// ReplicationController). *kube.Clients satisfies it. As with Deleter the shell
+// depends on the interface, not the concrete client, so the tui package constructs
+// no client and the scale flow is driveable in hermetic tests. A model built
+// without one is scale-inert: the Scale action opens no prompt. The signature
+// matches kube.Scale — scale is idempotent, so there is no UID precondition (D35).
+type Scaler interface {
+	Scale(ctx context.Context, r kube.Resource, ref kube.ObjectRef, replicas int32) error
+}
+
+// RolloutRestarter is the narrow slice of the kube layer the shell needs to run the
+// rollout-restart action (M3-10): stamp a pod-template workload's restartedAt
+// annotation so the controller rolls its pods (M1-06b's RolloutRestart, matching
+// `kubectl rollout restart`). *kube.Clients satisfies it. A model built without one
+// is restart-inert: the Rollout-restart action opens no confirm modal.
+type RolloutRestarter interface {
+	RolloutRestart(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -256,6 +278,20 @@ func WithSecretGetter(g SecretGetter) Option {
 // action is inert (the confirm modal never opens).
 func WithDeleter(d Deleter) Option {
 	return func(m *Model) { m.deleter = d }
+}
+
+// WithScaler wires the kube client the shell uses to scale the selected workload's
+// replicas once the scale prompt is submitted (M3-10). Without it the Scale action
+// is inert (the prompt never opens).
+func WithScaler(s Scaler) Option {
+	return func(m *Model) { m.scaler = s }
+}
+
+// WithRolloutRestarter wires the kube client the shell uses to rollout-restart the
+// selected workload once the confirm modal is accepted (M3-10). Without it the
+// Rollout-restart action is inert (the confirm modal never opens).
+func WithRolloutRestarter(r RolloutRestarter) Option {
+	return func(m *Model) { m.restarter = r }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -500,6 +536,20 @@ type Model struct {
 	deleteRes kube.Resource
 	deleteRef kube.ObjectRef
 
+	// scaler/restarter run the two mutating workload actions once their modal
+	// resolves (M3-10; nil → the action is inert, no modal opens): scaler.Scale on a
+	// submitted replicas prompt, restarter.RolloutRestart on an accepted confirm. Both
+	// are idempotent (no UID guard, D35). mutateRes/mutateRef stash the target the open
+	// modal applies to — like deleteRes/deleteRef, ConfirmedMsg carries only the modal
+	// Kind (D88) — shared between the two because only one modal is ever up at a time;
+	// consulted only while the scale/rollout modal is up (scaleModalKind/
+	// rolloutRestartModalKind), so a stale value from a declined one is harmless.
+	// Touched only from the single-threaded update loop.
+	scaler    Scaler
+	restarter RolloutRestarter
+	mutateRes kube.Resource
+	mutateRef kube.ObjectRef
+
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
 	// and it re-scopes to whatever is showing. filtering is whether it is open and
@@ -685,6 +735,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filtering {
 			return m.routeFilterKey(msg)
 		}
+		if m.modal.Prompting() {
+			return m.routeModalPromptKey(msg)
+		}
 		switch r := m.seq.Input(msg.Key()); r.Kind {
 		case keymap.ResultAction:
 			return m.handleAction(r.Action)
@@ -791,6 +844,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deleteDoneMsg:
 		return m.handleDeleteDone(msg)
+
+	case scaleDoneMsg:
+		return m.handleScaleDone(msg)
+
+	case restartDoneMsg:
+		return m.handleRestartDone(msg)
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
@@ -1243,6 +1302,10 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openLogsViewer(msg)
 	case rowActionSecret:
 		return m.openSecretViewer(msg)
+	case rowActionScale:
+		return m.openScalePrompt(msg)
+	case rowActionRolloutRestart:
+		return m.openRolloutRestartConfirm(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}
@@ -1296,6 +1359,10 @@ func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd)
 	switch msg.Kind {
 	case deleteModalKind:
 		return m.runDelete()
+	case scaleModalKind:
+		return m.runScale(msg.Value)
+	case rolloutRestartModalKind:
+		return m.runRolloutRestart()
 	}
 	return m, nil
 }
@@ -1326,6 +1393,123 @@ func (m Model) handleDeleteDone(msg deleteDoneMsg) (tea.Model, tea.Cmd) {
 		return m, m.surfaceError(NewErrorMsg("delete "+msg.label, msg.err))
 	}
 	return m, m.surfaceNotice("deleted " + msg.label)
+}
+
+// scaleModalKind / rolloutRestartModalKind stamp the modals the two M3-10 mutating
+// workload actions open, so modal.ConfirmedMsg/CancelledMsg route back to the right
+// flow — the same one-modal-many-kinds pattern delete established (D115). Scale uses
+// the modal's prompt mode (a replica count), rollout-restart its confirm mode.
+const (
+	scaleModalKind          = "scale"
+	rolloutRestartModalKind = "rolloutRestart"
+)
+
+// scaleDoneMsg / restartDoneMsg carry the outcome of the async kube call issued once
+// the scale prompt is submitted / the rollout-restart confirm is accepted (M3-10).
+// Like deleteDoneMsg they are one-shot fire-and-report with no generation guard: the
+// result only flashes a transient status message, so a superseded one is harmless.
+type scaleDoneMsg struct {
+	label    string
+	replicas int32
+	err      error
+}
+
+type restartDoneMsg struct {
+	label string
+	err   error
+}
+
+// openScalePrompt opens the modal's replica prompt over the selected workload before
+// scaling it (M3-10): it stashes the target (resource + the row's ObjectRef) and shows
+// a single-line prompt. nav.drillIn submits the typed count (ConfirmedMsg with Value →
+// the scale runs), nav.back cancels (CancelledMsg → nothing happens) — no raw digits
+// matched as behaviour, the field captures them via UpdatePrompt (D11). With no scaler
+// wired it is scale-inert (a no-op), exactly as the Scale entry is absent from a kind
+// whose menu omits it. Returns the prompt's focus cmd so the cursor blinks.
+func (m Model) openScalePrompt(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.scaler == nil {
+		return m, nil
+	}
+	m.mutateRes = msg.Resource
+	m.mutateRef = msg.Object
+	target := viewerTitle(msg.Resource, msg.Object)
+	cmd := m.modal.ShowPrompt(scaleModalKind, "Scale", "Replicas for "+target+":", "")
+	return m, cmd
+}
+
+// runScale parses the submitted replica count and issues the stashed scale off the
+// update loop, reporting its outcome via scaleDoneMsg. A blank or non-integer entry
+// (or a negative count) degrades to a transient status-bar error toast (D74) and runs
+// nothing — the modal is already hidden, so the user re-invokes to retry. Inert if the
+// scaler went away or no target is stashed, so an empty ref never reaches kube.Scale.
+func (m Model) runScale(value string) (tea.Model, tea.Cmd) {
+	if m.scaler == nil || m.mutateRef.Name == "" {
+		return m, nil
+	}
+	label := viewerTitle(m.mutateRes, m.mutateRef)
+	n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
+	if err != nil {
+		return m, m.surfaceError(ErrorMsg{Context: "scale " + label + ": replicas must be a whole number"})
+	}
+	if n < 0 {
+		return m, m.surfaceError(ErrorMsg{Context: "scale " + label + ": replicas must be >= 0"})
+	}
+	scaler, r, ref, replicas := m.scaler, m.mutateRes, m.mutateRef, int32(n)
+	return m, func() tea.Msg {
+		err := scaler.Scale(context.Background(), r, ref, replicas)
+		return scaleDoneMsg{label: label, replicas: replicas, err: err}
+	}
+}
+
+// handleScaleDone reports a completed scale: a failure (NotFound, RBAC) degrades to a
+// transient error toast (D74), a success to a neutral status notice naming the new
+// replica count. The workload's own row updates via the live watch stream, not here.
+func (m Model) handleScaleDone(msg scaleDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("scale "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice(fmt.Sprintf("scaled %s to %d", msg.label, msg.replicas))
+}
+
+// openRolloutRestartConfirm opens the confirm modal over the selected workload before
+// rollout-restarting it (M3-10): it stashes the target and shows a yes/no confirm.
+// nav.drillIn accepts (ConfirmedMsg → the restart runs), nav.back declines
+// (CancelledMsg → nothing happens) — no raw y/n (D11). With no restarter wired it is
+// restart-inert (a no-op), like the Rollout-restart entry being absent from the menu.
+func (m Model) openRolloutRestartConfirm(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.restarter == nil {
+		return m, nil
+	}
+	m.mutateRes = msg.Resource
+	m.mutateRef = msg.Object
+	target := viewerTitle(msg.Resource, msg.Object)
+	m.modal.ShowConfirm(rolloutRestartModalKind, "Rollout restart", "Rollout restart "+target+"?")
+	return m, nil
+}
+
+// runRolloutRestart issues the stashed rollout-restart off the update loop and reports
+// its outcome via restartDoneMsg. Inert if the restarter went away or no target is
+// stashed, so an empty ref never reaches kube.RolloutRestart.
+func (m Model) runRolloutRestart() (tea.Model, tea.Cmd) {
+	if m.restarter == nil || m.mutateRef.Name == "" {
+		return m, nil
+	}
+	restarter, r, ref := m.restarter, m.mutateRes, m.mutateRef
+	label := viewerTitle(r, ref)
+	return m, func() tea.Msg {
+		err := restarter.RolloutRestart(context.Background(), r, ref)
+		return restartDoneMsg{label: label, err: err}
+	}
+}
+
+// handleRestartDone reports a completed rollout-restart: a failure degrades to a
+// transient error toast (D74), a success to a neutral status notice. The rolling
+// pods surface through the live watch stream, not here.
+func (m Model) handleRestartDone(msg restartDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("rollout restart "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice("restarted " + msg.label)
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -1893,6 +2077,24 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if mapped {
 		*p, cmd = p.Update(action)
 	}
+	return m, cmd
+}
+
+// routeModalPromptKey resolves one keypress while the modal is open in prompt mode
+// (M3-10 scale). It mirrors routeFilterKey/routePickerKey's control/text split (D73):
+// a mapped key carrying no text (esc/enter/arrows/ctrl+…) is a control Action the
+// modal consumes — nav.drillIn submits the entry, nav.back cancels (handleModalAction)
+// — while any text-producing or editing key (a digit, or backspace) is prompt input
+// fed to the field via UpdatePrompt. No view matches a raw key for behaviour (D11);
+// the open prompt captures all input, so the sequencer and the panes never see it.
+// Confirm-mode modals are not prompting, so they still route through the sequencer.
+func (m Model) routeModalPromptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+		return m.handleModalAction(action)
+	}
+	var cmd tea.Cmd
+	m.modal, cmd = m.modal.UpdatePrompt(msg)
 	return m, cmd
 }
 

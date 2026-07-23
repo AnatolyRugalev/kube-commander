@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M2-14b added full-program (teatest/v2) coverage of the M3-09 confirm-modal flow: `x` → modal opens → `enter` accepts (runs the delete) / `esc` declines (no delete), syncing the async accept on a side-effect signal, never Quit-ordering (D116). Top-unblocked next: M3-10 (scale + rollout-restart). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-10 wired scale (prompt → `kube.Scale`) + rollout-restart (confirm → `kube.RolloutRestart`) through the D115 modal via new `Scaler`/`RolloutRestarter` seams, adding prompt-mode key routing (`routeModalPromptKey`) and a shared target stash (D117). Top-unblocked next: M3-11 (cordon/uncordon + drain). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-10** Scale + rollout-restart wired via the confirm/prompt modal
-      status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -84,9 +83,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-10** Scale + rollout-restart wired: scale via `ShowPrompt` (replicas) →
-      `kube.Scale`; rollout-restart via `ShowConfirm` → `kube.RolloutRestart`; results
-      to the status bar. status: in-progress (see In Progress) | owner: claude-opus | added: 2026-07-22
 - [ ] **M3-11** Cordon/uncordon + drain wired: cordon/uncordon (`kube.Cordon`/`Uncordon`)
       and drain (`kube.Drain`, confirm) on nodes; the long eviction loop reports progress
       to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-22
@@ -112,6 +108,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-10** Scale (prompt → `kube.Scale`) + rollout-restart (confirm → `kube.RolloutRestart`) wired through the D115 modal; new `Scaler`/`RolloutRestarter` seams, prompt-mode key routing (`routeModalPromptKey`), shared `mutateRes`/`mutateRef` stash, results to the status bar — done 2026-07-23 (D117)
 - [x] **M2-14b** teatest coverage: modal confirm flow — full-program (teatest/v2) delete confirm: `x`→open→`enter` accept (delete runs) / `esc` decline (no delete), async accept synced on a side-effect signal not Quit-ordering — done 2026-07-23 (D116)
 - [x] **M3-09** Delete action wired through the confirm modal (`res.delete`/`x` → `modal.ShowConfirm` on the selected row → accept `nav.drillIn` runs `kube.Delete` (row's UID guards the snapshot race), result to the status bar (error toast / neutral notice); decline `nav.back`/quit closes it, no raw y/n; `Deleter` seam + `WithDeleter`) — **unblocks M2-14b** — done 2026-07-23 (D115)
 - [x] **M3-08b** Secret viewer — copy the selected value to the clipboard (#89): per-entry cursor (`nav.up`/`nav.down` select, not scroll; `> ` gutter marks it, `EnsureLineVisible` keeps it on screen), `secret.copy` (`c`) yanks the selected decoded value via `tea.SetClipboard` OSC-52 (masked or revealed), neutral status-bar notice `copied "key" (N bytes)` (new `SetNotice` channel) — done 2026-07-23 (D114)

@@ -2889,3 +2889,25 @@ final-model-assertable** (it races Quit); prove the close via the accept path (t
 is hidden in `handleModalConfirmed` strictly before the delete cmd fires) and the
 direct-Update decline test, and let the decline teatest assert only the race-free facts
 (no delete ran; a swallowed nav left the selection put).
+
+### D117 — Prompt-mode modal input routes through routeModalPromptKey; mutating actions share one target stash keyed by modal Kind
+**2026-07-23 (M3-10).** Scale is the first action to use the modal's **prompt mode**
+(a replica count), so it extends D115's confirm wiring with the text-entry rhythm the
+picker/filter already use (D73). Constraints a later leg must not silently break:
+(1) While `modal.Prompting()` the root routes each keypress through
+**`routeModalPromptKey`** (checked in `Update`'s KeyPressMsg case, after `filtering`,
+before the sequencer): a mapped no-text key (enter/esc) is a control Action fed to
+`handleModalAction` (drillIn submits, back cancels), any text/editing key goes to
+`modal.UpdatePrompt` — no view matches a raw digit (D11). A **confirm-mode** modal is
+not `Prompting()`, so it still routes through the sequencer → `handleAction` →
+`handleModalAction` (the D115 path) unchanged. (2) The two M3-10 mutating actions
+share **one** stash pair (`mutateRes`/`mutateRef`) rather than a pair each, because
+only one modal is ever up at a time; it is consulted only while that action's modal
+Kind is up, so a stale value from a declined one is harmless (as with delete's own
+pair). Later mutating actions (M3-11 cordon/drain, M3-12 suspend/resume, M3-13
+port-forward prompt) reuse `mutateRes`/`mutateRef` + this routing, not a bespoke stash
+or key path. (3) A prompt whose submitted text fails to parse (scale: non-integer /
+negative replicas) **degrades to a status-bar error toast and runs nothing** (the
+modal is already hidden — the user re-invokes), never a panic or a silent no-op —
+input validation is the shell's job, the kube layer's own guard (M1-06b) is the
+backstop.

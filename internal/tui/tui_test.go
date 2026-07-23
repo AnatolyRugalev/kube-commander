@@ -3939,6 +3939,282 @@ func TestDeleteModalSwallowsNav(t *testing.T) {
 	}
 }
 
+// fakeScaler / fakeRestarter are hermetic stand-ins for the M3-10 mutating seams:
+// each records what it was asked to do (so a test can assert the selected row was
+// addressed and, for scale, the replica count) and returns a preset error.
+type fakeScaler struct {
+	err         error
+	calls       int
+	gotRes      kube.Resource
+	gotRef      kube.ObjectRef
+	gotReplicas int32
+}
+
+func (f *fakeScaler) Scale(_ context.Context, r kube.Resource, ref kube.ObjectRef, replicas int32) error {
+	f.calls++
+	f.gotRes = r
+	f.gotRef = ref
+	f.gotReplicas = replicas
+	return f.err
+}
+
+type fakeRestarter struct {
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeRestarter) RolloutRestart(_ context.Context, r kube.Resource, ref kube.ObjectRef) error {
+	f.calls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+// workloadModel drills into a scalable-workload table (Kind Deployment) with the
+// given options wired so a scale/rollout test has a concrete selected row.
+func workloadModel(t *testing.T, opts ...Option) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, append([]Option{WithWatcher(fw)}, opts...)...)
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("deployments", "Deployment")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// dispatchRowAction delivers a row-action intent over the selected row (the
+// actions-menu path — scale/rollout have no direct key) and returns the model plus
+// any resulting cmd.
+func dispatchRowAction(t *testing.T, m Model, action rowAction) (Model, tea.Cmd) {
+	t.Helper()
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	next, cmd := m.Update(rowActionMsg{Action: action, Resource: m.current, Object: row.Object})
+	return next.(Model), cmd
+}
+
+// TestScaleOpensPrompt proves the scale intent opens the modal's replica prompt over
+// the selected row (naming the target) rather than scaling outright — no kube call yet.
+func TestScaleOpensPrompt(t *testing.T) {
+	s := &fakeScaler{}
+	m := workloadModel(t, WithScaler(s))
+	row, _ := m.table.SelectedRow()
+
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+	if !m.modal.Active() {
+		t.Fatal("the scale intent should open the modal")
+	}
+	if !m.modal.Prompting() {
+		t.Fatal("the scale modal should be in prompt mode")
+	}
+	if m.modal.Kind() != scaleModalKind {
+		t.Fatalf("modal kind = %q, want %q", m.modal.Kind(), scaleModalKind)
+	}
+	if s.calls != 0 {
+		t.Fatal("opening the prompt must not scale anything yet")
+	}
+	if view := m.View().Content; !strings.Contains(view, row.Object.Name) {
+		t.Fatalf("the scale prompt should name the target row %q: %q", row.Object.Name, view)
+	}
+}
+
+// TestScalePromptRunsScale drives the whole accept path: open the prompt, type a
+// replica count (routed to the field while Prompting), accept (enter → nav.drillIn) →
+// the modal closes and kube.Scale runs against the selected row with the typed count,
+// and the success surfaces a neutral status notice.
+func TestScalePromptRunsScale(t *testing.T) {
+	s := &fakeScaler{}
+	m := workloadModel(t, WithScaler(s))
+	row, _ := m.table.SelectedRow()
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+
+	// Typed digits are routed to the prompt field (not the sequencer) while Prompting.
+	m, _ = press(t, m, tea.Key{Code: '1', Text: "1"})
+	m, _ = press(t, m, tea.Key{Code: '2', Text: "2"})
+	if got := m.modal.Value(); got != "12" {
+		t.Fatalf("prompt field = %q, want %q — digits must reach the input", got, "12")
+	}
+
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if confirmCmd == nil {
+		t.Fatal("accepting the prompt should emit a confirmed command")
+	}
+	confirmed, ok := confirmCmd().(modal.ConfirmedMsg)
+	if !ok {
+		t.Fatalf("accept produced %T, want modal.ConfirmedMsg", confirmCmd())
+	}
+	if confirmed.Value != "12" {
+		t.Fatalf("ConfirmedMsg carried %q, want the typed %q", confirmed.Value, "12")
+	}
+	next, scaleCmd := m.Update(confirmed)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("accepting the prompt should hide the modal")
+	}
+	if scaleCmd == nil {
+		t.Fatal("a submitted scale should issue the kube.Scale command")
+	}
+	done, ok := scaleCmd().(scaleDoneMsg)
+	if !ok {
+		t.Fatalf("scale produced %T, want scaleDoneMsg", scaleCmd())
+	}
+	if s.calls != 1 {
+		t.Fatalf("Scale should be called exactly once, got %d", s.calls)
+	}
+	if s.gotReplicas != 12 {
+		t.Fatalf("Scale replicas = %d, want 12", s.gotReplicas)
+	}
+	if s.gotRef.Name != row.Object.Name {
+		t.Fatalf("Scale addressed %+v, want the selected row %+v", s.gotRef, row.Object)
+	}
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful scale should surface a neutral status notice, no error")
+	}
+}
+
+// TestScaleInvalidReplicasDegrades proves a non-integer (or blank) entry degrades to a
+// status-bar error toast and runs no scale — the modal is already hidden.
+func TestScaleInvalidReplicasDegrades(t *testing.T) {
+	s := &fakeScaler{}
+	m := workloadModel(t, WithScaler(s))
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+	m, _ = press(t, m, tea.Key{Code: 'x', Text: "x"}) // not a number
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	next, scaleCmd := m.Update(confirmCmd().(modal.ConfirmedMsg))
+	m = next.(Model)
+	if scaleCmd != nil {
+		if _, ok := scaleCmd().(scaleDoneMsg); ok {
+			t.Fatal("an invalid replica count must not run a scale")
+		}
+	}
+	if s.calls != 0 {
+		t.Fatal("an invalid replica count must not call Scale")
+	}
+	if !m.status.HasError() {
+		t.Fatal("an invalid replica count should surface a status-bar error toast")
+	}
+}
+
+// TestScaleErrorDegrades proves a failed scale (e.g. RBAC, NotFound) degrades to a
+// transient status-bar error toast (D74).
+func TestScaleErrorDegrades(t *testing.T) {
+	s := &fakeScaler{err: errors.New("forbidden")}
+	m := workloadModel(t, WithScaler(s))
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+	m, _ = press(t, m, tea.Key{Code: '2', Text: "2"})
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	next, scaleCmd := m.Update(confirmCmd().(modal.ConfirmedMsg))
+	m = next.(Model)
+	done := scaleCmd().(scaleDoneMsg)
+	if done.err == nil {
+		t.Fatal("the scale result should carry the scaler's error")
+	}
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Fatal("a failed scale should surface a status-bar error toast")
+	}
+}
+
+// TestScaleInertWithoutScaler proves the scale intent is a no-op with no scaler wired:
+// the prompt never opens.
+func TestScaleInertWithoutScaler(t *testing.T) {
+	m := workloadModel(t) // no WithScaler
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+	if m.modal.Active() {
+		t.Fatal("with no scaler wired the scale prompt must not open")
+	}
+}
+
+// TestRolloutRestartOpensConfirm proves the rollout-restart intent opens a confirm
+// modal over the selected row (naming the target) rather than restarting outright.
+func TestRolloutRestartOpensConfirm(t *testing.T) {
+	r := &fakeRestarter{}
+	m := workloadModel(t, WithRolloutRestarter(r))
+	row, _ := m.table.SelectedRow()
+
+	m, _ = dispatchRowAction(t, m, rowActionRolloutRestart)
+	if !m.modal.Active() {
+		t.Fatal("the rollout-restart intent should open the confirm modal")
+	}
+	if m.modal.Prompting() {
+		t.Fatal("rollout-restart is a yes/no confirm, not a prompt")
+	}
+	if m.modal.Kind() != rolloutRestartModalKind {
+		t.Fatalf("modal kind = %q, want %q", m.modal.Kind(), rolloutRestartModalKind)
+	}
+	if r.calls != 0 {
+		t.Fatal("opening the confirm must not restart anything yet")
+	}
+	if view := m.View().Content; !strings.Contains(view, row.Object.Name) {
+		t.Fatalf("the confirm should name the target row %q: %q", row.Object.Name, view)
+	}
+}
+
+// TestRolloutRestartRunsRestart drives the accept path: accept (enter) → the modal
+// closes and kube.RolloutRestart runs against the selected row, success → notice.
+func TestRolloutRestartRunsRestart(t *testing.T) {
+	r := &fakeRestarter{}
+	m := workloadModel(t, WithRolloutRestarter(r))
+	row, _ := m.table.SelectedRow()
+	m, _ = dispatchRowAction(t, m, rowActionRolloutRestart)
+
+	m, confirmCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	next, restartCmd := m.Update(confirmCmd().(modal.ConfirmedMsg))
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("accepting the confirm should hide the modal")
+	}
+	done, ok := restartCmd().(restartDoneMsg)
+	if !ok {
+		t.Fatalf("restart produced %T, want restartDoneMsg", restartCmd())
+	}
+	if r.calls != 1 {
+		t.Fatalf("RolloutRestart should be called exactly once, got %d", r.calls)
+	}
+	if r.gotRef.Name != row.Object.Name {
+		t.Fatalf("RolloutRestart addressed %+v, want the selected row %+v", r.gotRef, row.Object)
+	}
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful restart should surface a neutral status notice, no error")
+	}
+}
+
+// TestRolloutRestartDeclineDoesNothing proves declining (esc → nav.back) closes the
+// modal without restarting.
+func TestRolloutRestartDeclineDoesNothing(t *testing.T) {
+	r := &fakeRestarter{}
+	m := workloadModel(t, WithRolloutRestarter(r))
+	m, _ = dispatchRowAction(t, m, rowActionRolloutRestart)
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	next, _ := m.Update(cancelCmd().(modal.CancelledMsg))
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("declining the confirm should hide the modal")
+	}
+	if r.calls != 0 {
+		t.Fatal("a declined confirm must not restart anything")
+	}
+}
+
+// TestRolloutRestartInertWithoutRestarter proves the intent is a no-op with no
+// restarter wired: the confirm modal never opens.
+func TestRolloutRestartInertWithoutRestarter(t *testing.T) {
+	m := workloadModel(t) // no WithRolloutRestarter
+	m, _ = dispatchRowAction(t, m, rowActionRolloutRestart)
+	if m.modal.Active() {
+		t.Fatal("with no restarter wired the confirm modal must not open")
+	}
+}
+
 // signalDeleter is a fakeDeleter that also announces on a channel the moment Delete
 // is invoked, so a full-program (teatest) test can block on the delete actually
 // running before it inspects state — the deterministic barrier the accept flow needs.
