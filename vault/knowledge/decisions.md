@@ -2923,3 +2923,26 @@ a predecessor relationship.** The other existing k9s references stay — they ar
 accurate and non-chronological: the "simpler and more discoverable than k9s"
 comparison, the "not cloning k9s" non-goal (goals.md), the "tview (what k9s uses)"
 note, and the k9s-`:`-style palette references.
+
+### D119 — Menu does not eagerly count resource types; empty-type graying is declined for now
+**2026-07-23 (FB-gray-out-empty-types).** Triaging the soft/low idea of graying left-menu
+resource types that have zero objects in the current view. Two constraints a future leg
+must not silently contradict:
+(1) **Never implement the eager version** — kubecom must not list/count every menu type on
+a namespace switch (or on any menu render) to know each item's population. That is dozens
+of API calls per switch, rate-limit exposure on large clusters, and instantly-stale counts
+needing re-polling/watch-all — it directly fights the lazy-list principle (D8, principle 4:
+list a type only when the user drills in). The menu stays stateless-per-item with respect
+to object counts.
+(2) The **cheap opportunistic variant is declined for now** (not forbidden): graying only
+types the user has already opened-and-found-empty, cached per `(GVR, namespace)`, reusing
+the one active watch's row count. Rejected on cost/value: the value is marginal and
+revisit-only (the user already saw the type was empty when they opened it; it evaporates /
+re-keys on every namespace switch since only one type is watched at a time), while it would
+add a namespace-keyed emptiness cache, per-`ApplyEvent` plumbing on the watch hot path, and
+a **third** always-on menu visual state that must read as distinct from the existing
+"unavailable/denied" muting (D57/M2-05b) — a real-terminal UX judgment (D68/D79) not worth
+the standing complexity for a low/soft item. If revisited, the opportunistic variant is the
+only acceptable shape (never the eager one), it must reuse the existing watch (zero extra
+API calls), key emptiness by `(GVR, namespace)`, treat never-visited as **unknown ≠ empty**,
+and keep "empty" visually distinct from "unavailable".
