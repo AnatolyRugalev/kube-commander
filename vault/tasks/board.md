@@ -7,7 +7,14 @@ _Last updated: 2026-07-23 — M3-12: CronJob suspend/resume wired via a `Suspend
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-13a** Port-forward start + background lifecycle: `PortForwarder` seam
+      (`WithPortForwarder`) → M1-08 `kube.PortForward` on a Pod row behind a ports
+      prompt; observe Ready/Done via a message wait (principle 1), report to the
+      status bar; track active forwards in the model; **stop all on exit**.
+      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
+      notes: Split from M3-13. Pod only this slice (kube.PortForward posts to the pod
+      subresource); the listing panel + stop-individual is M3-13b, Service→pod
+      resolution is M3-13c.
 
 ## Blocked
 
@@ -83,11 +90,15 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-13** Port-forward manager: start (prompt ports) via the M1-08 background
-      forward; a panel listing active forwards with their local:remote ports; stop a
-      forward; stop all on exit. status: todo | owner: — | added: 2026-07-22
-      notes: The forward runs in a background goroutine that only sends msgs (principle 1);
-      the panel is an overlay. May split into start/list/stop slices if > ~300 lines.
+- [ ] **M3-13b** Port-forward panel: an overlay listing active forwards with their
+      local:remote ports; stop the selected forward; stop-all gesture. status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-13. Reads the model's active-forward set (M3-13a); the panel
+      is an overlay compositing over the browse view (D95), no raw-key matching (D11).
+- [ ] **M3-13c** Port-forward for Services: resolve a Service to a backing endpoint pod
+      before forwarding (mirrors M3-07b's `PodForOwner`), re-add Service to the
+      Port-forward action's applicability. status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-13. M3-13a is Pod-only (kube.PortForward posts to the pod
+      subresource); this slice adds the Service→pod hop.
 - [ ] **M3-14** Exec shell: `tea.ExecProcess` suspend → `remotecommand` raw PTY (fallback
       `kubectl exec` when the binary is present); container picker reuse; restore the TUI
       on exit. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-22
