@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-07a added the logs container picker: a multi-container pod resolves its containers and prompts which to stream, a single-container pod streams directly (D111); M3-07b (pod-owning kinds) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-07b enabled logs for pod-owning kinds: a Deployment/RS/StatefulSet/DaemonSet/Job/RC resolves a backing pod (selector → newest ready pod) that then takes M3-07a's container path (D112); M3-08 (secret viewer) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-07b** Logs — pod-owning kinds (#84): resolve a backing pod for Deployment/RS/
-      StatefulSet/DaemonSet/Job/RC (selector → newest ready pod) and feed it into M3-07a's
-      container resolution/picker. status: in-progress | owner: claude-opus | added: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -132,6 +130,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-07b** Logs — pod-owning kinds (#84): `PodResolver` seam (`kube.PodForOwner`) resolves a Deployment/RS/StatefulSet/DaemonSet/Job/RC to a backing pod (dynamic Get → `spec.selector` → newest Ready pod, fallback newest); `openLogsViewer` resolves off the update loop then feeds the pod into the shared `resolveContainersFor` (M3-07a container path), titled as a Pod; `WithPodResolver` gates it (no resolver → the M3-05…07a not-yet-available toast) — done 2026-07-23 (D112)
 - [x] **M3-07a** Logs container picker for multi-container pods: `ContainerLister` seam (`kube.PodContainers`) resolves a pod's containers before streaming — multiple open the reused modal picker (`ctrPicker`) and the pick streams the chosen container, a single container streams directly; no lister → default container (no picker); streaming factored into `streamLogsInto`, container named in the title — done 2026-07-23 (D111)
 - [x] **M3-06** Logs viewer — follow + reconnect: opens tailing (`LogOptions{Follow:true}`, M1-07d) with auto-scroll; `logs.follow`/`f` toggles it (logs-viewer-only, per-open `viewer.SetKind`), a manual up-scroll pauses it, title marks `[following]`/`[paused]` — done 2026-07-23 (D110)
 - [x] **M3-05** Logs viewer wired (initial, no follow): `res.logs`/`L` → `LogStreamer` seam (`kube.Logs`, M1-07c) streamed line-by-line into the shared M3-01 viewer via a gen-tagged pump (D53); pods first, `stopLogStream` teardown, open-failure closes/mid-stream error keeps lines — done 2026-07-23 (D109)

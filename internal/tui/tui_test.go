@@ -2760,9 +2760,10 @@ func TestLogsViewerInertWithoutStreamer(t *testing.T) {
 	}
 }
 
-// TestLogsViewerNonPodDegrades proves the "Pods first" scope: logs on a pod-owning
-// kind the actions menu also lists (here a Deployment) degrades to a toast rather than
-// opening an empty viewer — resolving a backing pod is a later slice (M3-07).
+// TestLogsViewerNonPodDegrades proves logs on a pod-owning kind (here a Deployment)
+// degrades to a toast when no pod resolver is wired (M3-07b resolves a backing pod
+// only when WithPodResolver is set; without it the app and the non-resolver hermetic
+// tests stay inert) rather than opening an empty viewer.
 func TestLogsViewerNonPodDegrades(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
@@ -3140,5 +3141,199 @@ func TestLogsContainerFetchStaleDropped(t *testing.T) {
 	m = next.(Model)
 	if m.ctrPicker.Active() || m.viewer.Active() {
 		t.Fatal("a stale-generation container fetch should be dropped, opening nothing")
+	}
+}
+
+// fakePodResolver is a hermetic PodResolver: it returns a preset backing-pod ref (or
+// an error) and records the workload it was asked to resolve, so a test can drive the
+// M3-07b pod-owning-kind logs flow without a cluster.
+type fakePodResolver struct {
+	pod    kube.ObjectRef
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+}
+
+func (f *fakePodResolver) PodForOwner(_ context.Context, res kube.Resource, ref kube.ObjectRef) (kube.ObjectRef, error) {
+	f.calls++
+	f.gotRes = res
+	f.gotRef = ref
+	if f.err != nil {
+		return kube.ObjectRef{}, f.err
+	}
+	return f.pod, nil
+}
+
+// logsModelWorkload drills into a workload table (a pod-owning kind) with the given
+// seams wired, so a test exercises the M3-07b resolve-a-backing-pod flow.
+func logsModelWorkload(t *testing.T, resourceName, kind string, opts ...Option) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	all := append([]Option{WithWatcher(fw)}, opts...)
+	m := sizedWith(t, all...)
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource(resourceName, kind)})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// openWorkloadLogsResolve presses `L` on a workload row and delivers the logs intent,
+// returning the model and the async pod-resolution cmd openLogsViewer issues for a
+// pod-owning kind with a resolver wired.
+func openWorkloadLogsResolve(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	_, cmd := press(t, m, logsKey)
+	next, resolveCmd := m.Update(cmd().(rowActionMsg))
+	return next.(Model), resolveCmd
+}
+
+// TestLogsPodOwningKindResolvesPod proves M3-07b's happy path: logs on a Deployment
+// resolves a backing pod (the resolver asked for the deployment row), then that pod
+// takes the pod path — a single container streams directly, addressed to the resolved
+// pod and titled as a Pod so the user sees which pod is tailing.
+func TestLogsPodOwningKindResolvesPod(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "workload log"}}}
+	r := &fakePodResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz", UID: "uid-1"}}
+	l := &fakeContainerLister{names: []string{"app"}}
+	m := logsModelWorkload(t, "deployments", "Deployment", WithLogStreamer(s), WithPodResolver(r), WithContainerLister(l))
+
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	deployRef := row.Object
+
+	m, resolveCmd := openWorkloadLogsResolve(t, m)
+	if m.viewer.Active() {
+		t.Fatal("the viewer should not open until the backing pod resolves")
+	}
+	msg := resolveCmd()
+	prm, ok := msg.(podResolvedMsg)
+	if !ok {
+		t.Fatalf("opening logs on a workload produced %T, want podResolvedMsg", msg)
+	}
+	next, fetchCmd := m.Update(prm)
+	m = next.(Model)
+	if r.calls != 1 {
+		t.Fatalf("PodForOwner called %d times, want 1", r.calls)
+	}
+	if r.gotRef != deployRef {
+		t.Fatalf("resolver asked for %+v, want the deployment row %+v", r.gotRef, deployRef)
+	}
+	if r.gotRes.GVK.Kind != "Deployment" {
+		t.Fatalf("resolver got kind %q, want Deployment", r.gotRes.GVK.Kind)
+	}
+
+	m, pumpCmd := resolveContainers(t, m, fetchCmd)
+	if l.gotRef.Name != "api-xyz" {
+		t.Fatalf("the container lister was asked for %q, want the resolved pod api-xyz", l.gotRef.Name)
+	}
+	if !m.viewer.Active() {
+		t.Fatal("a single-container resolved pod should stream directly")
+	}
+	if s.gotRef.Name != "api-xyz" {
+		t.Fatalf("the stream ref = %q, want the resolved pod api-xyz", s.gotRef.Name)
+	}
+	m = drainLogPump(t, m, pumpCmd)
+	content := m.View().Content
+	if !strings.Contains(content, "workload log") {
+		t.Fatalf("the resolved pod's log line should show: %q", content)
+	}
+	if !strings.Contains(content, "Pod web/api-xyz") {
+		t.Fatalf("the viewer title should name the resolved pod, not the workload: %q", content)
+	}
+}
+
+// TestLogsPodOwningKindNoListerStreamsDirectly proves the resolved pod streams its
+// default container directly when no container lister is wired (the M3-05/06 behaviour
+// still applies after resolution).
+func TestLogsPodOwningKindNoListerStreamsDirectly(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
+	r := &fakePodResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz"}}
+	m := logsModelWorkload(t, "deployments", "Deployment", WithLogStreamer(s), WithPodResolver(r)) // no lister
+
+	m, resolveCmd := openWorkloadLogsResolve(t, m)
+	next, pumpCmd := m.Update(resolveCmd().(podResolvedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("no lister → the resolved pod should stream directly into the viewer")
+	}
+	if s.gotRef.Name != "api-xyz" {
+		t.Fatalf("the stream ref = %q, want the resolved pod api-xyz", s.gotRef.Name)
+	}
+	if s.gotOpts.Container != "" {
+		t.Fatalf("no lister → the default container (empty), got %q", s.gotOpts.Container)
+	}
+	_ = drainLogPump(t, m, pumpCmd)
+}
+
+// TestLogsPodOwningKindMultiContainerOpensPicker proves a resolved pod with multiple
+// containers still opens the container picker (M3-07a) rather than streaming blindly.
+func TestLogsPodOwningKindMultiContainerOpensPicker(t *testing.T) {
+	s := &fakeLogStreamer{}
+	r := &fakePodResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz"}}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWorkload(t, "deployments", "Deployment", WithLogStreamer(s), WithPodResolver(r), WithContainerLister(l))
+
+	m, resolveCmd := openWorkloadLogsResolve(t, m)
+	next, fetchCmd := m.Update(resolveCmd().(podResolvedMsg))
+	m = next.(Model)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	if !m.ctrPicker.Active() {
+		t.Fatal("a multi-container resolved pod should open the container picker")
+	}
+	if s.calls != 0 {
+		t.Fatal("no stream should start before a container is picked")
+	}
+}
+
+// TestLogsPodOwningKindResolveErrorDegrades proves a resolution failure (no matching/
+// ready pod, RBAC) degrades to a status-bar toast without opening the viewer or
+// starting a stream.
+func TestLogsPodOwningKindResolveErrorDegrades(t *testing.T) {
+	s := &fakeLogStreamer{}
+	r := &fakePodResolver{err: errors.New("no pods found")}
+	m := logsModelWorkload(t, "deployments", "Deployment", WithLogStreamer(s), WithPodResolver(r))
+
+	m, resolveCmd := openWorkloadLogsResolve(t, m)
+	next, _ := m.Update(resolveCmd().(podResolvedMsg))
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("a resolution error should not open the viewer")
+	}
+	if s.calls != 0 {
+		t.Fatal("a resolution error should not start a stream")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a resolution error should surface a status-bar toast")
+	}
+}
+
+// TestLogsPodResolvedStaleDropped proves the generation guard on the resolution: a
+// backing-pod result that lands after a newer logs open (viewerGen bumped) is dropped,
+// starting nothing.
+func TestLogsPodResolvedStaleDropped(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
+	r := &fakePodResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz"}}
+	m := logsModelWorkload(t, "deployments", "Deployment", WithLogStreamer(s), WithPodResolver(r))
+
+	m, resolveCmd := openWorkloadLogsResolve(t, m)
+	stale, ok := resolveCmd().(podResolvedMsg)
+	if !ok {
+		t.Fatalf("want podResolvedMsg, got %T", resolveCmd())
+	}
+	// A second open bumps viewerGen, staleifying the first resolution.
+	m, _ = openWorkloadLogsResolve(t, m)
+	if stale.gen == m.viewerGen {
+		t.Fatalf("precondition: stale gen %d should differ from current %d", stale.gen, m.viewerGen)
+	}
+	next, follow := m.Update(stale)
+	m = next.(Model)
+	if follow != nil {
+		t.Fatal("a stale pod-resolution should be dropped (no follow-on command)")
+	}
+	if s.calls != 0 {
+		t.Fatal("a stale pod-resolution should not start a stream")
 	}
 }

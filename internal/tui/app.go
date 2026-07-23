@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
@@ -126,6 +127,18 @@ type ContainerLister interface {
 	PodContainers(ctx context.Context, ref kube.ObjectRef) ([]string, error)
 }
 
+// PodResolver is the narrow slice of the kube layer the shell needs to stream logs
+// for a pod-owning workload kind (Deployment/ReplicaSet/StatefulSet/DaemonSet/Job/
+// ReplicationController): it resolves the workload to a backing pod (its selector →
+// the newest ready pod), which the shell then feeds into the same container
+// resolution/stream path a pod row takes (M3-07b, #84). *kube.Clients satisfies it
+// via PodForOwner. Without it wired logs on a non-pod kind degrade to a toast (the
+// M3-05…07a behaviour), so the pre-wiring app and the non-resolver hermetic tests
+// stay inert.
+type PodResolver interface {
+	PodForOwner(ctx context.Context, res kube.Resource, ref kube.ObjectRef) (kube.ObjectRef, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -193,6 +206,13 @@ func WithLogStreamer(s LogStreamer) Option {
 // the logs viewer streams the pod's default/sole container directly (no picker).
 func WithContainerLister(l ContainerLister) Option {
 	return func(m *Model) { m.containerLister = l }
+}
+
+// WithPodResolver wires the kube client the shell uses to resolve a backing pod for
+// a pod-owning workload kind, so its logs can be streamed (M3-07b). Without it logs
+// on a non-pod kind degrade to a toast (the M3-05…07a behaviour).
+func WithPodResolver(r PodResolver) Option {
+	return func(m *Model) { m.podResolver = r }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -369,6 +389,14 @@ type Model struct {
 	containerLister ContainerLister
 	logStreamRes    kube.Resource
 	logStreamRef    kube.ObjectRef
+
+	// podResolver resolves a backing pod for a pod-owning workload kind so its logs
+	// can be streamed (M3-07b; nil → logs on a non-pod kind degrade to a toast). When
+	// wired, opening logs on a Deployment/RS/StatefulSet/DaemonSet/Job/RC first
+	// resolves it to a pod off the update loop, then feeds that pod into the same
+	// container resolution/stream path a pod row takes. Touched only from the
+	// single-threaded update loop.
+	podResolver PodResolver
 
 	// logFollow is whether the open logs viewer is following (M3-06): the stream is
 	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
@@ -666,6 +694,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
+
+	case podResolvedMsg:
+		return m.handlePodResolved(msg)
 
 	case containersLoadedMsg:
 		return m.handleContainersLoaded(msg)
@@ -1248,46 +1279,91 @@ type containersLoadedMsg struct {
 	err        error
 }
 
-// openLogsViewer starts the logs flow over the selected row's object (M3-05/06/07a).
-// With no streamer wired it is logs-viewer-inert (a no-op). This cut is pods only
-// ("Pods first"): the pod-owning kinds the actions menu also lists resolve their
-// backing pod in a later slice (M3-07b), so a non-pod kind degrades to a toast rather
-// than opening an empty viewer.
-//
-// For a pod, a multi-container pod must say which container to stream (`kubectl logs`
-// requires -c). When a container lister is wired the pod's containers are resolved
-// first (off the update loop, tagged with a fresh viewerGen so a superseded request is
-// dropped): a single container streams directly, multiple open the container picker
-// (handleContainersLoaded). With no lister wired the shell streams the pod's
-// default/sole container directly (empty Container) — the M3-05/06 behaviour.
+// podLogResource labels the logs viewer for a pod resolved from a pod-owning
+// workload (M3-07b): the stream and title show the resolved *pod*, not the workload,
+// so the user sees which pod is tailing. It carries only the Pod kind — viewerTitle
+// reads GVK.Kind — since the resolved pod's namespace/name come from its ObjectRef.
+var podLogResource = kube.Resource{GVK: schema.GroupVersionKind{Version: "v1", Kind: "Pod"}}
+
+// podResolvedMsg carries the outcome of the async PodForOwner resolution issued when
+// logs are opened over a pod-owning workload kind (M3-07b). gen ties it to the
+// viewerGen bumped when the resolution was requested, so a result that lands after the
+// user opened a newer viewer (of any kind) is dropped rather than opening a stale
+// stream. ref is the resolved backing pod.
+type podResolvedMsg struct {
+	gen int
+	ref kube.ObjectRef
+	err error
+}
+
+// openLogsViewer starts the logs flow over the selected row's object (M3-05/06/07a/b).
+// With no streamer wired it is logs-viewer-inert (a no-op). A pod streams directly; a
+// pod-owning workload kind (Deployment/RS/StatefulSet/DaemonSet/Job/RC — the kinds the
+// actions menu lists for logs) is first resolved to a backing pod (M3-07b), then that
+// pod takes the same path. Resolution runs off the update loop tagged with a fresh
+// viewerGen so a superseded request is dropped (handlePodResolved); with no resolver
+// wired a non-pod kind degrades to a toast (the M3-05…07a behaviour).
 func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.logStreamer == nil {
 		return m, nil
 	}
-	if msg.Resource.GVK.Kind != "Pod" {
-		// Pod-owning kinds (Deployment/RS/StatefulSet/DaemonSet/Job/RC) are listed by
-		// the actions menu for logs but resolving their backing pod is M3-07b; keep the
-		// routing observable until then rather than opening an empty viewer.
+	if msg.Resource.GVK.Kind == "Pod" {
+		return m.resolveContainersFor(msg.Resource, msg.Object)
+	}
+	// Pod-owning workload kind: resolve a backing pod first (its container resolution
+	// then applies to the resolved pod). Without a resolver wired keep the routing
+	// observable with a toast rather than opening an empty viewer.
+	if m.podResolver == nil {
 		label := "logs for " + msg.Resource.GVK.Kind
 		return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
 	}
 	m.stopLogStream() // cancel any prior stream before resolving/starting a new one.
-	if m.containerLister == nil {
-		// No lister: stream the pod's default/sole container directly (M3-05/06).
-		m.viewerGen++
-		return m.streamLogsInto(msg.Resource, msg.Object, "", m.viewerGen)
+	m.viewerGen++
+	gen := m.viewerGen
+	resolver := m.podResolver
+	res, ref := msg.Resource, msg.Object
+	return m, func() tea.Msg {
+		pod, err := resolver.PodForOwner(context.Background(), res, ref)
+		return podResolvedMsg{gen: gen, ref: pod, err: err}
 	}
-	// Resolve the pod's containers first; a multi-container pod needs the picker. The
-	// fetch rides a fresh viewerGen so any newer viewer/stream opened while it is in
-	// flight staleifies it (handleContainersLoaded drops a mismatched gen).
+}
+
+// resolveContainersFor starts the container-resolution/stream flow over podRef (a pod
+// of res) — the shared tail of openLogsViewer's pod path and the pod-owning resolution
+// (M3-07b). It cancels any prior stream, then: with a container lister wired it fetches
+// the pod's containers off the update loop (a fresh viewerGen so a superseded request
+// is dropped — handleContainersLoaded), where a single container streams directly and
+// multiple open the picker; with no lister wired it streams the pod's default/sole
+// container directly (empty Container) — the M3-05/06 behaviour.
+func (m Model) resolveContainersFor(res kube.Resource, podRef kube.ObjectRef) (tea.Model, tea.Cmd) {
+	m.stopLogStream()
+	if m.containerLister == nil {
+		m.viewerGen++
+		return m.streamLogsInto(res, podRef, "", m.viewerGen)
+	}
 	m.viewerGen++
 	gen := m.viewerGen
 	lister := m.containerLister
-	res, ref := msg.Resource, msg.Object
 	return m, func() tea.Msg {
-		names, err := lister.PodContainers(context.Background(), ref)
-		return containersLoadedMsg{gen: gen, res: res, ref: ref, containers: names, err: err}
+		names, err := lister.PodContainers(context.Background(), podRef)
+		return containersLoadedMsg{gen: gen, res: res, ref: podRef, containers: names, err: err}
 	}
+}
+
+// handlePodResolved acts on a backing pod resolved for a pod-owning kind (M3-07b). A
+// result whose gen no longer matches (a newer viewer superseded it) is dropped; a
+// resolution error (no matching/ready pod, RBAC denial) degrades to a status-bar toast
+// (D74) without opening the viewer. On success it feeds the resolved pod into the same
+// container-resolution/stream path a pod row takes, titled as a Pod so the user sees
+// which pod is streaming.
+func (m Model) handlePodResolved(msg podResolvedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen {
+		return m, nil // superseded by a newer viewer/stream open; drop.
+	}
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("logs", msg.err))
+	}
+	return m.resolveContainersFor(podLogResource, msg.ref)
 }
 
 // handleContainersLoaded acts on a resolved container set (M3-07a). A result whose gen

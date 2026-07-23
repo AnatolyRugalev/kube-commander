@@ -2767,3 +2767,27 @@ container, gen)` (shared by the no-lister path, the single-container path, and t
 picker-select path); a non-empty container is named in the viewer title (`Logs ns/pod ·
 container`). M3-07b resolves a backing pod *before* this container resolution, so the
 pod-owning-kinds slice feeds a resolved pod ref into the same `openLogsViewer` pod path.
+
+### D112 — Logs on a pod-owning workload kind resolve a backing pod (selector → newest ready pod), then take the pod path
+**2026-07-23 (M3-07b, #84).** Logs are offered for pod-owning kinds
+(Deployment/ReplicaSet/StatefulSet/DaemonSet/Job/ReplicationController), not only pods.
+Constraints a later leg must not silently break: (1) A **`PodResolver` seam**
+(`PodForOwner(ctx, res, ref) (ObjectRef, error)`, `*kube.Clients` satisfies it) resolves
+a workload to one backing pod: it Gets the workload through the **dynamic client by GVR**
+(no per-kind typed client — all six kinds, and a CRD with a pod selector, are covered
+uniformly), reads `spec.selector` (a `metav1.LabelSelector` for every kind but
+ReplicationController, whose selector is a **plain label map** — both shapes handled),
+lists the matching pods, and returns the **newest Ready pod** (falling back to the newest
+pod overall when none is Ready, so a mid-rollout / crash-looping workload still yields a
+log target). A missing selector or no matching pods is a wrapped error, never a panic or
+a match-everything list (principle 3). (2) The shell flow is **resolve-then-reuse**:
+`openLogsViewer` sends a pod straight down the container path, but a pod-owning kind first
+issues `PodForOwner` off the update loop (fresh `viewerGen` guard, D108/D109/D111), and
+`handlePodResolved` feeds the resolved pod into `resolveContainersFor` — the shared tail
+extracted from the pod path — so **D111's container resolution/picker applies to the
+resolved pod** unchanged. The resolved pod's logs are titled as a **Pod** (`podLogResource`
+carries only the Pod kind) so the user sees which pod is tailing, not the workload.
+(3) **`WithPodResolver` gates it**: without a resolver wired a non-pod kind still degrades
+to a "not yet available" toast (the M3-05…07a behaviour), keeping the pre-wiring app and
+non-resolver hermetic tests inert. Init/ephemeral-container and a pod *picker* across a
+workload's pods remain deliberate later refinements.
