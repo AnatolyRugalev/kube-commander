@@ -188,4 +188,4 @@ your intent first so we can align with the milestone plan.
 
 - [Bubble Tea / Bubbles / Lipgloss](https://github.com/charmbracelet) — the TUI stack
 - [client-go](https://github.com/kubernetes/client-go) — in-process Kubernetes access
-- [k9s](https://github.com/derailed/k9s) — prior art in the Kubernetes-TUI space
+- [k9s](https://github.com/derailed/k9s) — a contemporary Kubernetes TUI in the same space

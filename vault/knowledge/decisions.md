@@ -2911,3 +2911,15 @@ negative replicas) **degrades to a status-bar error toast and runs nothing** (th
 modal is already hidden — the user re-invokes), never a panic or a silent no-op —
 input validation is the shell's job, the kube layer's own guard (M1-06b) is the
 backstop.
+
+### D118 — k9s is framed as a contemporary/peer of kube-commander, not "prior art"
+**2026-07-23 (FB-k9s-not-prior-art).** Both kube-commander and k9s emerged around
+2019–2020, so k9s is a **contemporary / kindred** Kubernetes TUI, not a predecessor
+kube-commander came after or built upon. The README "Special thanks" line was
+reworded from "prior art in the Kubernetes-TUI space" to "a contemporary Kubernetes
+TUI in the same space." The constraint a future docs/README/marketing leg must not
+silently contradict: **do not describe k9s (or any peer TUI) as "prior art" or imply
+a predecessor relationship.** The other existing k9s references stay — they are
+accurate and non-chronological: the "simpler and more discoverable than k9s"
+comparison, the "not cloning k9s" non-goal (goals.md), the "tview (what k9s uses)"
+note, and the k9s-`:`-style palette references.

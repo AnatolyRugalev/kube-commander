@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-10 wired scale (prompt → `kube.Scale`) + rollout-restart (confirm → `kube.RolloutRestart`) through the D115 modal via new `Scaler`/`RolloutRestarter` seams, adding prompt-mode key routing (`routeModalPromptKey`) and a shared target stash (D117). Top-unblocked next: M3-11 (cordon/uncordon + drain). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — FB-k9s-not-prior-art: reworded the README "Special thanks" k9s line from "prior art" to "a contemporary Kubernetes TUI in the same space" (k9s is a peer, ~2019-2020, not a predecessor); M3-11 split into M3-11a (cordon/uncordon) + M3-11b (drain). Top-unblocked next: M3-11a. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (`kube.Cordon`/`Uncordon`) — direct,
-      idempotent, no confirm — on Node rows; result to the status bar.
-      status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -85,9 +83,12 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
+- [ ] **M3-11a** Cordon/uncordon wired: `Cordoner` seam (`kube.Cordon`/`Uncordon`) — direct,
+      idempotent, no confirm — on Node rows; result to the status bar. status: todo | owner: — | added: 2026-07-23
+      notes: Split from M3-11. Mirrors the D117 seam pattern but simpler (no modal — idempotent).
 - [ ] **M3-11b** Drain wired (`kube.Drain`, confirm) on Node rows: the long eviction loop
       reports progress to the status bar and cancels on quit. status: todo | owner: — | added: 2026-07-23
-      notes: Split from M3-11 (M3-11a did cordon/uncordon). The confirm reuses D115/D117;
+      notes: Split from M3-11 (M3-11a does cordon/uncordon). The confirm reuses D115/D117;
       the drain progress stream (mirror the log pump) + cancel-on-quit is the new piece. A
       DrainOptions default (Force/IgnoreDaemonSets/DeleteEmptyDirData) must be decided in the leg.
 - [ ] **M3-12** Cronjob suspend/resume wired (`kube.Suspend`/`Resume`) via the actions
@@ -112,6 +113,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-k9s-not-prior-art** Feedback (normal, `2026-07-23-k9s-not-prior-art`): reworded the README "Special thanks" k9s line from "prior art in the Kubernetes-TUI space" to "a contemporary Kubernetes TUI in the same space" (k9s is a ~2019-2020 peer, not a predecessor); split M3-11 → M3-11a/M3-11b — done 2026-07-23 (D118)
 - [x] **M3-10** Scale (prompt → `kube.Scale`) + rollout-restart (confirm → `kube.RolloutRestart`) wired through the D115 modal; new `Scaler`/`RolloutRestarter` seams, prompt-mode key routing (`routeModalPromptKey`), shared `mutateRes`/`mutateRef` stash, results to the status bar — done 2026-07-23 (D117)
 - [x] **M2-14b** teatest coverage: modal confirm flow — full-program (teatest/v2) delete confirm: `x`→open→`enter` accept (delete runs) / `esc` decline (no delete), async accept synced on a side-effect signal not Quit-ordering — done 2026-07-23 (D116)
 - [x] **M3-09** Delete action wired through the confirm modal (`res.delete`/`x` → `modal.ShowConfirm` on the selected row → accept `nav.drillIn` runs `kube.Delete` (row's UID guards the snapshot race), result to the status bar (error toast / neutral notice); decline `nav.back`/quit closes it, no raw y/n; `Deleter` seam + `WithDeleter`) — **unblocks M2-14b** — done 2026-07-23 (D115)
