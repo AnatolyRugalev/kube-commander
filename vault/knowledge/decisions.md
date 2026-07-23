@@ -2946,3 +2946,23 @@ the standing complexity for a low/soft item. If revisited, the opportunistic var
 only acceptable shape (never the eager one), it must reuse the existing watch (zero extra
 API calls), key emptiness by `(GVR, namespace)`, treat never-visited as **unknown ≠ empty**,
 and keep "empty" visually distinct from "unavailable".
+
+### D120 — Idempotent mutating actions dispatch directly (no confirm modal); cordon/uncordon set the pattern
+**2026-07-23 (M3-11a).** Cordon/uncordon are the first mutating actions wired
+**without** a confirm modal: cordoning is idempotent (a merge patch of
+`spec.unschedulable`, M1-06c — re-running it is a no-op, no UID guard, D35), so a
+yes/no gate would be friction with no safety value. The constraint a later leg must
+not silently contradict: **an idempotent, reversible mutating action fires straight
+from `handleRowAction` and reports to the status bar — it does not open the D115
+confirm modal, and it carries no target stash** (`mutateRes`/`mutateRef` are for
+modal-gated actions that must hold the target between an open modal and the accept;
+a direct dispatch has the row's ref in hand, so it passes `msg.Resource`/`msg.Object`
+through and needs no field). This splits the M3 mutating actions into two shapes:
+**confirm-gated** (delete D115, rollout-restart D117 — destructive/disruptive) vs
+**direct** (cordon/uncordon here — idempotent). M3-12 (CronJob suspend/resume) is
+also idempotent (M1-06d, same merge-patch shape) and should follow the **direct**
+shape, not a modal. The `Cordoner` seam (`WithCordoner`, nil → inert) bundles both
+verbs on one interface (they share `setUnschedulable`); the outcome is a neutral
+notice (`cordoned`/`uncordoned <node>`) on success or an error toast (D74) on
+failure, and the Node's `Unschedulable` status flips via the live watch stream, not
+by touching the table (as with every mutating action, D115).

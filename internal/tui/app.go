@@ -190,6 +190,21 @@ type RolloutRestarter interface {
 	RolloutRestart(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
 }
 
+// Cordoner is the narrow slice of the kube layer the shell needs to run the
+// cordon/uncordon actions on a Node (M3-11a): mark it unschedulable / schedulable
+// via M1-06c's Cordon/Uncordon (each a merge patch of spec.unschedulable, matching
+// `kubectl cordon`/`uncordon`). *kube.Clients satisfies it. As with the other
+// mutating seams the shell depends on the interface, not the concrete client, so the
+// tui package constructs no client and the flow is driveable in hermetic tests. A
+// model built without one is cordon-inert: the Cordon/Uncordon actions are no-ops.
+// Both operations are idempotent, so — like Scale (D35) — there is no UID precondition
+// and, unlike delete/rollout-restart, no confirm modal (D115): the action dispatches
+// directly and reports its outcome to the status bar.
+type Cordoner interface {
+	Cordon(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
+	Uncordon(ctx context.Context, r kube.Resource, ref kube.ObjectRef) error
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -292,6 +307,13 @@ func WithScaler(s Scaler) Option {
 // Rollout-restart action is inert (the confirm modal never opens).
 func WithRolloutRestarter(r RolloutRestarter) Option {
 	return func(m *Model) { m.restarter = r }
+}
+
+// WithCordoner wires the kube client the shell uses to cordon/uncordon the selected
+// Node (M3-11a). Without it the Cordon/Uncordon actions are inert (no-ops). The
+// actions dispatch directly — cordoning is idempotent, so there is no confirm modal.
+func WithCordoner(c Cordoner) Option {
+	return func(m *Model) { m.cordoner = c }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -549,6 +571,14 @@ type Model struct {
 	restarter RolloutRestarter
 	mutateRes kube.Resource
 	mutateRef kube.ObjectRef
+
+	// cordoner runs the cordon/uncordon actions on a Node (M3-11a; nil → the actions
+	// are inert). Unlike scale/rollout it needs no target stash: cordoning is
+	// idempotent (no UID guard, D35) and has no confirm modal (D115), so the action
+	// dispatches straight from handleRowAction with the row's ref in hand — nothing is
+	// held between an open modal and an accept because there is no modal. Touched only
+	// from the single-threaded update loop.
+	cordoner Cordoner
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -850,6 +880,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case restartDoneMsg:
 		return m.handleRestartDone(msg)
+
+	case cordonDoneMsg:
+		return m.handleCordonDone(msg)
 
 	case yamlLoadedMsg:
 		return m.handleYAMLLoaded(msg)
@@ -1306,6 +1339,10 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openScalePrompt(msg)
 	case rowActionRolloutRestart:
 		return m.openRolloutRestartConfirm(msg)
+	case rowActionCordon:
+		return m.runCordon(msg, true)
+	case rowActionUncordon:
+		return m.runCordon(msg, false)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}
@@ -1510,6 +1547,57 @@ func (m Model) handleRestartDone(msg restartDoneMsg) (tea.Model, tea.Cmd) {
 		return m, m.surfaceError(NewErrorMsg("rollout restart "+msg.label, msg.err))
 	}
 	return m, m.surfaceNotice("restarted " + msg.label)
+}
+
+// cordonDoneMsg carries the outcome of the async cordon/uncordon issued when the
+// Node action is dispatched (M3-11a). cordon distinguishes the two so the status
+// message and error context read naturally. Like the other mutating done-messages it
+// is one-shot fire-and-report with no generation guard: the result only flashes a
+// transient status message, so a superseded one is harmless.
+type cordonDoneMsg struct {
+	label  string
+	cordon bool
+	err    error
+}
+
+// runCordon dispatches the cordon (cordon==true) or uncordon (false) on the selected
+// Node off the update loop, reporting its outcome via cordonDoneMsg. Unlike delete/
+// scale/rollout-restart there is **no confirm modal** (D115) and **no target stash**:
+// cordoning is idempotent (D35), so the action fires straight from handleRowAction
+// with the row's ref in hand. With no cordoner wired, or an empty ref (a row with no
+// name — cluster-scoped Nodes are always named, but guard anyway so an empty ref never
+// reaches the kube layer), it is a no-op — exactly as the Cordon/Uncordon entries are
+// absent from a non-Node kind's actions menu. The Node's Unschedulable status flips in
+// the table via the live watch stream, not here.
+func (m Model) runCordon(msg rowActionMsg, cordon bool) (tea.Model, tea.Cmd) {
+	if m.cordoner == nil || msg.Object.Name == "" {
+		return m, nil
+	}
+	cordoner, r, ref := m.cordoner, msg.Resource, msg.Object
+	label := viewerTitle(r, ref)
+	return m, func() tea.Msg {
+		var err error
+		if cordon {
+			err = cordoner.Cordon(context.Background(), r, ref)
+		} else {
+			err = cordoner.Uncordon(context.Background(), r, ref)
+		}
+		return cordonDoneMsg{label: label, cordon: cordon, err: err}
+	}
+}
+
+// handleCordonDone reports a completed cordon/uncordon: a failure (NotFound, RBAC)
+// degrades to a transient error toast (D74), a success to a neutral status notice. The
+// Node's Unschedulable status updates via the live watch stream, not here.
+func (m Model) handleCordonDone(msg cordonDoneMsg) (tea.Model, tea.Cmd) {
+	verb, past := "cordon", "cordoned"
+	if !msg.cordon {
+		verb, past = "uncordon", "uncordoned"
+	}
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg(verb+" "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice(past + " " + msg.label)
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it

@@ -4215,6 +4215,141 @@ func TestRolloutRestartInertWithoutRestarter(t *testing.T) {
 	}
 }
 
+// fakeCordoner is a hermetic Cordoner: it records which verb it was asked to run and
+// the object addressed (so a test can assert the selected Node row was targeted) and
+// returns a preset error for both verbs.
+type fakeCordoner struct {
+	err           error
+	cordonCalls   int
+	uncordonCalls int
+	gotRes        kube.Resource
+	gotRef        kube.ObjectRef
+}
+
+func (f *fakeCordoner) Cordon(_ context.Context, r kube.Resource, ref kube.ObjectRef) error {
+	f.cordonCalls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+func (f *fakeCordoner) Uncordon(_ context.Context, r kube.Resource, ref kube.ObjectRef) error {
+	f.uncordonCalls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.err
+}
+
+// nodeModel drills into a Node table (cluster-scoped) with the given options wired so
+// a cordon/uncordon test has a concrete selected row.
+func nodeModel(t *testing.T, opts ...Option) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, append([]Option{WithWatcher(fw)}, opts...)...)
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("nodes", "Node")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// TestCordonRunsCordon drives the cordon path: the intent dispatches kube.Cordon
+// against the selected Node **directly** — no confirm modal (cordoning is idempotent,
+// D115/D35) — and the success surfaces a neutral status notice.
+func TestCordonRunsCordon(t *testing.T) {
+	c := &fakeCordoner{}
+	m := nodeModel(t, WithCordoner(c))
+	row, _ := m.table.SelectedRow()
+
+	m, cmd := dispatchRowAction(t, m, rowActionCordon)
+	if m.modal.Active() {
+		t.Fatal("cordon is idempotent — it must not open a confirm modal")
+	}
+	if cmd == nil {
+		t.Fatal("the cordon intent should issue the kube.Cordon command")
+	}
+	done, ok := cmd().(cordonDoneMsg)
+	if !ok {
+		t.Fatalf("cordon produced %T, want cordonDoneMsg", cmd())
+	}
+	if c.cordonCalls != 1 {
+		t.Fatalf("Cordon should be called exactly once, got %d", c.cordonCalls)
+	}
+	if c.uncordonCalls != 0 {
+		t.Fatal("cordon must not call Uncordon")
+	}
+	if c.gotRef.Name != row.Object.Name {
+		t.Fatalf("Cordon addressed %+v, want the selected row %+v", c.gotRef, row.Object)
+	}
+	if !done.cordon {
+		t.Fatal("the done message should mark this as a cordon, not an uncordon")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful cordon should surface a neutral status notice, no error")
+	}
+}
+
+// TestUncordonRunsUncordon proves the uncordon intent dispatches kube.Uncordon
+// (the reverse verb) against the selected Node, also directly.
+func TestUncordonRunsUncordon(t *testing.T) {
+	c := &fakeCordoner{}
+	m := nodeModel(t, WithCordoner(c))
+	row, _ := m.table.SelectedRow()
+
+	m, cmd := dispatchRowAction(t, m, rowActionUncordon)
+	if cmd == nil {
+		t.Fatal("the uncordon intent should issue the kube.Uncordon command")
+	}
+	done, ok := cmd().(cordonDoneMsg)
+	if !ok {
+		t.Fatalf("uncordon produced %T, want cordonDoneMsg", cmd())
+	}
+	if c.uncordonCalls != 1 || c.cordonCalls != 0 {
+		t.Fatalf("uncordon should call Uncordon once and Cordon zero, got %d/%d", c.uncordonCalls, c.cordonCalls)
+	}
+	if c.gotRef.Name != row.Object.Name {
+		t.Fatalf("Uncordon addressed %+v, want the selected row %+v", c.gotRef, row.Object)
+	}
+	if done.cordon {
+		t.Fatal("the done message should mark this as an uncordon")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasNotice() || m.status.HasError() {
+		t.Fatal("a successful uncordon should surface a neutral status notice, no error")
+	}
+}
+
+// TestCordonErrorDegrades proves a failed cordon (e.g. RBAC, NotFound) degrades to a
+// transient status-bar error toast (D74).
+func TestCordonErrorDegrades(t *testing.T) {
+	c := &fakeCordoner{err: errors.New("forbidden")}
+	m := nodeModel(t, WithCordoner(c))
+	m, cmd := dispatchRowAction(t, m, rowActionCordon)
+	done := cmd().(cordonDoneMsg)
+	if done.err == nil {
+		t.Fatal("the cordon result should carry the cordoner's error")
+	}
+	next, _ := m.Update(done)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Fatal("a failed cordon should surface a status-bar error toast")
+	}
+}
+
+// TestCordonInertWithoutCordoner proves the cordon/uncordon intents are no-ops with no
+// cordoner wired: no kube command is issued.
+func TestCordonInertWithoutCordoner(t *testing.T) {
+	m := nodeModel(t) // no WithCordoner
+	if _, cmd := dispatchRowAction(t, m, rowActionCordon); cmd != nil {
+		t.Fatal("with no cordoner wired the cordon intent must not issue a command")
+	}
+	if _, cmd := dispatchRowAction(t, m, rowActionUncordon); cmd != nil {
+		t.Fatal("with no cordoner wired the uncordon intent must not issue a command")
+	}
+}
+
 // signalDeleter is a fakeDeleter that also announces on a channel the moment Delete
 // is invoked, so a full-program (teatest) test can block on the delete actually
 // running before it inspects state — the deterministic barrier the accept flow needs.
