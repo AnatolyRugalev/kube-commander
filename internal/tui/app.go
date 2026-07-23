@@ -17,6 +17,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/viewer"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/welcome"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/help"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
@@ -71,6 +72,18 @@ type NamespacePersister interface {
 	PersistNamespace(ns string) error
 }
 
+// YAMLGetter is the narrow slice of the kube layer the shell needs to open the
+// YAML viewer (M3-03): fetch a table row's object rendered as YAML (M1-07a's
+// GetYAML). *kube.Clients satisfies it. As with the other seams the shell depends
+// on this interface, not the concrete client, so the tui package never constructs
+// a client and the model is driveable in hermetic tests with a fake getter. A
+// model built without one (the default) is yaml-viewer-inert: the res.yaml action
+// is a no-op (the viewer never opens), which is what the pre-wiring app and the
+// non-viewer tests want.
+type YAMLGetter interface {
+	GetYAML(ctx context.Context, r kube.Resource, ref kube.ObjectRef) (string, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -110,6 +123,13 @@ func WithNamespaceLister(l NamespaceLister) Option {
 // persisted — inert, exactly like the pre-wiring app and the hermetic tests.
 func WithNamespacePersister(p NamespacePersister) Option {
 	return func(m *Model) { m.nsPersister = p }
+}
+
+// WithYAMLGetter wires the kube client the shell uses to fetch an object's YAML
+// for the read-only YAML viewer (M3-03). Without it the res.yaml action is inert
+// (the viewer never opens).
+func WithYAMLGetter(g YAMLGetter) Option {
+	return func(m *Model) { m.yamlGetter = g }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -203,6 +223,7 @@ type Model struct {
 	nsPicker  picker.Model
 	resPicker picker.Model
 	actPicker picker.Model
+	viewer    viewer.Model
 	welcome   welcome.Model
 
 	// context is the resolved kube context name and version the build version;
@@ -246,6 +267,14 @@ type Model struct {
 	// persistence-inert, M2-11b-2).
 	nsLister    NamespaceLister
 	nsPersister NamespacePersister
+
+	// yamlGetter fetches a row's object as YAML for the read-only viewer (M3-03; nil
+	// → the res.yaml action is inert, the viewer never opens). viewerGen tags each
+	// viewer open so an async fetch (yamlLoadedMsg) that returns after the user closed
+	// the viewer, or opened a newer one, is dropped rather than populating the wrong
+	// content — the same stale-message guard watchGen/seqGen give their async work.
+	yamlGetter YAMLGetter
+	viewerGen  int
 
 	// resByLabel maps each entry of the resource command palette (resPicker) back to
 	// its kube.Resource. The picker is generic over strings (D65), so the palette
@@ -342,6 +371,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		nsPicker:    picker.New(s, "namespace"),
 		resPicker:   picker.New(s, "resource"),
 		actPicker:   picker.New(s, actionPickerKind),
+		viewer:      viewer.New(s, viewerKindYAML),
 		welcome:     welcome.New(s),
 		filterInput: fi,
 	}
@@ -517,6 +547,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case rowActionMsg:
 		return m.handleRowAction(msg)
+
+	case yamlLoadedMsg:
+		return m.handleYAMLLoaded(msg)
+
+	case viewer.ClosedMsg:
+		// The viewer dismissed itself (nav.back). Hide it and return focus to the
+		// browse view underneath (the table keeps whatever selection it had).
+		m.viewer.Hide()
+		return m, nil
 
 	case spinner.TickMsg:
 		// The status bar owns the discovery spinner; forward its ticks so the
@@ -912,18 +951,91 @@ func (m Model) dispatchRowAction(act rowAction) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return intent }
 }
 
-// handleRowAction is the placeholder landing for a dispatched row action. M3-02
-// lands only the actions surface + routing (D107): each subsequent M3 leg (M3-03…)
-// replaces this branch — or adds its own case ahead of it — with the real viewer or
-// action for its intent. Until then it surfaces a transient status-bar toast naming
-// the action and target, so the routing is observable and the dogfooder sees the
-// action was recognised rather than the key seeming dead (D68).
+// handleRowAction dispatches a row action to its handler. Each M3 leg wires its own
+// intent here (M3-03: YAML); the actions not yet wired fall through to a transient
+// status-bar toast naming the action and target, so the routing stays observable and
+// the dogfooder sees the action was recognised rather than the key seeming dead (D68)
+// until its leg lands (D107).
 func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	switch msg.Action {
+	case rowActionYAML:
+		return m.openYAMLViewer(msg)
+	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
 		label += " " + msg.Object.Name
 	}
 	return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
+}
+
+// viewerKindYAML is the kind stamped on the shared read-only viewer while it shows an
+// object's YAML (M3-03). Later viewer legs (describe, logs, secret) reuse the same
+// component; the kind rides ClosedMsg for routing, though the shell currently hides
+// the viewer uniformly on close regardless of kind.
+const viewerKindYAML = "yaml"
+
+// yamlLoadedMsg carries the outcome of the async GetYAML fetch issued when the YAML
+// viewer opens (M3-03). gen ties it to the viewer open that requested it, so a fetch
+// that lands after the user closed the viewer (or opened a newer one) is dropped
+// rather than populating stale content (the watchGen/seqGen stale-message guard).
+type yamlLoadedMsg struct {
+	gen     int
+	content string
+	err     error
+}
+
+// openYAMLViewer opens the read-only YAML viewer over the selected row's object
+// (M3-03): it shows the viewer immediately (empty, so the gesture feels instant) and
+// kicks off the GetYAML fetch off the update loop, seeding the content when it lands.
+// With no getter wired it is yaml-viewer-inert (a no-op). The fetch is tagged with a
+// fresh viewerGen so a superseded/stale result is dropped (handleYAMLLoaded). A fetch
+// error degrades to a status-bar toast and closes the viewer (D74) rather than
+// leaving an empty box.
+func (m Model) openYAMLViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.yamlGetter == nil {
+		return m, nil
+	}
+	m.viewerGen++
+	gen := m.viewerGen
+	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
+	m.viewer.SetContent("") // clear any prior object's YAML before the fetch lands.
+	m.viewer.Show()
+	getter := m.yamlGetter
+	r, ref := msg.Resource, msg.Object
+	return m, func() tea.Msg {
+		content, err := getter.GetYAML(context.Background(), r, ref)
+		return yamlLoadedMsg{gen: gen, content: content, err: err}
+	}
+}
+
+// handleYAMLLoaded seeds the open viewer with the fetched YAML. A result whose gen no
+// longer matches (a newer open superseded it) or that arrives after the viewer closed
+// is dropped. A fetch error degrades: it closes the viewer and surfaces a transient
+// status-bar toast (D74), never breaking the layout or leaving an empty box.
+func (m Model) handleYAMLLoaded(msg yamlLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen || !m.viewer.Active() {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.viewer.Hide()
+		return m, m.surfaceError(NewErrorMsg("get yaml", msg.err))
+	}
+	m.viewer.SetContent(msg.content)
+	return m, nil
+}
+
+// viewerTitle labels the viewer with the browsed kind and the object's name
+// (namespace-qualified when the object is namespaced), e.g. "Pod default/web-1" or
+// "Node node-1", so the user always sees which object they are viewing.
+func viewerTitle(r kube.Resource, ref kube.ObjectRef) string {
+	name := ref.Name
+	if ref.Namespace != "" {
+		name = ref.Namespace + "/" + ref.Name
+	}
+	if kind := r.GVK.Kind; kind != "" {
+		return kind + " " + name
+	}
+	return name
 }
 
 // routePickerKey resolves one keypress while a modal picker (namespace switcher or
@@ -1136,7 +1248,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.viewer.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -1306,6 +1418,9 @@ func (m *Model) resize() {
 	m.nsPicker.SetSize(m.width, bodyH)
 	m.resPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
+	// The viewer is the large overlay; it too centers within the body area (above the
+	// status bar) so the top status line and bottom hint line stay visible around it.
+	m.viewer.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -1349,6 +1464,12 @@ func (m Model) scheduleTimeout() tea.Cmd {
 // is routed to the focused pane, with nav.left/nav.right also switching focus
 // between panes.
 func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	// The read-only viewer (M3-03) captures input while it is up: it scrolls on
+	// navigation and closes on nav.back/quit, and swallows everything else so the
+	// browse panes underneath never move (mirroring the help modal's capture).
+	if m.viewer.Active() {
+		return m.handleViewerAction(a)
+	}
 	switch a {
 	case keymap.ActionQuit:
 		// While the help modal is open, quit dismisses the modal instead of the
@@ -1428,6 +1549,22 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.triggerRowActionKey(a)
 	}
 	return m.routeNav(a)
+}
+
+// handleViewerAction routes a resolved action to the open read-only viewer (M3-03).
+// Navigation scrolls the viewport; nav.back and app.quit both dismiss the viewer —
+// nav.back via the viewer's own ClosedMsg (which the shell hides on), app.quit
+// directly (a viewer is a transient pager overlay, so `q` closes it rather than
+// exiting kubecom, exactly as the help modal owns quit while it is open). Every other
+// action is swallowed so the browse view underneath stays put.
+func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	if a == keymap.ActionQuit {
+		m.viewer.Hide()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.viewer, cmd = m.viewer.Update(a)
+	return m, cmd
 }
 
 // routeNav dispatches a navigation action to the focused pane and handles the
@@ -1514,6 +1651,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.resPicker.View(), m.width, m.bodyHeight())
 	case m.actPicker.Active():
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
+	case m.viewer.Active():
+		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))

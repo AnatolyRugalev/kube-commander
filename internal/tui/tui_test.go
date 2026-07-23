@@ -2208,3 +2208,183 @@ func TestActionsMenuSelectionDispatchesIntent(t *testing.T) {
 		t.Errorf("intent action = %q, want %q", intent.Action, rowActionDescribe)
 	}
 }
+
+// fakeYAMLGetter is a hermetic YAMLGetter: it returns a preset YAML string (or
+// error) and records the object it was asked for so a test can assert the selected
+// row was addressed.
+type fakeYAMLGetter struct {
+	yaml   string
+	err    error
+	calls  int
+	gotRes kube.Resource
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeYAMLGetter) GetYAML(_ context.Context, r kube.Resource, ref kube.ObjectRef) (string, error) {
+	f.calls++
+	f.gotRes = r
+	f.gotRef = ref
+	return f.yaml, f.err
+}
+
+// yamlViewerModel drills into a pods table (Kind Pod) with a live row and the given
+// YAML getter wired, so a viewer test has a concrete selected row and a fetch seam.
+func yamlViewerModel(t *testing.T, getter YAMLGetter) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithYAMLGetter(getter))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// yamlKey is the default res.yaml direct key (`y`).
+var yamlKey = tea.Key{Code: 'y', Text: "y"}
+
+// TestYAMLViewerOpensAndShowsContent drives the whole M3-03 path: the `y` key
+// dispatches the YAML intent, handling it opens the viewer and issues the GetYAML
+// fetch against the selected row, and the fetched YAML lands in the viewer's content.
+func TestYAMLViewerOpensAndShowsContent(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: web-1\n"}
+	m := yamlViewerModel(t, g)
+
+	// `y` dispatches the intent; feed it back in to trigger the viewer + fetch.
+	_, cmd := press(t, m, yamlKey)
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("res.yaml produced %T, want rowActionMsg", cmd())
+	}
+	next, fetchCmd := m.Update(intent)
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("handling the YAML intent should open the viewer")
+	}
+	if fetchCmd == nil {
+		t.Fatal("opening the YAML viewer should issue a GetYAML fetch command")
+	}
+	loaded, ok := fetchCmd().(yamlLoadedMsg)
+	if !ok {
+		t.Fatalf("fetch produced %T, want yamlLoadedMsg", fetchCmd())
+	}
+	if g.calls != 1 {
+		t.Fatalf("GetYAML called %d times, want 1", g.calls)
+	}
+	if g.gotRef.Name == "" {
+		t.Error("GetYAML should be addressed to the selected row's object")
+	}
+
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should stay open once its content lands")
+	}
+	// The fetched YAML is composited over the browse view (overlayCenter) — both the
+	// YAML body and the base menu ("Cluster" section header) are visible at once.
+	view := m.View().Content
+	if !strings.Contains(view, "kind: Pod") {
+		t.Fatalf("viewer should show the fetched YAML: %q", view)
+	}
+}
+
+// TestYAMLViewerCloses proves nav.back (esc) dismisses the viewer (its ClosedMsg,
+// delivered back through Update, hides it) and returns to the browse view.
+func TestYAMLViewerCloses(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "kind: Pod\n"}
+	m := yamlViewerModel(t, g)
+	_, cmd := press(t, m, yamlKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(fetchCmd().(yamlLoadedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("precondition: the viewer should be open")
+	}
+
+	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if closeCmd == nil {
+		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
+	}
+	next, _ = m.Update(closeCmd())
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("delivering the viewer's ClosedMsg should hide it")
+	}
+}
+
+// TestYAMLViewerFetchErrorDegrades proves a GetYAML failure closes the viewer and
+// surfaces a transient status-bar toast rather than leaving an empty box (D74).
+func TestYAMLViewerFetchErrorDegrades(t *testing.T) {
+	g := &fakeYAMLGetter{err: errors.New("not found")}
+	m := yamlViewerModel(t, g)
+	_, cmd := press(t, m, yamlKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer opens immediately, before the fetch resolves")
+	}
+	loaded := fetchCmd().(yamlLoadedMsg)
+	if loaded.err == nil {
+		t.Fatal("the fetch should carry the getter's error")
+	}
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("a fetch error should close the viewer")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a fetch error should surface a status-bar toast")
+	}
+}
+
+// TestYAMLViewerInertWithoutGetter proves the YAML intent is a no-op with no getter
+// wired (the viewer never opens) — the pre-wiring app and hermetic tests stay inert.
+func TestYAMLViewerInertWithoutGetter(t *testing.T) {
+	m := openPodTable(t, "Pod") // no WithYAMLGetter
+	_, cmd := press(t, m, yamlKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("the YAML viewer should not open without a getter wired")
+	}
+	if fetchCmd != nil {
+		t.Fatal("no getter → no fetch command")
+	}
+}
+
+// TestYAMLViewerStaleFetchDropped proves the generation guard: a fetch that lands
+// after a newer viewer open (or after the viewer closed) is dropped rather than
+// overwriting the current content.
+func TestYAMLViewerStaleFetchDropped(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "kind: Pod\n"}
+	m := yamlViewerModel(t, g)
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	intent := rowActionMsg{Action: rowActionYAML, Resource: m.current, Object: row.Object}
+
+	// First open → gen 1 fetch (dispatched directly; a key press would route to the
+	// open viewer, which is the point — a re-open comes from the intent, not the key).
+	next, firstFetch := m.Update(intent)
+	m = next.(Model)
+	stale := firstFetch().(yamlLoadedMsg)
+
+	// Second open → gen bumps; the first fetch is now stale.
+	next, _ = m.Update(intent)
+	m = next.(Model)
+	if stale.gen == m.viewerGen {
+		t.Fatalf("precondition: stale fetch gen %d should differ from current %d", stale.gen, m.viewerGen)
+	}
+
+	next, _ = m.Update(stale) // deliver the stale (gen-1) result
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should still be open")
+	}
+	// The stale result must not have populated content: content only lands from the
+	// current-gen fetch, so the viewer body stays empty until that arrives.
+	if strings.Contains(m.View().Content, "kind: Pod") {
+		t.Fatal("a stale-generation fetch should be dropped, not shown")
+	}
+}

@@ -2673,3 +2673,27 @@ observable (D68). Constraints a later leg must not silently break: keys stay in 
 keymap (no raw-key match, D11); a new action is a `rowActions` row (+ its handler),
 not a bespoke picker or key path; applicability by kind lives in the registry, not
 scattered in the shell.
+
+### D108 — M3 viewer legs wire through a narrow kube getter seam, fetch async with a generation guard, and capture input while open
+**2026-07-23 (M3-03).** The first viewer (YAML) establishes the pattern every later
+read-only viewer leg (describe M3-04, logs M3-05…, secret M3-08) follows so they do
+not each invent their own wiring: (1) the kube call is reached through a **narrow
+single-method seam** on the shell (`YAMLGetter`, wired with `WithYAMLGetter`;
+`*kube.Clients` satisfies it), mirroring `ResourceWatcher`/`Discoverer`/`NamespaceLister`
+— the tui package never constructs a client and stays hermetically testable; a model
+built without the seam is **viewer-inert** (the action is a no-op, the viewer never
+opens). (2) `handleRowAction` branches on the `rowAction` (D107) to an `openXViewer`
+that **shows the shared `viewer.Model` immediately (empty) and issues the fetch off
+the update loop** as a `tea.Cmd`, seeding content when a typed `xLoadedMsg` lands —
+the gesture feels instant and `Update` never blocks. (3) Every open bumps a
+**`viewerGen`** carried on the load message; `handleXLoaded` drops a result whose gen
+no longer matches or that arrives after the viewer closed (the watchGen/seqGen
+stale-message guard). (4) A fetch **error degrades**: close the viewer + a transient
+status-bar toast (D74), never an empty box. (5) While the viewer is active the root
+**captures input** — `handleAction` routes to `handleViewerAction`, which scrolls on
+nav and closes on nav.back (via the viewer's `ClosedMsg`) and app.quit, swallowing
+everything else — and the viewer composites over the base browse view via
+`overlayCenter` (D95); `overlayActive()` includes it so mouse events stay inert.
+Constraints a later viewer leg must not silently break: reach kube through a seam
+(no client in tui), keep the fetch async + gen-guarded, degrade on error, and capture
+input the same way rather than adding a bespoke key path.

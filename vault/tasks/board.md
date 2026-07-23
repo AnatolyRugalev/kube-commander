@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-02 landed the actions surface + M3 keymap (D107); M3-03 (YAML viewer wired) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-03 wired the YAML viewer (first end-to-end viewer, D108); M3-04 (describe viewer) is the next unblocked slice. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-03** YAML viewer wired: actions-menu/keymap → `kube.GetYAML` (M1-07a) →
-      M3-01 viewer overlay. status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -144,6 +143,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-03** YAML viewer wired: `res.yaml`/`y` → `YAMLGetter` seam (`kube.GetYAML`) → shared M3-01 viewer overlay; async fetch + gen-guard, error degrades to a toast — done 2026-07-23 (D108)
 - [x] **M3-02** Action surface + M3 keymap: actions menu (Kind `"action"` picker) + direct keys (`a d y L e x`) → typed `rowActionMsg` intent — done 2026-07-23 (D107)
 - [x] **M3-01** Read-only viewer/pager component (`internal/tui/components/viewer`): keymap-routed scrollable text overlay, bare box, `ClosedMsg` — done 2026-07-22 (D106)
 - [x] **M3-PLAN** Expand the M3 milestone (actions & viewers) into ordered, leg-sized Backlog slices M3-01…M3-15 — done 2026-07-22 (D105)
