@@ -7,7 +7,8 @@ _Last updated: 2026-07-23 — M3-03 wired the YAML viewer (first end-to-end view
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-04** Describe viewer wired: actions-menu/keymap → `kube.Describe` (M1-07b)
+      → M3-01 viewer overlay. status: in-progress | owner: claude-opus | added: 2026-07-22 | claimed: 2026-07-23
 
 ## Blocked
 
@@ -92,8 +93,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-04** Describe viewer wired: actions-menu/keymap → `kube.Describe` (M1-07b)
-      → M3-01 viewer overlay. status: todo | owner: — | added: 2026-07-22
 - [ ] **M3-05** Logs viewer — initial (no follow): actions-menu/keymap → `kube.Logs`
       (M1-07c) streamed into the M3-01 viewer via a msg pump (D53). Pods first.
       status: todo | owner: — | added: 2026-07-22
