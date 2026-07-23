@@ -2791,3 +2791,27 @@ carries only the Pod kind) so the user sees which pod is tailing, not the worklo
 to a "not yet available" toast (the M3-05…07a behaviour), keeping the pre-wiring app and
 non-resolver hermetic tests inert. Init/ephemeral-container and a pod *picker* across a
 workload's pods remain deliberate later refinements.
+
+### D113 — The secret viewer opens masked; values are revealed only by the deliberate `secret.reveal` (`r`) gesture; decoding uses the typed clientset
+**2026-07-23 (M3-08a, #89).** The Secret viewer is the first read-only viewer that
+transforms content (decode + mask) rather than showing it verbatim. Constraints a later
+leg must not silently break: (1) A **`SecretGetter` seam** (`SecretData(ctx, ref)
+(kube.SecretData, error)`, `*kube.Clients` satisfies it) fetches through the **typed
+clientset** (`CoreV1().Secrets`), not the dynamic client the other viewers use — the typed
+client decodes the wire base64 into raw bytes (`Secret.Data map[string][]byte`) for us, so
+no manual base64 decode is threaded and a malformed value can't slip through undecoded. It
+returns `SecretData{Type, Entries []SecretEntry{Key,Value}}` with **entries sorted by key**
+for a deterministic render; empty name is rejected; NotFound/RBAC errors are wrapped, never
+panicked (principle 3). (2) **Values start masked and reveal is deliberate** (never
+automatic): `openSecretViewer` sets `secretRevealed=false` on every open, and
+`renderSecret` shows each value as a fixed mask + byte length (`key: •••••••• (N bytes)`)
+until revealed — the length is shown, not the content, so nothing leaks pre-reveal. (3) The
+reveal is a **registered keymap action** `secret.reveal` (`r`, D11 — no raw-key matching),
+handled in `handleViewerAction` gated on `viewer.Kind()==viewerKindSecret` (inert on the
+other viewers and when no viewer is up, exactly like `logs.follow`/`f` for M3-06); toggling
+it re-renders the **same fetched data** (no re-fetch) via `SetContent`. (4) `WithSecretGetter`
+gates it: without a getter wired the Reveal-secret action is inert (the viewer never opens).
+**Reveal masks/unmasks all entries at once**; per-entry selection and **copy-to-clipboard
+(M3-08b)** are the deferred follow-up that ticks the M3 secret exit criterion — this leg is
+reveal only. A binary value renders as-is (read-only text); the copy slice can special-case
+it.

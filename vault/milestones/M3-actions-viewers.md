@@ -38,7 +38,7 @@ set, killing nearly all kubectl shell-outs.
 ## Exit criteria
 
 - [x] Logs/describe/YAML render in-TUI for the relevant kinds; no external pager needed. (logs cover pods + pod-owning kinds via a resolved backing pod, M3-05…07b/D112; describe M3-04, YAML M3-03)
-- [ ] Secret contents viewable with explicit reveal + copy.
+- [ ] Secret contents viewable with explicit reveal + copy. (reveal/decode done — masked on open, `secret.reveal`/`r` toggles, M3-08a/D113; copy is M3-08b)
 - [ ] Each workload action works with a confirmation step and reports success/failure to the status bar.
 - [ ] Port-forwards run in background, are listed, and stop cleanly on exit.
 - [ ] Exec drops into a working shell and restores the TUI afterward.

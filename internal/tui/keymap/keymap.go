@@ -67,6 +67,11 @@ const (
 	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
 	// elsewhere it is inert.
 	ActionLogsFollow Action = "logs.follow"
+	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
+	// open secret viewer (M3-08a). Values start masked; this is the deliberate
+	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
+	// it is inert.
+	ActionRevealSecret Action = "secret.reveal"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -106,6 +111,7 @@ var actionMeta = []struct {
 	{ActionEdit, "Edit the selected row in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
+	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 }
 
 var registered = func() map[Action]string {
@@ -169,6 +175,7 @@ var defaultBindings = map[Action][]string{
 	ActionEdit:         {"e"},
 	ActionDelete:       {"x"},
 	ActionLogsFollow:   {"f"},
+	ActionRevealSecret: {"r"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

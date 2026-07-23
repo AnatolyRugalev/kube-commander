@@ -130,6 +130,7 @@ func runTUI(opts runOptions) error {
 		tui.WithLogStreamer(clients),
 		tui.WithContainerLister(clients),
 		tui.WithPodResolver(clients),
+		tui.WithSecretGetter(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),

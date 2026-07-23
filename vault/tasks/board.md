@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-07b enabled logs for pod-owning kinds: a Deployment/RS/StatefulSet/DaemonSet/Job/RC resolves a backing pod (selector → newest ready pod) that then takes M3-07a's container path (D112); M3-08 (secret viewer) is the next unblocked slice. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-23 — M3-08a landed the secret viewer: `SecretGetter`/`SecretData` (typed clientset, decoded + key-sorted) → shared viewer, values masked on open, `secret.reveal` (`r`) toggles reveal, `WithSecretGetter` gates it (D113); M3-08b (copy the revealed value) is the next unblocked slice and ticks the secret exit criterion. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-08a** Secret viewer — reveal/base64-decode with an explicit reveal gesture (#89)
-      status: in-progress | owner: claude-opus | added: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -133,6 +132,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-08a** Secret viewer — reveal/base64-decode (#89): `SecretGetter` seam (`kube.SecretData`, typed clientset → decoded + key-sorted entries) → shared M3-01 viewer; values masked on open (`key: •••• (N bytes)`), the registered `secret.reveal` (`r`) gesture toggles reveal (viewer-only, re-renders the same fetched data), `WithSecretGetter` gates it; copy split to M3-08b — done 2026-07-23 (D113)
 - [x] **M3-07b** Logs — pod-owning kinds (#84): `PodResolver` seam (`kube.PodForOwner`) resolves a Deployment/RS/StatefulSet/DaemonSet/Job/RC to a backing pod (dynamic Get → `spec.selector` → newest Ready pod, fallback newest); `openLogsViewer` resolves off the update loop then feeds the pod into the shared `resolveContainersFor` (M3-07a container path), titled as a Pod; `WithPodResolver` gates it (no resolver → the M3-05…07a not-yet-available toast) — done 2026-07-23 (D112)
 - [x] **M3-07a** Logs container picker for multi-container pods: `ContainerLister` seam (`kube.PodContainers`) resolves a pod's containers before streaming — multiple open the reused modal picker (`ctrPicker`) and the pick streams the chosen container, a single container streams directly; no lister → default container (no picker); streaming factored into `streamLogsInto`, container named in the title — done 2026-07-23 (D111)
 - [x] **M3-06** Logs viewer — follow + reconnect: opens tailing (`LogOptions{Follow:true}`, M1-07d) with auto-scroll; `logs.follow`/`f` toggles it (logs-viewer-only, per-open `viewer.SetKind`), a manual up-scroll pauses it, title marks `[following]`/`[paused]` — done 2026-07-23 (D110)

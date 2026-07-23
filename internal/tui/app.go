@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
@@ -127,6 +129,18 @@ type ContainerLister interface {
 	PodContainers(ctx context.Context, ref kube.ObjectRef) ([]string, error)
 }
 
+// SecretGetter is the narrow slice of the kube layer the shell needs to open the
+// secret viewer (M3-08a): fetch a Secret's type and base64-decoded data (M1-07a's
+// sibling, SecretData). *kube.Clients satisfies it. As with the other viewer seams
+// the shell depends on this interface, not the concrete client, so the tui package
+// never constructs a client and the model is driveable in hermetic tests with a
+// fake getter. A model built without one (the default) is secret-viewer-inert: the
+// Reveal-secret action is a no-op (the viewer never opens), which is what the
+// pre-wiring app and the non-viewer tests want.
+type SecretGetter interface {
+	SecretData(ctx context.Context, ref kube.ObjectRef) (kube.SecretData, error)
+}
+
 // PodResolver is the narrow slice of the kube layer the shell needs to stream logs
 // for a pod-owning workload kind (Deployment/ReplicaSet/StatefulSet/DaemonSet/Job/
 // ReplicationController): it resolves the workload to a backing pod (its selector →
@@ -213,6 +227,13 @@ func WithContainerLister(l ContainerLister) Option {
 // on a non-pod kind degrade to a toast (the M3-05…07a behaviour).
 func WithPodResolver(r PodResolver) Option {
 	return func(m *Model) { m.podResolver = r }
+}
+
+// WithSecretGetter wires the kube client the shell uses to fetch a Secret's decoded
+// data for the read-only secret viewer (M3-08a). Without it the Reveal-secret action
+// is inert (the viewer never opens).
+func WithSecretGetter(g SecretGetter) Option {
+	return func(m *Model) { m.secretGetter = g }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -397,6 +418,17 @@ type Model struct {
 	// container resolution/stream path a pod row takes. Touched only from the
 	// single-threaded update loop.
 	podResolver PodResolver
+
+	// secretGetter fetches a Secret's decoded data for the shared viewer (M3-08a; nil
+	// → the Reveal-secret action is inert, the viewer never opens). secretData holds
+	// the fetched entries so the reveal toggle can re-render them without re-fetching,
+	// and secretRevealed is whether values are currently unmasked (false on open — the
+	// deliberate-reveal contract, #89). Both are consulted only while the secret viewer
+	// is up (viewerKindSecret), so a stale value left from a closed one is harmless.
+	// Touched only from the single-threaded update loop.
+	secretGetter   SecretGetter
+	secretData     kube.SecretData
+	secretRevealed bool
 
 	// logFollow is whether the open logs viewer is following (M3-06): the stream is
 	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
@@ -694,6 +726,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
+
+	case secretLoadedMsg:
+		return m.handleSecretLoaded(msg)
 
 	case podResolvedMsg:
 		return m.handlePodResolved(msg)
@@ -1121,6 +1156,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openDescribeViewer(msg)
 	case rowActionLogs:
 		return m.openLogsViewer(msg)
+	case rowActionSecret:
+		return m.openSecretViewer(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
@@ -1138,6 +1175,7 @@ const (
 	viewerKindYAML     = "yaml"
 	viewerKindDescribe = "describe"
 	viewerKindLogs     = "logs"
+	viewerKindSecret   = "secret"
 )
 
 // yamlLoadedMsg carries the outcome of the async GetYAML fetch issued when the YAML
@@ -1246,6 +1284,110 @@ func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) 
 	}
 	m.viewer.SetContent(msg.content)
 	return m, nil
+}
+
+// secretLoadedMsg carries the outcome of the async SecretData fetch issued when the
+// secret viewer opens (M3-08a). gen ties it to the viewer open that requested it, so
+// a fetch that lands after the user closed the viewer (or opened a newer one — of any
+// kind) is dropped rather than populating stale content (the viewerGen guard,
+// mirroring yamlLoadedMsg/describeLoadedMsg).
+type secretLoadedMsg struct {
+	gen  int
+	data kube.SecretData
+	err  error
+}
+
+// openSecretViewer opens the read-only secret viewer over the selected row's object
+// (M3-08a, #89): it shows the viewer immediately (empty, so the gesture feels
+// instant) and kicks off the SecretData fetch off the update loop, seeding the
+// content — masked — when it lands. With no getter wired it is secret-viewer-inert
+// (a no-op). The fetch is tagged with a fresh viewerGen so a superseded/stale result
+// is dropped (handleSecretLoaded). A fetch error degrades to a status-bar toast and
+// closes the viewer (D74) rather than leaving an empty box. Values start hidden: the
+// reveal (secret.reveal / `r`) is a deliberate gesture, never automatic.
+func (m Model) openSecretViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.secretGetter == nil {
+		return m, nil
+	}
+	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
+	m.viewerGen++
+	gen := m.viewerGen
+	m.secretRevealed = false // every open starts masked (the deliberate-reveal contract).
+	m.secretData = kube.SecretData{}
+	m.viewer.SetKind(viewerKindSecret)
+	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
+	m.viewer.SetContent("") // clear any prior object's content before the fetch lands.
+	m.viewer.Show()
+	getter := m.secretGetter
+	ref := msg.Object
+	return m, func() tea.Msg {
+		data, err := getter.SecretData(context.Background(), ref)
+		return secretLoadedMsg{gen: gen, data: data, err: err}
+	}
+}
+
+// handleSecretLoaded seeds the open viewer with the fetched secret, rendered masked.
+// A result whose gen no longer matches (a newer open superseded it) or that arrives
+// after the viewer closed is dropped. A fetch error degrades: it closes the viewer
+// and surfaces a transient status-bar toast (D74), never breaking the layout or
+// leaving an empty box.
+func (m Model) handleSecretLoaded(msg secretLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen || !m.viewer.Active() {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.viewer.Hide()
+		return m, m.surfaceError(NewErrorMsg("get secret", msg.err))
+	}
+	m.secretData = msg.data
+	m.secretRevealed = false
+	m.viewer.SetContent(renderSecret(msg.data, false))
+	return m, nil
+}
+
+// secretMask is the fixed-width placeholder shown for a hidden secret value, so the
+// value's length is not leaked while it is masked.
+const secretMask = "••••••••"
+
+// renderSecret formats a secret's data for the viewer: a type header, then one line
+// per key. While masked (revealed == false) each value is a fixed mask followed by
+// its byte length, so the user sees the keys and can decide what to reveal without
+// the value ever leaking; revealed, the decoded value is shown verbatim (a multi-line
+// value is indented under its key so the block stays readable). Keys arrive sorted
+// from the kube layer.
+func renderSecret(data kube.SecretData, revealed bool) string {
+	var b strings.Builder
+	typ := data.Type
+	if typ == "" {
+		typ = "(none)"
+	}
+	b.WriteString("Type: " + typ + "\n")
+	state := "hidden — press r to reveal"
+	if revealed {
+		state = "revealed — press r to hide"
+	}
+	b.WriteString("Data: " + state + "\n\n")
+	if len(data.Entries) == 0 {
+		b.WriteString("(no data)\n")
+		return b.String()
+	}
+	for _, e := range data.Entries {
+		if !revealed {
+			fmt.Fprintf(&b, "%s: %s (%d bytes)\n", e.Key, secretMask, len(e.Value))
+			continue
+		}
+		if strings.Contains(e.Value, "\n") {
+			// A multi-line value (a cert, a kubeconfig) reads best under its key,
+			// each line indented so it is visually part of the entry.
+			b.WriteString(e.Key + ":\n")
+			for _, line := range strings.Split(e.Value, "\n") {
+				b.WriteString("  " + line + "\n")
+			}
+			continue
+		}
+		b.WriteString(e.Key + ": " + e.Value + "\n")
+	}
+	return b.String()
 }
 
 // logMsg wraps one message from the log pump with the viewerGen of the viewer open
@@ -2052,6 +2194,17 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionQuit {
 		m.viewer.Hide()
 		m.stopLogStream() // tear down any log stream feeding the viewer.
+		return m, nil
+	}
+	// secret.reveal (`r`) toggles reveal/mask while the secret viewer is up (M3-08a); it
+	// is inert on the other viewers (nothing to reveal). The reveal re-renders the same
+	// fetched data (no re-fetch), scroll position preserved — SetContent resets to the
+	// top, which is what a reveal/hide toggle wants (the reader re-reads from the top).
+	if a == keymap.ActionRevealSecret {
+		if m.viewer.Kind() == viewerKindSecret {
+			m.secretRevealed = !m.secretRevealed
+			m.viewer.SetContent(renderSecret(m.secretData, m.secretRevealed))
+		}
 		return m, nil
 	}
 	// logs.follow (`f`) toggles follow while the logs viewer is up (M3-06); it is inert

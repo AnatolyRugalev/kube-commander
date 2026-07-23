@@ -100,7 +100,8 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Cordon · Uncordon · Drain | via actions menu | Node |
 | Suspend · Resume | via actions menu | CronJob (#83) |
 | Port-forward · Exec shell | via actions menu | Pod (+Service for forward) |
-| Reveal secret | via actions menu | Secret (#89) |
+| Reveal secret | via actions menu | Secret (#89) — opens the secret viewer masked |
+| Reveal / hide secret values | `r` (`secret.reveal`) | secret viewer only; values start masked, `r` toggles reveal (M3-08a) |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
 | Resource palette | `:` (`resources.switch`) | |

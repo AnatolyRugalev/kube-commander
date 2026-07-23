@@ -3337,3 +3337,216 @@ func TestLogsPodResolvedStaleDropped(t *testing.T) {
 		t.Fatal("a stale pod-resolution should not start a stream")
 	}
 }
+
+// --- M3-08a: secret viewer ------------------------------------------------
+
+// fakeSecretGetter is a hermetic SecretGetter: it returns preset secret data (or
+// an error) and records the object it was asked for so a test can assert the
+// selected row was addressed.
+type fakeSecretGetter struct {
+	data   kube.SecretData
+	err    error
+	calls  int
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeSecretGetter) SecretData(_ context.Context, ref kube.ObjectRef) (kube.SecretData, error) {
+	f.calls++
+	f.gotRef = ref
+	return f.data, f.err
+}
+
+// secretViewerModel drills into a secrets table (Kind Secret) with a live row and
+// the given getter wired, so a viewer test has a concrete selected row and a fetch
+// seam.
+func secretViewerModel(t *testing.T, getter SecretGetter) Model {
+	t.Helper()
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithSecretGetter(getter))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("secrets", "Secret")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	return next.(Model)
+}
+
+// openSecret dispatches the secret intent over the selected row (the actions-menu
+// path — rowActionSecret has no direct key) and returns the model plus the fetch cmd.
+func openSecret(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+	intent := rowActionMsg{Action: rowActionSecret, Resource: m.current, Object: row.Object}
+	next, cmd := m.Update(intent)
+	return next.(Model), cmd
+}
+
+// revealKey is the default secret.reveal key (`r`).
+var revealKey = tea.Key{Code: 'r', Text: "r"}
+
+// TestSecretViewerOpensMaskedThenReveals drives the whole M3-08a path: the secret
+// intent opens the viewer and fetches the selected row's data, the data lands
+// masked (the value never shown), and the reveal key unmasks it — then re-masks.
+func TestSecretViewerOpensMaskedThenReveals(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{
+		Type:    "Opaque",
+		Entries: []kube.SecretEntry{{Key: "password", Value: "s3cr3t"}},
+	}}
+	m := secretViewerModel(t, g)
+
+	m, fetchCmd := openSecret(t, m)
+	if !m.viewer.Active() {
+		t.Fatal("the secret intent should open the viewer")
+	}
+	if fetchCmd == nil {
+		t.Fatal("opening the secret viewer should issue a SecretData fetch")
+	}
+	loaded, ok := fetchCmd().(secretLoadedMsg)
+	if !ok {
+		t.Fatalf("fetch produced %T, want secretLoadedMsg", fetchCmd())
+	}
+	if g.calls != 1 || g.gotRef.Name == "" {
+		t.Fatalf("SecretData should be called once for the selected row (calls=%d ref=%q)", g.calls, g.gotRef.Name)
+	}
+	next, _ := m.Update(loaded)
+	m = next.(Model)
+
+	// Masked: the key and its byte count show, the value does not.
+	view := m.View().Content
+	if !strings.Contains(view, "password") || !strings.Contains(view, secretMask) {
+		t.Fatalf("masked view should show the key + mask: %q", view)
+	}
+	if strings.Contains(view, "s3cr3t") {
+		t.Fatal("the value must not be shown before an explicit reveal")
+	}
+
+	// Reveal: `r` unmasks.
+	m, cmd := press(t, m, revealKey)
+	if cmd != nil {
+		t.Fatal("secret.reveal should not emit a command (in-place re-render)")
+	}
+	if !m.secretRevealed {
+		t.Fatal("reveal key should flip secretRevealed on")
+	}
+	if !strings.Contains(m.View().Content, "s3cr3t") {
+		t.Fatalf("revealed view should show the value: %q", m.View().Content)
+	}
+
+	// Re-mask: a second `r` hides it again.
+	m, _ = press(t, m, revealKey)
+	if m.secretRevealed {
+		t.Fatal("a second reveal press should hide the values again")
+	}
+	if strings.Contains(m.View().Content, "s3cr3t") {
+		t.Fatal("re-masking should hide the value")
+	}
+}
+
+// TestSecretViewerFetchErrorDegrades proves a SecretData failure closes the viewer
+// and surfaces a transient status-bar toast rather than leaving an empty box (D74).
+func TestSecretViewerFetchErrorDegrades(t *testing.T) {
+	g := &fakeSecretGetter{err: errors.New("forbidden")}
+	m := secretViewerModel(t, g)
+	m, fetchCmd := openSecret(t, m)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer opens immediately, before the fetch resolves")
+	}
+	loaded := fetchCmd().(secretLoadedMsg)
+	if loaded.err == nil {
+		t.Fatal("the fetch should carry the getter's error")
+	}
+	next, _ := m.Update(loaded)
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("a fetch error should close the viewer")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a fetch error should surface a status-bar toast")
+	}
+}
+
+// TestSecretViewerInertWithoutGetter proves the secret intent is a no-op with no
+// getter wired (the viewer never opens).
+func TestSecretViewerInertWithoutGetter(t *testing.T) {
+	m := openPodTable(t, "Secret") // no WithSecretGetter
+	m, fetchCmd := openSecret(t, m)
+	if m.viewer.Active() {
+		t.Fatal("the secret viewer should not open without a getter wired")
+	}
+	if fetchCmd != nil {
+		t.Fatal("no getter → no fetch command")
+	}
+}
+
+// TestSecretViewerCloses proves nav.back (esc) dismisses the secret viewer.
+func TestSecretViewerCloses(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{Type: "Opaque"}}
+	m := secretViewerModel(t, g)
+	m, fetchCmd := openSecret(t, m)
+	next, _ := m.Update(fetchCmd().(secretLoadedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("precondition: the viewer should be open")
+	}
+	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if closeCmd == nil {
+		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
+	}
+	next, _ = m.Update(closeCmd())
+	m = next.(Model)
+	if m.viewer.Active() {
+		t.Fatal("delivering the viewer's ClosedMsg should hide it")
+	}
+}
+
+// TestSecretViewerStaleFetchDropped proves the generation guard: a fetch that lands
+// after a newer viewer open is dropped rather than populating stale content.
+func TestSecretViewerStaleFetchDropped(t *testing.T) {
+	g := &fakeSecretGetter{data: kube.SecretData{
+		Type:    "Opaque",
+		Entries: []kube.SecretEntry{{Key: "token", Value: "abc"}},
+	}}
+	m := secretViewerModel(t, g)
+	m, firstFetch := openSecret(t, m)
+	stale := firstFetch().(secretLoadedMsg)
+
+	m, _ = openSecret(t, m) // second open bumps viewerGen
+	if stale.gen == m.viewerGen {
+		t.Fatalf("precondition: stale gen %d should differ from current %d", stale.gen, m.viewerGen)
+	}
+	next, _ := m.Update(stale) // deliver the stale (gen-1) result
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the viewer should still be open")
+	}
+	// Even revealed, a dropped fetch left no data, so the value never appears.
+	m, _ = press(t, m, revealKey)
+	if strings.Contains(m.View().Content, "abc") {
+		t.Fatal("a stale-generation fetch should be dropped, not shown")
+	}
+}
+
+// TestRevealInertOnYAMLViewer proves secret.reveal is inert on a non-secret viewer.
+func TestRevealInertOnYAMLViewer(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "kind: Pod"}
+	m := yamlViewerModel(t, g)
+	_, cmd := press(t, m, yamlKey)
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	m = next.(Model)
+	if m.viewer.Kind() != viewerKindYAML {
+		t.Fatalf("precondition: the YAML viewer should be up, kind = %q", m.viewer.Kind())
+	}
+	m, revealCmd := press(t, m, revealKey)
+	if revealCmd != nil {
+		t.Fatal("secret.reveal on the YAML viewer should be inert (no command)")
+	}
+	if m.secretRevealed {
+		t.Fatal("secret.reveal should not toggle reveal on a non-secret viewer")
+	}
+	if !m.viewer.Active() {
+		t.Fatal("secret.reveal should not close the YAML viewer")
+	}
+}
