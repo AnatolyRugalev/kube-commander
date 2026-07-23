@@ -2724,3 +2724,22 @@ toast, but a **mid-stream error after lines already showed keeps them on screen*
 the pod-owning kinds the actions menu lists for logs degrade to a "not yet available"
 toast until M3-07 resolves their backing pod; `LogOptions{}` (whole log, default
 container, no follow) is the initial cut.
+
+### D110 — The logs viewer opens in follow mode (streaming + auto-scroll); `logs.follow` (`f`) toggles it and a manual up-scroll pauses it
+**2026-07-23 (M3-06).** Building on D109, the logs viewer opens **following**: the
+stream is opened with `kube.LogOptions{Follow:true}` (M1-07d — the stream stays open
+and reconnects transparently across transport drops rather than ending at EOF), and
+while following each appended line snaps the viewport to the bottom (`viewer.GotoBottom`)
+so the newest output is always shown — the `kubectl logs -f` / k9s default. Constraints a
+later leg (M3-07 container picker / pod-owning kinds) must not silently break: (1) follow
+is a **shell-owned bool** (`m.logFollow`), never shared mutable state, consulted only
+while the logs viewer is up (`viewer.Kind()==viewerKindLogs`); the shared viewer is
+restamped per open (`viewer.SetKind`) so YAML/describe/logs are distinguishable for
+kind-specific gating. (2) `logs.follow` (default `f`, off the reserved nav keys) toggles
+follow **only inside the logs viewer** — inert on the YAML/describe viewers and inert in
+the browse view; re-enabling snaps to the bottom. (3) A **manual up-scroll while
+following pauses follow** (nav.up/top/halfPageUp/pageUp) so scrollback isn't yanked back
+to the tail; the toggle (or a fresh open) resumes it. (4) The viewer title carries a
+`[following]`/`[paused]` marker so the mode is always visible (D68). This is the first
+viewer with a mode of its own; the same follow bool + kind-gated toggle is the shape
+M3-07 extends when it adds a container picker to the logs viewer.

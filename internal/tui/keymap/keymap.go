@@ -63,6 +63,10 @@ const (
 	ActionLogs     Action = "res.logs"
 	ActionEdit     Action = "res.edit"
 	ActionDelete   Action = "res.delete"
+	// ActionLogsFollow toggles follow (auto-scroll + live streaming) inside the
+	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
+	// elsewhere it is inert.
+	ActionLogsFollow Action = "logs.follow"
 )
 
 // actionMeta is the registry: every known Action, in a stable order, with the
@@ -101,6 +105,7 @@ var actionMeta = []struct {
 	{ActionLogs, "View logs for the selected row"},
 	{ActionEdit, "Edit the selected row in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
+	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 }
 
 var registered = func() map[Action]string {
@@ -163,6 +168,7 @@ var defaultBindings = map[Action][]string{
 	ActionLogs:         {"L"},
 	ActionEdit:         {"e"},
 	ActionDelete:       {"x"},
+	ActionLogsFollow:   {"f"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

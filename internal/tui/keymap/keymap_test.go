@@ -62,7 +62,7 @@ func TestDefaultResolution(t *testing.T) {
 func TestMergeOverride(t *testing.T) {
 	km := DefaultKeymap()
 	merged, warns, err := km.Merge(map[Action][]string{
-		ActionFilter: {"f"}, // replace "/" with "f"
+		ActionFilter: {"t"}, // replace "/" with "t" (a free, non-nav key)
 	})
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -71,8 +71,8 @@ func TestMergeOverride(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", warns)
 	}
 	// New binding wins.
-	if a, ok := merged.Action(tea.Key{Code: 'f', Text: "f"}); !ok || a != ActionFilter {
-		t.Errorf("f resolved to %q,%v; want app.filter", a, ok)
+	if a, ok := merged.Action(tea.Key{Code: 't', Text: "t"}); !ok || a != ActionFilter {
+		t.Errorf("t resolved to %q,%v; want app.filter", a, ok)
 	}
 	// Old default no longer resolves.
 	if a, ok := merged.Action(tea.Key{Code: '/', Text: "/"}); ok {

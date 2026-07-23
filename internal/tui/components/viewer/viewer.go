@@ -81,6 +81,13 @@ func New(s styles.Styles, kind string) Model {
 // Kind returns the viewer's kind id.
 func (m Model) Kind() string { return m.kind }
 
+// SetKind restamps the viewer's kind so one shared component can serve every M3
+// viewer (YAML / describe / logs / secret): the open path sets the kind it is
+// showing, and it rides the ClosedMsg so the root can route the close. The root
+// also reads it to gate kind-specific behaviour — the M3-06 follow toggle acts
+// only while the logs viewer is up.
+func (m *Model) SetKind(k string) { m.kind = k }
+
 // SetTitle overrides the title shown above the content.
 func (m *Model) SetTitle(t string) { m.title = t }
 
@@ -133,6 +140,11 @@ func (m Model) Active() bool { return m.active }
 // AtBottom reports whether the viewport is scrolled to the last line — used by the
 // follow-logs slice (M3-06) to decide whether to auto-scroll on new content.
 func (m Model) AtBottom() bool { return m.viewport.AtBottom() }
+
+// GotoBottom pins the viewport to the last line. The follow-logs slice (M3-06)
+// calls it after each appended line while follow is on, and when follow is
+// (re-)enabled, so a following log tails the newest output.
+func (m *Model) GotoBottom() { m.viewport.GotoBottom() }
 
 // Update handles a resolved keymap action while the viewer is active. Navigation
 // scrolls the viewport (vim nav + gg/G + half/full page, D10); nav.back closes the

@@ -2573,15 +2573,17 @@ func TestDescribeViewerStaleRenderDropped(t *testing.T) {
 // fails the open with err. It records the object it was asked for so a test can assert
 // the selected row was addressed.
 type fakeLogStreamer struct {
-	events []kube.LogEvent // delivered in order, then the channel closes
-	err    error           // an open failure (Logs returns it, no channel)
-	calls  int
-	gotRef kube.ObjectRef
+	events  []kube.LogEvent // delivered in order, then the channel closes
+	err     error           // an open failure (Logs returns it, no channel)
+	calls   int
+	gotRef  kube.ObjectRef
+	gotOpts kube.LogOptions // records the options the last open was asked for
 }
 
-func (f *fakeLogStreamer) Logs(_ context.Context, ref kube.ObjectRef, _ kube.LogOptions) (<-chan kube.LogEvent, error) {
+func (f *fakeLogStreamer) Logs(_ context.Context, ref kube.ObjectRef, opts kube.LogOptions) (<-chan kube.LogEvent, error) {
 	f.calls++
 	f.gotRef = ref
+	f.gotOpts = opts
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -2818,5 +2820,101 @@ func TestLogsViewerStaleLineDropped(t *testing.T) {
 	m = next.(Model)
 	if strings.Contains(m.View().Content, "stale line") {
 		t.Fatal("a stale-generation log line should be dropped, not shown")
+	}
+}
+
+// followKey is the default logs.follow toggle key (`f`).
+var followKey = tea.Key{Code: 'f', Text: "f"}
+
+// openLogsViewerHelper opens the logs viewer over the selected pod row and drains the
+// initial stream, returning the model with the viewer up.
+func openLogsViewerHelper(t *testing.T, m Model) Model {
+	t.Helper()
+	_, cmd := press(t, m, logsKey)
+	next, pumpCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	return drainLogPump(t, m, pumpCmd)
+}
+
+// TestLogsViewerOpensFollowing proves M3-06's default: the logs viewer opens in follow
+// mode and asks the streamer for a following stream (LogOptions{Follow:true}), so the
+// stream stays open and reconnects (M1-07d) rather than ending at EOF.
+func TestLogsViewerOpensFollowing(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "line one"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewerHelper(t, m)
+	if !m.logFollow {
+		t.Fatal("the logs viewer should open in follow mode")
+	}
+	if !s.gotOpts.Follow {
+		t.Fatal("the follow logs viewer should open the stream with Follow:true")
+	}
+	if !strings.Contains(m.View().Content, "[following]") {
+		t.Fatalf("the viewer title should mark it as following: %q", m.View().Content)
+	}
+}
+
+// TestLogsFollowToggle proves the `f` key toggles follow off and back on inside the
+// logs viewer, and the title marker tracks the state.
+func TestLogsFollowToggle(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewerHelper(t, m)
+
+	m, _ = press(t, m, followKey) // pause
+	if m.logFollow {
+		t.Fatal("pressing follow while following should pause it")
+	}
+	if !strings.Contains(m.View().Content, "[paused]") {
+		t.Fatalf("a paused logs viewer should mark [paused]: %q", m.View().Content)
+	}
+
+	m, _ = press(t, m, followKey) // resume
+	if !m.logFollow {
+		t.Fatal("pressing follow while paused should resume it")
+	}
+	if !strings.Contains(m.View().Content, "[following]") {
+		t.Fatalf("a resumed logs viewer should mark [following]: %q", m.View().Content)
+	}
+}
+
+// TestLogsFollowPausesOnManualUpScroll proves a manual up-scroll (`k`) while following
+// pauses follow so the reader can inspect earlier output without being yanked back to
+// the tail; a down-scroll (`j`) leaves follow untouched.
+func TestLogsFollowPausesOnManualUpScroll(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewerHelper(t, m)
+
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"}) // down: still following
+	if !m.logFollow {
+		t.Fatal("a down-scroll should not pause follow")
+	}
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"}) // up: pauses
+	if m.logFollow {
+		t.Fatal("a manual up-scroll while following should pause follow")
+	}
+}
+
+// TestLogsFollowInertOnYAMLViewer proves logs.follow is inert on a non-logs viewer:
+// pressing `f` while the YAML viewer is up does nothing (there is nothing to follow)
+// and leaves the viewer open.
+func TestLogsFollowInertOnYAMLViewer(t *testing.T) {
+	g := &fakeYAMLGetter{yaml: "kind: Pod"}
+	m := yamlViewerModel(t, g)
+	_, cmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	m = next.(Model)
+	if m.viewer.Kind() != viewerKindYAML {
+		t.Fatalf("precondition: the YAML viewer should be up, kind = %q", m.viewer.Kind())
+	}
+	m, followCmd := press(t, m, followKey)
+	if followCmd != nil {
+		t.Fatal("logs.follow on the YAML viewer should be inert (no command)")
+	}
+	if !m.viewer.Active() {
+		t.Fatal("logs.follow should not close the YAML viewer")
 	}
 }

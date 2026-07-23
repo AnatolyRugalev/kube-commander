@@ -93,6 +93,7 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Describe | `d` (`res.describe`) | any kind |
 | View YAML | `y` (`res.yaml`) | any kind |
 | Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
+| Toggle log follow | `f` (`logs.follow`) | logs viewer only; auto-scroll on/off, manual up-scroll pauses (M3-06) |
 | Edit (`$EDITOR`) | `e` (`res.edit`) | any kind with `update`/`patch` |
 | Delete | `x` (`res.delete`) | any kind with `delete` (confirm) |
 | Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |

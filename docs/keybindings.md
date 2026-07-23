@@ -81,3 +81,9 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `res.logs` | `L` | View logs for the selected row |
 | `res.edit` | `e` | Edit the selected row in $EDITOR |
 | `res.delete` | `x` | Delete the selected row |
+
+## logs
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `logs.follow` | `f` | Toggle log follow (auto-scroll) in the logs viewer |

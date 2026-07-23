@@ -338,6 +338,19 @@ type Model struct {
 	logCh       <-chan kube.LogEvent
 	logCancel   context.CancelFunc
 
+	// logFollow is whether the open logs viewer is following (M3-06): the stream is
+	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
+	// and while logFollow is true each appended line snaps the viewport to the bottom
+	// (viewer.GotoBottom) so the newest output is always shown. logs.follow (`f`)
+	// toggles it inside the viewer; a manual up-scroll pauses it (so history can be
+	// read without being yanked back down), and re-enabling snaps to the bottom.
+	// logTitle is the base viewer title (without the follow marker) so the toggle can
+	// re-render "[following]"/"[paused]" without re-deriving the object ref. Both are
+	// consulted only while the logs viewer is up (viewerKindLogs), so a stale value
+	// left from a closed logs viewer is harmless. Touched only from the update loop.
+	logFollow bool
+	logTitle  string
+
 	// resByLabel maps each entry of the resource command palette (resPicker) back to
 	// its kube.Resource. The picker is generic over strings (D65), so the palette
 	// lists resource titles and this map, rebuilt each time the palette opens from the
@@ -1042,11 +1055,16 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	return m, m.surfaceError(ErrorMsg{Context: label + ": not yet available"})
 }
 
-// viewerKindYAML is the kind stamped on the shared read-only viewer while it shows an
-// object's YAML (M3-03). Later viewer legs (describe, logs, secret) reuse the same
-// component; the kind rides ClosedMsg for routing, though the shell currently hides
-// the viewer uniformly on close regardless of kind.
-const viewerKindYAML = "yaml"
+// viewerKind* are the kinds stamped on the shared read-only viewer for the content it
+// is showing. The M3 viewers all reuse one viewer.Model; each open path restamps the
+// kind (viewer.SetKind) so the kind rides ClosedMsg for routing and the shell can gate
+// kind-specific behaviour — the M3-06 follow toggle acts only while viewerKindLogs is
+// up. The shell still hides the viewer uniformly on close regardless of kind.
+const (
+	viewerKindYAML     = "yaml"
+	viewerKindDescribe = "describe"
+	viewerKindLogs     = "logs"
+)
 
 // yamlLoadedMsg carries the outcome of the async GetYAML fetch issued when the YAML
 // viewer opens (M3-03). gen ties it to the viewer open that requested it, so a fetch
@@ -1072,6 +1090,7 @@ func (m Model) openYAMLViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
 	m.viewerGen++
 	gen := m.viewerGen
+	m.viewer.SetKind(viewerKindYAML)
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
 	m.viewer.SetContent("") // clear any prior object's YAML before the fetch lands.
 	m.viewer.Show()
@@ -1126,6 +1145,7 @@ func (m Model) openDescribeViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
 	m.viewerGen++
 	gen := m.viewerGen
+	m.viewer.SetKind(viewerKindDescribe)
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
 	m.viewer.SetContent("") // clear any prior object's content before the render lands.
 	m.viewer.Show()
@@ -1192,13 +1212,19 @@ func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	m.stopLogStream() // cancel any prior stream before starting a new one.
 	m.viewerGen++
 	gen := m.viewerGen
-	m.viewer.SetTitle("Logs " + viewerTitle(msg.Resource, msg.Object))
+	m.viewer.SetKind(viewerKindLogs)
+	m.logFollow = true // the logs viewer opens following, like `kubectl logs -f`.
+	m.logTitle = "Logs " + viewerTitle(msg.Resource, msg.Object)
+	m.syncLogViewerTitle()
 	m.viewer.SetContent("") // clear any prior object's content before the stream lands.
 	m.viewer.Show()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ref := msg.Object
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{})
+	// Follow keeps the stream open and reconnects transparently across transport
+	// drops (M1-07d), so the viewer tails live output; stopLogStream cancels it on
+	// close/supersede/quit.
+	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true})
 	if err != nil {
 		cancel()
 		m.viewer.Hide()
@@ -1207,6 +1233,19 @@ func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	m.logCancel = cancel
 	m.logCh = ch
 	return m, m.pumpLogs(gen)
+}
+
+// syncLogViewerTitle re-renders the logs viewer's title with a follow marker so the
+// user always sees whether the log is tailing live ("[following]") or paused for
+// scrollback ("[paused]"). It is a no-op-safe helper called on open and whenever
+// follow toggles; it reads logTitle (the base, object-named title) so it never needs
+// the object ref again.
+func (m *Model) syncLogViewerTitle() {
+	marker := " [paused]"
+	if m.logFollow {
+		marker = " [following]"
+	}
+	m.viewer.SetTitle(m.logTitle + marker)
 }
 
 // pumpLogs issues the tea.Cmd that pulls the next line from the current log channel,
@@ -1236,6 +1275,9 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 	switch inner := l.msg.(type) {
 	case LogLineMsg:
 		m.viewer.AppendContent(inner.Line)
+		if m.logFollow {
+			m.viewer.GotoBottom() // follow mode tails the newest output (M3-06).
+		}
 		return m, m.pumpLogs(l.gen)
 	case LogClosedMsg:
 		m.stopLogStream() // stream ended (EOF); release the context, keep the lines shown.
@@ -1803,9 +1845,39 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		m.stopLogStream() // tear down any log stream feeding the viewer.
 		return m, nil
 	}
+	// logs.follow (`f`) toggles follow while the logs viewer is up (M3-06); it is inert
+	// on the YAML/describe viewers (nothing to follow). Re-enabling snaps to the bottom
+	// so a re-followed log resumes tailing the newest line.
+	if a == keymap.ActionLogsFollow {
+		if m.viewer.Kind() == viewerKindLogs {
+			m.logFollow = !m.logFollow
+			if m.logFollow {
+				m.viewer.GotoBottom()
+			}
+			m.syncLogViewerTitle()
+		}
+		return m, nil
+	}
+	// A manual up-scroll while following pauses follow (M3-06): the reader wants to
+	// inspect earlier output without the next line yanking the viewport back to the
+	// bottom. `f` (or nav.bottom's own scroll) resumes it. Down-scrolls keep following.
+	if m.viewer.Kind() == viewerKindLogs && m.logFollow && isScrollUp(a) {
+		m.logFollow = false
+		m.syncLogViewerTitle()
+	}
 	var cmd tea.Cmd
 	m.viewer, cmd = m.viewer.Update(a)
 	return m, cmd
+}
+
+// isScrollUp reports whether a is an upward-scroll navigation action — the gestures
+// that move away from the tail of a following log and so pause follow (M3-06).
+func isScrollUp(a keymap.Action) bool {
+	switch a {
+	case keymap.ActionUp, keymap.ActionTop, keymap.ActionHalfPageUp, keymap.ActionPageUp:
+		return true
+	}
+	return false
 }
 
 // routeNav dispatches a navigation action to the focused pane and handles the
