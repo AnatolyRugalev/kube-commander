@@ -7,7 +7,13 @@ _Last updated: 2026-07-24 — FB-pf-local-port done: the port picker now owns th
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-02a** Cluster-search view **component** (`internal/tui/components/searchview`):
+      full-screen query field + streaming results list (Kind · ns · name), keymap-driven
+      cursor, `SelectedMsg`/`ClosedMsg`/`QueryChangedMsg`. Component in isolation — no app
+      wiring (that is SEARCH-02b).
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
+      notes: First slice of SEARCH-02, split D52-style (component first, like LOGS-01 →
+      LOGS-02). Reuses the picker's list/delegate rhythm and the logsview full-screen shape.
 
 ## Blocked
 
@@ -90,15 +96,18 @@ An M4-class capability pulled forward by feedback. One-shot, concurrent, curated
 default — never "watch everything" (D131). Built bottom-up (D52): kube primitive first
 (done), then the TUI search mini-app, then streaming/progress, then scope-widening/fuzzy.
 
-- [ ] **SEARCH-02** Search mini-app shell + `search.cluster` action: a registered key (D11)
-      opens a full-screen search view (like the logs viewer / palette) — query textinput +
-      results list (Kind · ns · name); `enter` drills into the selected hit (switch browse
-      to that kind + select the row); `esc` closes. Message-only (principle 1).
+SEARCH-02 was split D52-style into the component (**SEARCH-02a**, in progress) and the
+app wiring (**SEARCH-02b**), mirroring LOGS-01 → LOGS-02.
+
+- [ ] **SEARCH-02b** Search mini-app **app wiring** + `search.cluster` action: a registered
+      key (D11) opens the SEARCH-02a view; `enter` drills into the selected hit (switch
+      browse to that kind + select the row); `esc` closes. Message-only (principle 1).
       status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
       notes: Wire `kube.Search` (SEARCH-01) over `CommonSearchResources(discovered)` in the
-      current namespace; run the fan-out off the update loop, stream hits in via a gen-tagged
-      pump (like the log pump D53), cancel the previous query on a new one / on close. Reuse
-      the picker/list rendering. This is the MVP first UI slice from the feedback.
+      current namespace behind a `Searcher` seam (`WithSearcher`, nil → search-inert); run
+      the fan-out off the update loop, stream hits in via a gen-tagged pump (like the log
+      pump D53), cancel the previous query on `QueryChangedMsg` / on close. Register
+      `search.cluster` + regenerate `docs/keybindings.md`. Depends on SEARCH-02a.
 - [ ] **SEARCH-03** Streaming results + progress + cap indicator: show hits as each kind
       returns (not only when all finish), a "searching N/M kinds…" progress line, the cap
       state, and cancel-in-flight on query change. Per-kind failures stay silent (D131 pt 3).
