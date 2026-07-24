@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — FB-pf-port-picker-b done: the port-forward flow no
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" in the picker/prompt flow
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
 
 ## Blocked
 
@@ -83,9 +84,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" (`:0` auto-assign) in the picker/prompt flow
-      status: todo | owner: — | added: 2026-07-24 (triaged from feedback 2026-07-24-port-forward-picker-and-local-port, part 1/2)
-      notes: Default local = remote, editable; a gesture that rewrites the spec to `:0` (OS-assigned free local port, already supported by kube.PortForward + reported via Ports()). Builds on FB-pf-port-picker; supersedes needing the D130 retry-hint for the common clash once shipped (the hint stays as the fallback). Depends on the picker UI.
 ### Cluster search (SEARCH — feedback-driven, D131)
 Cross-object cluster search (feedback `2026-07-24-cluster-search-multi-resource`): type a
 query → matching objects **across kinds** (Kind · namespace · name), drill into the hit.
