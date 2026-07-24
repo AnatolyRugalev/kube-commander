@@ -3192,3 +3192,26 @@ when the `kubectl` binary is on PATH, and only falls back to the in-process SPDY
    real-terminal/real-cluster dogfood (the advisory human-task
    `vault/human-tasks/2026-07-24-exec-live-cluster-dogfood.md`, now also covering the
    kubectl route); the criterion stays unticked pending that run.
+
+### D129 — Edit applies via a client-side Update (PUT), not server-side apply
+**2026-07-24.** The Edit action (M3-15) writes the edited object back with
+`Clients.Update` (`internal/kube/apply.go`): parse the edited YAML → unstructured
+→ dynamic-client **Update** (PUT) of the full object. This is `kubectl edit`'s
+**default** (client-side apply), not `--server-side`. **Why:** the edited buffer is
+the whole object GetYAML produced (only managedFields stripped), so it still carries
+`metadata.resourceVersion` — a PUT then gets **optimistic concurrency for free**: a
+concurrent server-side change → Conflict, degrade, never a silent clobber. SSA on a
+full fetched object would instead take field-ownership of everything it round-tripped,
+surprising and heavier for a plain edit. **Constraints a future leg must not silently
+contradict:**
+1. **Edit is not a rename.** `Update` rejects (before any request) an edited object
+   whose name is empty or differs from the ref's, or whose namespace differs (a
+   namespaced resource with an empty edited namespace is filled from the ref), and
+   rejects empty/null/unparseable content — a botched edit never mutates the wrong
+   object or wipes this one.
+2. **Parsing goes YAML→JSON→unstructured** (`obj.UnmarshalJSON`), so integer fields
+   decode as int64 (the unstructured scheme's contract), matching what the dynamic
+   client round-trips — a plain YAML unmarshal would yield float64 numbers.
+3. **No-change detection is the caller's job** (M3-15b): the TUI compares the edited
+   bytes to the original and simply never calls `Update` on a no-op editor exit, so
+   `Update` always intends to write.

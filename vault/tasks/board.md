@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-14b-4: exec kubectl parity fallback — when `kubectl` is on PATH, exec suspends into `kubectl exec -it` (via `tea.ExecProcess`, pointed at the same --kubeconfig/--context/-n) instead of the in-process SPDY path, which becomes the no-kubectl fallback (D128); `lookupKubectl` seam + pure `kubectlExecArgs`. Top-unblocked next: M3-15 (Edit → `$EDITOR`). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-15a: Edit — kube-layer apply/update primitive (`internal/kube/apply.go`): `Clients.Update` parses edited YAML→unstructured (int64-safe) and PUT-updates via the generic dynamic client; resourceVersion in the buffer gives optimistic concurrency, identity (name/namespace) guarded not editable, empty/invalid/null rejected without mutation (D129). Top-unblocked next: M3-15b (Edit TUI suspend wire). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-15a** Edit — kube-layer apply/update primitive (`internal/kube/apply.go`):
-      `Clients.Update` parses edited YAML → unstructured and PUT-updates the object
-      status: in-progress | owner: claude-opus | 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -97,6 +95,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-15a** Edit — kube-layer apply/update primitive (`internal/kube/apply.go`): `Clients.Update` parses the edited `$EDITOR` bytes (YAML→JSON→unstructured, int64-safe) and PUT-updates the object through the generic dynamic client (built-ins + CRDs, no kubectl, D2); the buffer's `metadata.resourceVersion` gives optimistic concurrency (concurrent change → Conflict, not clobber), identity (name/namespace) guarded before any request — rename/empty/invalid/null rejected without mutation; no-change left to the caller (M3-15b) — done 2026-07-24 (D129)
 - [x] **M3-14b-4** Exec — kubectl parity fallback: when `kubectl` is on PATH `execInto` suspends into `kubectl exec -i -t <pod> [-c ctr] -- /bin/sh` via `tea.ExecProcess` (pointed at the same cluster via `--kubeconfig`/`--context`/`-n`, new `WithKubeconfig` option wired in `run.go`), else the in-process SPDY path (14b-1) — kubectl owns its own raw PTY/resize/edge-cases when present, SPDY keeps exec working with no kubectl (#68/D2); `lookupKubectl` seam (overridable in tests) + pure `kubectlExecArgs` builder, hermetically tested — done 2026-07-24 (D128)
 - [x] **M3-14b-3** Exec — live terminal resize: a `syscall.SIGWINCH` watcher (`watchResize`, real-terminal path) reads `term.GetSize` (injected `sizeOf`) and pushes it into the exec size queue, now a latest-wins one-slot channel (`push` supersedes an unread stale size, drops 0×0), so the remote PTY tracks the local window mid-session; watcher stopped (`signal.Stop` + wait for the goroutine) before `close`, so no push races the closed channel; hermetic test raises SIGWINCH in-process — done 2026-07-24 (D127)
 - [x] **M3-14b-2** Exec — multi-container picker reuse: `openExec` routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); single-container Pod execs directly, multi-container prompts via the reused `ctrPicker`, `streamOrExec` routes to `streamLogsInto`/`execInto`; `newExecCommand` takes the chosen container — done 2026-07-24 (D126)
