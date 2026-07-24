@@ -101,3 +101,10 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `forwards.panel` | `F` | Toggle the port-forward panel |
 | `forwards.stopAll` | `X` | Stop all port-forwards (in the panel) |
+
+## confirm
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `confirm.accept` | `y` / `enter` | Accept the confirm dialog |
+| `confirm.decline` | `n` / `esc` | Decline the confirm dialog |

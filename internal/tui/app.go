@@ -959,6 +959,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.modal.Prompting() {
 			return m.routeModalPromptKey(msg)
 		}
+		if m.modal.Active() {
+			return m.routeModalConfirmKey(msg)
+		}
 		switch r := m.seq.Input(msg.Key()); r.Kind {
 		case keymap.ResultAction:
 			return m.handleAction(r.Action)
@@ -3025,6 +3028,24 @@ func (m Model) routeModalPromptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.modal, cmd = m.modal.UpdatePrompt(msg)
 	return m, cmd
+}
+
+// routeModalConfirmKey resolves one keypress while the confirm modal is open (not
+// prompting). The confirm modal fully captures input, so a key resolves in the
+// confirm context first (ConfirmAction: `y`/enter → confirm.accept, `n`/esc →
+// confirm.decline — the y/n muscle memory the feedback asked for, still registered
+// and rebindable, D11/D132); anything the confirm context doesn't bind falls back
+// to the browse keymap so app.quit still dismisses the modal, and every other key
+// is swallowed so the panes underneath never move. No view matches a raw key (D11).
+func (m Model) routeModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if action, ok := m.keymap.ConfirmAction(key); ok {
+		return m.handleModalAction(action)
+	}
+	if action, ok := m.keymap.Action(key); ok {
+		return m.handleModalAction(action)
+	}
+	return m, nil
 }
 
 // openFilter opens the live table filter input over the current resource table

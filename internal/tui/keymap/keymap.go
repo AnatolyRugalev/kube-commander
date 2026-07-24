@@ -85,7 +85,45 @@ const (
 	// (M3-13b). It is meaningful only while the panel is up; elsewhere it is inert
 	// (the panel's per-forward stop is nav.drillIn on the selected entry).
 	ActionStopForwards Action = "forwards.stopAll"
+	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
+	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
+	// **confirm key context** (contextOf), not the browse context: `y`/`n`/`enter`/
+	// `esc` already mean res.yaml / app.searchNext / nav.drillIn / nav.back in the
+	// browse view, so a flat keymap could not bind them twice. Resolving them in a
+	// separate context (ConfirmAction) lets the modal accept `y`/`n` while keeping
+	// them registered and rebindable (D11). Supersedes the "no y/n" part of D88/D115.
+	ActionConfirmAccept  Action = "confirm.accept"
+	ActionConfirmDecline Action = "confirm.decline"
 )
+
+// keyContext scopes key resolution: a chord means different actions in different
+// contexts, and collisions are checked per-context (keybindings.md: "two actions
+// bound to the same key **in the same context**"). Today there are two: the browse
+// context (the sequencer + Action) and the confirm-modal context (ConfirmAction).
+type keyContext int
+
+const (
+	ctxBrowse keyContext = iota
+	ctxConfirm
+)
+
+// confirmContextActions is the set of actions resolved in the confirm-modal
+// context rather than the browse context. contextOf routes every other action to
+// the browse context.
+var confirmContextActions = map[Action]struct{}{
+	ActionConfirmAccept:  {},
+	ActionConfirmDecline: {},
+}
+
+// contextOf returns the key context an action's bindings live in. Confirm
+// accept/decline resolve only while the confirm modal is up (ConfirmAction); every
+// other action resolves in the browse context (the sequencer + Action).
+func contextOf(a Action) keyContext {
+	if _, ok := confirmContextActions[a]; ok {
+		return ctxConfirm
+	}
+	return ctxBrowse
+}
 
 // actionMeta is the registry: every known Action, in a stable order, with the
 // human description used by help/doc generation. Adding an Action here (and to a
@@ -128,6 +166,8 @@ var actionMeta = []struct {
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
 	{ActionStopForwards, "Stop all port-forwards (in the panel)"},
+	{ActionConfirmAccept, "Accept the confirm dialog"},
+	{ActionConfirmDecline, "Decline the confirm dialog"},
 }
 
 var registered = func() map[Action]string {
@@ -195,6 +235,12 @@ var defaultBindings = map[Action][]string{
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},
 	ActionStopForwards: {"X"},
+	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
+	// muscle memory, `enter`/`esc` the modal convention. These reuse chords the
+	// browse context also binds (res.yaml/app.searchNext/nav.drillIn/nav.back) —
+	// legal because they resolve in a different context (build partitions them).
+	ActionConfirmAccept:  {"y", "enter"},
+	ActionConfirmDecline: {"n", "esc"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app
@@ -212,10 +258,11 @@ var navChords = map[chord]struct{}{
 // support the sequencer (is this a prefix of a binding; does a longer binding
 // extend it).
 type Keymap struct {
-	bindings map[Action][]seq
-	bySeq    map[string]Action
-	prefix   map[string]bool
-	extends  map[string]bool
+	bindings     map[Action][]seq
+	bySeq        map[string]Action // browse-context single/sequence resolution
+	confirmBySeq map[string]Action // confirm-modal-context resolution (ConfirmAction)
+	prefix       map[string]bool
+	extends      map[string]bool
 }
 
 // DefaultKeymap returns the built-in vim-first keymap. It panics if the static
@@ -294,6 +341,7 @@ func (k *Keymap) Merge(overrides map[Action][]string) (*Keymap, []string, error)
 // two facts the sequencer needs.
 func build(bindings map[Action][]seq) (*Keymap, error) {
 	bySeq := make(map[string]Action)
+	confirmBySeq := make(map[string]Action)
 	prefix := make(map[string]bool)
 	extends := make(map[string]bool)
 	// Deterministic order so a collision reports the same pair every run.
@@ -303,16 +351,29 @@ func build(bindings map[Action][]seq) (*Keymap, error) {
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, a := range ids {
+		// Each action's chords resolve in exactly one context; a collision is only a
+		// collision within that context (keybindings.md). The confirm context has no
+		// multi-key sequences, so only the browse context feeds prefix/extends (the
+		// sequencer). Both indexes are keyed by chord, so the same key can map to a
+		// browse action and a confirm action without clashing.
+		idx := bySeq
+		browse := true
+		if contextOf(a) == ctxConfirm {
+			idx, browse = confirmBySeq, false
+		}
 		for _, s := range bindings[a] {
 			key := s.key()
-			if other, ok := bySeq[key]; ok && other != a {
+			if other, ok := idx[key]; ok && other != a {
 				lo, hi := other, a
 				if hi < lo {
 					lo, hi = hi, lo
 				}
 				return nil, fmt.Errorf("keymap: key %q is bound to both %q and %q", s.String(), lo, hi)
 			}
-			bySeq[key] = a
+			idx[key] = a
+			if !browse {
+				continue
+			}
 			for i := 1; i <= len(s); i++ {
 				prefix[s[:i].key()] = true
 				if i < len(s) {
@@ -321,7 +382,7 @@ func build(bindings map[Action][]seq) (*Keymap, error) {
 			}
 		}
 	}
-	return &Keymap{bindings: bindings, bySeq: bySeq, prefix: prefix, extends: extends}, nil
+	return &Keymap{bindings: bindings, bySeq: bySeq, confirmBySeq: confirmBySeq, prefix: prefix, extends: extends}, nil
 }
 
 // exact returns the action a whole sequence is bound to.
@@ -339,6 +400,16 @@ func (k *Keymap) hasExtension(s seq) bool { return k.extends[s.key()] }
 // (modals, pickers) can use this directly.
 func (k *Keymap) Action(key tea.Key) (Action, bool) {
 	a, ok := k.bySeq[seq{chordFromKey(key)}.key()]
+	return a, ok
+}
+
+// ConfirmAction resolves a single live keypress in the confirm-modal context: the
+// confirm-only bindings (default `y`/`enter` → confirm.accept, `n`/`esc` →
+// confirm.decline). It is separate from Action so the modal can accept `y`/`n`
+// without those keys losing their browse-context meaning (res.yaml / searchNext).
+// The confirm context has only single-key bindings, so no sequencer is needed.
+func (k *Keymap) ConfirmAction(key tea.Key) (Action, bool) {
+	a, ok := k.confirmBySeq[seq{chordFromKey(key)}.key()]
 	return a, ok
 }
 

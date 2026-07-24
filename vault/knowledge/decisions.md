@@ -3265,3 +3265,31 @@ contradict:**
    whole-cluster/all-namespace widening are **later slices** (SEARCH-03+), not part of
    this contract. A `SearchHit` carries the `Resource` so drilling in switches the
    browse view to that kind and selects the object.
+
+### D132 — Key contexts: the confirm modal resolves `y`/`n` in its own key context; supersedes the "no y/n" of D88/D115
+**2026-07-24** (feedback `2026-07-24-confirm-modal-yn-keys`). The confirm modal now
+accepts `y`/`n` (the universal yes/no muscle memory) **and** `enter`/`esc`, via two
+**registered, rebindable** actions — `confirm.accept` (default `y`, `enter`) and
+`confirm.decline` (default `n`, `esc`) — resolved through the keymap, **not** raw-key
+matching (D11). This is the concrete realization of keybindings.md's "two actions bound
+to the same key **in the same context**": the keymap now has **key contexts**
+(`contextOf`). `y`/`n`/`enter`/`esc` already mean res.yaml / app.searchNext / nav.drillIn
+/ nav.back in the **browse** context, so the confirm actions live in a separate
+**confirm** context; `build` partitions bindings into per-context resolution indexes
+(`bySeq` for browse + the sequencer, `confirmBySeq` for the modal) so the same chord
+maps to a browse action **and** a confirm action with no collision. **Constraints a
+future leg must not silently contradict:**
+1. **The confirm modal captures input and resolves via `ConfirmAction` first**
+   (`routeModalConfirmKey`, gated on `m.modal.Active() && !Prompting()`, before the
+   sequencer). Unmatched keys fall back to the browse keymap so `app.quit` still
+   dismisses; everything else is swallowed. **Prompt-mode** modals are unchanged —
+   they still submit/cancel on `nav.drillIn`/`nav.back` via `routeModalPromptKey` (a
+   typed `y`/`n` is text there, never accept/decline).
+2. **`modal.Update` accepts on `confirm.accept` OR `nav.drillIn`, declines on
+   `confirm.decline` OR `nav.back`** — so both confirm keys and the prompt-mode nav
+   keys resolve one component.
+3. **This supersedes the "no `confirm.yes`/`confirm.no` actions, no raw y/n" clause of
+   D88 and D115.** The rest of those decisions stands: the modal is Kind-stamped,
+   message-only (principle 1), one `modal.Model` on the root, results routed by Kind.
+   Adding another key context (e.g. a viewer context) follows this pattern — a new
+   `contextOf` entry + a context-scoped resolver, never raw-key matching in a view.

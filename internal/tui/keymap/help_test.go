@@ -141,11 +141,12 @@ func TestShortHelpContext(t *testing.T) {
 // first-seen column order and registry order within a column, dropping disabled.
 func TestHelpMapFullHelp(t *testing.T) {
 	full := DefaultKeymap().HelpMap().FullHelp()
-	// Registry has twelve namespaces: nav.* then app.* then ns.* then resources.*
+	// Registry has thirteen namespaces: nav.* then app.* then ns.* then resources.*
 	// then mouse.* then sort.* then menu.* then actions.* then res.* (M3-02) then
-	// logs.* (M3-06) then secret.* (M3-08a) then forwards.* (M3-13b).
-	if len(full) != 12 {
-		t.Fatalf("FullHelp columns = %d; want 12", len(full))
+	// logs.* (M3-06) then secret.* (M3-08a) then forwards.* (M3-13b) then confirm.*
+	// (D132).
+	if len(full) != 13 {
+		t.Fatalf("FullHelp columns = %d; want 13", len(full))
 	}
 	// Total enabled bindings equals the whole registry (all default-bound).
 	total := 0
@@ -171,7 +172,7 @@ func TestHelpMapFullHelp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
-	if cols := km.HelpMap().FullHelp(); len(cols) != 11 {
-		t.Errorf("FullHelp after disabling nav.* columns = %d; want 11 (app + ns + resources + mouse + sort + menu + actions + res + logs + secret + forwards)", len(cols))
+	if cols := km.HelpMap().FullHelp(); len(cols) != 12 {
+		t.Errorf("FullHelp after disabling nav.* columns = %d; want 12 (app + ns + resources + mouse + sort + menu + actions + res + logs + secret + forwards + confirm)", len(cols))
 	}
 }

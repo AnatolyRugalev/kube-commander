@@ -109,6 +109,53 @@ func TestMergeCollision(t *testing.T) {
 	}
 }
 
+// TestConfirmContextResolution proves the confirm actions resolve in their own key
+// context: `y`/`enter` → confirm.accept and `n`/`esc` → confirm.decline via
+// ConfirmAction, while the same keys keep their browse meaning via Action. The two
+// contexts coexist without a collision even though they share chords (D132).
+func TestConfirmContextResolution(t *testing.T) {
+	km := DefaultKeymap()
+
+	confirm := []struct {
+		key  tea.Key
+		want Action
+	}{
+		{tea.Key{Code: 'y', Text: "y"}, ActionConfirmAccept},
+		{tea.Key{Code: tea.KeyEnter}, ActionConfirmAccept},
+		{tea.Key{Code: 'n', Text: "n"}, ActionConfirmDecline},
+		{tea.Key{Code: tea.KeyEsc}, ActionConfirmDecline},
+	}
+	for _, tt := range confirm {
+		if a, ok := km.ConfirmAction(tt.key); !ok || a != tt.want {
+			t.Errorf("ConfirmAction(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
+		}
+	}
+
+	// The confirm chords keep their browse meaning in the default context.
+	browse := []struct {
+		key  tea.Key
+		want Action
+	}{
+		{tea.Key{Code: 'y', Text: "y"}, ActionYAML},
+		{tea.Key{Code: 'n', Text: "n"}, ActionSearchNext},
+		{tea.Key{Code: tea.KeyEnter}, ActionDrillIn},
+		{tea.Key{Code: tea.KeyEsc}, ActionBack},
+	}
+	for _, tt := range browse {
+		if a, ok := km.Action(tt.key); !ok || a != tt.want {
+			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
+		}
+	}
+
+	// Browse resolution never yields a confirm action, and vice versa.
+	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); ok && a == ActionConfirmAccept {
+		t.Error("Action leaked a confirm-context action into the browse context")
+	}
+	if a, ok := km.ConfirmAction(tea.Key{Code: 'd', Text: "d"}); ok {
+		t.Errorf("ConfirmAction(d) = %q, want unbound in the confirm context", a)
+	}
+}
+
 func TestMergeNavShadowWarns(t *testing.T) {
 	// Rebinding help onto a nav key is allowed but warns. Use "h" and also
 	// disable nav.left so there's no collision, isolating the warning.

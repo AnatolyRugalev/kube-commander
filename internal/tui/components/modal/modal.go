@@ -11,10 +11,12 @@
 // root model can tell which prompt resolved, and it emits its own message types
 // (ConfirmedMsg/CancelledMsg) so it never imports the root package (D56). It is
 // driven entirely through keymap.Actions and never matches a raw key for
-// behaviour (D11): nav.drillIn accepts (Enter), nav.back declines (Esc) — the
-// Enter/Esc-consistent modal convention of knowledge/keybindings.md. In prompt
-// mode the typed text is fed to the input through UpdatePrompt, the single
-// raw-key entry point, mirroring the picker's own incremental filter.
+// behaviour (D11). In confirm mode confirm.accept (default `y`/Enter) accepts and
+// confirm.decline (default `n`/Esc) declines — the yes/no muscle memory plus the
+// Enter/Esc modal convention, resolved in the confirm key context (D132). In prompt
+// mode nav.drillIn submits and nav.back cancels, and the typed text is fed to the
+// input through UpdatePrompt, the single raw-key entry point, mirroring the picker's
+// own incremental filter.
 //
 // This slice (M2-10) is the component in isolation; the app-shell wiring — routing
 // a would-be-destructive M3 action through a confirm before it runs — lands with
@@ -94,7 +96,7 @@ func New(s styles.Styles) Model {
 
 // ShowConfirm configures the modal as a yes/no confirm and reveals it. Kind stamps
 // the result messages; title and message are the box heading and the question.
-// nav.drillIn then accepts (ConfirmedMsg, empty Value), nav.back declines
+// confirm.accept then accepts (ConfirmedMsg, empty Value), confirm.decline declines
 // (CancelledMsg).
 func (m *Model) ShowConfirm(kind, title, message string) {
 	m.kind = kind
@@ -166,13 +168,13 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch a {
-	case keymap.ActionDrillIn:
+	case keymap.ActionDrillIn, keymap.ActionConfirmAccept:
 		kind, value := m.kind, ""
 		if m.mode == modePrompt {
 			value = m.input.Value()
 		}
 		return m, func() tea.Msg { return ConfirmedMsg{Kind: kind, Value: value} }
-	case keymap.ActionBack:
+	case keymap.ActionBack, keymap.ActionConfirmDecline:
 		kind := m.kind
 		return m, func() tea.Msg { return CancelledMsg{Kind: kind} }
 	}

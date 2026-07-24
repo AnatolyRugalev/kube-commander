@@ -3904,6 +3904,64 @@ func TestDeleteConfirmDeclineDoesNothing(t *testing.T) {
 	}
 }
 
+// TestDeleteConfirmAcceptWithY proves `y` accepts the confirm modal (confirm.accept)
+// just like enter — the yes/no muscle memory, resolved in the confirm key context
+// so `y` keeps meaning res.yaml in the browse view (D132).
+func TestDeleteConfirmAcceptWithY(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	row, _ := m.table.SelectedRow()
+	m = openDeleteModal(t, m)
+
+	m, confirmCmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
+	if confirmCmd == nil {
+		t.Fatal("`y` should accept the confirm modal")
+	}
+	confirmed, ok := confirmCmd().(modal.ConfirmedMsg)
+	if !ok {
+		t.Fatalf("`y` produced %T, want modal.ConfirmedMsg", confirmCmd())
+	}
+	next, delCmd := m.Update(confirmed)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("accepting with `y` should hide the modal")
+	}
+	if delCmd == nil {
+		t.Fatal("accepting with `y` should issue the kube.Delete command")
+	}
+	if _, ok := delCmd().(deleteDoneMsg); !ok {
+		t.Fatalf("`y` delete produced %T, want deleteDoneMsg", delCmd())
+	}
+	if d.calls != 1 || d.gotRef.Name != row.Object.Name {
+		t.Fatalf("Delete addressed %+v x%d, want the selected row %+v once", d.gotRef, d.calls, row.Object)
+	}
+}
+
+// TestDeleteConfirmDeclineWithN proves `n` declines the confirm modal
+// (confirm.decline) just like esc — closing it without deleting.
+func TestDeleteConfirmDeclineWithN(t *testing.T) {
+	d := &fakeDeleter{}
+	m := deleteTableModel(t, d)
+	m = openDeleteModal(t, m)
+
+	m, cancelCmd := press(t, m, tea.Key{Code: 'n', Text: "n"})
+	if cancelCmd == nil {
+		t.Fatal("`n` should decline the confirm modal")
+	}
+	cancelled, ok := cancelCmd().(modal.CancelledMsg)
+	if !ok {
+		t.Fatalf("`n` produced %T, want modal.CancelledMsg", cancelCmd())
+	}
+	next, _ := m.Update(cancelled)
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("declining with `n` should hide the modal")
+	}
+	if d.calls != 0 {
+		t.Fatal("declining with `n` must not delete anything")
+	}
+}
+
 // TestDeleteErrorDegrades proves a failed delete (e.g. RBAC or a UID conflict from
 // the snapshot guard) degrades to a transient status-bar error toast (D74).
 func TestDeleteErrorDegrades(t *testing.T) {
