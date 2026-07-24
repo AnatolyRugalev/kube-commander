@@ -21,7 +21,9 @@ if not already in context. Follow these steps in order.
   finish or revert it — never build on an unknown dirty state.
 - Read: `vault/goals.md`, the **active milestone** in `vault/milestones/`, the top
   of `vault/tasks/board.md`, and the **3 newest entry files** in `vault/journal/`
-  (named `YYYY-MM-DD.N.md`; filename sort == chronological order).
+  (named `YYYY-MM-DD.N.md`, `N` **not** zero-padded — so plain filename sort is
+  *wrong* past 9 entries/day: `.10` sorts before `.2`. Sort by numeric `N`:
+  `ls vault/journal/ | sort -t. -k1,1 -k2,2n | tail -3`).
   Skim `vault/knowledge/decisions.md` for anything relevant.
 - **Check the feedback inbox**: list `vault/feedback/`. Any file other than
   `README.md` is unaddressed human feedback and **preempts the board** (see Pick).

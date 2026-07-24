@@ -3389,3 +3389,34 @@ the M3-03-vs-M3-15 split.** Delivered bottom-up:
    and kinds — a real, common case (read-only kubeconfig, componentstatuses). A future leg
    must not re-gate this action on write verbs. Menu title: **"View / Edit YAML"**; it stays
    in the mutating group (last, before delete) since a save can mutate.
+
+### D137 — Port-forward port discovery: declared ports only, TCP only, Service ports resolve to the pod side
+**2026-07-24** (FB-pf-port-picker-a). The port-forward flow is moving from free-text
+remote entry to a **picker of known ports** (feedback
+`2026-07-24-port-forward-picker-and-local-port` part 1). The kube-layer primitive is
+`Clients.PodPorts` / `Clients.ServicePorts` (`internal/kube/ports.go`), returning an
+apimachinery-free `Port{Port,Name,Container,ServicePort}` (D33). **Constraints a future
+leg must not silently contradict:**
+1. **Discovery reads *declared* ports; an empty list never means "nothing is
+   listening".** Ports come from the pod spec's `containerPorts` (what `kubectl
+   describe pod` shows) — declaring them is **optional** in the API, and a container
+   serving an undeclared port is normal. So the picker is an **affordance, not a
+   constraint**: the free-text ports prompt must remain reachable, and a pod with no
+   declared ports must fall back to it rather than refuse to forward (principle 3).
+   Never probe the container to discover ports.
+2. **TCP only.** Port-forward tunnels TCP over the SPDY connection to the pod's
+   portforward subresource, so UDP/SCTP declarations are filtered out at the primitive
+   — never offered as a choice that could not work. An empty protocol is TCP (API default).
+3. **A Service's forwardable port is its `targetPort`, not its `port`.** A Service can't
+   be forwarded directly (it resolves to a backing pod first, D123/M3-13c), so the
+   remote side of the forward is the **pod-side** number; `Port.Port` carries it and
+   `Port.ServicePort` keeps the service-side number the user recognises, so the UI can
+   label a choice `80 → 8080` without re-deriving the mapping. A **named** `targetPort`
+   resolves only against the backing pod's declarations and is **dropped when
+   unresolvable** — forwarding to a guessed number is worse than falling back to the
+   prompt.
+4. **Native sidecars count, plain init containers do not.** An initContainer with
+   `restartPolicy: Always` runs for the pod's whole life (a proxy/exporter is a prime
+   forward target), so its ports are offered; a plain init container has exited before a
+   forward could reach it. Ports are de-duplicated by number (one forward target = one
+   choice) and kept in declaration order — regular containers first, then sidecars.

@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-15c done: unify complete (D135/D136) — standalone read-only YAML viewer retired; the View/Edit YAML action (`e`, `canGet`) is now the only YAML surface, `y` unbound. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — FB-pf-port-picker-a done: the port-forward port picker's kube-layer primitive (`kube.PodPorts`/`ServicePorts`, D137) landed; FB-pf-port-picker-b (the picker UI) is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-pf-port-picker-a** Port-forward port picker — kube-layer declared-ports introspection primitive (`internal/kube/ports.go`): `Clients.PodPorts` (a pod's declared containerPorts) + `Clients.ServicePorts` (a Service's ports with their targetPort resolved against the backing pod)
-      status: in-progress | owner: claude-opus | added: 2026-07-24 | started: 2026-07-24
-      notes: First slice of FB-pf-port-picker, split per the D52 rhythm (kube primitive → TUI wire). Pure introspection, no TUI surface; the picker UI is FB-pf-port-picker-b.
+_(none)_
 
 ## Blocked
 
@@ -150,6 +148,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-pf-port-picker-a** Port-forward port picker — kube-layer declared-ports primitive (`internal/kube/ports.go`): `Clients.PodPorts` (declared containerPorts, native sidecars included) + `Clients.ServicePorts` (service ports resolved to the pod-side targetPort, named targets looked up on the backing pod); TCP-only, de-duplicated, apimachinery-free `Port` — done 2026-07-24 (D137)
 - [x] **M3-15c** Unify YAML view + edit — retired the standalone read-only YAML viewer (`openYAMLViewer`/`yamlLoadedMsg`/`viewerKindYAML`/`rowActionYAML`/`ActionYAML`/`res.yaml`); the View/Edit YAML action (`e`, gated `canGet`) is now the only YAML surface, `y` unbound; `YAMLGetter` seam kept; `docs/keybindings.md` regenerated — done 2026-07-24 (D135, D136)
 - [x] **M3-15b** Edit — TUI wire (the suspend flow): `res.edit`/`e` → `GetYAML` (existing `YAMLGetter`) → temp file → `tea.Exec` `$EDITOR` → read back → `Editor` seam (`kube.Update`, M3-15a) only on change; no-change / editor-abort / apply-rejection degrade to a status-bar toast without mutating; `$EDITOR` resolved `KUBE_EDITOR`→`EDITOR`→`vi` (space-split for flags). First slice of the unify-yaml-view-and-edit feedback (D69/D135; feedback triaged into M3-15c + deleted); live `$EDITOR` suspend dogfood raised as a human-task, so the M3 Edit exit criterion stays unticked — done 2026-07-24 (D135)
 - [x] **LOGS-01** Feedback (normal, `2026-07-24-logs-dedicated-view-live-grep`, first slice): dedicated full-screen logs-view component (`internal/tui/components/logsview`) — streaming append buffer + live case-insensitive substring filter that narrows the shown lines **while following** (reuses `app.filter`), follow/pause (reuses `logs.follow`) with auto-scroll on append + upward-scroll pauses, full-screen header (`[following]`/`[paused]` + query + matched/total), keymap-driven (D11)/message-only (principle 1)/`ClosedMsg`; feedback triaged into LOGS-01…04 and deleted — done 2026-07-24 (D134)
