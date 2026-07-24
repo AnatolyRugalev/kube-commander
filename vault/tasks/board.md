@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — M3-15a: Edit — kube-layer apply/update primitive
 
 ## In Progress
 
-_(none)_
+- [ ] **HT-exec-dogfood** Close the exec live-cluster dogfood human-task (Status: done) — tick M3 exec exit criterion, delete the file
+      status: in-progress | owner: claude-opus | added: 2026-07-24
 
 ## Blocked
 
