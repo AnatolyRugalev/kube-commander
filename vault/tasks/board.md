@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — M3-14b-2: exec multi-container picker reuse — `o
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-14b-3** Exec — live terminal resize (SIGWINCH → exec size queue)
+      status: in-progress | owner: claude-opus | claimed: 2026-07-24
 
 ## Blocked
 
@@ -83,11 +84,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-14b-3** Exec — live terminal resize: feed SIGWINCH into the exec size queue so the
-      remote PTY tracks the local window mid-session (14b-1 seeds only the initial size).
-      status: todo | owner: — | added: 2026-07-24
-      notes: Depends on M3-14b-1. `execSizeQueue` already models seed→session-end; add a
-      SIGWINCH loop pushing new `term.GetSize` reads until Run returns.
 - [ ] **M3-14b-4** Exec — `kubectl exec` fallback when the binary is present (parity escape
       hatch, D7): `tea.ExecProcess(exec.Command("kubectl","exec",…))` when `kubectl` is on PATH,
       else the in-process SPDY path (14b-1). status: todo | owner: — | added: 2026-07-24
