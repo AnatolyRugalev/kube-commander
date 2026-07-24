@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-confirm-yn-keys: confirm modal now accepts `y`/`n` (plus enter/esc) via registered, rebindable `confirm.accept`/`confirm.decline` actions in a dedicated keymap **context** (D132, supersedes the no-y/n of D88/D115); feedback deleted. Feedback inbox now 3 items (still preempts the board): delete-default-key-d, logs-dedicated-view-live-grep, unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — FB-delete-key-d: shipped default delete key is now `d` (vim `dd`), describe relocated to `D` (D133); registry-driven/rebindable, doc regenerated, feedback deleted. Feedback inbox now 2 items (still preempts the board): logs-dedicated-view-live-grep, unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-delete-key-d** Feedback (normal, `2026-07-24-delete-default-key-d`): make the default delete binding `d` (vim `dd` muscle memory), relocate describe off `d`
-      status: in-progress | owner: claude-opus | added: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -130,6 +129,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-delete-key-d** Feedback (normal, `2026-07-24-delete-default-key-d`): shipped default delete binding is now `d` (vim `dd` muscle memory, was `x`); describe relocated off `d` to `D` (read-only, not a reserved nav chord); registry-driven/rebindable (D11), `docs/keybindings.md` regenerated, feedback deleted — done 2026-07-24 (D133)
 - [x] **FB-confirm-yn-keys** Feedback (normal, `2026-07-24-confirm-modal-yn-keys`): confirm modal accepts `y` (confirm)/`n` (decline) plus enter/esc via registered, rebindable `confirm.accept`/`confirm.decline` resolved in a dedicated keymap **context** (no raw-key match, D11) — done 2026-07-24 (D132)
 - [x] **SEARCH-01** Feedback (normal, `2026-07-24-cluster-search-multi-resource`, first slice): cluster-search **kube primitive** (`internal/kube/search.go`) — `Clients.Search`/`searchRows` fan out one-shot **concurrent** server-side `List`s over a caller-supplied `[]Resource`, match `Row.Object.Name` by case-insensitive substring, stream `SearchHit{Resource,ObjectRef}` on a channel; per-kind failure isolates (principle 3), hit **cap** + ctx cancel bound it, `CommonSearchResources` gives the curated default scope; feedback triaged into SEARCH-02…04 and deleted — done 2026-07-24 (D131)
 - [x] **FB-pf-bind-toast** Feedback (high, `2026-07-24-port-forward-picker-and-local-port`, first slice): a port-forward local-listener bind failure now surfaces an actionable status-bar hint (naming the clashing local port(s) + `:0`/`:<remote>` free-local-port retry) instead of client-go's raw "unable to listen on any of the requested ports"; prompt hint surfaces the `:80=free local` syntax; parts 1/2 (port picker, editable/auto local port) triaged to FB-pf-port-picker/FB-pf-local-port — done 2026-07-24 (D130)

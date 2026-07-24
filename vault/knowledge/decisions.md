@@ -3293,3 +3293,19 @@ future leg must not silently contradict:**
    message-only (principle 1), one `modal.Model` on the root, results routed by Kind.
    Adding another key context (e.g. a viewer context) follows this pattern — a new
    `contextOf` entry + a context-scoped resolver, never raw-key matching in a view.
+
+### D133 — Default row-action keys: delete is `d`, describe relocates to `D`
+**2026-07-24** (feedback `2026-07-24-delete-default-key-d`). The shipped **default**
+delete binding is now `d` (`res.delete`), matching vim `dd`-style muscle memory; the
+old `x` default is dropped. Describe (`res.describe`), which previously owned `d`,
+relocates to **`D`** (capital, read-only, not a reserved nav chord). Everything stays
+registry-driven and rebindable (D11) — this only changes `defaultBindings`, the
+generated `docs/keybindings.md`, and the design-intent table; no view matches a raw
+key. **Constraints a future leg must not silently contradict:**
+1. **`d` = delete, `D` = describe** in the default keymap. Neither is in the reserved
+   nav set (`navChords`), so no warn/collision; the freed `x` is now unbound by default.
+2. **The coming "unify view-YAML + edit" leg (feedback `unify-yaml-view-and-edit`)
+   must lay out its key against this surface** — it collapses `res.yaml` (`y`) and
+   `res.edit` (`e`) into one editable-object action and frees a key; `d`/`D` are settled
+   and must not be reused for it. Describe and logs stay read-only viewers. This keeps
+   the two coupled feedback items from producing conflicting one-off key layouts.

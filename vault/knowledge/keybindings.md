@@ -90,12 +90,12 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Action | Binding | Notes |
 |--------|---------|-------|
 | Open actions menu for selection | `a` (`actions.menu`) | lists the applicable actions for the selected row |
-| Describe | `d` (`res.describe`) | any kind |
+| Describe | `D` (`res.describe`) | any kind; read-only. Relocated off `d` (D133) so delete can take `d` |
 | View YAML | `y` (`res.yaml`) | any kind |
 | Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
 | Toggle log follow | `f` (`logs.follow`) | logs viewer only; auto-scroll on/off, manual up-scroll pauses (M3-06) |
 | Edit (`$EDITOR`) | `e` (`res.edit`) | any kind with `update`/`patch` |
-| Delete | `x` (`res.delete`) | any kind with `delete` (confirm) |
+| Delete | `d` (`res.delete`) | any kind with `delete` (confirm); vim `dd` muscle memory (D133) |
 | Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |
 | Cordon · Uncordon · Drain | via actions menu | Node |
 | Suspend · Resume | via actions menu | CronJob (#83) |
@@ -110,7 +110,8 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Resource palette | `:` (`resources.switch`) | |
 | Context switcher | `:` ctx (M4) | |
 
-`a d y e x` and `L` don't collide with reserved nav keys. The direct keys and the
+`a D y e d` and `L` don't collide with reserved nav keys (`d`/`D` are not in the
+reserved nav set; delete uses `d`, describe `D`, D133). The direct keys and the
 menu both dispatch one typed `rowActionMsg` intent (D107); each later M3 leg
 (M3-03…) wires the real viewer/action. The generated
 [`docs/keybindings.md`](../../docs/keybindings.md) is the shipping map.

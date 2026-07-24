@@ -2439,8 +2439,8 @@ func describeViewerModel(t *testing.T, describer Describer) Model {
 	return next.(Model)
 }
 
-// describeKey is the default res.describe direct key (`d`).
-var describeKey = tea.Key{Code: 'd', Text: "d"}
+// describeKey is the default res.describe direct key (`D`).
+var describeKey = tea.Key{Code: 'D', Text: "D"}
 
 // TestDescribeViewerOpensAndShowsContent drives the whole M3-04 path: the `d` key
 // dispatches the describe intent, handling it opens the viewer and issues the Describe
@@ -3790,8 +3790,8 @@ func deleteTableModel(t *testing.T, d Deleter) Model {
 	return next.(Model)
 }
 
-// deleteKey is the default res.delete key (`x`).
-var deleteKey = tea.Key{Code: 'x', Text: "x"}
+// deleteKey is the default res.delete key (`d`).
+var deleteKey = tea.Key{Code: 'd', Text: "d"}
 
 // openDeleteModal presses the delete key over the selected row and delivers the
 // resulting rowActionMsg, returning the model with the confirm modal open.
