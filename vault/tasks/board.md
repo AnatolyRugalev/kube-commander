@@ -3,11 +3,13 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-delete-key-d: shipped default delete key is now `d` (vim `dd`), describe relocated to `D` (D133); registry-driven/rebindable, doc regenerated, feedback deleted. Feedback inbox now 2 items (still preempts the board): logs-dedicated-view-live-grep, unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — LOGS-01 (claim): logs feedback (`logs-dedicated-view-live-grep`) triaged into LOGS-01…04 (D134); claiming LOGS-01, the dedicated full-screen logs-view component with live filter. Feedback inbox now 1 item (still preempts the board): unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-01** Dedicated full-screen logs-view component (`internal/tui/components/logsview`) with live substring filter
+      status: in-progress | owner: claude-opus | added: 2026-07-24 (triaged from feedback 2026-07-24-logs-dedicated-view-live-grep, first slice)
+      notes: Component-only, not yet wired (D52 rhythm, like the M3-01 viewer / M2-08a picker). Streaming append buffer + live case-insensitive substring filter that narrows the displayed lines **while following** (reuses `app.filter`/`/`) + follow/pause (reuses `logs.follow`/`f`) with auto-scroll-to-bottom on append while following + full-screen header showing `[following]`/`[paused]` and the active filter. Keymap-driven (D11), message-only (principle 1), `ClosedMsg`. Regex/highlight, wrap/timestamps, and the app wiring are LOGS-02…04.
 
 ## Blocked
 
@@ -123,6 +125,32 @@ default — never "watch everything" (D131). Built bottom-up (D52): kube primiti
       fuzzy / label / field matching beyond name substring.
       status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
       notes: Keep the widen explicit + rate-limit-aware on big clusters. Depends on SEARCH-02.
+
+### Logs dedicated view (LOGS — feedback-driven, D134)
+Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
+mini-app** with real-time grep (feedback `2026-07-24-logs-dedicated-view-live-grep`):
+type a `/`-filter that narrows the streamed lines **live while following** (à la
+stern/k9s), full-screen for high throughput, clear `[following]`/`[paused]` + active-filter
+indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wiring that
+retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
+nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
+
+- [ ] **LOGS-02** Wire `res.logs` to the new logs view — retire the shared-viewer logs path
+      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
+      notes: Replace `openLogsViewer`/`streamLogsInto`/`logFollow`/`logTitle` + the
+      `viewerKindLogs` special-casing in `app.go` so logs stream into the LOGS-01 component
+      instead of the shared M3-01 viewer (which keeps serving YAML/describe/secret). Keep the
+      container picker (M3-07a) and pod-owning resolution (M3-07b) feeding it; keep the
+      gen-tagged log pump (D53). Must stay launchable and not regress the running binary (D68);
+      raise a dogfood human-task if a real-terminal filter/throughput check is warranted.
+- [ ] **LOGS-03** Regex filter mode + match highlighting
+      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
+      notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
+      regex degrades to no-match/last-good, principle 3) and highlight matched spans in the
+      shown lines. Depends on LOGS-01.
+- [ ] **LOGS-04** Long-line + throughput nice-to-haves: wrap toggle / horizontal scroll, timestamps toggle, jump-to-latest
+      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
+      notes: The feedback's explicit "later, don't block" list. Depends on LOGS-01.
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
