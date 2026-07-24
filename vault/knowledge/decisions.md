@@ -3370,3 +3370,22 @@ the M3-03-vs-M3-15 split.** Delivered bottom-up:
 4. The live `$EDITOR` suspend needs a **human dogfood** (like exec, D125); the M3 "Edit
    round-trips through `$EDITOR`" exit criterion stays unticked until that lands
    (`vault/human-tasks/2026-07-24-edit-live-cluster-dogfood.md`).
+
+### D136 — M3-15c resolves D135: the unified View/Edit YAML action keeps `e`, gates on `canGet`, and `y` is retired
+**2026-07-24** (M3-15c, completing D135). Two choices D135 left open, now settled:
+
+1. **The surviving key is `e` (`res.edit`); `y` (`res.yaml`) is removed and left unbound in
+   the browse context.** Rationale: `e`=edit is the accurate, conventional mnemonic for an
+   action that can mutate, and it was already the shipped edit key — no new muscle memory,
+   minimal churn atop the D133 `d`(delete)/`D`(describe) layout. `y` is *not* repurposed
+   (no surprise "peek turns into a mutating editor" on the long-standing view key); it stays
+   free for a future rebind or user config. `y` keeps its **confirm-context** meaning
+   (`confirm.accept`, D132) — that context split now stands on `n`/`enter`/`esc` alone.
+2. **The action's applicability predicate is `canGet`, not `update`/`patch`.** The unified
+   action is **viewer-first**: you need `get` to render the YAML, and edit is best-effort —
+   a save on a resource you can't write degrades to a toast on the apply's RBAC error
+   (principle 3), exactly as `kubectl edit` opens a read-only object and fails only on save.
+   Gating on `canEdit` would have **regressed** YAML viewing for read-only (get-only) users
+   and kinds — a real, common case (read-only kubeconfig, componentstatuses). A future leg
+   must not re-gate this action on write verbs. Menu title: **"View / Edit YAML"**; it stays
+   in the mutating group (last, before delete) since a save can mutate.

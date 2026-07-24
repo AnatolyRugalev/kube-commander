@@ -2132,10 +2132,14 @@ func TestActionsMenuListsApplicableActions(t *testing.T) {
 	if !m.actPicker.Active() {
 		t.Fatal("actions.menu key should open the actions picker over the selected row")
 	}
-	for _, title := range []string{"View YAML", "Describe", "Logs", "Exec shell", "Delete"} {
+	for _, title := range []string{"View / Edit YAML", "Describe", "Logs", "Exec shell", "Delete"} {
 		if _, ok := m.actByLabel[title]; !ok {
 			t.Errorf("Pod actions menu should list %q", title)
 		}
+	}
+	// The retired standalone "View YAML" folded into "View / Edit YAML" (D135/M3-15c).
+	if _, ok := m.actByLabel["View YAML"]; ok {
+		t.Error("the standalone \"View YAML\" entry should be gone after the unify (M3-15c)")
 	}
 	for _, title := range []string{"Cordon", "Drain", "Suspend"} {
 		if _, ok := m.actByLabel[title]; ok {
@@ -2188,21 +2192,21 @@ func TestActionsMenuInertWithoutResource(t *testing.T) {
 	}
 }
 
-// TestActionDirectKeyDispatchesIntent proves a direct-key M3 action (here `y`,
-// res.yaml) dispatches a rowActionMsg carrying the action and the selected row's
-// object, without opening the menu.
+// TestActionDirectKeyDispatchesIntent proves a direct-key M3 action (here `e`,
+// res.edit — the unified View/Edit YAML action) dispatches a rowActionMsg carrying
+// the action and the selected row's object, without opening the menu.
 func TestActionDirectKeyDispatchesIntent(t *testing.T) {
 	m := openPodTable(t, "Pod")
-	_, cmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
+	_, cmd := press(t, m, tea.Key{Code: 'e', Text: "e"})
 	if cmd == nil {
-		t.Fatal("res.yaml key produced no command")
+		t.Fatal("res.edit key produced no command")
 	}
 	intent, ok := cmd().(rowActionMsg)
 	if !ok {
-		t.Fatalf("res.yaml produced %T, want rowActionMsg", cmd())
+		t.Fatalf("res.edit produced %T, want rowActionMsg", cmd())
 	}
-	if intent.Action != rowActionYAML {
-		t.Errorf("intent action = %q, want %q", intent.Action, rowActionYAML)
+	if intent.Action != rowActionEdit {
+		t.Errorf("intent action = %q, want %q", intent.Action, rowActionEdit)
 	}
 	if intent.Object.Name == "" {
 		t.Error("intent should carry the selected row's object identity")
@@ -2246,167 +2250,11 @@ func (f *fakeYAMLGetter) GetYAML(_ context.Context, r kube.Resource, ref kube.Ob
 	return f.yaml, f.err
 }
 
-// yamlViewerModel drills into a pods table (Kind Pod) with a live row and the given
-// YAML getter wired, so a viewer test has a concrete selected row and a fetch seam.
-func yamlViewerModel(t *testing.T, getter YAMLGetter) Model {
-	t.Helper()
-	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
-	m := sizedWith(t, WithWatcher(fw), WithYAMLGetter(getter))
-	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
-	m = next.(Model)
-	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
-	return next.(Model)
-}
-
-// yamlKey is the default res.yaml direct key (`y`).
-var yamlKey = tea.Key{Code: 'y', Text: "y"}
-
-// TestYAMLViewerOpensAndShowsContent drives the whole M3-03 path: the `y` key
-// dispatches the YAML intent, handling it opens the viewer and issues the GetYAML
-// fetch against the selected row, and the fetched YAML lands in the viewer's content.
-func TestYAMLViewerOpensAndShowsContent(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: web-1\n"}
-	m := yamlViewerModel(t, g)
-
-	// `y` dispatches the intent; feed it back in to trigger the viewer + fetch.
-	_, cmd := press(t, m, yamlKey)
-	intent, ok := cmd().(rowActionMsg)
-	if !ok {
-		t.Fatalf("res.yaml produced %T, want rowActionMsg", cmd())
-	}
-	next, fetchCmd := m.Update(intent)
-	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("handling the YAML intent should open the viewer")
-	}
-	if fetchCmd == nil {
-		t.Fatal("opening the YAML viewer should issue a GetYAML fetch command")
-	}
-	loaded, ok := fetchCmd().(yamlLoadedMsg)
-	if !ok {
-		t.Fatalf("fetch produced %T, want yamlLoadedMsg", fetchCmd())
-	}
-	if g.calls != 1 {
-		t.Fatalf("GetYAML called %d times, want 1", g.calls)
-	}
-	if g.gotRef.Name == "" {
-		t.Error("GetYAML should be addressed to the selected row's object")
-	}
-
-	next, _ = m.Update(loaded)
-	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("the viewer should stay open once its content lands")
-	}
-	// The fetched YAML is composited over the browse view (overlayCenter) — both the
-	// YAML body and the base menu ("Cluster" section header) are visible at once.
-	view := m.View().Content
-	if !strings.Contains(view, "kind: Pod") {
-		t.Fatalf("viewer should show the fetched YAML: %q", view)
-	}
-}
-
-// TestYAMLViewerCloses proves nav.back (esc) dismisses the viewer (its ClosedMsg,
-// delivered back through Update, hides it) and returns to the browse view.
-func TestYAMLViewerCloses(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "kind: Pod\n"}
-	m := yamlViewerModel(t, g)
-	_, cmd := press(t, m, yamlKey)
-	next, fetchCmd := m.Update(cmd().(rowActionMsg))
-	m = next.(Model)
-	next, _ = m.Update(fetchCmd().(yamlLoadedMsg))
-	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("precondition: the viewer should be open")
-	}
-
-	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
-	if closeCmd == nil {
-		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
-	}
-	next, _ = m.Update(closeCmd())
-	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("delivering the viewer's ClosedMsg should hide it")
-	}
-}
-
-// TestYAMLViewerFetchErrorDegrades proves a GetYAML failure closes the viewer and
-// surfaces a transient status-bar toast rather than leaving an empty box (D74).
-func TestYAMLViewerFetchErrorDegrades(t *testing.T) {
-	g := &fakeYAMLGetter{err: errors.New("not found")}
-	m := yamlViewerModel(t, g)
-	_, cmd := press(t, m, yamlKey)
-	next, fetchCmd := m.Update(cmd().(rowActionMsg))
-	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("the viewer opens immediately, before the fetch resolves")
-	}
-	loaded := fetchCmd().(yamlLoadedMsg)
-	if loaded.err == nil {
-		t.Fatal("the fetch should carry the getter's error")
-	}
-	next, _ = m.Update(loaded)
-	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("a fetch error should close the viewer")
-	}
-	if !m.status.HasError() {
-		t.Fatal("a fetch error should surface a status-bar toast")
-	}
-}
-
-// TestYAMLViewerInertWithoutGetter proves the YAML intent is a no-op with no getter
-// wired (the viewer never opens) — the pre-wiring app and hermetic tests stay inert.
-func TestYAMLViewerInertWithoutGetter(t *testing.T) {
-	m := openPodTable(t, "Pod") // no WithYAMLGetter
-	_, cmd := press(t, m, yamlKey)
-	next, fetchCmd := m.Update(cmd().(rowActionMsg))
-	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("the YAML viewer should not open without a getter wired")
-	}
-	if fetchCmd != nil {
-		t.Fatal("no getter → no fetch command")
-	}
-}
-
-// TestYAMLViewerStaleFetchDropped proves the generation guard: a fetch that lands
-// after a newer viewer open (or after the viewer closed) is dropped rather than
-// overwriting the current content.
-func TestYAMLViewerStaleFetchDropped(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "kind: Pod\n"}
-	m := yamlViewerModel(t, g)
-	row, ok := m.table.SelectedRow()
-	if !ok {
-		t.Fatal("precondition: a row should be selected")
-	}
-	intent := rowActionMsg{Action: rowActionYAML, Resource: m.current, Object: row.Object}
-
-	// First open → gen 1 fetch (dispatched directly; a key press would route to the
-	// open viewer, which is the point — a re-open comes from the intent, not the key).
-	next, firstFetch := m.Update(intent)
-	m = next.(Model)
-	stale := firstFetch().(yamlLoadedMsg)
-
-	// Second open → gen bumps; the first fetch is now stale.
-	next, _ = m.Update(intent)
-	m = next.(Model)
-	if stale.gen == m.viewerGen {
-		t.Fatalf("precondition: stale fetch gen %d should differ from current %d", stale.gen, m.viewerGen)
-	}
-
-	next, _ = m.Update(stale) // deliver the stale (gen-1) result
-	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("the viewer should still be open")
-	}
-	// The stale result must not have populated content: content only lands from the
-	// current-gen fetch, so the viewer body stays empty until that arrives.
-	if strings.Contains(m.View().Content, "kind: Pod") {
-		t.Fatal("a stale-generation fetch should be dropped, not shown")
-	}
-}
+// The standalone read-only YAML viewer (M3-03) was retired into the unified View/Edit
+// YAML action (M3-15c/D135): view and edit an object's YAML are one act, so the edit
+// flow (openEdit → $EDITOR → apply) is the only YAML surface. Its coverage lives in
+// edit_test.go; fakeYAMLGetter above is now the edit flow's buffer-source fake. The
+// former YAMLViewer* tests were removed with the feature.
 
 // fakeDescriber is a hermetic Describer: it returns a preset describe string (or
 // error) and records the object it was asked for so a test can assert the selected
@@ -2428,7 +2276,7 @@ func (f *fakeDescriber) Describe(r kube.Resource, ref kube.ObjectRef) (string, e
 
 // describeViewerModel drills into a pods table (Kind Pod) with a live row and the
 // given describer wired, so a viewer test has a concrete selected row and a render
-// seam. Mirrors yamlViewerModel.
+// seam.
 func describeViewerModel(t *testing.T, describer Describer) Model {
 	t.Helper()
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
@@ -2616,7 +2464,7 @@ func (f *fakeLogStreamer) Logs(_ context.Context, ref kube.ObjectRef, opts kube.
 
 // logsViewerModel drills into a pods table (Kind Pod) with a live row and the given
 // streamer wired, so a viewer test has a concrete selected row and a stream seam.
-// Mirrors yamlViewerModel/describeViewerModel.
+// Mirrors describeViewerModel.
 func logsViewerModel(t *testing.T, streamer LogStreamer) Model {
 	t.Helper()
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
@@ -2916,26 +2764,26 @@ func TestLogsFollowPausesOnManualUpScroll(t *testing.T) {
 	}
 }
 
-// TestLogsFollowInertOnYAMLViewer proves logs.follow is inert on a non-logs viewer:
-// pressing `f` while the YAML viewer is up does nothing (there is nothing to follow)
+// TestLogsFollowInertOnDescribeViewer proves logs.follow is inert on a non-logs viewer:
+// pressing `f` while the describe viewer is up does nothing (there is nothing to follow)
 // and leaves the viewer open.
-func TestLogsFollowInertOnYAMLViewer(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "kind: Pod"}
-	m := yamlViewerModel(t, g)
-	_, cmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
-	next, _ := m.Update(cmd().(rowActionMsg))
+func TestLogsFollowInertOnDescribeViewer(t *testing.T) {
+	d := &fakeDescriber{text: "Name: web-1\n"}
+	m := describeViewerModel(t, d)
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
-	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	next, _ = m.Update(fetchCmd().(describeLoadedMsg))
 	m = next.(Model)
-	if m.viewer.Kind() != viewerKindYAML {
-		t.Fatalf("precondition: the YAML viewer should be up, kind = %q", m.viewer.Kind())
+	if m.viewer.Kind() != viewerKindDescribe {
+		t.Fatalf("precondition: the describe viewer should be up, kind = %q", m.viewer.Kind())
 	}
 	m, followCmd := press(t, m, followKey)
 	if followCmd != nil {
-		t.Fatal("logs.follow on the YAML viewer should be inert (no command)")
+		t.Fatal("logs.follow on the describe viewer should be inert (no command)")
 	}
 	if !m.viewer.Active() {
-		t.Fatal("logs.follow should not close the YAML viewer")
+		t.Fatal("logs.follow should not close the describe viewer")
 	}
 }
 
@@ -3546,27 +3394,27 @@ func TestSecretViewerStaleFetchDropped(t *testing.T) {
 	}
 }
 
-// TestRevealInertOnYAMLViewer proves secret.reveal is inert on a non-secret viewer.
-func TestRevealInertOnYAMLViewer(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "kind: Pod"}
-	m := yamlViewerModel(t, g)
-	_, cmd := press(t, m, yamlKey)
-	next, _ := m.Update(cmd().(rowActionMsg))
+// TestRevealInertOnDescribeViewer proves secret.reveal is inert on a non-secret viewer.
+func TestRevealInertOnDescribeViewer(t *testing.T) {
+	d := &fakeDescriber{text: "Name: web-1\n"}
+	m := describeViewerModel(t, d)
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
-	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	next, _ = m.Update(fetchCmd().(describeLoadedMsg))
 	m = next.(Model)
-	if m.viewer.Kind() != viewerKindYAML {
-		t.Fatalf("precondition: the YAML viewer should be up, kind = %q", m.viewer.Kind())
+	if m.viewer.Kind() != viewerKindDescribe {
+		t.Fatalf("precondition: the describe viewer should be up, kind = %q", m.viewer.Kind())
 	}
 	m, revealCmd := press(t, m, revealKey)
 	if revealCmd != nil {
-		t.Fatal("secret.reveal on the YAML viewer should be inert (no command)")
+		t.Fatal("secret.reveal on the describe viewer should be inert (no command)")
 	}
 	if m.secretRevealed {
 		t.Fatal("secret.reveal should not toggle reveal on a non-secret viewer")
 	}
 	if !m.viewer.Active() {
-		t.Fatal("secret.reveal should not close the YAML viewer")
+		t.Fatal("secret.reveal should not close the describe viewer")
 	}
 }
 
@@ -3740,24 +3588,24 @@ func TestSecretCopyInertWithoutEntries(t *testing.T) {
 	}
 }
 
-// TestCopyInertOnYAMLViewer proves secret.copy is inert on a non-secret viewer.
-func TestCopyInertOnYAMLViewer(t *testing.T) {
-	g := &fakeYAMLGetter{yaml: "kind: Pod"}
-	m := yamlViewerModel(t, g)
-	_, cmd := press(t, m, yamlKey)
-	next, _ := m.Update(cmd().(rowActionMsg))
+// TestCopyInertOnDescribeViewer proves secret.copy is inert on a non-secret viewer.
+func TestCopyInertOnDescribeViewer(t *testing.T) {
+	d := &fakeDescriber{text: "Name: web-1\n"}
+	m := describeViewerModel(t, d)
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
-	next, _ = m.Update(yamlLoadedMsg{gen: m.viewerGen, content: g.yaml})
+	next, _ = m.Update(fetchCmd().(describeLoadedMsg))
 	m = next.(Model)
 	m, copyCmd := press(t, m, copyKey)
 	if copyCmd != nil {
-		t.Fatal("secret.copy on the YAML viewer should be inert (no command)")
+		t.Fatal("secret.copy on the describe viewer should be inert (no command)")
 	}
 	if m.status.HasNotice() {
 		t.Fatal("secret.copy on a non-secret viewer should not surface a notice")
 	}
 	if !m.viewer.Active() {
-		t.Fatal("secret.copy should not close the YAML viewer")
+		t.Fatal("secret.copy should not close the describe viewer")
 	}
 }
 
@@ -3905,8 +3753,9 @@ func TestDeleteConfirmDeclineDoesNothing(t *testing.T) {
 }
 
 // TestDeleteConfirmAcceptWithY proves `y` accepts the confirm modal (confirm.accept)
-// just like enter — the yes/no muscle memory, resolved in the confirm key context
-// so `y` keeps meaning res.yaml in the browse view (D132).
+// just like enter — the yes/no muscle memory, resolved in the dedicated confirm key
+// context so it can't collide with the browse context's `n`/enter/esc (D132). (`y`
+// itself is now browse-free since res.yaml was retired into edit, D135/M3-15c.)
 func TestDeleteConfirmAcceptWithY(t *testing.T) {
 	d := &fakeDeleter{}
 	m := deleteTableModel(t, d)

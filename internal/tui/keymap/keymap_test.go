@@ -131,12 +131,13 @@ func TestConfirmContextResolution(t *testing.T) {
 		}
 	}
 
-	// The confirm chords keep their browse meaning in the default context.
+	// The confirm chords `n`/`enter`/`esc` keep their browse meaning in the default
+	// context. `y` is unbound in the browse context since res.yaml was retired into
+	// the edit action (D135/M3-15c) — its confirm-context meaning stands alone.
 	browse := []struct {
 		key  tea.Key
 		want Action
 	}{
-		{tea.Key{Code: 'y', Text: "y"}, ActionYAML},
 		{tea.Key{Code: 'n', Text: "n"}, ActionSearchNext},
 		{tea.Key{Code: tea.KeyEnter}, ActionDrillIn},
 		{tea.Key{Code: tea.KeyEsc}, ActionBack},
@@ -145,6 +146,9 @@ func TestConfirmContextResolution(t *testing.T) {
 		if a, ok := km.Action(tt.key); !ok || a != tt.want {
 			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
 		}
+	}
+	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); ok {
+		t.Errorf("Action(y) = %q,true; want unbound in browse after res.yaml retired (D135/M3-15c)", a)
 	}
 
 	// Browse resolution never yields a confirm action, and vice versa.

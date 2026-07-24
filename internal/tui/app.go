@@ -77,14 +77,15 @@ type NamespacePersister interface {
 	PersistNamespace(ns string) error
 }
 
-// YAMLGetter is the narrow slice of the kube layer the shell needs to open the
-// YAML viewer (M3-03): fetch a table row's object rendered as YAML (M1-07a's
-// GetYAML). *kube.Clients satisfies it. As with the other seams the shell depends
-// on this interface, not the concrete client, so the tui package never constructs
-// a client and the model is driveable in hermetic tests with a fake getter. A
-// model built without one (the default) is yaml-viewer-inert: the res.yaml action
-// is a no-op (the viewer never opens), which is what the pre-wiring app and the
-// non-viewer tests want.
+// YAMLGetter is the narrow slice of the kube layer the shell needs to fetch a table
+// row's object rendered as YAML (M1-07a's GetYAML). It feeds the unified View/Edit
+// YAML action (M3-15b/D135): openEdit fetches the object's YAML through it before
+// suspending into $EDITOR. (The standalone read-only YAML viewer that first used
+// this seam was retired into the edit flow in M3-15c.) *kube.Clients satisfies it.
+// As with the other seams the shell depends on this interface, not the concrete
+// client, so the tui package never constructs a client and the model is driveable in
+// hermetic tests with a fake getter. A model built without one (the default) — or
+// without an Editor — makes the View/Edit YAML action a no-op.
 type YAMLGetter interface {
 	GetYAML(ctx context.Context, r kube.Resource, ref kube.ObjectRef) (string, error)
 }
@@ -327,8 +328,8 @@ func WithNamespacePersister(p NamespacePersister) Option {
 }
 
 // WithYAMLGetter wires the kube client the shell uses to fetch an object's YAML
-// for the read-only YAML viewer (M3-03). Without it the res.yaml action is inert
-// (the viewer never opens).
+// for the unified View/Edit YAML action (the edit flow's buffer source, M3-15b/D135).
+// Without it — or without an Editor — that action is inert.
 func WithYAMLGetter(g YAMLGetter) Option {
 	return func(m *Model) { m.yamlGetter = g }
 }
@@ -578,16 +579,15 @@ type Model struct {
 	nsLister    NamespaceLister
 	nsPersister NamespacePersister
 
-	// yamlGetter fetches a row's object as YAML for the read-only viewer (M3-03; nil
-	// → the res.yaml action is inert, the viewer never opens). viewerGen tags each
-	// viewer open so an async fetch (yamlLoadedMsg) that returns after the user closed
-	// the viewer, or opened a newer one, is dropped rather than populating the wrong
-	// content — the same stale-message guard watchGen/seqGen give their async work.
-	// describer renders an object's describe output for the same shared viewer (M3-04;
-	// nil → the res.describe action is inert). Both viewer fetches share viewerGen: the
-	// viewer is one component, so opening either kind bumps the generation and drops any
-	// other in-flight fetch (a describe open supersedes a pending YAML fetch and vice
-	// versa).
+	// yamlGetter fetches a row's object as YAML for the unified View/Edit YAML action's
+	// editor buffer (M3-15b/D135; nil → that action is inert). The standalone read-only
+	// YAML viewer that once used this seam was retired into the edit flow (M3-15c), so
+	// the getter no longer feeds the shared viewer. describer renders an object's
+	// describe output for the shared viewer (M3-04; nil → the res.describe action is
+	// inert). viewerGen tags each shared-viewer open so an async fetch that returns after
+	// the user closed the viewer, or opened a newer one, is dropped rather than populating
+	// the wrong content — the same stale-message guard watchGen/seqGen give their async
+	// work; the describe/logs/secret opens all share it (the viewer is one component).
 	yamlGetter YAMLGetter
 	describer  Describer
 	viewerGen  int
@@ -865,7 +865,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		resPicker:   picker.New(s, "resource"),
 		actPicker:   picker.New(s, actionPickerKind),
 		ctrPicker:   picker.New(s, containerPickerKind),
-		viewer:      viewer.New(s, viewerKindYAML),
+		viewer:      viewer.New(s, viewerKindDescribe),
 		modal:       modal.New(s),
 		welcome:     welcome.New(s),
 		filterInput: fi,
@@ -1105,9 +1105,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case forwardDoneMsg:
 		return m.handleForwardDone(msg)
-
-	case yamlLoadedMsg:
-		return m.handleYAMLLoaded(msg)
 
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
@@ -1546,14 +1543,13 @@ func (m Model) dispatchRowAction(act rowAction) (tea.Model, tea.Cmd) {
 }
 
 // handleRowAction dispatches a row action to its handler. Each M3 leg wires its own
-// intent here (M3-03: YAML); the actions not yet wired fall through to a transient
+// intent here (e.g. describe, logs, the View/Edit YAML edit flow); any action not yet
+// wired falls through to a transient
 // status-bar toast naming the action and target, so the routing stays observable and
 // the dogfooder sees the action was recognised rather than the key seeming dead (D68)
 // until its leg lands (D107).
 func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	switch msg.Action {
-	case rowActionYAML:
-		return m.openYAMLViewer(msg)
 	case rowActionDescribe:
 		return m.openDescribeViewer(msg)
 	case rowActionLogs:
@@ -2414,69 +2410,15 @@ func (m Model) forwardsPanelView() string {
 // kind-specific behaviour — the M3-06 follow toggle acts only while viewerKindLogs is
 // up. The shell still hides the viewer uniformly on close regardless of kind.
 const (
-	viewerKindYAML     = "yaml"
 	viewerKindDescribe = "describe"
 	viewerKindLogs     = "logs"
 	viewerKindSecret   = "secret"
 )
 
-// yamlLoadedMsg carries the outcome of the async GetYAML fetch issued when the YAML
-// viewer opens (M3-03). gen ties it to the viewer open that requested it, so a fetch
-// that lands after the user closed the viewer (or opened a newer one) is dropped
-// rather than populating stale content (the watchGen/seqGen stale-message guard).
-type yamlLoadedMsg struct {
-	gen     int
-	content string
-	err     error
-}
-
-// openYAMLViewer opens the read-only YAML viewer over the selected row's object
-// (M3-03): it shows the viewer immediately (empty, so the gesture feels instant) and
-// kicks off the GetYAML fetch off the update loop, seeding the content when it lands.
-// With no getter wired it is yaml-viewer-inert (a no-op). The fetch is tagged with a
-// fresh viewerGen so a superseded/stale result is dropped (handleYAMLLoaded). A fetch
-// error degrades to a status-bar toast and closes the viewer (D74) rather than
-// leaving an empty box.
-func (m Model) openYAMLViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
-	if m.yamlGetter == nil {
-		return m, nil
-	}
-	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
-	m.viewerGen++
-	gen := m.viewerGen
-	m.viewer.SetKind(viewerKindYAML)
-	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
-	m.viewer.SetContent("") // clear any prior object's YAML before the fetch lands.
-	m.viewer.Show()
-	getter := m.yamlGetter
-	r, ref := msg.Resource, msg.Object
-	return m, func() tea.Msg {
-		content, err := getter.GetYAML(context.Background(), r, ref)
-		return yamlLoadedMsg{gen: gen, content: content, err: err}
-	}
-}
-
-// handleYAMLLoaded seeds the open viewer with the fetched YAML. A result whose gen no
-// longer matches (a newer open superseded it) or that arrives after the viewer closed
-// is dropped. A fetch error degrades: it closes the viewer and surfaces a transient
-// status-bar toast (D74), never breaking the layout or leaving an empty box.
-func (m Model) handleYAMLLoaded(msg yamlLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.gen != m.viewerGen || !m.viewer.Active() {
-		return m, nil
-	}
-	if msg.err != nil {
-		m.viewer.Hide()
-		return m, m.surfaceError(NewErrorMsg("get yaml", msg.err))
-	}
-	m.viewer.SetContent(msg.content)
-	return m, nil
-}
-
 // describeLoadedMsg carries the outcome of the async Describe render issued when the
 // describe viewer opens (M3-04). gen ties it to the viewer open that requested it, so
 // a render that lands after the user closed the viewer (or opened a newer one — of
-// either kind) is dropped rather than populating stale content (the viewerGen guard,
-// mirroring yamlLoadedMsg).
+// either kind) is dropped rather than populating stale content (the viewerGen guard).
 type describeLoadedMsg struct {
 	gen     int
 	content string
@@ -2532,7 +2474,7 @@ func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) 
 // secret viewer opens (M3-08a). gen ties it to the viewer open that requested it, so
 // a fetch that lands after the user closed the viewer (or opened a newer one — of any
 // kind) is dropped rather than populating stale content (the viewerGen guard,
-// mirroring yamlLoadedMsg/describeLoadedMsg).
+// mirroring describeLoadedMsg).
 type secretLoadedMsg struct {
 	gen  int
 	data kube.SecretData
@@ -3563,7 +3505,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionActions:
 		return m.openActionsMenu()
-	case keymap.ActionDescribe, keymap.ActionYAML, keymap.ActionLogs,
+	case keymap.ActionDescribe, keymap.ActionLogs,
 		keymap.ActionEdit, keymap.ActionDelete:
 		return m.triggerRowActionKey(a)
 	}

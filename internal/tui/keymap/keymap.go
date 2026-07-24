@@ -59,10 +59,13 @@ const (
 	// menu rather than a key of its own (see vault/knowledge/keybindings.md).
 	ActionActions  Action = "actions.menu"
 	ActionDescribe Action = "res.describe"
-	ActionYAML     Action = "res.yaml"
 	ActionLogs     Action = "res.logs"
-	ActionEdit     Action = "res.edit"
-	ActionDelete   Action = "res.delete"
+	// ActionEdit is the unified object-YAML action (D135/M3-15c): it opens the
+	// selected object's YAML in $EDITOR — the single way to both view and edit an
+	// object's YAML, replacing the retired standalone read-only YAML viewer. Viewing
+	// is `:q` (no-change is a neutral no-op); a save applies via the Editor seam.
+	ActionEdit   Action = "res.edit"
+	ActionDelete Action = "res.delete"
 	// ActionLogsFollow toggles follow (auto-scroll + live streaming) inside the
 	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
 	// elsewhere it is inert.
@@ -87,11 +90,13 @@ const (
 	ActionStopForwards Action = "forwards.stopAll"
 	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
 	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
-	// **confirm key context** (contextOf), not the browse context: `y`/`n`/`enter`/
-	// `esc` already mean res.yaml / app.searchNext / nav.drillIn / nav.back in the
-	// browse view, so a flat keymap could not bind them twice. Resolving them in a
-	// separate context (ConfirmAction) lets the modal accept `y`/`n` while keeping
-	// them registered and rebindable (D11). Supersedes the "no y/n" part of D88/D115.
+	// **confirm key context** (contextOf), not the browse context: `n`/`enter`/`esc`
+	// already mean app.searchNext / nav.drillIn / nav.back in the browse view, so a
+	// flat keymap could not bind them twice. (`y` is unbound in browse since res.yaml
+	// was retired, D135/M3-15c — but the context split stays for `n`/`enter`/`esc`.)
+	// Resolving them in a separate context (ConfirmAction) lets the modal accept
+	// `y`/`n` while keeping them registered and rebindable (D11). Supersedes the
+	// "no y/n" part of D88/D115.
 	ActionConfirmAccept  Action = "confirm.accept"
 	ActionConfirmDecline Action = "confirm.decline"
 )
@@ -157,9 +162,8 @@ var actionMeta = []struct {
 	{ActionToggleMenu, "Toggle left menu pane"},
 	{ActionActions, "Open actions menu for the selected row"},
 	{ActionDescribe, "Describe the selected row"},
-	{ActionYAML, "View the selected row as YAML"},
 	{ActionLogs, "View logs for the selected row"},
-	{ActionEdit, "Edit the selected row in $EDITOR"},
+	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
@@ -226,19 +230,22 @@ var defaultBindings = map[Action][]string{
 	ActionToggleMenu:   {"m"},
 	ActionActions:      {"a"},
 	ActionDescribe:     {"D"},
-	ActionYAML:         {"y"},
 	ActionLogs:         {"L"},
-	ActionEdit:         {"e"},
-	ActionDelete:       {"d"},
+	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
+	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
+	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
+	ActionEdit:   {"e"},
+	ActionDelete: {"d"},
 	ActionLogsFollow:   {"f"},
 	ActionRevealSecret: {"r"},
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},
 	ActionStopForwards: {"X"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
-	// muscle memory, `enter`/`esc` the modal convention. These reuse chords the
-	// browse context also binds (res.yaml/app.searchNext/nav.drillIn/nav.back) —
-	// legal because they resolve in a different context (build partitions them).
+	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
+	// in the browse context (app.searchNext/nav.drillIn/nav.back); `y` is browse-free
+	// since res.yaml retired (D135/M3-15c) — legal either way because they resolve in
+	// a different context (build partitions them).
 	ActionConfirmAccept:  {"y", "enter"},
 	ActionConfirmDecline: {"n", "esc"},
 }
@@ -406,8 +413,9 @@ func (k *Keymap) Action(key tea.Key) (Action, bool) {
 // ConfirmAction resolves a single live keypress in the confirm-modal context: the
 // confirm-only bindings (default `y`/`enter` → confirm.accept, `n`/`esc` →
 // confirm.decline). It is separate from Action so the modal can accept `y`/`n`
-// without those keys losing their browse-context meaning (res.yaml / searchNext).
-// The confirm context has only single-key bindings, so no sequencer is needed.
+// without `n`/`enter`/`esc` losing their browse-context meaning (searchNext /
+// drillIn / back). The confirm context has only single-key bindings, so no
+// sequencer is needed.
 func (k *Keymap) ConfirmAction(key tea.Key) (Action, bool) {
 	a, ok := k.confirmBySeq[seq{chordFromKey(key)}.key()]
 	return a, ok

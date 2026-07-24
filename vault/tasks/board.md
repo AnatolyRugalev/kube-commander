@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-15b done: Edit → `$EDITOR` suspend+apply machinery wired to `res.edit` (D135), first slice of the unify-yaml-view-and-edit feedback (now triaged into M3-15c + deleted). Feedback inbox empty; the board rules again. Edit dogfood human-task raised (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-15c done: unify complete (D135/D136) — standalone read-only YAML viewer retired; the View/Edit YAML action (`e`, `canGet`) is now the only YAML surface, `y` unbound. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- **M3-15c** Unify YAML view + edit — retire the read-only YAML viewer, collapse to one object-YAML action
-      status: in-progress | owner: claude-opus | claimed: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -90,19 +89,6 @@ is a default, not a contract — re-split any slice that proves > ~300 lines.
 - [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" (`:0` auto-assign) in the picker/prompt flow
       status: todo | owner: — | added: 2026-07-24 (triaged from feedback 2026-07-24-port-forward-picker-and-local-port, part 1/2)
       notes: Default local = remote, editable; a gesture that rewrites the spec to `:0` (OS-assigned free local port, already supported by kube.PortForward + reported via Ports()). Builds on FB-pf-port-picker; supersedes needing the D130 retry-hint for the common clash once shipped (the hint stays as the fallback). Depends on the picker UI.
-- [ ] **M3-15c** Unify YAML view + edit: retire the standalone read-only YAML viewer and
-      collapse the surface to **one object-YAML key** (edit becomes the object-YAML action;
-      `res.yaml`/`View YAML` goes away). D135, second/final slice of the unify feedback.
-      status: todo | owner: — | added: 2026-07-24 (D135, follow-up to M3-15b)
-      notes: Remove `openYAMLViewer`/`yamlLoadedMsg`/`handleYAMLLoaded`/`viewerKindYAML` +
-      the `rowActionYAML` menu entry + `ActionYAML`/`res.yaml` keymap binding; merge the
-      "View YAML" + "Edit" menu rows into one; rebind so the freed key coheres with the
-      D133 delete=`d`/describe=`D` layout (candidate: edit on `y`, or keep `e` and drop `y`).
-      The `YAMLGetter` seam **stays** — the edit flow fetches through it. Regenerate
-      `docs/keybindings.md` (M2-01e drift check). Update the YAML-viewer tests in `tui_test.go`
-      to the edit flow. Must stay launchable / not regress the running binary (D68). Depends
-      on M3-15b (done).
-
 ### Cluster search (SEARCH — feedback-driven, D131)
 Cross-object cluster search (feedback `2026-07-24-cluster-search-multi-resource`): type a
 query → matching objects **across kinds** (Kind · namespace · name), drill into the hit.
@@ -162,6 +148,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-15c** Unify YAML view + edit — retired the standalone read-only YAML viewer (`openYAMLViewer`/`yamlLoadedMsg`/`viewerKindYAML`/`rowActionYAML`/`ActionYAML`/`res.yaml`); the View/Edit YAML action (`e`, gated `canGet`) is now the only YAML surface, `y` unbound; `YAMLGetter` seam kept; `docs/keybindings.md` regenerated — done 2026-07-24 (D135, D136)
 - [x] **M3-15b** Edit — TUI wire (the suspend flow): `res.edit`/`e` → `GetYAML` (existing `YAMLGetter`) → temp file → `tea.Exec` `$EDITOR` → read back → `Editor` seam (`kube.Update`, M3-15a) only on change; no-change / editor-abort / apply-rejection degrade to a status-bar toast without mutating; `$EDITOR` resolved `KUBE_EDITOR`→`EDITOR`→`vi` (space-split for flags). First slice of the unify-yaml-view-and-edit feedback (D69/D135; feedback triaged into M3-15c + deleted); live `$EDITOR` suspend dogfood raised as a human-task, so the M3 Edit exit criterion stays unticked — done 2026-07-24 (D135)
 - [x] **LOGS-01** Feedback (normal, `2026-07-24-logs-dedicated-view-live-grep`, first slice): dedicated full-screen logs-view component (`internal/tui/components/logsview`) — streaming append buffer + live case-insensitive substring filter that narrows the shown lines **while following** (reuses `app.filter`), follow/pause (reuses `logs.follow`) with auto-scroll on append + upward-scroll pauses, full-screen header (`[following]`/`[paused]` + query + matched/total), keymap-driven (D11)/message-only (principle 1)/`ClosedMsg`; feedback triaged into LOGS-01…04 and deleted — done 2026-07-24 (D134)
 - [x] **FB-delete-key-d** Feedback (normal, `2026-07-24-delete-default-key-d`): shipped default delete binding is now `d` (vim `dd` muscle memory, was `x`); describe relocated off `d` to `D` (read-only, not a reserved nav chord); registry-driven/rebindable (D11), `docs/keybindings.md` regenerated, feedback deleted — done 2026-07-24 (D133)

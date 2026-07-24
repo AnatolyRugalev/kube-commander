@@ -15,9 +15,10 @@ import (
 // kind, so all rows of a resource share the same menu.
 //
 // A rowAction is *not* a keymap.Action — keys live only in the keymap (D11). The
-// direct-key actions (describe/yaml/logs/edit/delete) each map to a keymap.Action
-// via the `key` field so pressing the key and picking the menu entry funnel
-// through the same rowActionMsg; the rest are menu-only (no key of their own).
+// direct-key actions (describe/logs/edit/delete) each map to a keymap.Action via
+// the `key` field so pressing the key and picking the menu entry funnel through the
+// same rowActionMsg; the rest are menu-only (no key of their own). The standalone
+// read-only YAML view was retired into the edit (View/Edit YAML) action (D135).
 
 // rowActionMsg is the typed intent a chosen row action dispatches: run Action on
 // the object Object (a row of Resource). It is originated by the root model — a
@@ -37,7 +38,6 @@ type rowAction string
 
 const (
 	rowActionDescribe       rowAction = "describe"
-	rowActionYAML           rowAction = "yaml"
 	rowActionLogs           rowAction = "logs"
 	rowActionSecret         rowAction = "secret"
 	rowActionScale          rowAction = "scale"
@@ -67,12 +67,13 @@ type rowActionMeta struct {
 
 // rowActions is the curated M3 action set, in the order the actions menu lists
 // them: the read-only viewers first, then the kind-specific operations, then the
-// two general mutating actions (edit, delete) last so a destructive entry never
-// sits under the cursor by default. Adding an M3 action is a row here plus (if it
-// handles the intent) a case in handleRowAction.
+// two general object actions (View/Edit YAML, delete) last so a destructive or
+// mutating entry never sits under the cursor by default. View/Edit YAML is a viewer
+// that can also mutate on save (D135), so it keeps its place in the mutating group.
+// Adding an M3 action is a row here plus (if it handles the intent) a case in
+// handleRowAction.
 var rowActions = []rowActionMeta{
 	{rowActionDescribe, "Describe", keymap.ActionDescribe, canGet},
-	{rowActionYAML, "View YAML", keymap.ActionYAML, canGet},
 	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController")},
 	{rowActionSecret, "Reveal secret", "", kindIn("Secret")},
 	{rowActionScale, "Scale", "", kindIn("Deployment", "ReplicaSet", "StatefulSet", "ReplicationController")},
@@ -84,7 +85,7 @@ var rowActions = []rowActionMeta{
 	{rowActionResume, "Resume", "", kindIn("CronJob")},
 	{rowActionPortForward, "Port-forward", "", kindIn("Pod", "Service")},
 	{rowActionExec, "Exec shell", "", kindIn("Pod")},
-	{rowActionEdit, "Edit", keymap.ActionEdit, canEdit},
+	{rowActionEdit, "View / Edit YAML", keymap.ActionEdit, canGet},
 	{rowActionDelete, "Delete", keymap.ActionDelete, canDelete},
 }
 
@@ -152,14 +153,17 @@ func kindIn(kinds ...string) func(kube.Resource) bool {
 	}
 }
 
-// canGet/canEdit/canDelete gate the verb-generic actions on the resource's own
-// verbs (a RESTMapping-derived fact the discovery layer already carries), so an
-// action the API server does not allow for the kind is not offered. A resource
-// with no verbs recorded (the static seed set, or a hermetic test) is treated as
-// permissive so the actions stay reachable — the action layer degrades on the
-// real RBAC error (principle 3).
+// canGet/canDelete gate the verb-generic actions on the resource's own verbs (a
+// RESTMapping-derived fact the discovery layer already carries), so an action the
+// API server does not allow for the kind is not offered. The unified View/Edit YAML
+// action gates on canGet, not update/patch (D135/M3-15c): it is first a *viewer*
+// (you need get to render the YAML), and edit is best-effort — a save on a
+// read-only resource degrades to a toast on the apply's RBAC error (principle 3),
+// exactly as `kubectl edit` lets you open a get-only object and fails only on save.
+// A resource with no verbs recorded (the static seed set, or a hermetic test) is
+// treated as permissive so the actions stay reachable — the action layer degrades
+// on the real RBAC error (principle 3).
 func canGet(r kube.Resource) bool    { return hasVerb(r, "get") }
-func canEdit(r kube.Resource) bool   { return hasVerb(r, "update") || hasVerb(r, "patch") }
 func canDelete(r kube.Resource) bool { return hasVerb(r, "delete") }
 
 func hasVerb(r kube.Resource, verb string) bool {

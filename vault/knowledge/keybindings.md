@@ -91,10 +91,9 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 |--------|---------|-------|
 | Open actions menu for selection | `a` (`actions.menu`) | lists the applicable actions for the selected row |
 | Describe | `D` (`res.describe`) | any kind; read-only. Relocated off `d` (D133) so delete can take `d` |
-| View YAML | `y` (`res.yaml`) | any kind |
 | Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
 | Toggle log follow | `f` (`logs.follow`) | logs viewer only; auto-scroll on/off, manual up-scroll pauses (M3-06) |
-| Edit (`$EDITOR`) | `e` (`res.edit`) | any kind with `update`/`patch` |
+| View / Edit YAML | `e` (`res.edit`) | any gettable kind; opens the object's YAML in `$EDITOR` — the single view+edit surface. Save applies (needs `update`/`patch`; a read-only save degrades to a toast). The standalone read-only YAML viewer + its `y` key were retired here (D135/M3-15c); `y` is now unbound |
 | Delete | `d` (`res.delete`) | any kind with `delete` (confirm); vim `dd` muscle memory (D133) |
 | Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |
 | Cordon · Uncordon · Drain | via actions menu | Node |
