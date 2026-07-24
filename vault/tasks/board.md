@@ -7,7 +7,9 @@ _Last updated: 2026-07-24 — M3-13b: port-forward panel — `forwards.panel` (`
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-13c** Port-forward for Services: resolve a Service to a backing endpoint pod
+      before forwarding (mirrors M3-07b's `PodForOwner`), re-add Service to the
+      Port-forward action's applicability. status: in-progress | owner: claude-opus | added: 2026-07-23 | claimed: 2026-07-24
 
 ## Blocked
 
@@ -83,11 +85,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-13c** Port-forward for Services: resolve a Service to a backing endpoint pod
-      before forwarding (mirrors M3-07b's `PodForOwner`), re-add Service to the
-      Port-forward action's applicability. status: todo | owner: — | added: 2026-07-23
-      notes: Split from M3-13. M3-13a is Pod-only (kube.PortForward posts to the pod
-      subresource); this slice adds the Service→pod hop.
 - [ ] **M3-14** Exec shell: `tea.ExecProcess` suspend → `remotecommand` raw PTY (fallback
       `kubectl exec` when the binary is present); container picker reuse; restore the TUI
       on exit. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-22
