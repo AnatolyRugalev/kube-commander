@@ -3046,3 +3046,36 @@ mirroring the logs viewer's `PodResolver`/`PodForOwner` hop (D112):
    that lands after a newer port-forward request is dropped. The ports the user types are
    **pod-side** — no Service-port→targetPort translation (deliberately out of this slice's
    scope; a future refinement if dogfooding wants it).
+
+### D124 — In-process exec is a blocking `Clients.Exec` over the pod exec subresource (SPDY remotecommand), apimachinery-free, driven by the TUI via `tea.Exec` off the update loop
+
+**Date:** 2026-07-24 · M3-14a.
+
+kubecom execs into a container **in process** via `remotecommand.NewSPDYExecutor` on a
+POST to the pod's `exec` subresource — the same SPDY upgrade `kubectl exec` uses, so no
+kubectl binary is required for the primary path (D2). The primitive is
+**`Clients.Exec(ctx, ref, ExecOptions) error`** and it **blocks** for the whole exec:
+
+1. **It is a blocking call, not a stream pump or a background handle.** Unlike logs (a
+   channel pump, D53) or port-forward (a tracked background handle, D122), an interactive
+   exec owns the terminal for its lifetime, so `Exec` runs synchronously and returns when
+   the command exits. The TUI must therefore drive it from a **suspended terminal via
+   `tea.Exec`** (an `ExecCommand` whose `Run()` calls `kube.Exec`) — **never on the Bubble
+   Tea update loop** (M3-14b). A clean exit returns nil; a non-zero command exit or a
+   transport drop returns a wrapped error whose chain preserves the underlying
+   `exec.CodeExitError` (so the exit code is recoverable).
+2. **Apimachinery-free boundary (D33).** The public surface uses kubecom's own
+   `ExecOptions` and `TerminalSize`/`TerminalSizeQueue` types, never client-go tooling
+   types; `execStreamOptions` maps to `remotecommand.StreamOptions` and a
+   `sizeQueueAdapter` translates resizes on the way to the wire, so the TUI never imports
+   `remotecommand` (mirrors PortForward's `ForwardedPort`).
+3. **TTY folds stderr into stdout.** With `TTY` set the primitive drops the separate
+   Stderr stream and consults `SizeQueue` for PTY resizes — `StreamWithContext` rejects a
+   TTY exec that also attaches Stderr, and a shell needs the PTY for line editing / job
+   control. A non-TTY exec keeps all three streams and ignores the size queue.
+4. **Injectable executor factory** (like PortForward's `forwarderFactory`): `runExec`
+   drives a `streamExecutor` seam so argument validation, option mapping, size-queue
+   adaptation, and error propagation are covered hermetically (D18); the live SPDY exec is
+   envtest / dogfood territory. Empty pod name or empty command is rejected before any
+   dial (#86). Raw-PTY exec is Linux/macOS only (D7); the `kubectl exec` fallback lands
+   with the wiring (M3-14b).

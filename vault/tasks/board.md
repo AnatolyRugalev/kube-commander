@@ -3,15 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-13c: port-forward for Services — a Service can't be forwarded directly (kube.PortForward posts to the pod subresource), so the Port-forward action (re-extended to Service) resolves it to a backing endpoint pod first via a new `ServiceResolver` seam (`kube.PodForService`: selector → newest ready pod, selector-less → toast), then opens the ports prompt over the resolved pod; resolve-then-prompt is gen-guarded (`pfResolveGen`) and off the update loop (D123). Top-unblocked next: M3-14 (exec shell). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-14a: kube-layer exec primitive — `Clients.Exec` execs into a pod container in process over the `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl binary, D2); a **blocking** call the TUI will drive from a suspended terminal via `tea.Exec`, off the update loop (D124), with an apimachinery-free `ExecOptions`/`TerminalSize` surface (D33) and an injectable executor factory for hermetic fake tests. Top-unblocked next: M3-14b (wire exec into the TUI). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-14a** Exec — kube-layer exec primitive (`internal/kube/exec.go`): `Clients.Exec`
-      over the pod `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl
-      binary, D2); apimachinery-free `ExecOptions`/`TerminalSize`/`TerminalSizeQueue` boundary
-      (mirrors PortForward's `ForwardedPort`, D33); injectable executor factory for hermetic
-      tests (D18). status: in-progress | owner: claude-opus | added: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -87,10 +83,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-14** Exec shell (split into M3-14a kube primitive / M3-14b TUI wire, D52 rhythm):
-      status: in-progress | owner: claude-opus | added: 2026-07-22
-      notes: One of the only two sanctioned TUI-suspending actions (goals). M3-14a is the
-      kube-layer exec primitive (in progress); M3-14b wires it into the TUI.
 - [ ] **M3-14b** Exec — TUI wire: `tea.Exec` suspend driving `kube.Exec` with a raw PTY
       (`ExecCommand` adapter feeding os.Stdin/out + a `TerminalSizeQueue`), reusing the M3-07a
       container picker, default shell probe (`/bin/sh`), restore the TUI on exit; fallback
@@ -107,6 +99,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-14a** Exec — kube-layer exec primitive (`internal/kube/exec.go`): blocking `Clients.Exec` over the pod `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl binary, D2); apimachinery-free `ExecOptions`/`TerminalSize`/`TerminalSizeQueue` surface with a `sizeQueueAdapter` (D33); TTY folds stderr into stdout + wires the size queue; injectable executor factory, hermetic fake tests (D18) — done 2026-07-24 (D124)
 - [x] **M3-13c** Port-forward for Services: a Service can't be forwarded directly (kube.PortForward posts to the pod subresource), so the Port-forward action — re-extended to apply to `Service` as well as `Pod` — resolves it to a backing endpoint pod first via a new `ServiceResolver` seam (`WithServiceResolver`; `kube.PodForService`: `spec.selector` → newest ready pod via `newestReadyPod`, selector-less/no-pods → toast), then opens the ports prompt over — and forwards — the resolved pod; resolve-then-prompt runs off the update loop, generation-guarded (`pfResolveGen`), no resolver → toast (a Pod still forwards directly) — done 2026-07-24 (D123)
 - [x] **M3-13b** Port-forward panel: `forwards.panel` (`F`) toggles an app-global overlay listing active forwards (label · bound/requested ports · ready state) with a cursor; `nav.drillIn` stops the selected forward (context cancel → the M3-13a Done flow removes it + notices), `forwards.stopAll` (`X`) stops all via `stopForwards` + a sweep notice; inline overlay state + `forwardsPanelView` composited via `overlayCenter` (D95), captured like help/viewer; ticks the M3 port-forward exit criterion — done 2026-07-24
 - [x] **M3-13a** Port-forward start + background lifecycle: `PortForwarder`/`ActiveForward` seam (`WithPortForwarder`, `PortForwarderFunc` launcher adapter) → M1-08 `kube.PortForward` on a Pod row behind a ports prompt (D117 stash); lifecycle via two-edge `waitForward`/`waitForwardDone` messages (not a pump), bound ports to the status bar, forwards tracked in the model, all cancelled on quit (`stopForwards`); Pod-only (Service → M3-13c, panel → M3-13b) — done 2026-07-23 (D122)
