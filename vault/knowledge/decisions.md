@@ -3309,3 +3309,32 @@ key. **Constraints a future leg must not silently contradict:**
    `res.edit` (`e`) into one editable-object action and frees a key; `d`/`D` are settled
    and must not be reused for it. Describe and logs stay read-only viewers. This keeps
    the two coupled feedback items from producing conflicting one-off key layouts.
+
+### D134 — Logs get a dedicated full-screen logs view (`logsview`) with a live filter, off the shared read-only viewer
+**2026-07-24** (feedback `2026-07-24-logs-dedicated-view-live-grep`). Logs stop sharing
+the M3-01 read-only viewer and move to a **dedicated full-screen logs mini-app**
+(`internal/tui/components/logsview`) built for streaming + a **real-time grep**: a
+`/`-filter (reusing `app.filter`) that narrows the streamed buffer **live while
+following** (case-insensitive substring now; regex is LOGS-03), plus follow/pause
+(reusing `logs.follow`) with auto-scroll-to-bottom on append and a header showing
+`[following]`/`[paused]` + the active filter and matched/total. The feedback was
+triaged into board tasks **LOGS-01** (this component, done) → **LOGS-02** (app wiring,
+retire the shared-viewer logs path) → **LOGS-03** (regex + highlight) → **LOGS-04**
+(wrap/timestamps/jump-to-latest). **Constraints a future leg must not silently
+contradict:**
+1. **The shared viewer (M3-01) keeps serving YAML/describe/secret; logs do not.** Once
+   LOGS-02 lands, the logs path streams into `logsview`, and the `viewerKindLogs`
+   special-casing / `logFollow` / `logTitle` on the shared-viewer path is removed — do
+   not re-route logs back onto the shared viewer.
+2. **Logs render full-screen (no centered border box)** — the root composites the view
+   as the base while it is up, not via `overlayCenter` (D95). It is the one M3 viewer
+   that replaces the base rather than floating over it, because logs want every column
+   for long lines / high throughput.
+3. **The live filter narrows client-side over the full buffer while following** — a
+   line that arrives under an active filter is shown only if it matches; clearing the
+   filter (one `nav.back`) restores the full stream, a second `nav.back` closes the
+   view. Keymap-driven (D11), message-only (principle 1): the only raw-key entry is the
+   filter field (`UpdateFilter`), exactly as the picker.
+4. **Container picker (M3-07a) and pod-owning resolution (M3-07b) still feed logs** —
+   LOGS-02 keeps that resolve-then-stream plumbing and the gen-tagged log pump (D53);
+   this decision changes the *sink*, not how a pod/container is chosen.

@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — LOGS-01 (claim): logs feedback (`logs-dedicated-view-live-grep`) triaged into LOGS-01…04 (D134); claiming LOGS-01, the dedicated full-screen logs-view component with live filter. Feedback inbox now 1 item (still preempts the board): unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — LOGS-01 done: dedicated full-screen logs-view component (`logsview`) with live filter + follow/pause landed (D134), logs feedback triaged into LOGS-01…04 and deleted. Feedback inbox now 1 item (still preempts the board): unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-01** Dedicated full-screen logs-view component (`internal/tui/components/logsview`) with live substring filter
-      status: in-progress | owner: claude-opus | added: 2026-07-24 (triaged from feedback 2026-07-24-logs-dedicated-view-live-grep, first slice)
-      notes: Component-only, not yet wired (D52 rhythm, like the M3-01 viewer / M2-08a picker). Streaming append buffer + live case-insensitive substring filter that narrows the displayed lines **while following** (reuses `app.filter`/`/`) + follow/pause (reuses `logs.follow`/`f`) with auto-scroll-to-bottom on append while following + full-screen header showing `[following]`/`[paused]` and the active filter. Keymap-driven (D11), message-only (principle 1), `ClosedMsg`. Regex/highlight, wrap/timestamps, and the app wiring are LOGS-02…04.
+_(none)_
 
 ## Blocked
 
@@ -157,6 +155,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **LOGS-01** Feedback (normal, `2026-07-24-logs-dedicated-view-live-grep`, first slice): dedicated full-screen logs-view component (`internal/tui/components/logsview`) — streaming append buffer + live case-insensitive substring filter that narrows the shown lines **while following** (reuses `app.filter`), follow/pause (reuses `logs.follow`) with auto-scroll on append + upward-scroll pauses, full-screen header (`[following]`/`[paused]` + query + matched/total), keymap-driven (D11)/message-only (principle 1)/`ClosedMsg`; feedback triaged into LOGS-01…04 and deleted — done 2026-07-24 (D134)
 - [x] **FB-delete-key-d** Feedback (normal, `2026-07-24-delete-default-key-d`): shipped default delete binding is now `d` (vim `dd` muscle memory, was `x`); describe relocated off `d` to `D` (read-only, not a reserved nav chord); registry-driven/rebindable (D11), `docs/keybindings.md` regenerated, feedback deleted — done 2026-07-24 (D133)
 - [x] **FB-confirm-yn-keys** Feedback (normal, `2026-07-24-confirm-modal-yn-keys`): confirm modal accepts `y` (confirm)/`n` (decline) plus enter/esc via registered, rebindable `confirm.accept`/`confirm.decline` resolved in a dedicated keymap **context** (no raw-key match, D11) — done 2026-07-24 (D132)
 - [x] **SEARCH-01** Feedback (normal, `2026-07-24-cluster-search-multi-resource`, first slice): cluster-search **kube primitive** (`internal/kube/search.go`) — `Clients.Search`/`searchRows` fan out one-shot **concurrent** server-side `List`s over a caller-supplied `[]Resource`, match `Row.Object.Name` by case-insensitive substring, stream `SearchHit{Resource,ObjectRef}` on a channel; per-kind failure isolates (principle 3), hit **cap** + ctx cancel bound it, `CommonSearchResources` gives the curated default scope; feedback triaged into SEARCH-02…04 and deleted — done 2026-07-24 (D131)
