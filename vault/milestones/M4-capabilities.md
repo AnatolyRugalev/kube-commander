@@ -14,6 +14,9 @@ The capabilities the original lacked, now natural on the new architecture.
 - **Owner → children drill-down** (Deployment → Pods, Node → Pods, etc.).
 - **Metrics** (CPU/mem) via `metrics.k8s.io` when the API is available; hidden otherwise.
 - **Theme selection**; ship a couple of solid built-ins (port monokai/solarized).
+- **Cluster search** — cross-object query across kinds (Kind · ns · name), one-shot +
+  curated-scope by default, drill into a hit (feedback-driven, D131; kube primitive
+  `kube.Search` landed as SEARCH-01, TUI slices SEARCH-02…04 on the board).
 
 ## Exit criteria
 
@@ -22,6 +25,7 @@ The capabilities the original lacked, now natural on the new architecture.
 - [ ] Drill-down navigates from an owner to its pods and back.
 - [ ] Metrics columns appear only when metrics-server is present; absence is silent.
 - [ ] At least two themes selectable and persisted.
+- [ ] Cluster search returns matching objects across kinds and drills into the selected hit.
 
 ## Depends on
 M2 browse shell + M1 discovery (context switch = rebuild client + discovery).

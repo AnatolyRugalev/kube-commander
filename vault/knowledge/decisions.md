@@ -3235,3 +3235,33 @@ status notice already shows. **Constraints a future leg must not silently contra
 3. The remaining parts of that feedback — a **port picker** from the pod's declared
    ports (FB-pf-port-picker) and **editable/auto local port** with a one-keystroke
    "use a free port" (FB-pf-local-port) — are deferred board tasks, not done here.
+
+### D131 — Cluster search: one-shot concurrent fan-out over List, curated-scope default
+**2026-07-24.** Cross-object **cluster search** (feedback
+`2026-07-24-cluster-search-multi-resource`: type a query → matching objects across
+kinds, not a within-table filter). Kubernetes has **no cross-type search API**, so
+"search the cluster" means listing kinds and matching client-side — the same
+expensive enumeration the fast-cold-start design (D8/principle 4) avoids on the hot
+path. It is therefore built as a **one-shot, user-triggered, cancellable** query, never
+a "watch everything". The kube-layer primitive is `kube.Search` /`searchRows`
+(`internal/kube/search.go`, the SEARCH-01 first slice): it fans out **concurrent**
+server-side `List`s (M1-05a) over a **caller-supplied** `[]Resource`, matches
+`Row.Object.Name` by **case-insensitive substring**, and **streams** `SearchHit`
+(`{Resource, ObjectRef}`) onto a channel. **Constraints a future leg must not silently
+contradict:**
+1. **One-shot, not a watch.** Each kind is listed exactly once per query; the search
+   never re-lists or opens watches. Re-running is a new explicit query.
+2. **Curated scope is the default; whole-cluster is an opt-in widen.** The default kind
+   set is `CommonSearchResources` (Pods, Deployments, StatefulSets, DaemonSets,
+   Services, ConfigMaps, Secrets, PVCs, Jobs, CronJobs, Ingresses) in the **current
+   namespace**. Searching every discovered kind / all namespaces is a later opt-in
+   slice — the default must never enumerate every type (D8/principle 4).
+3. **Per-kind failure isolates** (principle 3): a denied/broken kind's List error is
+   swallowed and contributes nothing; it never aborts the search or blanks results.
+4. **Bounded + cancellable.** A hit **cap** (`limit`) stops the in-flight lists once
+   reached; the channel closes on completion, cap, or ctx-cancel (query change / view
+   close). A background goroutine owns all sends (principle 1).
+5. Matching starts at **name substring**; fuzzy / label / field matching and
+   whole-cluster/all-namespace widening are **later slices** (SEARCH-03+), not part of
+   this contract. A `SearchHit` carries the `Resource` so drilling in switches the
+   browse view to that kind and selects the object.

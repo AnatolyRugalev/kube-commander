@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-pf-bind-toast: port-forward bind failures now surface an actionable retry hint (D130) instead of client-go's raw listener error; feedback file deleted, parts 1/2 triaged to FB-pf-port-picker/FB-pf-local-port. Feedback inbox now 5 items (still preempts the board): highest-priority next is normal-priority — oldest is `cluster-search-multi-resource`. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — SEARCH-01: cluster-search kube primitive (`kube.Search`, one-shot concurrent fan-out over List, curated-scope default, per-kind isolation, capped/cancellable, D131) landed and `cluster-search-multi-resource` feedback triaged into SEARCH-01…04 + deleted. Feedback inbox now 4 items (still preempts the board): confirm-modal-yn-keys, delete-default-key-d, logs-dedicated-view-live-grep, unify-yaml-view-and-edit. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -96,11 +96,40 @@ is a default, not a contract — re-split any slice that proves > ~300 lines.
       parse-error degrade without mutating; result to the status bar. Needs a real-terminal
       dogfood human-task like exec (D125). Depends on M3-15a.
 
+### Cluster search (SEARCH — feedback-driven, D131)
+Cross-object cluster search (feedback `2026-07-24-cluster-search-multi-resource`): type a
+query → matching objects **across kinds** (Kind · namespace · name), drill into the hit.
+An M4-class capability pulled forward by feedback. One-shot, concurrent, curated-scope by
+default — never "watch everything" (D131). Built bottom-up (D52): kube primitive first
+(done), then the TUI search mini-app, then streaming/progress, then scope-widening/fuzzy.
+
+- [ ] **SEARCH-02** Search mini-app shell + `search.cluster` action: a registered key (D11)
+      opens a full-screen search view (like the logs viewer / palette) — query textinput +
+      results list (Kind · ns · name); `enter` drills into the selected hit (switch browse
+      to that kind + select the row); `esc` closes. Message-only (principle 1).
+      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
+      notes: Wire `kube.Search` (SEARCH-01) over `CommonSearchResources(discovered)` in the
+      current namespace; run the fan-out off the update loop, stream hits in via a gen-tagged
+      pump (like the log pump D53), cancel the previous query on a new one / on close. Reuse
+      the picker/list rendering. This is the MVP first UI slice from the feedback.
+- [ ] **SEARCH-03** Streaming results + progress + cap indicator: show hits as each kind
+      returns (not only when all finish), a "searching N/M kinds…" progress line, the cap
+      state, and cancel-in-flight on query change. Per-kind failures stay silent (D131 pt 3).
+      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
+      notes: `kube.Search` already streams + caps + cancels; this is the TUI surfacing of
+      progress/cap. Depends on SEARCH-02.
+- [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
+      **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
+      fuzzy / label / field matching beyond name substring.
+      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
+      notes: Keep the widen explicit + rate-limit-aware on big clusters. Depends on SEARCH-02.
+
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
 
 
+- [x] **SEARCH-01** Feedback (normal, `2026-07-24-cluster-search-multi-resource`, first slice): cluster-search **kube primitive** (`internal/kube/search.go`) — `Clients.Search`/`searchRows` fan out one-shot **concurrent** server-side `List`s over a caller-supplied `[]Resource`, match `Row.Object.Name` by case-insensitive substring, stream `SearchHit{Resource,ObjectRef}` on a channel; per-kind failure isolates (principle 3), hit **cap** + ctx cancel bound it, `CommonSearchResources` gives the curated default scope; feedback triaged into SEARCH-02…04 and deleted — done 2026-07-24 (D131)
 - [x] **FB-pf-bind-toast** Feedback (high, `2026-07-24-port-forward-picker-and-local-port`, first slice): a port-forward local-listener bind failure now surfaces an actionable status-bar hint (naming the clashing local port(s) + `:0`/`:<remote>` free-local-port retry) instead of client-go's raw "unable to listen on any of the requested ports"; prompt hint surfaces the `:80=free local` syntax; parts 1/2 (port picker, editable/auto local port) triaged to FB-pf-port-picker/FB-pf-local-port — done 2026-07-24 (D130)
 - [x] **HT-exec-dogfood** Closed the exec live-cluster dogfood human-task — maintainer confirmed the Exec-shell action works end-to-end against a real cluster in a real terminal (shell drops in, TUI restores cleanly); ticked the M3 exec exit criterion, deleted `vault/human-tasks/2026-07-24-exec-live-cluster-dogfood.md` — done 2026-07-24
 - [x] **M3-15a** Edit — kube-layer apply/update primitive (`internal/kube/apply.go`): `Clients.Update` parses the edited `$EDITOR` bytes (YAML→JSON→unstructured, int64-safe) and PUT-updates the object through the generic dynamic client (built-ins + CRDs, no kubectl, D2); the buffer's `metadata.resourceVersion` gives optimistic concurrency (concurrent change → Conflict, not clobber), identity (name/namespace) guarded before any request — rename/empty/invalid/null rejected without mutation; no-change left to the caller (M3-15b) — done 2026-07-24 (D129)
