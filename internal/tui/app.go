@@ -747,6 +747,13 @@ type Model struct {
 	serviceResolver ServiceResolver
 	pfResolveGen    int
 
+	// execer opens an interactive shell in the selected Pod's container (M3-14b-1;
+	// nil → the Exec-shell action is inert). The exec is a *blocking* kube.Exec run
+	// from a suspended terminal via tea.Exec (off the update loop, D124), so there is
+	// no channel/goroutine to track here — bubbletea drives the ExecCommand and
+	// delivers the result as an execDoneMsg the update loop reports. See exec.go.
+	execer Execer
+
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
 	// and it re-scopes to whatever is showing. filtering is whether it is open and
@@ -1053,6 +1060,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case suspendDoneMsg:
 		return m.handleSuspendDone(msg)
+
+	case execDoneMsg:
+		return m.handleExecDone(msg)
 
 	case drainMsg:
 		return m.handleDrainMsg(msg)
@@ -1533,6 +1543,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openDrainConfirm(msg)
 	case rowActionPortForward:
 		return m.openPortForwardPrompt(msg)
+	case rowActionExec:
+		return m.openExec(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}

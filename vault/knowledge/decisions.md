@@ -3079,3 +3079,34 @@ kubectl binary is required for the primary path (D2). The primitive is
    envtest / dogfood territory. Empty pod name or empty command is rejected before any
    dial (#86). Raw-PTY exec is Linux/macOS only (D7); the `kubectl exec` fallback lands
    with the wiring (M3-14b).
+
+### D125 — The exec TUI wire runs `kube.Exec` inside a `tea.Exec` `ExecCommand` that puts the local terminal raw itself; the exec size queue delivers one seeded size then session-end
+
+**Date:** 2026-07-24 · M3-14b-1.
+
+The Exec-shell action suspends into a shell via **`tea.Exec`** (not `ExecProcess`): an
+`execCommand` (`internal/tui/exec.go`) implements bubbletea's `ExecCommand`, and its
+`Run()` calls the blocking `kube.Exec` (D124) — so the shell owns the terminal off the
+update loop, exactly as D124 requires. Binding constraints for future exec legs:
+
+1. **The ExecCommand owns raw mode, not bubbletea.** bubbletea releases the terminal to
+   **cooked** on suspend; an interactive remote PTY needs the *local* terminal **raw** so
+   keystrokes and `^C` pass straight through. `Run()` therefore calls
+   `term.MakeRaw`/`term.Restore` (`golang.org/x/term`, now a direct dep) around the exec,
+   nested inside bubbletea's own release/restore. It does this **only when stdin is a real
+   terminal** (`*os.File` + `term.IsTerminal`) — a non-terminal stdin (test buffer, pipe)
+   skips raw/size handling and just streams, which is what keeps `Run` hermetically
+   testable without a TTY.
+2. **`SetStderr` is a no-op on the wire.** A TTY exec has no separate stderr (D124 §3), so
+   the adapter attaches only stdin+stdout; bubbletea's `SetStderr(os.Stderr)` is dropped.
+3. **The size queue seeds the initial size once, then blocks until session-end.**
+   `execSizeQueue` is a one-slot buffered channel: `seed(w,h)` offers the terminal's size
+   at exec start (dropped if 0×0 → server default), `Next()` returns it once then blocks,
+   `close()` (deferred in `Run`) makes `Next` return nil — remotecommand's end signal.
+   **Live mid-session resize (SIGWINCH) is deliberately not wired here** (M3-14b-3).
+4. **This slice execs the pod's *default* container with `/bin/sh`.** Empty `Container`
+   (kube.Exec → the default-container annotation / sole container), fixed `["/bin/sh"]`
+   argv. Multi-container disambiguation (reuse the M3-07a `ctrPicker`) is **M3-14b-2**;
+   the `kubectl exec` binary fallback is **M3-14b-4**. A clean shell exit → neutral status
+   notice; any failure (attach error, missing shell, non-zero exit) → transient error
+   toast (D74), never a panic. Inert with no `Execer` wired or an empty ref.

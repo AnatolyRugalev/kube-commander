@@ -142,6 +142,7 @@ func runTUI(opts runOptions) error {
 			return clients.PortForward(ctx, ref, ports)
 		})),
 		tui.WithServiceResolver(clients),
+		tui.WithExecer(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),

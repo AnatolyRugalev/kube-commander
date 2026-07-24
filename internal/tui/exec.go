@@ -1,0 +1,202 @@
+package tui
+
+import (
+	"context"
+	"io"
+	"os"
+	"sync"
+
+	tea "charm.land/bubbletea/v2"
+	"golang.org/x/term"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+)
+
+// This file is the M3-14b-1 exec wire: the TUI surface that drops the user into an
+// interactive shell inside a Pod's container and restores the browse UI afterwards.
+// The kube layer already has the primitive — a *blocking* Clients.Exec over the pod
+// exec subresource (M3-14a/D124) — so the TUI's job is only to run it from a
+// suspended terminal. That is what bubbletea's tea.Exec is for: it releases the
+// terminal, runs an ExecCommand synchronously (so the shell owns the screen, off the
+// update loop — D124's contract), then re-captures the terminal and delivers the
+// result as a Msg. An interactive shell needs the local terminal in raw mode so
+// keystrokes (and ^C) pass straight through to the remote PTY, so execCommand.Run
+// puts it raw for the exec's lifetime and restores it before returning — nested
+// inside bubbletea's own release/restore.
+//
+// This slice execs the pod's default/sole container with /bin/sh and seeds only the
+// initial terminal size (multi-container picker reuse → M3-14b-2, live SIGWINCH
+// resize → M3-14b-3, kubectl-binary fallback → M3-14b-4). Linux/macOS only — the
+// raw-PTY path is a non-goal on native Windows (WSL2 instead, D7).
+
+// Execer is the narrow slice of the kube layer the shell needs to run the exec
+// action (M3-14b-1): open an interactive session in a pod's container (M3-14a's
+// blocking Exec). *kube.Clients satisfies it. As with the other action seams the
+// shell depends on this interface, not the concrete client, so the tui package
+// never constructs a client and the exec flow is driveable in hermetic tests with a
+// fake execer. A model built without one (the default) is exec-inert: the Exec-shell
+// action is a no-op, exactly as the entry is absent from a non-Pod kind's menu.
+type Execer interface {
+	Exec(ctx context.Context, ref kube.ObjectRef, opts kube.ExecOptions) error
+}
+
+// WithExecer wires the kube client the shell uses to open an interactive exec
+// session in a Pod's container (M3-14b-1). Without it the Exec-shell action is inert.
+func WithExecer(e Execer) Option {
+	return func(m *Model) { m.execer = e }
+}
+
+// defaultExecShell is the argv exec runs when the user picks Exec-shell. /bin/sh is
+// the lowest-common-denominator shell present in virtually every image (unlike
+// /bin/bash), matching `kubectl exec -it pod -- /bin/sh`. A shell probe / override
+// is a later refinement; this slice keeps it fixed.
+var defaultExecShell = []string{"/bin/sh"}
+
+// execDoneMsg carries the outcome of an interactive exec once tea.Exec resumes the
+// program (M3-14b-1). label is the human target ("Pod default/web-1") for the
+// status-bar result. err is nil on a clean shell exit, non-nil on a failure to
+// attach (RBAC denial, missing shell) or a non-zero shell exit (remotecommand
+// surfaces the exit code as an error) — either way it degrades to a transient toast,
+// never a panic (principle 3).
+type execDoneMsg struct {
+	label string
+	err   error
+}
+
+// openExec suspends the TUI into an interactive shell in the selected Pod's default
+// container (M3-14b-1). With no execer wired, or an empty ref (a row with no name,
+// guarded so an empty ref never reaches the kube layer), it is a no-op — exactly as
+// the Exec-shell entry is absent from a non-Pod kind's actions menu. It returns the
+// tea.Exec command bubbletea runs from a released terminal; the callback reports the
+// session result to the status bar (handleExecDone).
+func (m Model) openExec(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.execer == nil || msg.Object.Name == "" {
+		return m, nil
+	}
+	label := viewerTitle(msg.Resource, msg.Object)
+	cmd := newExecCommand(m.execer, msg.Object)
+	return m, tea.Exec(cmd, func(err error) tea.Msg {
+		return execDoneMsg{label: label, err: err}
+	})
+}
+
+// handleExecDone reports a finished exec session: a failure (attach error, missing
+// shell, non-zero exit) degrades to a transient error toast (D74), a clean exit to a
+// neutral status notice. The browse UI is already restored by the time this lands —
+// tea.Exec re-captured the terminal before delivering the callback msg.
+func (m Model) handleExecDone(msg execDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("exec "+msg.label, msg.err))
+	}
+	return m, m.surfaceNotice("exec session ended · " + msg.label)
+}
+
+// execCommand adapts kube.Exec to bubbletea's ExecCommand (tea.Exec), so an
+// interactive shell runs in the suspended terminal off the update loop (D124).
+// bubbletea releases the terminal, calls the Set* setters with the program's
+// streams, runs Run() to completion, then re-captures the terminal. Run puts the
+// local terminal into raw mode (bubbletea released it to cooked) so input passes
+// through to the remote PTY, then blocks in kube.Exec until the shell exits, then
+// restores cooked mode — all before returning, so it nests cleanly inside
+// bubbletea's own release/restore.
+type execCommand struct {
+	execer    Execer
+	ref       kube.ObjectRef
+	container string   // "" → the pod's default/sole container (14b-1)
+	command   []string // the shell argv
+
+	stdin  io.Reader
+	stdout io.Writer
+}
+
+// newExecCommand builds the exec adapter for the selected pod's default container.
+func newExecCommand(execer Execer, ref kube.ObjectRef) *execCommand {
+	return &execCommand{execer: execer, ref: ref, command: defaultExecShell}
+}
+
+// SetStdin/SetStdout capture the terminal streams bubbletea hands the exec. SetStderr
+// is a no-op: an exec with a TTY has no separate stderr stream — the server
+// multiplexes it into stdout (D124), so kube.Exec attaches only stdin+stdout.
+func (c *execCommand) SetStdin(r io.Reader)  { c.stdin = r }
+func (c *execCommand) SetStdout(w io.Writer) { c.stdout = w }
+func (c *execCommand) SetStderr(io.Writer)   {}
+
+// Run streams the interactive exec to completion. When stdin is a real terminal it
+// switches it to raw mode for the session (restored on return) and seeds the exec's
+// size queue with the terminal's current size; a non-terminal stdin (a test's
+// buffer, a piped run) skips the raw/size handling and just streams. The blocking
+// kube.Exec owns the terminal until the shell exits.
+func (c *execCommand) Run() error {
+	q := newExecSizeQueue()
+	defer q.close()
+
+	if fd, ok := fileFd(c.stdin); ok && term.IsTerminal(fd) {
+		if st, err := term.MakeRaw(fd); err == nil {
+			defer func() { _ = term.Restore(fd, st) }()
+		}
+		if w, h, err := term.GetSize(fd); err == nil {
+			q.seed(uint16(w), uint16(h))
+		}
+	}
+
+	return c.execer.Exec(context.Background(), c.ref, kube.ExecOptions{
+		Container: c.container,
+		Command:   c.command,
+		TTY:       true,
+		Stdin:     c.stdin,
+		Stdout:    c.stdout,
+		SizeQueue: q,
+	})
+}
+
+// fileFd returns the file descriptor of r when it is an *os.File (the real terminal
+// bubbletea passes for a standard program), so raw-mode / size handling only kicks in
+// for an actual terminal. Anything else (a test buffer, a pipe) reports false.
+func fileFd(r io.Reader) (int, bool) {
+	if f, ok := r.(*os.File); ok {
+		return int(f.Fd()), true
+	}
+	return 0, false
+}
+
+// execSizeQueue is the exec's kube.TerminalSizeQueue (M3-14b-1): it delivers the
+// initial terminal size once, then blocks until the session ends (close → Next
+// returns nil, the queue's end-of-session signal). A one-slot buffer holds the seed
+// so seeding never blocks the update loop; live mid-session resize (SIGWINCH) is
+// M3-14b-3. Concurrency-safe: seed runs on the update loop before the exec starts,
+// Next runs on remotecommand's reader goroutine, close on the exec goroutine.
+type execSizeQueue struct {
+	ch        chan kube.TerminalSize
+	closeOnce sync.Once
+}
+
+func newExecSizeQueue() *execSizeQueue {
+	return &execSizeQueue{ch: make(chan kube.TerminalSize, 1)}
+}
+
+// seed offers the initial terminal size, dropped if a size is already queued or the
+// dimensions are degenerate (0×0 — remotecommand then falls back to server defaults).
+func (q *execSizeQueue) seed(w, h uint16) {
+	if w == 0 || h == 0 {
+		return
+	}
+	select {
+	case q.ch <- kube.TerminalSize{Width: w, Height: h}:
+	default:
+	}
+}
+
+// Next returns the next terminal size, or nil once the queue is closed (session end).
+func (q *execSizeQueue) Next() *kube.TerminalSize {
+	s, ok := <-q.ch
+	if !ok {
+		return nil
+	}
+	return &s
+}
+
+// close ends the session: a blocked Next returns nil, and the reader goroutine exits.
+// Idempotent so a double teardown never panics on a closed channel.
+func (q *execSizeQueue) close() {
+	q.closeOnce.Do(func() { close(q.ch) })
+}
