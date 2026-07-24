@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — LOGS-01 done: dedicated full-screen logs-view comp
 
 ## In Progress
 
-_(none)_
+- **M3-15b** Edit — TUI wire (the suspend flow) — first slice of the unify-yaml-view-and-edit feedback (D69/D135)
+      status: in-progress | owner: claude-opus | claimed: 2026-07-24
 
 ## Blocked
 
