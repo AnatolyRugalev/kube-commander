@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — M3-15b done: Edit → `$EDITOR` suspend+apply mach
 
 ## In Progress
 
-_(none)_
+- **M3-15c** Unify YAML view + edit — retire the read-only YAML viewer, collapse to one object-YAML action
+      status: in-progress | owner: claude-opus | claimed: 2026-07-24
 
 ## Blocked
 
