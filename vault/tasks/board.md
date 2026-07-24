@@ -7,7 +7,9 @@ _Last updated: 2026-07-24 — FB-pf-port-picker-a done: the port-forward port pi
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-pf-port-picker-b** Port-forward port picker — TUI wire: offer a picker of the declared ports (from FB-pf-port-picker-a) instead of free-text remote entry
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
+      notes: A `PortLister` seam over `kube.PodPorts`/`ServicePorts` (mirroring `ContainerLister`/`ServiceResolver`), resolved off the update loop and generation-guarded like `pfResolveGen`; multiple ports open the reused modal picker (like the logs container picker, M3-07a), a single declared port forwards directly, no declared ports falls back to today's free-text ports prompt (principle 3). Keymap-driven (D11), message-only (principle 1). Depends on FB-pf-port-picker-a.
 
 ## Blocked
 
@@ -83,9 +85,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **FB-pf-port-picker-b** Port-forward port picker — TUI wire: offer a picker of the declared ports (from FB-pf-port-picker-a) instead of free-text remote entry
-      status: todo | owner: — | added: 2026-07-24 (FB-pf-port-picker split, second slice)
-      notes: A `PortLister` seam over `kube.PodPorts`/`ServicePorts` (mirroring `ContainerLister`/`ServiceResolver`), resolved off the update loop and generation-guarded like `pfResolveGen`; multiple ports open the reused modal picker (like the logs container picker, M3-07a), a single declared port forwards directly, no declared ports falls back to today's free-text ports prompt (principle 3). Keymap-driven (D11), message-only (principle 1). Depends on FB-pf-port-picker-a.
 - [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" (`:0` auto-assign) in the picker/prompt flow
       status: todo | owner: — | added: 2026-07-24 (triaged from feedback 2026-07-24-port-forward-picker-and-local-port, part 1/2)
       notes: Default local = remote, editable; a gesture that rewrites the spec to `:0` (OS-assigned free local port, already supported by kube.PortForward + reported via Ports()). Builds on FB-pf-port-picker; supersedes needing the D130 retry-hint for the common clash once shipped (the hint stays as the fallback). Depends on the picker UI.
