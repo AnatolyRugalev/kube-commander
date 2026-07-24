@@ -41,7 +41,7 @@ set, killing nearly all kubectl shell-outs.
 - [x] Secret contents viewable with explicit reveal + copy. (reveal/decode masked on open, `secret.reveal`/`r`, M3-08a/D113; per-entry cursor + `secret.copy`/`c` OSC-52 clipboard yank, M3-08b/D114)
 - [x] Each workload action works with a confirmation step and reports success/failure to the status bar. (delete M3-09/D115; scale prompt + rollout-restart confirm M3-10/D117; cordon/uncordon M3-11a — direct, no confirm since idempotent, D120; drain M3-11b — confirm + streamed eviction progress, D121; CronJob suspend/resume M3-12 — direct, no confirm since idempotent, D120)
 - [x] Port-forwards run in background, are listed, and stop cleanly on exit.
-- [ ] Exec drops into a working shell and restores the TUI afterward.
+- [x] Exec drops into a working shell and restores the TUI afterward. (M3-14a/14b-1…4; maintainer-confirmed against a real cluster in a real terminal 2026-07-24 — shell drops in, TUI restores cleanly, HT-exec-dogfood)
 - [ ] Edit round-trips through `$EDITOR`.
 
 ## Depends on
