@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-pf-local-port done: the port picker now owns the local side too (`p` set · `0` free), closing the port-forward feedback line (D139); SEARCH-02 is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — SEARCH-02a done: the cluster-search view component landed (D140), leaving SEARCH-02b (the app wiring + `search.cluster` action) as the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-02a** Cluster-search view **component** (`internal/tui/components/searchview`):
-      full-screen query field + streaming results list (Kind · ns · name), keymap-driven
-      cursor, `SelectedMsg`/`ClosedMsg`/`QueryChangedMsg`. Component in isolation — no app
-      wiring (that is SEARCH-02b).
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
-      notes: First slice of SEARCH-02, split D52-style (component first, like LOGS-01 →
-      LOGS-02). Reuses the picker's list/delegate rhythm and the logsview full-screen shape.
+_(none)_
 
 ## Blocked
 
@@ -151,6 +145,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-02a** Cluster-search view component (`internal/tui/components/searchview`): full-screen always-open query field over a streaming cross-kind result list (kind-aligned `Kind  ns/name` rows from `kube.SearchHit`), keymap-driven cursor that streamed hits never move, `SelectedMsg`/`ClosedMsg`/`QueryChangedMsg`, clear-then-close `nav.back`, and an empty list that always says which empty it is — done 2026-07-24 (D140)
 - [x] **FB-pf-local-port** Port-forward local port (`internal/tui/ports.go`): every declared port now opens the picker (a lone one no longer auto-forwards, which dead-ended a local clash), where `enter` still forwards local = remote, `forwards.freeLocal` (`0`) forwards `:<remote>` on an OS-assigned local port, and `forwards.localPort` (`p`) opens a prompt seeded with the remote number (blank = free port); the bind hint stopped suggesting the invalid `:0` — done 2026-07-24 (D139)
 - [x] **FB-pf-port-picker-b** Port-forward port picker — TUI wire (`internal/tui/ports.go`): a `PortLister` seam over `kube.PodPorts`/`ServicePorts` lists the target's declared ports off the update loop (`pfResolveGen`-guarded); one port forwards directly (local = remote), several open the reused modal picker (`80 → 8080 (http · app)` rows), and no lister / an empty list / a listing error all fall back to the free-text ports prompt — done 2026-07-24 (D138)
 - [x] **FB-pf-port-picker-a** Port-forward port picker — kube-layer declared-ports primitive (`internal/kube/ports.go`): `Clients.PodPorts` (declared containerPorts, native sidecars included) + `Clients.ServicePorts` (service ports resolved to the pod-side targetPort, named targets looked up on the backing pod); TCP-only, de-duplicated, apimachinery-free `Port` — done 2026-07-24 (D137)

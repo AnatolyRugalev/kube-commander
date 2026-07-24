@@ -3469,3 +3469,28 @@ now choosable. **Constraints a future leg must not silently contradict:**
    picker titles itself `Port-forward port · p local · 0 free` with keys read from the
    resolved keymap — a modal has no hint bar, and a gesture nothing announces is a
    gesture nobody finds. Never hard-code the key text in a view (D11).
+
+### D140 — The cluster-search view owns the query; hits stream into it and never move the cursor
+**2026-07-24** (SEARCH-02a). The search mini-app's component half
+(`internal/tui/components/searchview`), split component-first from SEARCH-02 in the D52
+rhythm (LOGS-01 → LOGS-02). **Constraints a future leg must not silently contradict:**
+1. **The query field is always open while the view is up** — the query *is* the view,
+   not a mode inside it (unlike the picker's `app.filter` and the logs view's grep,
+   which toggle). So the view has no filter action of its own, and the root must route
+   text keys to `UpdateQuery` for as long as the view is active, resolving only control
+   keys to actions (D11).
+2. **The view searches nothing and holds no client.** It emits `QueryChangedMsg` on
+   every actual text change (including the `""` that `nav.back` produces) and the
+   wiring owns launching, debouncing, capping, and cancelling `kube.Search`
+   (SEARCH-02b). A key that leaves the text unchanged emits nothing, so cursor moves
+   inside the field never restart a search.
+3. **A query change drops the previous query's hits inside the view, before the wiring
+   sees the message.** Results on screen always describe the query on screen; a
+   consumer never has to reconcile stale hits, and a late hit from a superseded search
+   must be dropped by the wiring's generation guard, not shown.
+4. **Streaming hits never move the reader's cursor.** `AppendHit` preserves the
+   selected row, so results arriving during a fan-out cannot change what `enter`
+   drills into.
+5. **An empty result list always says why** — `type to search this cluster` /
+   `searching…` / `no matches`. An empty search view must never be ambiguous between
+   "nothing typed", "still working", and "nothing found".
