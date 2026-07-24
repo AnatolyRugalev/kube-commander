@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — SEARCH-01: cluster-search kube primitive (`kube.Se
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-confirm-yn-keys** Feedback (normal, `2026-07-24-confirm-modal-yn-keys`): confirm modal accepts `y`/`n` as registered, rebindable actions (`confirm.accept`/`confirm.decline`), not raw keys — supersedes the "no y/n" part of D88/D115
+      status: in-progress | owner: claude-opus | added: 2026-07-24
 
 ## Blocked
 
