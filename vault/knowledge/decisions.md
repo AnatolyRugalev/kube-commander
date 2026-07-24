@@ -3440,3 +3440,32 @@ leg must not silently contradict:**
 3. **The listing shares `pfResolveGen` with the Service→pod hop.** One generation
    guards the whole port-forward resolution chain (Service → pod → ports), so a
    superseded request is dropped wherever it is; do not add a second counter.
+
+### D139 — Port-forward local port: every declared port goes through the picker, whose two gestures own the local side; `:0` is not a valid spec
+**2026-07-24** (FB-pf-local-port). The last slice of the port-forward feedback
+(`2026-07-24-port-forward-picker-and-local-port` part 2): the local end of a forward is
+now choosable. **Constraints a future leg must not silently contradict:**
+1. **Any declared port opens the picker — a lone one no longer forwards straight
+   away.** This **supersedes D138 pt 2's fast path** (the rest of D138 stands: the
+   picker never gates the action, `enter` is a whole spec with local = remote, one
+   generation guards the chain). Reason: the picker is the only surface carrying the
+   local-port gestures, so skipping it for a single-port target left a **dead end** —
+   a pod declaring one port whose local number is already taken would re-forward and
+   re-fail on every invocation with no way to name a different local port. Confirming
+   a one-row picker is still one keystroke, which is what D138 pt 2 actually protects.
+2. **The local side is opt-in, never a mandatory prompt.** `enter` forwards local =
+   remote; `forwards.freeLocal` (`0`) forwards `:<remote>` immediately; only
+   `forwards.localPort` (`p`) opens a prompt, seeded with the remote number, whose
+   blank value means "free port". Both gestures are registered, rebindable actions
+   resolved by the root while the port picker is up (D11) — the shared picker
+   component stays generic and knows nothing about ports.
+3. **The free-local spec is `:<remote>`, never `:0`.** client-go parses the half after
+   the colon as the **remote** port and rejects 0 ("remote port must be > 0"), so `:0`
+   — suggested by D130 pt 2's parenthetical and by the bind-failure hint — is simply
+   invalid. The hint now offers only `:<remote>`; D130's substance (never surface the
+   raw listener error; leading-colon = OS-assigned local port) is unchanged, and the
+   hint is now the fallback for an already-started forward rather than the only escape.
+4. **A modal's own gestures are advertised in its title, from the keymap.** The port
+   picker titles itself `Port-forward port · p local · 0 free` with keys read from the
+   resolved keymap — a modal has no hint bar, and a gesture nothing announces is a
+   gesture nobody finds. Never hard-code the key text in a view (D11).

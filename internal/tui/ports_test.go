@@ -11,7 +11,37 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
+
+// pressPicker feeds one live keypress to a model with the port picker open and
+// delivers whatever message the resulting command produced, since the picker resolves
+// a confirmed pick asynchronously (a Cmd emitting picker.SelectedMsg).
+func pressPicker(t *testing.T, m Model, k tea.Key) Model {
+	t.Helper()
+	m, cmd := press(t, m, k)
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	if msg == nil {
+		return m
+	}
+	next, _ := m.Update(msg)
+	return next.(Model)
+}
+
+// gestureKey resolves the key a picker gesture is bound to, so a test presses what the
+// keymap says rather than a literal (D11).
+func gestureKey(t *testing.T, m Model, a keymap.Action) tea.Key {
+	t.Helper()
+	keys := m.keymap.Keys(a)
+	if len(keys) != 1 || len([]rune(keys[0])) != 1 {
+		t.Fatalf("action %s should default to one single-rune key, got %v", a, keys)
+	}
+	r := []rune(keys[0])[0]
+	return tea.Key{Code: r, Text: string(r)}
+}
 
 // fakePortLister is a hermetic PortLister (FB-pf-port-picker-b): it returns a preset
 // port set (or an error) and records which method it was asked and with which refs,
@@ -55,10 +85,10 @@ func loadPorts(t *testing.T, m Model, cmd tea.Cmd) Model {
 	return next.(Model)
 }
 
-// TestPortForwardSingleDeclaredPortForwardsDirectly proves the fast path: a pod
-// declaring exactly one port forwards straight away (local = remote), with no prompt
-// and no picker in the way.
-func TestPortForwardSingleDeclaredPortForwardsDirectly(t *testing.T) {
+// TestPortForwardSingleDeclaredPortOpensPicker proves D139: even a lone declared port
+// goes through the picker (it is the only surface carrying the local-port gestures),
+// and confirming it is still one keystroke that forwards local = remote.
+func TestPortForwardSingleDeclaredPortOpensPicker(t *testing.T) {
 	pf := &fakePortForwarder{handle: newFakeForward()}
 	pl := &fakePortLister{ports: []kube.Port{{Port: 8080, Name: "http", Container: "app"}}}
 	m := openPodTable(t, "Pod", WithPortForwarder(pf), WithPortLister(pl))
@@ -73,9 +103,14 @@ func TestPortForwardSingleDeclaredPortForwardsDirectly(t *testing.T) {
 	if pl.podCalls != 1 || pl.gotRef.Name != row.Object.Name {
 		t.Fatalf("PodPorts should be asked for the selected row %q once, got calls=%d ref=%q", row.Object.Name, pl.podCalls, pl.gotRef.Name)
 	}
-	if m.modal.Active() || m.portPicker.Active() {
-		t.Fatal("a single declared port should forward directly, opening no prompt or picker")
+	if !m.portPicker.Active() || m.modal.Active() {
+		t.Fatal("a single declared port should open the picker, not the prompt and not a bare forward")
 	}
+	if pf.calls != 0 {
+		t.Fatal("opening the picker must not start a forward yet")
+	}
+
+	m = pressPicker(t, m, tea.Key{Code: tea.KeyEnter})
 	if pf.calls != 1 || pf.gotRef.Name != row.Object.Name {
 		t.Fatalf("the forward should target the selected row once, got calls=%d ref=%q", pf.calls, pf.gotRef.Name)
 	}
@@ -84,6 +119,98 @@ func TestPortForwardSingleDeclaredPortForwardsDirectly(t *testing.T) {
 	}
 	if len(m.forwards) != 1 {
 		t.Fatalf("the started forward should be tracked, got %d", len(m.forwards))
+	}
+}
+
+// TestPortPickerFreeLocalPortGesture proves the one-keystroke escape from a local port
+// clash: forwards.freeLocal on the highlighted port forwards it with the leading-colon
+// spec, so the OS assigns the local port — no typing, no prompt.
+func TestPortPickerFreeLocalPortGesture(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	pl := &fakePortLister{ports: []kube.Port{{Port: 6379, Name: "redis"}}}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf), WithPortLister(pl))
+
+	m, cmd := dispatchRowAction(t, m, rowActionPortForward)
+	m = loadPorts(t, m, cmd)
+	m = pressPicker(t, m, gestureKey(t, m, keymap.ActionFreeLocalPort))
+
+	if m.portPicker.Active() || m.modal.Active() {
+		t.Fatal("the free-local gesture should forward straight away, closing the picker")
+	}
+	if pf.calls != 1 || len(pf.gotPorts) != 1 || pf.gotPorts[0] != ":6379" {
+		t.Fatalf("the free-local forward spec = %v, want [:6379], calls=%d", pf.gotPorts, pf.calls)
+	}
+}
+
+// TestPortPickerLocalPortPrompt proves the editable local side: forwards.localPort
+// opens a prompt seeded with the remote number, and the submitted value becomes the
+// local half of the spec while the remote half stays the picked port.
+func TestPortPickerLocalPortPrompt(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	pl := &fakePortLister{ports: []kube.Port{{Port: 80, Name: "http"}, {Port: 8080, Name: "admin"}}}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf), WithPortLister(pl))
+
+	m, cmd := dispatchRowAction(t, m, rowActionPortForward)
+	m = loadPorts(t, m, cmd)
+	m = pressPicker(t, m, tea.Key{Code: 'j', Text: "j"}) // highlight the second port
+	m = pressPicker(t, m, gestureKey(t, m, keymap.ActionLocalPort))
+
+	if m.portPicker.Active() {
+		t.Fatal("opening the local-port prompt should close the picker")
+	}
+	if !m.modal.Active() || !m.modal.Prompting() || m.modal.Kind() != localPortModalKind {
+		t.Fatalf("the local-port gesture should open the local-port prompt, kind=%q", m.modal.Kind())
+	}
+	if view := m.View().Content; !strings.Contains(view, "8080") {
+		t.Fatalf("the prompt should be seeded with the picked remote port: %q", view)
+	}
+	if pf.calls != 0 {
+		t.Fatal("opening the prompt must not start a forward yet")
+	}
+
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: localPortModalKind, Value: "18080"})
+	m = next.(Model)
+	if pf.calls != 1 || len(pf.gotPorts) != 1 || pf.gotPorts[0] != "18080:8080" {
+		t.Fatalf("the local-port forward spec = %v, want [18080:8080], calls=%d", pf.gotPorts, pf.calls)
+	}
+}
+
+// TestLocalPortSpec pins the two specs the gestures build, including the blank entry
+// (an emptied prompt means "let the OS pick", the same spec the free-local gesture
+// makes) and the fact that ":0" is never produced — client-go rejects remote port 0.
+func TestLocalPortSpec(t *testing.T) {
+	p := kube.Port{Port: 8080, Name: "http"}
+	if got := freeLocalPortSpec(p); got != ":8080" {
+		t.Errorf("freeLocalPortSpec = %q, want %q", got, ":8080")
+	}
+	for _, tc := range []struct{ in, want string }{
+		{"9090", "9090:8080"},
+		{"", ":8080"},
+		{"   ", ":8080"},
+		{" 9090 ", "9090:8080"},
+	} {
+		if got := localPortSpec(p, tc.in); got != tc.want {
+			t.Errorf("localPortSpec(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestPortPickerTitleAdvertisesGestures proves the picker's only discovery surface
+// names the gestures by their *resolved* keys (D11), never a literal.
+func TestPortPickerTitleAdvertisesGestures(t *testing.T) {
+	km := keymap.DefaultKeymap()
+	title := portPickerTitle(km)
+	for _, a := range []keymap.Action{keymap.ActionLocalPort, keymap.ActionFreeLocalPort} {
+		if k := km.Keys(a)[0]; !strings.Contains(title, k) {
+			t.Fatalf("the port picker title %q should advertise %s (%q)", title, a, k)
+		}
+	}
+	km, _, err := km.Merge(map[keymap.Action][]string{keymap.ActionLocalPort: {}})
+	if err != nil {
+		t.Fatalf("disabling the local-port action: %v", err)
+	}
+	if got := portPickerTitle(km); strings.Contains(got, "local") {
+		t.Fatalf("a disabled gesture should drop out of the title, got %q", got)
 	}
 }
 
@@ -231,6 +358,7 @@ func TestPortForwardServiceListsServicePorts(t *testing.T) {
 	if pl.gotSvc.Name != row.Object.Name || pl.gotRef.Name != "api-xyz" {
 		t.Fatalf("ServicePorts should get the Service %q and the resolved pod api-xyz, got svc=%q pod=%q", row.Object.Name, pl.gotSvc.Name, pl.gotRef.Name)
 	}
+	m = pressPicker(t, m, tea.Key{Code: tea.KeyEnter}) // confirm the listed port (D139)
 	if pf.calls != 1 || pf.gotRef.Name != "api-xyz" {
 		t.Fatalf("the forward should target the resolved pod once, got calls=%d ref=%q", pf.calls, pf.gotRef.Name)
 	}

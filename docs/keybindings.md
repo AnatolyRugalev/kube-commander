@@ -100,6 +100,8 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `forwards.panel` | `F` | Toggle the port-forward panel |
 | `forwards.stopAll` | `X` | Stop all port-forwards (in the panel) |
+| `forwards.localPort` | `p` | Set the local port for the highlighted port (port picker) |
+| `forwards.freeLocal` | `0` | Forward the highlighted port on a free local port (port picker) |
 
 ## confirm
 

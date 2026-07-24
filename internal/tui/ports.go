@@ -9,6 +9,7 @@ import (
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // This file is the FB-pf-port-picker-b wire: the TUI surface that turns the
@@ -108,10 +109,11 @@ func (m Model) resolvePortsFor(res kube.Resource, podRef, svcRef kube.ObjectRef)
 //     the API, so neither case may block the forward (D137/principle 3). The fallback
 //     is silent: the user gets the prompt they got before the picker existed, and a
 //     toast alongside a freshly-opened prompt would only add noise;
-//   - a single declared port is forwarded straight away (local = remote), skipping the
-//     prompt entirely — the common Pod case, one keystroke instead of a typed spec;
-//   - several open the port picker, stashing the target so the pick knows what it
-//     applies to (the picker's SelectedMsg carries only the chosen label, D65).
+//   - any declared port — including a lone one — opens the port picker, stashing the
+//     target so the pick knows what it applies to (the picker's SelectedMsg carries
+//     only the chosen label, D65). Confirming is still one keystroke, and the picker
+//     is the only surface carrying the local-port gestures, so a single-port target
+//     must not skip it (D139 supersedes D138 pt 2).
 func (m Model) handlePortsLoaded(msg portsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.pfResolveGen {
 		return m, nil // superseded by a newer port-forward request; drop.
@@ -121,9 +123,6 @@ func (m Model) handlePortsLoaded(msg portsLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.mutateRes = msg.res
 	m.mutateRef = msg.ref
-	if len(msg.ports) == 1 {
-		return m.runPortForward(portForwardSpec(msg.ports[0]))
-	}
 	m.pfPorts = msg.ports
 	m.portPicker.SetItems(portPickerItems(msg.ports))
 	m.portPicker.Show()
@@ -145,11 +144,90 @@ func (m Model) handlePortSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 
 // portForwardSpec renders a chosen port as the port spec kube.PortForward takes. A
 // bare number is kubectl's shorthand for "same local port as remote", which is what a
-// user picking a declared port means. The local side stays implicit here — making it
-// editable (and offering ":0" for an OS-assigned free local port) is FB-pf-local-port;
-// until then a local clash still surfaces the D130 bind hint naming the retry syntax.
+// user confirming a declared port means (D138): the plain pick stays one keystroke.
+// The two local-port gestures below build the other two specs.
 func portForwardSpec(p kube.Port) string {
 	return strconv.Itoa(int(p.Port))
+}
+
+// freeLocalPortSpec renders a chosen port with its local side left to the OS:
+// kubectl's leading-colon form, ":<remote>". Note it is *not* ":0" — client-go parses
+// the half after the colon as the **remote** port and rejects 0 ("remote port must be
+// > 0"), so the free-local spec always names the real remote port and leaves the local
+// half empty (D139). The bound local port is reported once the forward is ready
+// (PortForward.Ports → the status notice), which is how the user learns what it got.
+func freeLocalPortSpec(p kube.Port) string {
+	return ":" + strconv.Itoa(int(p.Port))
+}
+
+// localPortSpec renders a chosen port with the local side the prompt collected. A
+// blank entry means "let the OS pick one" (the prompt says so) — the same spec the
+// free-local gesture builds — so clearing the field is a second way to reach it.
+// Anything else is used verbatim as the local half: kube.PortForward validates it and
+// a malformed entry degrades to an error toast (principle 3) rather than being
+// second-guessed here.
+func localPortSpec(p kube.Port, local string) string {
+	local = strings.TrimSpace(local)
+	if local == "" {
+		return freeLocalPortSpec(p)
+	}
+	return local + ":" + strconv.Itoa(int(p.Port))
+}
+
+// localPortModalKind stamps the prompt the "set the local port" gesture opens, so the
+// shared modal's ConfirmedMsg routes back to runLocalPortForward rather than the
+// free-text ports prompt (portForwardModalKind) or the other mutating modals (D117).
+const localPortModalKind = "portForwardLocal"
+
+// selectedPort returns the kube.Port the port picker currently highlights. The picker
+// resolves to a label (D65), so the highlighted row maps back through the listed set
+// exactly as a confirmed pick does; false means the picker is empty (or the set
+// changed under it), which leaves the gestures inert rather than guessing a port.
+func (m Model) selectedPort() (kube.Port, bool) {
+	label, ok := m.portPicker.Selected()
+	if !ok {
+		return kube.Port{}, false
+	}
+	return portForLabel(m.pfPorts, label)
+}
+
+// forwardOnFreeLocalPort is the one-keystroke escape from a local port clash
+// (FB-pf-local-port): it forwards the highlighted port immediately with the local side
+// left to the OS. It is the gesture the D130 bind hint used to describe in prose —
+// "retry with :<remote>" — turned into a key, so the common "port 6379 is already
+// taken locally" case never needs a typed spec (the hint stays for a forward that was
+// already started).
+func (m Model) forwardOnFreeLocalPort() (tea.Model, tea.Cmd) {
+	p, ok := m.selectedPort()
+	if !ok {
+		return m, nil
+	}
+	m.portPicker.Hide()
+	return m.runPortForward(freeLocalPortSpec(p))
+}
+
+// promptLocalPort opens the local-port prompt over the highlighted port: a single-line
+// entry seeded with the remote number (the local = remote default, editable), whose
+// blank value means an OS-assigned free port. The target stays in the shared
+// mutate stash (D117) that handlePortsLoaded filled; pfPort carries the chosen port
+// across the prompt so the submitted local half can be joined to the right remote one.
+func (m Model) promptLocalPort() (tea.Model, tea.Cmd) {
+	p, ok := m.selectedPort()
+	if !ok {
+		return m, nil
+	}
+	m.portPicker.Hide()
+	m.pfPort = p
+	remote := strconv.Itoa(int(p.Port))
+	cmd := m.modal.ShowPrompt(localPortModalKind, "Port-forward",
+		"Local port for remote "+remote+" (blank = free port):", remote)
+	return m, cmd
+}
+
+// runLocalPortForward starts the stashed forward with the local port the prompt
+// collected, joined to the remote port the gesture was invoked on.
+func (m Model) runLocalPortForward(value string) (tea.Model, tea.Cmd) {
+	return m.runPortForward(localPortSpec(m.pfPort, value))
 }
 
 // portPickerItems renders the listed ports as picker rows, in listing order.
@@ -182,6 +260,35 @@ func portLabel(p kube.Port) string {
 		s += " (" + strings.Join(meta, " · ") + ")"
 	}
 	return s
+}
+
+// portPickerTitle renders the port picker's title with the two local-port gestures
+// advertised by their *resolved* keys. The picker is the only surface where they do
+// anything and a modal has no hint bar, so the title is where they are discoverable —
+// e.g. "Port-forward port · p local · 0 free". The keys come from the keymap, never a
+// literal (D11), so a rebind is reflected and a disabled action drops out of the title.
+func portPickerTitle(km *keymap.Keymap) string {
+	title := "Port-forward port"
+	var hints []string
+	if k := firstKey(km, keymap.ActionLocalPort); k != "" {
+		hints = append(hints, k+" local")
+	}
+	if k := firstKey(km, keymap.ActionFreeLocalPort); k != "" {
+		hints = append(hints, k+" free")
+	}
+	if len(hints) > 0 {
+		title += " · " + strings.Join(hints, " · ")
+	}
+	return title
+}
+
+// firstKey is an action's primary bound key ("" when the user disabled it), the token
+// a hint shows.
+func firstKey(km *keymap.Keymap, a keymap.Action) string {
+	if ks := km.Keys(a); len(ks) > 0 {
+		return ks[0]
+	}
+	return ""
 }
 
 // portForLabel maps a picked row back to the port it was rendered from. The picker

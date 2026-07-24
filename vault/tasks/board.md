@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-pf-port-picker-b done: the port-forward flow now offers the target's declared ports as a picker (D138); FB-pf-local-port is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — FB-pf-local-port done: the port picker now owns the local side too (`p` set · `0` free), closing the port-forward feedback line (D139); SEARCH-02 is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" in the picker/prompt flow
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -143,6 +142,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-pf-local-port** Port-forward local port (`internal/tui/ports.go`): every declared port now opens the picker (a lone one no longer auto-forwards, which dead-ended a local clash), where `enter` still forwards local = remote, `forwards.freeLocal` (`0`) forwards `:<remote>` on an OS-assigned local port, and `forwards.localPort` (`p`) opens a prompt seeded with the remote number (blank = free port); the bind hint stopped suggesting the invalid `:0` — done 2026-07-24 (D139)
 - [x] **FB-pf-port-picker-b** Port-forward port picker — TUI wire (`internal/tui/ports.go`): a `PortLister` seam over `kube.PodPorts`/`ServicePorts` lists the target's declared ports off the update loop (`pfResolveGen`-guarded); one port forwards directly (local = remote), several open the reused modal picker (`80 → 8080 (http · app)` rows), and no lister / an empty list / a listing error all fall back to the free-text ports prompt — done 2026-07-24 (D138)
 - [x] **FB-pf-port-picker-a** Port-forward port picker — kube-layer declared-ports primitive (`internal/kube/ports.go`): `Clients.PodPorts` (declared containerPorts, native sidecars included) + `Clients.ServicePorts` (service ports resolved to the pod-side targetPort, named targets looked up on the backing pod); TCP-only, de-duplicated, apimachinery-free `Port` — done 2026-07-24 (D137)
 - [x] **M3-15c** Unify YAML view + edit — retired the standalone read-only YAML viewer (`openYAMLViewer`/`yamlLoadedMsg`/`viewerKindYAML`/`rowActionYAML`/`ActionYAML`/`res.yaml`); the View/Edit YAML action (`e`, gated `canGet`) is now the only YAML surface, `y` unbound; `YAMLGetter` seam kept; `docs/keybindings.md` regenerated — done 2026-07-24 (D135, D136)

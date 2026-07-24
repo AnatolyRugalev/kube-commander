@@ -4970,17 +4970,18 @@ func TestPortForwardBindErrDetection(t *testing.T) {
 }
 
 // TestPortForwardBindHint pins the actionable retry message built from the requested
-// specs: it names the clashing local port(s) and shows the ":0"/":<remote>" escape.
+// specs: it names the clashing local port(s) and shows the ":<remote>" escape — never
+// ":0", which client-go rejects as remote port 0 (D139).
 func TestPortForwardBindHint(t *testing.T) {
 	cases := []struct {
 		name  string
 		specs []string
 		want  []string // substrings that must all be present
 	}{
-		{"same-port", []string{"6379"}, []string{"local port 6379 already in use", "retry with :6379", ":0"}},
-		{"explicit-local", []string{"8080:80"}, []string{"local port 8080 already in use", "retry with :80", ":0"}},
-		{"multiple", []string{"8080:80", "6379"}, []string{"local ports 8080, 6379 already in use", ":0"}},
-		{"already-auto", []string{":80"}, []string{"could not bind the local listener", ":0"}},
+		{"same-port", []string{"6379"}, []string{"local port 6379 already in use", "retry with :6379"}},
+		{"explicit-local", []string{"8080:80"}, []string{"local port 8080 already in use", "retry with :80"}},
+		{"multiple", []string{"8080:80", "6379"}, []string{"local ports 8080, 6379 already in use", "retry with :80"}},
+		{"already-auto", []string{":80"}, []string{"could not bind the local listener"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -4989,6 +4990,9 @@ func TestPortForwardBindHint(t *testing.T) {
 				if !strings.Contains(got, want) {
 					t.Fatalf("hint %q missing %q", got, want)
 				}
+			}
+			if strings.Contains(got, ":0 ") || strings.HasSuffix(got, ":0") {
+				t.Fatalf("the hint must not suggest :0 (client-go rejects remote port 0): %q", got)
 			}
 		})
 	}

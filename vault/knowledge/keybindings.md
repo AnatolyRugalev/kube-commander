@@ -104,6 +104,8 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Copy selected secret value | `c` (`secret.copy`) | secret viewer only; `j`/`k` move the entry cursor, `c` yanks the decoded value to the clipboard (OSC-52), masked or revealed (M3-08b) |
 | Toggle port-forward panel | `F` (`forwards.panel`) | app-global overlay listing active forwards; `j`/`k` move the cursor, `enter` stops the selected one (M3-13b) |
 | Stop all port-forwards | `X` (`forwards.stopAll`) | port-forward panel only; cancels every active forward at once (M3-13b) |
+| Set the local port | `p` (`forwards.localPort`) | port picker only; prompt seeded with the remote port, blank = free port (FB-pf-local-port/D139) |
+| Free local port | `0` (`forwards.freeLocal`) | port picker only; forwards `:<remote>` so the OS assigns the local port — `enter` still forwards local = remote (D139) |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
 | Resource palette | `:` (`resources.switch`) | |

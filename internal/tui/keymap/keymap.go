@@ -88,6 +88,15 @@ const (
 	// (M3-13b). It is meaningful only while the panel is up; elsewhere it is inert
 	// (the panel's per-forward stop is nav.drillIn on the selected entry).
 	ActionStopForwards Action = "forwards.stopAll"
+	// ActionLocalPort / ActionFreeLocalPort are the two *local side* gestures on the
+	// port-forward port picker (FB-pf-local-port/D139). Confirming a port (nav.drillIn)
+	// forwards it with local = remote — one keystroke, D138 — and these opt into
+	// choosing the local end instead: ActionLocalPort opens a prompt seeded with the
+	// remote number so it can be edited, ActionFreeLocalPort forwards straight away on
+	// an OS-assigned free local port. Both are meaningful only while the port picker is
+	// up; elsewhere they are inert (like logs.follow / secret.reveal outside a viewer).
+	ActionLocalPort     Action = "forwards.localPort"
+	ActionFreeLocalPort Action = "forwards.freeLocal"
 	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
 	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
 	// **confirm key context** (contextOf), not the browse context: `n`/`enter`/`esc`
@@ -170,6 +179,8 @@ var actionMeta = []struct {
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
 	{ActionStopForwards, "Stop all port-forwards (in the panel)"},
+	{ActionLocalPort, "Set the local port for the highlighted port (port picker)"},
+	{ActionFreeLocalPort, "Forward the highlighted port on a free local port (port picker)"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
 }
@@ -241,6 +252,12 @@ var defaultBindings = map[Action][]string{
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},
 	ActionStopForwards: {"X"},
+	// Port-picker local-port gestures (FB-pf-local-port): `p` for the local **p**ort
+	// prompt, `0` for "let the OS pick one" — the port-0 convention, though the spec
+	// kubectl/client-go actually accepts is the leading-colon form `:<remote>` (`:0`
+	// is rejected: remote port must be > 0), which the shell builds itself (D139).
+	ActionLocalPort:     {"p"},
+	ActionFreeLocalPort: {"0"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
 	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
 	// in the browse context (app.searchNext/nav.drillIn/nav.back); `y` is browse-free

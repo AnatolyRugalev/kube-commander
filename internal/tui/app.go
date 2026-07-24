@@ -771,14 +771,17 @@ type Model struct {
 	// offered as choices instead of typed into the free-text prompt (FB-pf-port-picker-b;
 	// nil → the prompt opens directly, the M3-13a behaviour). The listing runs off the
 	// update loop stamped with the same pfResolveGen that guards the Service→pod hop, so
-	// a superseded request is dropped; a single declared port forwards straight away and
-	// several open portPicker. pfPorts holds the listed set between the picker opening
-	// and the pick landing — the picker's SelectedMsg carries only the chosen label
-	// (D65), so the label maps back to a port through here. The target itself is stashed
-	// in mutateRes/mutateRef, as it is for the prompt. Touched only from the
+	// a superseded request is dropped; any declared port opens portPicker (D139).
+	// pfPorts holds the listed set between the picker opening and the pick landing — the
+	// picker's SelectedMsg carries only the chosen label (D65), so the label maps back
+	// to a port through here. pfPort is the one port the local-port gesture
+	// (FB-pf-local-port) is acting on, held across its prompt so the submitted local
+	// half can be joined to the right remote port. The target itself is stashed in
+	// mutateRes/mutateRef, as it is for the prompt. Touched only from the
 	// single-threaded update loop.
 	portLister PortLister
 	pfPorts    []kube.Port
+	pfPort     kube.Port
 
 	// execer opens an interactive shell in the selected Pod's container (M3-14b-1;
 	// nil → the Exec-shell action is inert). The exec is a *blocking* kube.Exec run
@@ -893,7 +896,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
 	m.ctrPicker.SetTitle("Container")
-	m.portPicker.SetTitle("Port-forward port")
+	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -1664,6 +1667,8 @@ func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd)
 		return m.runDrain()
 	case portForwardModalKind:
 		return m.runPortForward(msg.Value)
+	case localPortModalKind:
+		return m.runLocalPortForward(msg.Value)
 	}
 	return m, nil
 }
@@ -2283,14 +2288,17 @@ func isPortForwardBindErr(err error) bool {
 }
 
 // portForwardBindHint turns the requested port specs into an actionable retry message
-// for a local-listener bind failure: it names the local port(s) that couldn't bind
-// and shows how to let the OS pick a free one — a ":<remote>" or ":0" prefix (both
-// already accepted by kube.PortForward: a leading ":" means an OS-assigned local
-// port). e.g. specs ["6379"] → `local port 6379 already in use — retry with :6379
-// (or :0) to auto-assign a free local port`.
+// for a local-listener bind failure: it names the local port(s) that couldn't bind and
+// shows how to let the OS pick a free one — the leading-colon form ":<remote>", which
+// kube.PortForward accepts (an empty local half means "OS-assigned"). e.g. specs
+// ["6379"] → `local port 6379 already in use — retry with :6379 to auto-assign a free
+// local port`. It never suggests ":0": client-go reads the half after the colon as the
+// *remote* port and rejects 0 (D139). Since FB-pf-local-port the port picker also has
+// a one-key free-local gesture, so this hint is the fallback for a forward that was
+// already started, not the only escape.
 func portForwardBindHint(specs []string) string {
 	locals := make([]string, 0, len(specs))
-	example := ":0"
+	example := ""
 	for i, s := range specs {
 		local, remote := splitPortSpec(s)
 		if local != "" {
@@ -2300,16 +2308,17 @@ func portForwardBindHint(specs []string) string {
 			example = ":" + remote // the first spec gives a concrete retry example.
 		}
 	}
-	if len(locals) == 0 {
-		// All specs already auto-assign the local port, so a bind failure isn't a
-		// port clash — keep the message generic rather than misleading.
-		return "could not bind the local listener — retry with :0 to auto-assign a free local port"
+	if len(locals) == 0 || example == "" {
+		// Every spec already auto-assigns the local port (or names no remote to build
+		// a retry from), so a bind failure isn't a plain port clash — keep the message
+		// generic rather than suggesting a retry that changes nothing.
+		return "could not bind the local listener for the requested ports"
 	}
 	word := "port"
 	if len(locals) > 1 {
 		word = "ports"
 	}
-	return fmt.Sprintf("local %s %s already in use — retry with %s (or :0) to auto-assign a free local port",
+	return fmt.Sprintf("local %s %s already in use — retry with %s to auto-assign a free local port",
 		word, strings.Join(locals, ", "), example)
 }
 
@@ -2999,6 +3008,21 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			*p, cmd = p.UpdateFilter(msg)
 		}
 		return m, cmd
+	}
+	// The port picker carries two gestures of its own (FB-pf-local-port): they act on
+	// the *highlighted* port rather than moving the cursor, so the root handles them
+	// instead of the shared component — the picker stays generic (D65) and knows
+	// nothing about ports. They resolve to registered actions like everything else
+	// (D11) and are inert in every other picker, exactly as logs.follow is inert
+	// outside the logs viewer. Checked after the filtering branch above, so while the
+	// filter is open their keys type into it.
+	if mapped && p.Kind() == portPickerKind {
+		switch action {
+		case keymap.ActionFreeLocalPort:
+			return m.forwardOnFreeLocalPort()
+		case keymap.ActionLocalPort:
+			return m.promptLocalPort()
+		}
 	}
 	if mapped {
 		*p, cmd = p.Update(action)
