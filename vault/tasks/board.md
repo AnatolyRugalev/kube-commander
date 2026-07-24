@@ -7,7 +7,10 @@ _Last updated: 2026-07-24 — M3-14a: kube-layer exec primitive — `Clients.Exe
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-14b-1** Exec — TUI wire (in-process SPDY primary path): `tea.Exec` suspend driving
+      `kube.Exec` on a Pod row's default container with `/bin/sh`, raw local terminal + initial
+      size seed, restore the TUI on exit, result to the status bar; `Execer` seam.
+      status: in-progress | owner: claude-opus | added: 2026-07-24 | claimed: 2026-07-24
 
 ## Blocked
 
@@ -83,12 +86,20 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-14b** Exec — TUI wire: `tea.Exec` suspend driving `kube.Exec` with a raw PTY
-      (`ExecCommand` adapter feeding os.Stdin/out + a `TerminalSizeQueue`), reusing the M3-07a
-      container picker, default shell probe (`/bin/sh`), restore the TUI on exit; fallback
-      `kubectl exec` when the binary is present. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-24
-      notes: Depends on M3-14a. `tea.Exec` (not ExecProcess) so the exec runs via an
-      `ExecCommand` whose Run() calls `kube.Exec`; window-resize wired through a size queue.
+- [ ] **M3-14b-2** Exec — multi-container picker reuse: a multi-container Pod prompts which
+      container to exec into (reuse the M3-07a `ctrPicker`, disambiguated by purpose logs↔exec);
+      a single-container Pod execs directly. status: todo | owner: — | added: 2026-07-24
+      notes: Depends on M3-14b-1. Generalise the container-picker selection route (currently
+      logs-only, `handleContainerSelected` → `streamLogsInto`) so a pick opens either the logs
+      stream or an exec session. 14b-1 execs the pod's default/sole container (empty Container).
+- [ ] **M3-14b-3** Exec — live terminal resize: feed SIGWINCH into the exec size queue so the
+      remote PTY tracks the local window mid-session (14b-1 seeds only the initial size).
+      status: todo | owner: — | added: 2026-07-24
+      notes: Depends on M3-14b-1. `execSizeQueue` already models seed→session-end; add a
+      SIGWINCH loop pushing new `term.GetSize` reads until Run returns.
+- [ ] **M3-14b-4** Exec — `kubectl exec` fallback when the binary is present (parity escape
+      hatch, D7): `tea.ExecProcess(exec.Command("kubectl","exec",…))` when `kubectl` is on PATH,
+      else the in-process SPDY path (14b-1). status: todo | owner: — | added: 2026-07-24
 - [ ] **M3-15** Edit: `tea.ExecProcess` suspend to `$EDITOR` on the object's YAML; apply
       on save (server-side apply / update), report result. status: todo | owner: — | added: 2026-07-22
       notes: The second sanctioned suspend action. Round-trip: `GetYAML` → temp file →
