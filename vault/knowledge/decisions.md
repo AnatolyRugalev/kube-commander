@@ -3020,3 +3020,29 @@ not silently contradict:
 4. **Pod-only for M3-13a.** `kube.PortForward` posts to the pod subresource, so the
    Port-forward action applies to `Pod` only for now; the listing panel + stop-individual
    is M3-13b, and Service→endpoint-pod resolution (mirroring `PodForOwner`, D112) is M3-13c.
+
+---
+
+### D123 — Port-forwarding a Service resolves it to a backing endpoint pod first (ServiceResolver seam), mirroring the logs PodResolver hop
+**2026-07-24.** A **Service cannot be port-forwarded directly** — `kube.PortForward`
+POSTs to the pod `portforward` subresource (D122/M1-08), which a Service does not have.
+So the Port-forward action, re-extended to apply to `Service` (M3-13c) as well as `Pod`
+(D122), **resolves a Service to a backing endpoint pod before opening the ports prompt**,
+mirroring the logs viewer's `PodResolver`/`PodForOwner` hop (D112):
+1. **`kube.PodForService(ctx, ref)`** reads the Service's `spec.selector` (a flat label
+   map, via the typed clientset — no unstructured parsing), lists matching pods, and
+   returns the **newest Ready pod** (fallback newest overall), reusing `newestReadyPod`.
+   A **selector-less Service** (headless with manual Endpoints, or ExternalName) has no
+   pods to forward to → a wrapped error the caller degrades to a toast (principle 3),
+   never a panic — same for a missing Service or no matching pods.
+2. **`ServiceResolver` seam** (`WithServiceResolver`, `*kube.Clients` satisfies it) — a
+   **separate seam from `PodResolver`**, not a second method on it, since the two
+   resolve for different features (logs vs port-forward) and a Pod row forwards directly
+   with no hop. Without it wired a Service port-forward **degrades to a toast**, not a
+   silent no-op (a Pod stays inert-without-forwarder as before).
+3. **Resolve-then-prompt**, off the update loop, **generation-guarded** (`pfResolveGen`,
+   like `viewerGen`): the prompt (and the resulting forward's label) shows the **resolved
+   pod**, not the Service, so the user sees which endpoint pod is forwarding; a resolution
+   that lands after a newer port-forward request is dropped. The ports the user types are
+   **pod-side** — no Service-port→targetPort translation (deliberately out of this slice's
+   scope; a future refinement if dogfooding wants it).

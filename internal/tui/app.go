@@ -272,6 +272,19 @@ func (f PortForwarderFunc) PortForward(ctx context.Context, ref kube.ObjectRef, 
 	return f(ctx, ref, ports)
 }
 
+// ServiceResolver is the narrow slice of the kube layer the shell needs to
+// port-forward a Service (M3-13c): a Service can't be forwarded directly (M1-08's
+// PortForward posts to the pod portforward subresource), so the shell resolves it to
+// a backing endpoint pod first (its selector → the newest ready pod), then forwards
+// that pod — mirroring the PodResolver hop the logs viewer takes for a pod-owning
+// workload (M3-07b). *kube.Clients satisfies it via PodForService. Without it wired
+// the Port-forward action on a Service degrades to a toast, so the pre-wiring app and
+// the non-resolver hermetic tests stay inert; a Pod row forwards directly (no hop),
+// so it needs no resolver.
+type ServiceResolver interface {
+	PodForService(ctx context.Context, ref kube.ObjectRef) (kube.ObjectRef, error)
+}
+
 // Option configures a Model at construction. It keeps New()/NewWithKeymap(km)
 // working unchanged (no dependencies) while letting the launcher inject a live
 // client (WithWatcher for live tables, WithDiscoverer for the menu reconcile)
@@ -403,6 +416,14 @@ func WithDrainer(d Drainer) Option {
 // passes a PortForwarderFunc wrapping kube.Clients.PortForward.
 func WithPortForwarder(p PortForwarder) Option {
 	return func(m *Model) { m.portForwarder = p }
+}
+
+// WithServiceResolver wires the kube client the shell uses to resolve a Service to a
+// backing endpoint pod before port-forwarding it (M3-13c). Without it the Port-forward
+// action on a Service degrades to a toast (a Pod row still forwards directly). The
+// launcher passes *kube.Clients, which satisfies it via PodForService.
+func WithServiceResolver(r ServiceResolver) Option {
+	return func(m *Model) { m.serviceResolver = r }
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
@@ -716,6 +737,15 @@ type Model struct {
 	forwardSeq    int
 	forwardsPanel bool
 	forwardsSel   int
+
+	// serviceResolver resolves a Service to a backing endpoint pod before forwarding
+	// (M3-13c; nil → the Port-forward action on a Service degrades to a toast). When
+	// wired, port-forwarding a Service first resolves it to a pod off the update loop
+	// (pfResolveGen stamps the request so a superseded resolution is dropped), then the
+	// ports prompt opens over that resolved pod and the forward targets it — a Pod row
+	// forwards directly, no hop. Touched only from the single-threaded update loop.
+	serviceResolver ServiceResolver
+	pfResolveGen    int
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -1044,6 +1074,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case podResolvedMsg:
 		return m.handlePodResolved(msg)
+
+	case serviceResolvedMsg:
+		return m.handleServiceResolved(msg)
 
 	case containersLoadedMsg:
 		return m.handleContainersLoaded(msg)
@@ -1953,21 +1986,79 @@ type forwardDoneMsg struct {
 	err error
 }
 
-// openPortForwardPrompt opens the modal's ports prompt over the selected Pod before
-// forwarding it (M3-13a). It stashes the target (resource + the row's ObjectRef) in
-// the shared mutate stash and shows a single-line prompt; nav.drillIn submits the
-// typed spec (ConfirmedMsg with Value → runPortForward), nav.back cancels — no raw
-// keys, the field captures input (D11). With no port-forwarder wired it is inert (a
-// no-op), exactly as the Port-forward entry is absent from a non-Pod kind's menu.
+// pfPodResource labels the ports prompt (and the resulting forward) for a pod
+// resolved from a Service (M3-13c): the prompt title and forward label show the
+// resolved *pod*, not the Service, so the user sees which endpoint pod is forwarding.
+// It carries only the Pod kind — viewerTitle reads GVK.Kind — since the resolved pod's
+// namespace/name come from its ObjectRef (the logs viewer's podLogResource twin).
+var pfPodResource = kube.Resource{GVK: schema.GroupVersionKind{Version: "v1", Kind: "Pod"}}
+
+// serviceResolvedMsg carries the outcome of the async PodForService resolution issued
+// when the Port-forward action is invoked on a Service (M3-13c). gen ties it to the
+// pfResolveGen bumped when the resolution was requested, so a result that lands after
+// a newer port-forward request supersedes it is dropped rather than opening a stale
+// prompt. ref is the resolved backing pod.
+type serviceResolvedMsg struct {
+	gen int
+	ref kube.ObjectRef
+	err error
+}
+
+// openPortForwardPrompt starts the Port-forward flow over the selected row (M3-13a/c).
+// With no port-forwarder wired it is inert (a no-op), exactly as the Port-forward
+// entry is absent from a kind whose menu omits it. A Pod forwards directly: its ports
+// prompt opens immediately. A Service can't be forwarded directly (kube.PortForward
+// posts to the pod portforward subresource), so it is first resolved to a backing
+// endpoint pod off the update loop (M3-13c, mirroring the logs viewer's PodResolver
+// hop); the prompt then opens over that resolved pod (handleServiceResolved). Without a
+// service resolver wired a Service degrades to a toast rather than a silent no-op.
 func (m Model) openPortForwardPrompt(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.portForwarder == nil {
 		return m, nil
 	}
-	m.mutateRes = msg.Resource
-	m.mutateRef = msg.Object
-	target := viewerTitle(msg.Resource, msg.Object)
+	if msg.Resource.GVK.Kind == "Service" {
+		if m.serviceResolver == nil {
+			return m, m.surfaceError(ErrorMsg{Context: "port-forward for " + msg.Resource.GVK.Kind + ": not yet available"})
+		}
+		m.pfResolveGen++
+		gen := m.pfResolveGen
+		resolver := m.serviceResolver
+		ref := msg.Object
+		return m, func() tea.Msg {
+			pod, err := resolver.PodForService(context.Background(), ref)
+			return serviceResolvedMsg{gen: gen, ref: pod, err: err}
+		}
+	}
+	return m.showPortForwardPrompt(msg.Resource, msg.Object)
+}
+
+// showPortForwardPrompt opens the modal's ports prompt over ref (a Pod — either a Pod
+// row directly, or the endpoint pod a Service resolved to) before forwarding it. It
+// stashes the target in the shared mutate stash and shows a single-line prompt;
+// nav.drillIn submits the typed spec (ConfirmedMsg with Value → runPortForward),
+// nav.back cancels — no raw keys, the field captures input (D11).
+func (m Model) showPortForwardPrompt(res kube.Resource, ref kube.ObjectRef) (tea.Model, tea.Cmd) {
+	m.mutateRes = res
+	m.mutateRef = ref
+	target := viewerTitle(res, ref)
 	cmd := m.modal.ShowPrompt(portForwardModalKind, "Port-forward", "Ports for "+target+" (e.g. 8080:80):", "")
 	return m, cmd
+}
+
+// handleServiceResolved acts on a backing pod resolved for a Service port-forward
+// (M3-13c). A result whose gen no longer matches (a newer port-forward request
+// superseded it) is dropped; a resolution error (a selector-less Service, no
+// matching/ready pod, RBAC denial) degrades to a status-bar toast (D74) without
+// opening the prompt. On success it opens the ports prompt over the resolved pod,
+// titled as a Pod so the user sees which endpoint pod is forwarding.
+func (m Model) handleServiceResolved(msg serviceResolvedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.pfResolveGen {
+		return m, nil // superseded by a newer port-forward request; drop.
+	}
+	if msg.err != nil {
+		return m, m.surfaceError(NewErrorMsg("port-forward", msg.err))
+	}
+	return m.showPortForwardPrompt(pfPodResource, msg.ref)
 }
 
 // runPortForward parses the submitted port spec and starts the stashed forward off

@@ -141,6 +141,7 @@ func runTUI(opts runOptions) error {
 		tui.WithPortForwarder(tui.PortForwarderFunc(func(ctx context.Context, ref kube.ObjectRef, ports []string) (tui.ActiveForward, error) {
 			return clients.PortForward(ctx, ref, ports)
 		})),
+		tui.WithServiceResolver(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),

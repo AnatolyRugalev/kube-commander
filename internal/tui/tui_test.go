@@ -5032,6 +5032,129 @@ func TestPortForwardInertWithoutForwarder(t *testing.T) {
 	}
 }
 
+// fakeServiceResolver is a hermetic ServiceResolver (M3-13c): it returns a preset
+// backing-pod ref (or an error) and records the Service ref it was asked to resolve,
+// so a test can drive the Service→pod port-forward hop without a cluster.
+type fakeServiceResolver struct {
+	pod    kube.ObjectRef
+	err    error
+	calls  int
+	gotRef kube.ObjectRef
+}
+
+func (f *fakeServiceResolver) PodForService(_ context.Context, ref kube.ObjectRef) (kube.ObjectRef, error) {
+	f.calls++
+	f.gotRef = ref
+	if f.err != nil {
+		return kube.ObjectRef{}, f.err
+	}
+	return f.pod, nil
+}
+
+// TestPortForwardServiceResolvesPod proves M3-13c's happy path: port-forwarding a
+// Service first resolves it to a backing endpoint pod (the resolver asked for the
+// Service row), then the ports prompt opens over — and the started forward targets —
+// the *resolved pod*, not the Service.
+func TestPortForwardServiceResolvesPod(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	sr := &fakeServiceResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz", UID: "uid-1"}}
+	m := openPodTable(t, "Service", WithPortForwarder(pf), WithServiceResolver(sr))
+	row, _ := m.table.SelectedRow()
+
+	// The action resolves off the update loop; no prompt yet.
+	m, resolveCmd := dispatchRowAction(t, m, rowActionPortForward)
+	if m.modal.Active() {
+		t.Fatal("a Service port-forward must not open the prompt until its backing pod resolves")
+	}
+	if resolveCmd == nil {
+		t.Fatal("a Service port-forward should issue the async resolution command")
+	}
+	msg, ok := resolveCmd().(serviceResolvedMsg)
+	if !ok {
+		t.Fatalf("resolution command should produce a serviceResolvedMsg, got %T", resolveCmd())
+	}
+	if sr.calls != 1 || sr.gotRef.Name != row.Object.Name {
+		t.Fatalf("resolver should be asked for the Service row %q once, got calls=%d ref=%q", row.Object.Name, sr.calls, sr.gotRef.Name)
+	}
+
+	// Delivering the resolution opens the prompt over the resolved pod.
+	next, _ := m.Update(msg)
+	m = next.(Model)
+	if !m.modal.Active() || !m.modal.Prompting() || m.modal.Kind() != portForwardModalKind {
+		t.Fatal("the resolved Service should open the port-forward ports prompt")
+	}
+	if view := m.View().Content; !strings.Contains(view, "api-xyz") {
+		t.Fatalf("the prompt should name the resolved pod api-xyz: %q", view)
+	}
+
+	// Submitting starts the forward against the resolved pod.
+	next, _ = m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "8080:80"})
+	m = next.(Model)
+	if pf.calls != 1 || pf.gotRef.Name != "api-xyz" {
+		t.Fatalf("the forward should target the resolved pod api-xyz, got calls=%d ref=%q", pf.calls, pf.gotRef.Name)
+	}
+	if len(m.forwards) != 1 {
+		t.Fatalf("the started forward should be tracked, got %d", len(m.forwards))
+	}
+}
+
+// TestPortForwardServiceResolveErrorDegrades proves a resolution failure (a
+// selector-less Service, no ready pod, RBAC denial) degrades to a status-bar toast and
+// opens no prompt.
+func TestPortForwardServiceResolveErrorDegrades(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	sr := &fakeServiceResolver{err: errors.New("no pods found for service")}
+	m := openPodTable(t, "Service", WithPortForwarder(pf), WithServiceResolver(sr))
+
+	m, resolveCmd := dispatchRowAction(t, m, rowActionPortForward)
+	next, _ := m.Update(resolveCmd().(serviceResolvedMsg))
+	m = next.(Model)
+	if m.modal.Active() {
+		t.Fatal("a failed Service resolution must not open the prompt")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a failed Service resolution should surface a status-bar error")
+	}
+	if pf.calls != 0 {
+		t.Fatal("a failed Service resolution must start no forward")
+	}
+}
+
+// TestPortForwardServiceInertWithoutResolver proves that with a forwarder but no
+// service resolver wired, port-forwarding a Service degrades to a toast (not a silent
+// no-op) and opens no prompt — a Pod still forwards directly.
+func TestPortForwardServiceInertWithoutResolver(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := openPodTable(t, "Service", WithPortForwarder(pf)) // no WithServiceResolver
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+	if m.modal.Active() {
+		t.Fatal("with no service resolver wired a Service port-forward must not open a prompt")
+	}
+	if !m.status.HasError() {
+		t.Fatal("with no service resolver wired a Service port-forward should surface a status-bar error")
+	}
+	if pf.calls != 0 {
+		t.Fatal("with no service resolver wired a Service port-forward must start no forward")
+	}
+}
+
+// TestPortForwardServiceStaleResolutionDropped proves the generation guard: a resolution
+// that lands after a newer port-forward request superseded it is dropped, opening no
+// prompt.
+func TestPortForwardServiceStaleResolutionDropped(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	sr := &fakeServiceResolver{pod: kube.ObjectRef{Namespace: "web", Name: "api-xyz"}}
+	m := openPodTable(t, "Service", WithPortForwarder(pf), WithServiceResolver(sr))
+
+	m, resolveCmd := dispatchRowAction(t, m, rowActionPortForward)
+	stale := resolveCmd().(serviceResolvedMsg)
+	m.pfResolveGen++ // a newer request supersedes the in-flight resolution
+	next, _ := m.Update(stale)
+	if next.(Model).modal.Active() {
+		t.Fatal("a superseded Service resolution should be dropped, opening no prompt")
+	}
+}
+
 // TestPortForwardStopsOnQuit proves every running forward is torn down when the app
 // quits (cancel-on-exit): the forward's context is done and the set is cleared.
 func TestPortForwardStopsOnQuit(t *testing.T) {

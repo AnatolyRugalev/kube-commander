@@ -48,6 +48,41 @@ func (c *Clients) PodForOwner(ctx context.Context, res Resource, ref ObjectRef) 
 	return ObjectRef{Namespace: pod.Namespace, Name: pod.Name, UID: string(pod.UID)}, nil
 }
 
+// PodForService resolves a backing endpoint pod for a Service so a port-forward can
+// target a running pod (M3-13c). kube.PortForward posts to the pod portforward
+// subresource, so a Service cannot be forwarded directly — the shell resolves it to
+// one of its endpoint pods first. It mirrors PodForOwner: it reads the Service's pod
+// selector (spec.selector, a flat label map — the built-in Service type is fetched
+// via the typed clientset, so no unstructured parsing is needed), lists the pods
+// matching it in the Service's namespace, and returns the newest Ready pod's
+// ObjectRef, falling back to the newest pod overall when none is Ready. A
+// selector-less Service (headless with manually managed Endpoints, or an ExternalName
+// service) has no spec.selector to resolve; that — like a missing Service or no
+// matching pods — is a wrapped error the caller degrades to a status-bar toast
+// (principle 3), never a panic.
+func (c *Clients) PodForService(ctx context.Context, ref ObjectRef) (ObjectRef, error) {
+	if ref.Name == "" {
+		return ObjectRef{}, fmt.Errorf("kube: pod for service: empty service name")
+	}
+	svc, err := c.Clientset.CoreV1().Services(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	if err != nil {
+		return ObjectRef{}, fmt.Errorf("kube: getting service %q: %w", ref.Name, err)
+	}
+	if len(svc.Spec.Selector) == 0 {
+		return ObjectRef{}, fmt.Errorf("kube: service %q has no pod selector (headless or ExternalName services can't be port-forwarded)", ref.Name)
+	}
+	sel := labels.SelectorFromSet(labels.Set(svc.Spec.Selector))
+	pods, err := c.Clientset.CoreV1().Pods(ref.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
+	if err != nil {
+		return ObjectRef{}, fmt.Errorf("kube: listing pods for service %q: %w", ref.Name, err)
+	}
+	pod := newestReadyPod(pods.Items)
+	if pod == nil {
+		return ObjectRef{}, fmt.Errorf("kube: no pods found for service %q", ref.Name)
+	}
+	return ObjectRef{Namespace: pod.Namespace, Name: pod.Name, UID: string(pod.UID)}, nil
+}
+
 // podSelector extracts a workload's pod label selector from its unstructured form.
 // Every pod-owning kind but ReplicationController stores spec.selector as a
 // metav1.LabelSelector (matchLabels + matchExpressions); ReplicationController (core
