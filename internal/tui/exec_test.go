@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"syscall"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -315,5 +316,52 @@ func TestExecSizeQueueDropsDegenerateSeed(t *testing.T) {
 	q.close()
 	if got := q.Next(); got != nil {
 		t.Fatalf("a degenerate seed should be dropped, got %+v", got)
+	}
+}
+
+// TestExecSizeQueuePushLatestWins proves a live resize (push) replaces the pending size
+// so the newest window size always wins over a stale one queued but not yet read — the
+// coalescing that keeps the remote PTY from lagging behind a burst of SIGWINCH events.
+func TestExecSizeQueuePushLatestWins(t *testing.T) {
+	q := newExecSizeQueue()
+	q.push(100, 30)
+	q.push(120, 40) // supersedes the unread 100×30
+	got := q.Next()
+	if got == nil || got.Width != 120 || got.Height != 40 {
+		t.Fatalf("Next = %+v, want the latest {120 40}", got)
+	}
+	q.close()
+}
+
+// TestExecSizeQueuePushDropsDegenerate proves a 0×0 resize read is ignored rather than
+// queued, leaving a prior good size intact (a bad GetSize must not clobber the PTY size).
+func TestExecSizeQueuePushDropsDegenerate(t *testing.T) {
+	q := newExecSizeQueue()
+	q.seed(80, 24)
+	q.push(0, 0) // a failed size read must not overwrite the good seeded size
+	got := q.Next()
+	if got == nil || got.Width != 80 || got.Height != 24 {
+		t.Fatalf("Next = %+v, want the seeded {80 24} (degenerate push dropped)", got)
+	}
+	q.close()
+}
+
+// TestWatchResizeTracksSIGWINCH proves the resize watcher pushes the current terminal
+// size into the queue on a SIGWINCH, so the remote PTY tracks the local window
+// mid-session (M3-14b-3). It feeds a fake size reader and raises SIGWINCH in-process
+// (no real terminal needed), then reads the delivered size; stop tears the watcher down
+// so a later close never races a push.
+func TestWatchResizeTracksSIGWINCH(t *testing.T) {
+	q := newExecSizeQueue()
+	sizeOf := func() (uint16, uint16, bool) { return 132, 43, true }
+	stop := watchResize(q, sizeOf)
+	defer stop()
+
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGWINCH); err != nil {
+		t.Fatalf("raising SIGWINCH: %v", err)
+	}
+	got := q.Next() // blocks until the watcher reads the new size and pushes it
+	if got == nil || got.Width != 132 || got.Height != 43 {
+		t.Fatalf("after SIGWINCH Next = %+v, want the resized {132 43}", got)
 	}
 }

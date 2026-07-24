@@ -3137,3 +3137,28 @@ and the picker stash (`ctrPurpose` + the renamed `ctrStreamRes`/`ctrStreamRef`),
 3. **`viewerGen` guards the exec fetch too.** The exec container fetch bumps/checks
    `viewerGen` for supersession like the logs fetch, even though exec opens no viewer; the
    `gen` is unused past `streamOrExec` on the exec arm.
+
+### D127 — Live exec terminal resize: a SIGWINCH watcher pushes the current size into the exec size queue, which is now a latest-wins one-slot channel
+
+**Date:** 2026-07-24 · M3-14b-3.
+
+The exec size queue (`execSizeQueue`, D125 §3) no longer delivers only the seeded size —
+it now tracks the local window for the session's life. `execCommand.Run` (real-terminal
+path only) starts **`watchResize(q, sizeOf)`**: a goroutine that listens for
+**`syscall.SIGWINCH`** and on each one reads the current terminal size (`term.GetSize`,
+injected as `sizeOf` so the pump is hermetically testable with a fake reader + an
+in-process `syscall.Kill(self, SIGWINCH)`) and calls the new **`push`**. Binding
+constraints for future exec/size legs:
+
+1. **The size queue is latest-wins, never lossy-blocking.** `push` replaces the pending
+   size (drops a stale unread one, retries) so a burst of resizes collapses to the newest
+   and the SIGWINCH goroutine never blocks on a slow `remotecommand` reader. `seed` (the
+   initial size) keeps its keep-existing semantics; `push` (resizes) supersedes. A 0×0 read
+   is dropped by both.
+2. **The watcher is stopped before the queue is closed.** `Run` defers `watchResize`'s
+   `stop` *after* `defer q.close()`, so LIFO tears the watcher down first; `stop`
+   unregisters the signal (`signal.Stop`) and **blocks until the pump goroutine has
+   exited**, guaranteeing no `push` ever races a closed channel. A future leg adding another
+   size producer must preserve that stop-before-close ordering.
+3. **SIGWINCH resize is Linux/macOS only**, consistent with the raw-PTY path (D7/D125) —
+   `syscall.SIGWINCH` exists on both; native Windows is a non-goal (WSL2).

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-14b-2: exec multi-container picker reuse — `openExec` now routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); a single-container Pod execs directly, a multi-container Pod prompts via the reused `ctrPicker`, and `streamOrExec` routes the resolved container to `streamLogsInto` or `execInto` (D126). Top-unblocked next: M3-14b-3 (live SIGWINCH resize). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-14b-3: exec live terminal resize — a `syscall.SIGWINCH` watcher (`watchResize`) pushes the current terminal size into the now latest-wins exec size queue so the remote PTY tracks the local window mid-session; the watcher is stopped (signal.Stop + wait) before the queue closes, so no push races the close (D127). Top-unblocked next: M3-14b-4 (kubectl-exec fallback). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-14b-3** Exec — live terminal resize (SIGWINCH → exec size queue)
-      status: in-progress | owner: claude-opus | claimed: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -97,6 +96,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-14b-3** Exec — live terminal resize: a `syscall.SIGWINCH` watcher (`watchResize`, real-terminal path) reads `term.GetSize` (injected `sizeOf`) and pushes it into the exec size queue, now a latest-wins one-slot channel (`push` supersedes an unread stale size, drops 0×0), so the remote PTY tracks the local window mid-session; watcher stopped (`signal.Stop` + wait for the goroutine) before `close`, so no push races the closed channel; hermetic test raises SIGWINCH in-process — done 2026-07-24 (D127)
 - [x] **M3-14b-2** Exec — multi-container picker reuse: `openExec` routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); single-container Pod execs directly, multi-container prompts via the reused `ctrPicker`, `streamOrExec` routes to `streamLogsInto`/`execInto`; `newExecCommand` takes the chosen container — done 2026-07-24 (D126)
 - [x] **M3-14b-1** Exec — TUI wire (in-process SPDY primary path): `tea.Exec`→`execCommand.Run()` drives blocking `kube.Exec` off the loop, local raw terminal (x/term) + seed-once size queue, Pod default container `/bin/sh`, result to status bar; `Execer` seam; live exec dogfood raised as a human-task — done 2026-07-24 (D125)
 - [x] **M3-14a** Exec — kube-layer exec primitive (`internal/kube/exec.go`): blocking `Clients.Exec` over the pod `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl binary, D2); apimachinery-free `ExecOptions`/`TerminalSize`/`TerminalSizeQueue` surface with a `sizeQueueAdapter` (D33); TTY folds stderr into stdout + wires the size queue; injectable executor factory, hermetic fake tests (D18) — done 2026-07-24 (D124)

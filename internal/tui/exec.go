@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
@@ -26,9 +28,10 @@ import (
 //
 // A multi-container Pod prompts which container to exec into via the shared container
 // picker (M3-14b-2, reusing the M3-07a ctrPicker); a single-container Pod execs
-// directly. The exec runs /bin/sh and seeds only the initial terminal size (live
-// SIGWINCH resize → M3-14b-3, kubectl-binary fallback → M3-14b-4). Linux/macOS only —
-// the raw-PTY path is a non-goal on native Windows (WSL2 instead, D7).
+// directly. The exec runs /bin/sh, seeds the initial terminal size, and tracks live
+// window resizes via a SIGWINCH watcher so the remote PTY follows the local terminal
+// (M3-14b-3; kubectl-binary fallback → M3-14b-4). Linux/macOS only — the raw-PTY path
+// is a non-goal on native Windows (WSL2 instead, D7).
 
 // Execer is the narrow slice of the kube layer the shell needs to run the exec
 // action (M3-14b-1): open an interactive session in a pod's container (M3-14a's
@@ -140,10 +143,13 @@ func (c *execCommand) SetStdout(w io.Writer) { c.stdout = w }
 func (c *execCommand) SetStderr(io.Writer)   {}
 
 // Run streams the interactive exec to completion. When stdin is a real terminal it
-// switches it to raw mode for the session (restored on return) and seeds the exec's
-// size queue with the terminal's current size; a non-terminal stdin (a test's
-// buffer, a piped run) skips the raw/size handling and just streams. The blocking
-// kube.Exec owns the terminal until the shell exits.
+// switches it to raw mode for the session (restored on return), seeds the exec's size
+// queue with the terminal's current size, and starts a SIGWINCH watcher that pushes
+// the new size on every window resize so the remote PTY tracks the local window
+// (M3-14b-3); a non-terminal stdin (a test's buffer, a piped run) skips the
+// raw/size/resize handling and just streams. The blocking kube.Exec owns the terminal
+// until the shell exits. The watcher is stopped (deferred before the queue's close, so
+// LIFO tears it down first) before Run returns, so no push ever races a closed queue.
 func (c *execCommand) Run() error {
 	q := newExecSizeQueue()
 	defer q.close()
@@ -152,9 +158,17 @@ func (c *execCommand) Run() error {
 		if st, err := term.MakeRaw(fd); err == nil {
 			defer func() { _ = term.Restore(fd, st) }()
 		}
-		if w, h, err := term.GetSize(fd); err == nil {
-			q.seed(uint16(w), uint16(h))
+		sizeOf := func() (uint16, uint16, bool) {
+			w, h, err := term.GetSize(fd)
+			if err != nil {
+				return 0, 0, false
+			}
+			return uint16(w), uint16(h), true
 		}
+		if w, h, ok := sizeOf(); ok {
+			q.seed(w, h)
+		}
+		defer watchResize(q, sizeOf)()
 	}
 
 	return c.execer.Exec(context.Background(), c.ref, kube.ExecOptions{
@@ -167,6 +181,39 @@ func (c *execCommand) Run() error {
 	})
 }
 
+// watchResize pumps live terminal-size changes into q until the returned stop func is
+// called (M3-14b-3). It listens for SIGWINCH and on each one reads the current size
+// via sizeOf and pushes it to the queue (latest-wins), so the remote PTY follows the
+// local window mid-session — 14b-1 seeded only the size at exec start. stop
+// unregisters the signal and blocks until the pump goroutine has exited, so the caller
+// can then close the queue with no push racing a closed channel. sizeOf is injected so
+// the pump is hermetically testable (fed a fake reader + an in-process SIGWINCH)
+// without a real terminal.
+func watchResize(q *execSizeQueue, sizeOf func() (uint16, uint16, bool)) (stop func()) {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGWINCH)
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		for {
+			select {
+			case <-sig:
+				if w, h, ok := sizeOf(); ok {
+					q.push(w, h)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() {
+		signal.Stop(sig)
+		close(done)
+		<-finished
+	}
+}
+
 // fileFd returns the file descriptor of r when it is an *os.File (the real terminal
 // bubbletea passes for a standard program), so raw-mode / size handling only kicks in
 // for an actual terminal. Anything else (a test buffer, a pipe) reports false.
@@ -177,12 +224,14 @@ func fileFd(r io.Reader) (int, bool) {
 	return 0, false
 }
 
-// execSizeQueue is the exec's kube.TerminalSizeQueue (M3-14b-1): it delivers the
-// initial terminal size once, then blocks until the session ends (close → Next
-// returns nil, the queue's end-of-session signal). A one-slot buffer holds the seed
-// so seeding never blocks the update loop; live mid-session resize (SIGWINCH) is
-// M3-14b-3. Concurrency-safe: seed runs on the update loop before the exec starts,
-// Next runs on remotecommand's reader goroutine, close on the exec goroutine.
+// execSizeQueue is the exec's kube.TerminalSizeQueue (M3-14b-1/3): it delivers the
+// initial terminal size (seed), then the latest size on every window resize (push),
+// then blocks until the session ends (close → Next returns nil, the queue's
+// end-of-session signal). A one-slot latest-wins buffer holds the pending size so
+// producers never block; a burst of resizes collapses to the newest. Concurrency-safe:
+// seed runs on the exec goroutine before the size watcher starts, push on the SIGWINCH
+// watcher goroutine, Next on remotecommand's reader goroutine, close on the exec
+// goroutine after the watcher has stopped (so push never races the close).
 type execSizeQueue struct {
 	ch        chan kube.TerminalSize
 	closeOnce sync.Once
@@ -201,6 +250,30 @@ func (q *execSizeQueue) seed(w, h uint16) {
 	select {
 	case q.ch <- kube.TerminalSize{Width: w, Height: h}:
 	default:
+	}
+}
+
+// push replaces the pending terminal size with the latest w×h on a window resize
+// (M3-14b-3), so the newest size always wins and a slow reader never lags behind a
+// burst of SIGWINCH events. It never blocks the watcher goroutine: if a stale size is
+// still queued it is dropped and the newer one takes its place. A degenerate 0×0 read
+// is ignored. Safe against close because the watcher is stopped before close (see
+// watchResize) — push is never called on a closed channel.
+func (q *execSizeQueue) push(w, h uint16) {
+	if w == 0 || h == 0 {
+		return
+	}
+	s := kube.TerminalSize{Width: w, Height: h}
+	for {
+		select {
+		case q.ch <- s:
+			return
+		default:
+			select {
+			case <-q.ch: // drop the stale pending size, then retry with the newer one
+			default:
+			}
+		}
 	}
 }
 
