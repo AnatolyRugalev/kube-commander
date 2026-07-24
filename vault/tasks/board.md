@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-14b-3: exec live terminal resize — a `syscall.SIGWINCH` watcher (`watchResize`) pushes the current terminal size into the now latest-wins exec size queue so the remote PTY tracks the local window mid-session; the watcher is stopped (signal.Stop + wait) before the queue closes, so no push races the close (D127). Top-unblocked next: M3-14b-4 (kubectl-exec fallback). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-14b-4: exec kubectl parity fallback — when `kubectl` is on PATH, exec suspends into `kubectl exec -it` (via `tea.ExecProcess`, pointed at the same --kubeconfig/--context/-n) instead of the in-process SPDY path, which becomes the no-kubectl fallback (D128); `lookupKubectl` seam + pure `kubectlExecArgs`. Top-unblocked next: M3-15 (Edit → `$EDITOR`). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -83,9 +83,6 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-14b-4** Exec — `kubectl exec` fallback when the binary is present (parity escape
-      hatch, D7): `tea.ExecProcess(exec.Command("kubectl","exec",…))` when `kubectl` is on PATH,
-      else the in-process SPDY path (14b-1). status: todo | owner: — | added: 2026-07-24
 - [ ] **M3-15** Edit: `tea.ExecProcess` suspend to `$EDITOR` on the object's YAML; apply
       on save (server-side apply / update), report result. status: todo | owner: — | added: 2026-07-22
       notes: The second sanctioned suspend action. Round-trip: `GetYAML` → temp file →
@@ -96,6 +93,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-14b-4** Exec — kubectl parity fallback: when `kubectl` is on PATH `execInto` suspends into `kubectl exec -i -t <pod> [-c ctr] -- /bin/sh` via `tea.ExecProcess` (pointed at the same cluster via `--kubeconfig`/`--context`/`-n`, new `WithKubeconfig` option wired in `run.go`), else the in-process SPDY path (14b-1) — kubectl owns its own raw PTY/resize/edge-cases when present, SPDY keeps exec working with no kubectl (#68/D2); `lookupKubectl` seam (overridable in tests) + pure `kubectlExecArgs` builder, hermetically tested — done 2026-07-24 (D128)
 - [x] **M3-14b-3** Exec — live terminal resize: a `syscall.SIGWINCH` watcher (`watchResize`, real-terminal path) reads `term.GetSize` (injected `sizeOf`) and pushes it into the exec size queue, now a latest-wins one-slot channel (`push` supersedes an unread stale size, drops 0×0), so the remote PTY tracks the local window mid-session; watcher stopped (`signal.Stop` + wait for the goroutine) before `close`, so no push races the closed channel; hermetic test raises SIGWINCH in-process — done 2026-07-24 (D127)
 - [x] **M3-14b-2** Exec — multi-container picker reuse: `openExec` routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); single-container Pod execs directly, multi-container prompts via the reused `ctrPicker`, `streamOrExec` routes to `streamLogsInto`/`execInto`; `newExecCommand` takes the chosen container — done 2026-07-24 (D126)
 - [x] **M3-14b-1** Exec — TUI wire (in-process SPDY primary path): `tea.Exec`→`execCommand.Run()` drives blocking `kube.Exec` off the loop, local raw terminal (x/term) + seed-once size queue, Pod default container `/bin/sh`, result to status bar; `Execer` seam; live exec dogfood raised as a human-task — done 2026-07-24 (D125)

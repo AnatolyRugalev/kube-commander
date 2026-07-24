@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"syscall"
 	"testing"
 
@@ -288,6 +289,97 @@ func TestExecDoneReportsResult(t *testing.T) {
 	got = next.(Model)
 	if !got.status.HasError() {
 		t.Fatal("a failed exec should surface a status-bar error toast")
+	}
+}
+
+// forceKubectl overrides the lookupKubectl seam for a test and restores it after, so
+// the exec parity fallback (M3-14b-4) is exercised deterministically without a real
+// kubectl on the runner. present=false forces the in-process SPDY path.
+func forceKubectl(t *testing.T, present bool) {
+	t.Helper()
+	old := lookupKubectl
+	if present {
+		lookupKubectl = func() (string, bool) { return "/usr/bin/kubectl", true }
+	} else {
+		lookupKubectl = func() (string, bool) { return "", false }
+	}
+	t.Cleanup(func() { lookupKubectl = old })
+}
+
+// TestKubectlExecProcWhenPresent proves that with kubectl on PATH the exec routes to a
+// `kubectl exec -it` process (M3-14b-4) targeting the same cluster kubecom launched
+// with — the resolved binary, --kubeconfig / --context, the row namespace, container,
+// and `-- /bin/sh`.
+func TestKubectlExecProcWhenPresent(t *testing.T) {
+	forceKubectl(t, true)
+	m := sizedWith(t, WithExecer(&fakeExecer{}), WithContext("prod"), WithKubeconfig("/home/u/.kube/config"))
+
+	proc, ok := m.kubectlExecProc(kube.ObjectRef{Namespace: "web", Name: "api-1"}, "sidecar")
+	if !ok {
+		t.Fatal("with kubectl on PATH the exec should route to the kubectl process")
+	}
+	if proc.Path != "/usr/bin/kubectl" {
+		t.Fatalf("process path = %q, want the resolved kubectl", proc.Path)
+	}
+	want := []string{
+		"/usr/bin/kubectl",
+		"--kubeconfig", "/home/u/.kube/config",
+		"--context", "prod",
+		"-n", "web",
+		"exec", "-i", "-t", "api-1",
+		"-c", "sidecar",
+		"--", "/bin/sh",
+	}
+	if got := proc.Args; !slices.Equal(got, want) {
+		t.Fatalf("kubectl argv =\n  %v\nwant\n  %v", got, want)
+	}
+}
+
+// TestKubectlExecProcAbsent proves that with no kubectl on PATH kubectlExecProc reports
+// no process, so execInto falls back to the in-process SPDY path.
+func TestKubectlExecProcAbsent(t *testing.T) {
+	forceKubectl(t, false)
+	m := sizedWith(t, WithExecer(&fakeExecer{}))
+	if _, ok := m.kubectlExecProc(kube.ObjectRef{Namespace: "web", Name: "api-1"}, ""); ok {
+		t.Fatal("with no kubectl on PATH kubectlExecProc must report no process (use SPDY)")
+	}
+}
+
+// TestKubectlExecArgsMinimal proves the connection flags and -c are omitted when unset:
+// a cluster-less launch (no --kubeconfig/--context) execing a Pod's default container
+// yields just `exec -i -t <pod> -- /bin/sh` (kubectl uses its standard resolution).
+func TestKubectlExecArgsMinimal(t *testing.T) {
+	got := kubectlExecArgs("", "", kube.ObjectRef{Name: "api-1"}, "")
+	want := []string{"exec", "-i", "-t", "api-1", "--", "/bin/sh"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("minimal argv = %v, want %v", got, want)
+	}
+}
+
+// TestKubectlExecArgsNamespaceOnly proves a namespaced Pod adds -n but still omits the
+// unset connection flags and container.
+func TestKubectlExecArgsNamespaceOnly(t *testing.T) {
+	got := kubectlExecArgs("", "", kube.ObjectRef{Namespace: "kube-system", Name: "dns-1"}, "")
+	want := []string{"-n", "kube-system", "exec", "-i", "-t", "dns-1", "--", "/bin/sh"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("namespaced argv = %v, want %v", got, want)
+	}
+}
+
+// TestExecRoutesToKubectlWhenPresent proves the end-to-end intent still suspends (a
+// non-nil command) when kubectl is on PATH — the kubectl branch of execInto — without
+// ever calling the in-process execer.
+func TestExecRoutesToKubectlWhenPresent(t *testing.T) {
+	forceKubectl(t, true)
+	f := &fakeExecer{}
+	m := podExecModel(t, WithExecer(f))
+
+	_, cmd := dispatchRowAction(t, m, rowActionExec)
+	if cmd == nil {
+		t.Fatal("with kubectl present the exec intent should still issue a suspend command")
+	}
+	if f.calls != 0 {
+		t.Fatal("the kubectl fallback must not call the in-process execer")
 	}
 }
 

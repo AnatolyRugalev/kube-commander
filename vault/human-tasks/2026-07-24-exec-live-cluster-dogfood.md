@@ -23,8 +23,11 @@ end (the sandbox has no cluster and no TTY, so this path is unverified by tests)
    RBAC forbids `pods/exec` — and confirm it degrades to a **status-bar error toast**
    (no panic, TUI intact).
 5. Note whether the initial shell size matches the terminal, and what happens on a
-   window resize mid-session (live SIGWINCH resize is intentionally deferred to
-   M3-14b-3 — a mismatch after resize is expected, not a bug in this slice).
+   window resize mid-session (live SIGWINCH resize now tracks the window, M3-14b-3).
+6. **Two exec paths now exist (M3-14b-4/D128):** with `kubectl` on `PATH` the action
+   shells out to `kubectl exec -it` (kubectl owns the PTY/resize); with no `kubectl`
+   installed it uses the in-process SPDY path. Ideally confirm **both** — run once with
+   `kubectl` present and once with it off `PATH` — and note if either misbehaves.
 
 ## Why the agent can't do it
 

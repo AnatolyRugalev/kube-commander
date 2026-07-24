@@ -427,9 +427,19 @@ func WithServiceResolver(r ServiceResolver) Option {
 }
 
 // WithContext sets the kube context name shown on the status bar and the startup
-// welcome page. Purely cosmetic; empty renders nothing.
+// welcome page. Also forwarded to the `kubectl exec` parity fallback as --context
+// (M3-14b-4) so the shelled-out kubectl targets the same context. Empty renders
+// nothing on the UI and omits the flag.
 func WithContext(name string) Option {
 	return func(m *Model) { m.context = name }
+}
+
+// WithKubeconfig records the explicit --kubeconfig path kubecom launched with ("" =
+// standard resolution). It is forwarded to the `kubectl exec` parity fallback
+// (M3-14b-4) as --kubeconfig so a shelled-out kubectl resolves the same cluster the
+// in-process client did; empty omits the flag (kubectl uses its standard rules).
+func WithKubeconfig(path string) Option {
+	return func(m *Model) { m.kubeconfig = path }
 }
 
 // WithVersion sets the build version shown on the startup welcome page (e.g.
@@ -524,9 +534,13 @@ type Model struct {
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
-	// page (both). Set at construction via WithContext/WithVersion.
-	context string
-	version string
+	// page (both). Set at construction via WithContext/WithVersion. kubeconfig is the
+	// explicit --kubeconfig path (empty = standard resolution) — not cosmetic: it is
+	// forwarded to the `kubectl exec` parity fallback (M3-14b-4) so the shelled-out
+	// kubectl targets the same kubeconfig/context kubecom launched with.
+	context    string
+	version    string
+	kubeconfig string
 
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)

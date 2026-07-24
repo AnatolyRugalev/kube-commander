@@ -3162,3 +3162,33 @@ constraints for future exec/size legs:
    size producer must preserve that stop-before-close ordering.
 3. **SIGWINCH resize is Linux/macOS only**, consistent with the raw-PTY path (D7/D125) —
    `syscall.SIGWINCH` exists on both; native Windows is a non-goal (WSL2).
+
+### D128 — Exec prefers `kubectl exec` when the binary is on PATH (parity escape hatch); the in-process SPDY path is the fallback that keeps exec working without kubectl
+
+**Date:** 2026-07-24 · M3-14b-4.
+
+`execInto` now routes through a **`kubectl exec -it`** subprocess (`tea.ExecProcess`)
+when the `kubectl` binary is on PATH, and only falls back to the in-process SPDY wire
+(D125) when it is not. Binding constraints:
+
+1. **Prefer kubectl when present; SPDY is the fallback, not the primary.** This does
+   **not** reopen the hard kubectl dependency (#68/D2): exec still works with no kubectl
+   installed via the in-process path. But when kubectl *is* there it owns its own raw PTY,
+   SIGWINCH resize, auth plugins, and every server-side edge case, so it is the
+   battle-tested parity path. Exec is one of the two sanctioned shell-outs (D2), so
+   shelling out here is within the in-process-first principle, not a violation of it.
+2. **The shelled-out kubectl must target the same cluster kubecom launched with.**
+   `kubectlExecArgs` emits `--kubeconfig` and `--context` from the model
+   (`WithKubeconfig` — new — and `WithContext`) plus `-n <namespace>` from the row, each
+   only when set (else kubectl uses its standard resolution). A future flag that changes
+   how kubecom resolves its cluster must be forwarded here too, or the fallback exec will
+   silently hit the wrong context.
+3. **The kubectl lookup is a seam (`lookupKubectl`, a package var).** It is overridable in
+   tests so the fallback routing is hermetically testable without a real kubectl on the
+   runner; `kubectlExecArgs` is a pure argv builder tested directly. The container arg is
+   omitted when empty (kubectl picks the pod default, matching the SPDY path), and the
+   shell is the same `defaultExecShell` (`/bin/sh`) both paths use.
+4. **This does not close the M3 exec exit criterion.** Both paths still need a
+   real-terminal/real-cluster dogfood (the advisory human-task
+   `vault/human-tasks/2026-07-24-exec-live-cluster-dogfood.md`, now also covering the
+   kubectl route); the criterion stays unticked pending that run.

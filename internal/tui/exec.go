@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -30,8 +31,17 @@ import (
 // picker (M3-14b-2, reusing the M3-07a ctrPicker); a single-container Pod execs
 // directly. The exec runs /bin/sh, seeds the initial terminal size, and tracks live
 // window resizes via a SIGWINCH watcher so the remote PTY follows the local terminal
-// (M3-14b-3; kubectl-binary fallback → M3-14b-4). Linux/macOS only — the raw-PTY path
-// is a non-goal on native Windows (WSL2 instead, D7).
+// (M3-14b-3). Linux/macOS only — the raw-PTY path is a non-goal on native Windows
+// (WSL2 instead, D7).
+//
+// M3-14b-4 adds the parity escape hatch (D2/D7/D128): when the `kubectl` binary is on
+// PATH, exec suspends into `kubectl exec -it` (via tea.ExecProcess) instead of the
+// in-process SPDY path — kubectl owns its own raw PTY, SIGWINCH resize, and every
+// server-side edge case, so it is the battle-tested parity path when available. The
+// in-process path is the *fallback* that keeps exec working with no kubectl installed
+// (removing the hard kubectl dependency, #68/D2). The shelled-out kubectl is pointed
+// at the same cluster via --kubeconfig / --context / -n so it matches what kubecom is
+// browsing.
 
 // Execer is the narrow slice of the kube layer the shell needs to run the exec
 // action (M3-14b-1): open an interactive session in a pod's container (M3-14a's
@@ -94,10 +104,67 @@ func (m Model) execInto(res kube.Resource, ref kube.ObjectRef, container string)
 		return m, nil
 	}
 	label := viewerTitle(res, ref)
-	cmd := newExecCommand(m.execer, ref, container)
-	return m, tea.Exec(cmd, func(err error) tea.Msg {
+	callback := func(err error) tea.Msg {
 		return execDoneMsg{label: label, err: err}
-	})
+	}
+	// Parity escape hatch (M3-14b-4/D128): when kubectl is on PATH, suspend into it
+	// rather than the in-process SPDY path — kubectl owns its own raw PTY + resize and
+	// covers every server-side edge case. tea.ExecProcess wraps the *exec.Cmd,
+	// releasing/re-capturing the terminal around it exactly as the in-process wire does.
+	if proc, ok := m.kubectlExecProc(ref, container); ok {
+		return m, tea.ExecProcess(proc, callback)
+	}
+	cmd := newExecCommand(m.execer, ref, container)
+	return m, tea.Exec(cmd, callback)
+}
+
+// lookupKubectl resolves the kubectl binary on PATH for the exec parity fallback
+// (M3-14b-4/D128). It is a package var so tests can force the fallback on or off
+// without a real kubectl on the runner. Empty path + false → not found, use the
+// in-process SPDY path.
+var lookupKubectl = func() (path string, ok bool) {
+	p, err := exec.LookPath("kubectl")
+	if err != nil {
+		return "", false
+	}
+	return p, true
+}
+
+// kubectlExecProc builds the `kubectl exec -it` process to suspend into when the
+// kubectl binary is on PATH (the parity escape hatch, M3-14b-4/D128), or returns
+// (nil,false) to signal the caller to use the in-process SPDY path. The kubectl is
+// pointed at the same cluster kubecom launched with via --kubeconfig / --context and
+// the row's namespace via -n, so it targets exactly the pod being browsed.
+func (m Model) kubectlExecProc(ref kube.ObjectRef, container string) (*exec.Cmd, bool) {
+	path, ok := lookupKubectl()
+	if !ok {
+		return nil, false
+	}
+	return exec.Command(path, kubectlExecArgs(m.kubeconfig, m.context, ref, container)...), true //nolint:gosec // path is the resolved kubectl; args are namespace/context/pod identifiers, not shell.
+}
+
+// kubectlExecArgs builds the argv for `kubectl exec` targeting ref's container
+// (M3-14b-4). Connection flags (--kubeconfig, --context, -n) are emitted only when set
+// so kubectl falls back to its standard resolution otherwise; -i -t requests the
+// interactive TTY, an empty container omits -c (kubectl picks the default container,
+// matching the in-process path), and `-- /bin/sh` runs the same shell as the SPDY path.
+func kubectlExecArgs(kubeconfig, context string, ref kube.ObjectRef, container string) []string {
+	args := make([]string, 0, 12)
+	if kubeconfig != "" {
+		args = append(args, "--kubeconfig", kubeconfig)
+	}
+	if context != "" {
+		args = append(args, "--context", context)
+	}
+	if ref.Namespace != "" {
+		args = append(args, "-n", ref.Namespace)
+	}
+	args = append(args, "exec", "-i", "-t", ref.Name)
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+	args = append(args, "--")
+	return append(args, defaultExecShell...)
 }
 
 // handleExecDone reports a finished exec session: a failure (attach error, missing

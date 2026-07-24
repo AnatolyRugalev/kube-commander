@@ -146,6 +146,7 @@ func runTUI(opts runOptions) error {
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
+		tui.WithKubeconfig(opts.kubeconfig),
 		tui.WithVersion(version.Version),
 		tui.WithMenuExtras(menuExtras),
 		tui.WithStartupError(startupErr),
