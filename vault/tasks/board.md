@@ -7,7 +7,9 @@ _Last updated: 2026-07-24 — M3-14b-4: exec kubectl parity fallback — when `k
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-15a** Edit — kube-layer apply/update primitive (`internal/kube/apply.go`):
+      `Clients.Update` parses edited YAML → unstructured and PUT-updates the object
+      status: in-progress | owner: claude-opus | 2026-07-24
 
 ## Blocked
 
@@ -83,10 +85,12 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-15** Edit: `tea.ExecProcess` suspend to `$EDITOR` on the object's YAML; apply
-      on save (server-side apply / update), report result. status: todo | owner: — | added: 2026-07-22
-      notes: The second sanctioned suspend action. Round-trip: `GetYAML` → temp file →
-      `$EDITOR` → apply the edited YAML; no-change / parse-error degrade without mutating.
+- [ ] **M3-15b** Edit — TUI wire (the suspend flow): `res.edit`/`e` → `GetYAML` → temp
+      file → `tea.ExecProcess` `$EDITOR` → read back → `Editor` seam (`kube.Update`, M3-15a).
+      status: todo | owner: — | added: 2026-07-24 (split from M3-15)
+      notes: The second sanctioned suspend action. no-change (edited bytes == original) and
+      parse-error degrade without mutating; result to the status bar. Needs a real-terminal
+      dogfood human-task like exec (D125). Depends on M3-15a.
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
