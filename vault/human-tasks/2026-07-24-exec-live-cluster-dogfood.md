@@ -4,7 +4,15 @@
 - By: M3-14b-1
 - Priority: normal
 - Blocks: none (advisory)
-- Status: open
+- Status: done
+
+## Result
+
+**Exec shell works well** — confirmed against a real cluster in a real terminal by
+the maintainer (2026-07-24). Shell drops in and behaves; TUI restores cleanly.
+Tick the M3 exec exit criterion and delete this file. (Delete action also confirmed
+working in the same pass. Other dogfood findings — port-forward, keymap, viewers,
+logs — filed separately in `../feedback/`.)
 
 ## What's needed
 
