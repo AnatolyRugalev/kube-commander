@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-23 — M3-13a: port-forward start wired via a `PortForwarder`/`ActiveForward` seam (`WithPortForwarder`) → M1-08 `kube.PortForward` on a Pod row behind a ports prompt; lifecycle observed via two-edge messages (principle 1), forwards tracked in the model, all cancelled on exit (D122). Pod-only for now. Top-unblocked next: M3-13b (port-forward listing panel + stop). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-13b: port-forward panel — `forwards.panel` (`F`) toggles an app-global overlay listing active forwards (label · bound/requested ports · ready state), `nav.up`/`down` move the cursor, `nav.drillIn` stops the selected forward (cancels its context → the existing Done flow removes it), `forwards.stopAll` (`X`) stops every one; inline overlay state (like the secret cursor), no new component. Ticks the M3 port-forward exit criterion. Top-unblocked next: M3-13c (Service→pod resolution). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-13b** Port-forward panel: an overlay listing active forwards with their
-      local:remote ports; stop the selected forward; stop-all gesture. status: in-progress | owner: claude-opus | added: 2026-07-23
+_(none)_
 
 ## Blocked
 
@@ -104,6 +103,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-13b** Port-forward panel: `forwards.panel` (`F`) toggles an app-global overlay listing active forwards (label · bound/requested ports · ready state) with a cursor; `nav.drillIn` stops the selected forward (context cancel → the M3-13a Done flow removes it + notices), `forwards.stopAll` (`X`) stops all via `stopForwards` + a sweep notice; inline overlay state + `forwardsPanelView` composited via `overlayCenter` (D95), captured like help/viewer; ticks the M3 port-forward exit criterion — done 2026-07-24
 - [x] **M3-13a** Port-forward start + background lifecycle: `PortForwarder`/`ActiveForward` seam (`WithPortForwarder`, `PortForwarderFunc` launcher adapter) → M1-08 `kube.PortForward` on a Pod row behind a ports prompt (D117 stash); lifecycle via two-edge `waitForward`/`waitForwardDone` messages (not a pump), bound ports to the status bar, forwards tracked in the model, all cancelled on quit (`stopForwards`); Pod-only (Service → M3-13c, panel → M3-13b) — done 2026-07-23 (D122)
 - [x] **M3-12** CronJob suspend/resume wired: `Suspender` seam (both verbs, `WithSuspender`) → `kube.Suspend`/`Resume` on CronJob rows, dispatched **directly** (idempotent — no confirm modal, no target stash, D120), result to the status bar (neutral notice / error toast) — done 2026-07-23 (D120)
 - [x] **M3-11b** Drain wired: `Drainer` seam (`WithDrainer`) → `kube.DrainStream` (channel twin of `Drain`) on Node rows behind the D115 confirm modal; `drainPump` (mirrors the log pump, `drainGen`-tagged) streams cordon→evict→remove progress to the status bar, terminal error toast / clean-close success notice, `stopDrain` cancel-on-quit; default `{IgnoreDaemonSets:true}` (Force/DeleteEmptyDirData off) — done 2026-07-23 (D121)

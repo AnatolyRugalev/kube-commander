@@ -703,11 +703,19 @@ type Model struct {
 	// ActiveForward handle. Lifecycle (Ready → bound ports, Done → removal) flows in
 	// through messages, never a mutex (principle 1); forwardSeq stamps a stable id on
 	// each so a Ready/Done message finds its entry after the slice shifts. On quit
-	// stopForwards cancels them all (cancel-on-exit). The listing panel + stop-individual
-	// is M3-13b; all fields are touched only from the single-threaded update loop.
+	// stopForwards cancels them all (cancel-on-exit). All fields are touched only from
+	// the single-threaded update loop.
+	//
+	// forwardsPanel/forwardsSel are the M3-13b listing overlay: forwards.panel (`F`)
+	// toggles a global panel listing the active forwards, forwardsSel is the cursor
+	// into m.forwards (nav.up/down move it), nav.drillIn stops the selected forward and
+	// forwards.stopAll (`X`) stops every one. The panel reads m.forwards directly; like
+	// the secret viewer's entry cursor it is inline state, not a separate component.
 	portForwarder PortForwarder
 	forwards      []*forward
 	forwardSeq    int
+	forwardsPanel bool
+	forwardsSel   int
 
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
@@ -2043,6 +2051,7 @@ func (m Model) handleForwardDone(msg forwardDoneMsg) (tea.Model, tea.Cmd) {
 	label := f.label
 	f.cancel() // release the context bridged to Stop; idempotent.
 	m.removeForward(msg.id)
+	m.clampForwardsSel() // a removed entry may have left the panel cursor past the end.
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg("port-forward "+label, msg.err))
 	}
@@ -2092,6 +2101,110 @@ func forwardPortsLabel(f *forward) string {
 		parts[i] = fmt.Sprintf("localhost:%d → %d", p.Local, p.Remote)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// openForwardsPanel shows the port-forward panel (M3-13b), a global overlay listing
+// the active background forwards. It is not row-scoped — forwards outlive the row they
+// started on — so it opens from anywhere in the browse view. The cursor is clamped to
+// the current set (a forward may have ended since it was last open).
+func (m Model) openForwardsPanel() (tea.Model, tea.Cmd) {
+	m.forwardsPanel = true
+	m.clampForwardsSel()
+	return m, nil
+}
+
+// clampForwardsSel keeps forwardsSel a valid index into m.forwards: 0 when empty,
+// otherwise within [0, len-1]. Called whenever the set or the panel opens changes.
+func (m *Model) clampForwardsSel() {
+	if m.forwardsSel < 0 || len(m.forwards) == 0 {
+		m.forwardsSel = 0
+		return
+	}
+	if m.forwardsSel >= len(m.forwards) {
+		m.forwardsSel = len(m.forwards) - 1
+	}
+}
+
+// handleForwardsPanelAction routes a resolved action to the open port-forward panel
+// (M3-13b). forwards.panel (`F`), nav.back and app.quit close it (the overlay owns the
+// quit key while up, like help/viewer); nav.up/down move the cursor; nav.drillIn stops
+// the selected forward (cancelling its context; the resulting forwardDoneMsg removes it
+// and reports it stopped); forwards.stopAll stops every forward at once. Everything else
+// is swallowed so the browse panes underneath stay put.
+func (m Model) handleForwardsPanelAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	switch a {
+	case keymap.ActionForwards, keymap.ActionBack, keymap.ActionQuit:
+		m.forwardsPanel = false
+		return m, nil
+	case keymap.ActionUp:
+		if m.forwardsSel > 0 {
+			m.forwardsSel--
+		}
+		return m, nil
+	case keymap.ActionDown:
+		if m.forwardsSel < len(m.forwards)-1 {
+			m.forwardsSel++
+		}
+		return m, nil
+	case keymap.ActionDrillIn:
+		// Stop the selected forward: cancelling its context ends it, and the
+		// forwardDoneMsg that follows removes the entry + flashes "stopped …" and
+		// re-clamps the cursor (handleForwardDone). Inert when the set is empty.
+		if m.forwardsSel < len(m.forwards) {
+			m.forwards[m.forwardsSel].cancel()
+		}
+		return m, nil
+	case keymap.ActionStopForwards:
+		// Stop every forward at once: stopForwards cancels each context and clears the
+		// set immediately, so the panel drops to its empty state. The background wait
+		// goroutines still fire forwardDoneMsg, but those ids are already gone and are
+		// dropped (handleForwardDone). A single neutral notice reports the sweep.
+		if len(m.forwards) == 0 {
+			return m, nil
+		}
+		m.stopForwards()
+		m.clampForwardsSel()
+		return m, m.surfaceNotice("stopped all port-forwards")
+	}
+	return m, nil
+}
+
+// forwardsPanelView renders the port-forward panel (M3-13b): a bordered box listing
+// each active forward — its label and bound (or requested) ports and whether it is
+// ready — with the cursor row highlighted, plus a footer of the panel's keys. With no
+// active forwards it shows an empty-state line. Composited centered over the browse
+// view by View (overlayCenter, D95), like the modal.
+func (m Model) forwardsPanelView() string {
+	iw := m.width - 6 // leave a margin; the box border adds 2 back.
+	if iw > 64 {
+		iw = 64
+	}
+	if iw < 20 {
+		iw = 20
+	}
+	title := m.styles.Header.Width(iw).MaxWidth(iw).Render("Port-forwards")
+	lines := []string{title}
+	if len(m.forwards) == 0 {
+		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render("No active port-forwards."))
+	} else {
+		for i, f := range m.forwards {
+			status := "starting…"
+			if f.ready {
+				status = "ready"
+			}
+			row := fmt.Sprintf("%s  %s  [%s]", f.label, forwardPortsLabel(f), status)
+			gutter := "  "
+			style := m.styles.App
+			if i == m.forwardsSel {
+				gutter = "> "
+				style = m.styles.Selection
+			}
+			lines = append(lines, style.Width(iw).MaxWidth(iw).Render(gutter+row))
+		}
+	}
+	footer := m.styles.Subtle.Width(iw).MaxWidth(iw).Render("enter: stop · X: stop all · esc: close")
+	lines = append(lines, footer)
+	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -2860,7 +2973,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.modal.Active() || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.modal.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3093,6 +3206,14 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if m.viewer.Active() {
 		return m.handleViewerAction(a)
 	}
+	// The port-forward panel (M3-13b) is an app-global overlay: while it is up it
+	// captures input — nav.up/down move the cursor, nav.drillIn stops the selected
+	// forward, forwards.stopAll stops every one, forwards.panel/nav.back/app.quit close
+	// it — swallowing the rest so the browse panes underneath never move (the help /
+	// viewer capture pattern).
+	if m.forwardsPanel {
+		return m.handleForwardsPanelAction(a)
+	}
 	switch a {
 	case keymap.ActionQuit:
 		// While the help modal is open, quit dismisses the modal instead of the
@@ -3155,6 +3276,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openNamespacePicker()
 	case keymap.ActionResources:
 		return m.openResourcePicker()
+	case keymap.ActionForwards:
+		return m.openForwardsPanel()
 	case keymap.ActionFilter:
 		return m.openFilter()
 	case keymap.ActionSearchNext:
@@ -3375,6 +3498,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
+	case m.forwardsPanel:
+		body = overlayCenter(body, m.forwardsPanelView(), m.width, m.bodyHeight())
 	}
 
 	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))

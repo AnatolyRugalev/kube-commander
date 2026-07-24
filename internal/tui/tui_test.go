@@ -5057,3 +5057,170 @@ func TestPortForwardStopsOnQuit(t *testing.T) {
 		t.Fatal("quitting should clear the tracked forwards")
 	}
 }
+
+// startForwardOnPod drills into a Pod, submits the ports prompt, and returns the model
+// with one tracked (not-yet-ready) forward — the fixture the M3-13b panel tests build on.
+func startForwardOnPod(t *testing.T, pf *fakePortForwarder, value string) Model {
+	t.Helper()
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: value})
+	return next.(Model)
+}
+
+// TestForwardsPanelToggle proves forwards.panel (`F`) opens the panel (an active
+// overlay) and forwards.panel/nav.back both close it.
+func TestForwardsPanelToggle(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	if m.forwardsPanel {
+		t.Fatal("the port-forward panel should start closed")
+	}
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	if !m.forwardsPanel {
+		t.Fatal("forwards.panel should open the panel")
+	}
+	if !m.overlayActive() {
+		t.Fatal("the open panel should count as an active overlay (swallows browse input)")
+	}
+	// forwards.panel again toggles it closed.
+	next, _ = m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	if m.forwardsPanel {
+		t.Fatal("forwards.panel should toggle the panel closed")
+	}
+	// nav.back also closes it.
+	next, _ = m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	next, _ = m.handleAction(keymap.ActionBack)
+	m = next.(Model)
+	if m.forwardsPanel {
+		t.Fatal("nav.back should close the panel")
+	}
+}
+
+// TestForwardsPanelLists proves the panel renders each active forward with its bound
+// ports and ready state, and shows an empty-state line when none are active.
+func TestForwardsPanelLists(t *testing.T) {
+	// Empty state first.
+	m := openPodTable(t, "Pod")
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	if view := m.View().Content; !strings.Contains(view, "No active port-forwards") {
+		t.Fatalf("the empty panel should show the empty-state line: %q", view)
+	}
+
+	// With a ready forward the panel lists its label + bound ports + "ready".
+	fw := newFakeForward()
+	fw.ports = []kube.ForwardedPort{{Local: 8080, Remote: 80}}
+	pf := &fakePortForwarder{handle: fw}
+	m = startForwardOnPod(t, pf, "8080:80")
+	row := m.forwards[0]
+	next, _ = m.Update(forwardReadyMsg{id: row.id})
+	m = next.(Model)
+	next, _ = m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	view := m.View().Content
+	if !strings.Contains(view, "localhost:8080 → 80") {
+		t.Fatalf("the panel should list the bound ports: %q", view)
+	}
+	if !strings.Contains(view, "ready") {
+		t.Fatalf("a ready forward should read as ready in the panel: %q", view)
+	}
+	if !strings.Contains(view, row.label) {
+		t.Fatalf("the panel should name the forward target %q: %q", row.label, view)
+	}
+}
+
+// TestForwardsPanelStopSelected proves nav.drillIn on the selected forward cancels its
+// context; the forwardDoneMsg that follows removes it from the set.
+func TestForwardsPanelStopSelected(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := startForwardOnPod(t, pf, "80")
+	id := m.forwards[0].id
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+
+	next, _ = m.handleAction(keymap.ActionDrillIn)
+	m = next.(Model)
+	if pf.gotCtx.Err() == nil {
+		t.Fatal("nav.drillIn should cancel the selected forward's context")
+	}
+	if len(m.forwards) != 1 {
+		t.Fatal("the entry stays listed until its Done lands")
+	}
+	// The Done that the cancellation triggers removes the entry.
+	next, _ = m.Update(forwardDoneMsg{id: id})
+	m = next.(Model)
+	if len(m.forwards) != 0 {
+		t.Fatalf("the stopped forward should be dropped, got %d", len(m.forwards))
+	}
+}
+
+// TestForwardsPanelStopAll proves forwards.stopAll cancels every forward and clears the
+// set immediately, reporting the sweep, and is inert with nothing active.
+func TestForwardsPanelStopAll(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := startForwardOnPod(t, pf, "80")
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+
+	next, cmd := m.handleAction(keymap.ActionStopForwards)
+	m = next.(Model)
+	if pf.gotCtx.Err() == nil {
+		t.Fatal("forwards.stopAll should cancel the forward's context")
+	}
+	if len(m.forwards) != 0 {
+		t.Fatalf("forwards.stopAll should clear the set, got %d", len(m.forwards))
+	}
+	if cmd == nil {
+		t.Fatal("forwards.stopAll should report the sweep with a notice")
+	}
+	// Inert with nothing active (no notice, no panic).
+	if _, cmd := m.handleAction(keymap.ActionStopForwards); cmd != nil {
+		t.Fatal("forwards.stopAll should be inert with no forwards")
+	}
+}
+
+// TestForwardsPanelCursorMoves proves nav.up/down move the panel cursor over the
+// forwards and clamp at both ends.
+func TestForwardsPanelCursorMoves(t *testing.T) {
+	pf := &fakePortForwarder{handle: newFakeForward()}
+	m := startForwardOnPod(t, pf, "80")
+	m = startForwardOnPod2(t, m, pf, "81") // a second forward on the same pod
+	if len(m.forwards) != 2 {
+		t.Fatalf("expected two tracked forwards, got %d", len(m.forwards))
+	}
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	if m.forwardsSel != 0 {
+		t.Fatalf("the cursor should start at 0, got %d", m.forwardsSel)
+	}
+	next, _ = m.handleAction(keymap.ActionDown)
+	m = next.(Model)
+	if m.forwardsSel != 1 {
+		t.Fatalf("nav.down should move the cursor to 1, got %d", m.forwardsSel)
+	}
+	next, _ = m.handleAction(keymap.ActionDown) // clamps at the last entry
+	m = next.(Model)
+	if m.forwardsSel != 1 {
+		t.Fatalf("nav.down should clamp at the last entry, got %d", m.forwardsSel)
+	}
+	next, _ = m.handleAction(keymap.ActionUp)
+	m = next.(Model)
+	next, _ = m.handleAction(keymap.ActionUp) // clamps at 0
+	m = next.(Model)
+	if m.forwardsSel != 0 {
+		t.Fatalf("nav.up should clamp at 0, got %d", m.forwardsSel)
+	}
+}
+
+// startForwardOnPod2 starts a second forward on the already-open Pod table model,
+// reusing the row action + prompt path (openPodTable is not re-run so the first
+// forward is preserved).
+func startForwardOnPod2(t *testing.T, m Model, pf *fakePortForwarder, value string) Model {
+	t.Helper()
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: value})
+	return next.(Model)
+}

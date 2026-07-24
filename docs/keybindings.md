@@ -94,3 +94,10 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `secret.reveal` | `r` | Reveal / hide secret values in the secret viewer |
 | `secret.copy` | `c` | Copy the selected secret value to the clipboard |
+
+## forwards
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `forwards.panel` | `F` | Toggle the port-forward panel |
+| `forwards.stopAll` | `X` | Stop all port-forwards (in the panel) |
