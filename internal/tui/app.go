@@ -529,9 +529,12 @@ type Model struct {
 	resPicker picker.Model
 	actPicker picker.Model
 	ctrPicker picker.Model
-	viewer    viewer.Model
-	modal     modal.Model
-	welcome   welcome.Model
+	// portPicker offers a port-forward target's declared ports as choices
+	// (FB-pf-port-picker-b); its selection is stashed against mutateRes/mutateRef.
+	portPicker picker.Model
+	viewer     viewer.Model
+	modal      modal.Model
+	welcome    welcome.Model
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
@@ -764,6 +767,19 @@ type Model struct {
 	serviceResolver ServiceResolver
 	pfResolveGen    int
 
+	// portLister lists the declared ports of a port-forward target so they can be
+	// offered as choices instead of typed into the free-text prompt (FB-pf-port-picker-b;
+	// nil → the prompt opens directly, the M3-13a behaviour). The listing runs off the
+	// update loop stamped with the same pfResolveGen that guards the Service→pod hop, so
+	// a superseded request is dropped; a single declared port forwards straight away and
+	// several open portPicker. pfPorts holds the listed set between the picker opening
+	// and the pick landing — the picker's SelectedMsg carries only the chosen label
+	// (D65), so the label maps back to a port through here. The target itself is stashed
+	// in mutateRes/mutateRef, as it is for the prompt. Touched only from the
+	// single-threaded update loop.
+	portLister PortLister
+	pfPorts    []kube.Port
+
 	// execer opens an interactive shell in the selected Pod's container (M3-14b-1;
 	// nil → the Exec-shell action is inert). The exec is a *blocking* kube.Exec run
 	// from a suspended terminal via tea.Exec (off the update loop, D124), so there is
@@ -865,6 +881,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		resPicker:   picker.New(s, "resource"),
 		actPicker:   picker.New(s, actionPickerKind),
 		ctrPicker:   picker.New(s, containerPickerKind),
+		portPicker:  picker.New(s, portPickerKind),
 		viewer:      viewer.New(s, viewerKindDescribe),
 		modal:       modal.New(s),
 		welcome:     welcome.New(s),
@@ -876,6 +893,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
 	m.ctrPicker.SetTitle("Container")
+	m.portPicker.SetTitle("Port-forward port")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -1044,6 +1062,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleActionSelected(msg)
 		case containerPickerKind:
 			return m.handleContainerSelected(msg)
+		case portPickerKind:
+			return m.handlePortSelected(msg)
 		default:
 			return m.handleNamespaceSelected(msg)
 		}
@@ -1056,6 +1076,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.actPicker.Hide()
 		case containerPickerKind:
 			m.ctrPicker.Hide()
+		case portPickerKind:
+			m.portPicker.Hide()
 		default:
 			m.nsPicker.Hide()
 		}
@@ -1117,6 +1139,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case serviceResolvedMsg:
 		return m.handleServiceResolved(msg)
+
+	case portsLoadedMsg:
+		return m.handlePortsLoaded(msg)
 
 	case containersLoadedMsg:
 		return m.handleContainersLoaded(msg)
@@ -1405,6 +1430,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.actPicker
 	case m.ctrPicker.Active():
 		return &m.ctrPicker
+	case m.portPicker.Active():
+		return &m.portPicker
 	}
 	return nil
 }
@@ -2040,10 +2067,13 @@ var pfPodResource = kube.Resource{GVK: schema.GroupVersionKind{Version: "v1", Ki
 // when the Port-forward action is invoked on a Service (M3-13c). gen ties it to the
 // pfResolveGen bumped when the resolution was requested, so a result that lands after
 // a newer port-forward request supersedes it is dropped rather than opening a stale
-// prompt. ref is the resolved backing pod.
+// prompt. ref is the resolved backing pod; svc is the Service it was resolved from,
+// carried through so its declared ports can be listed against both (ServicePorts maps
+// each targetPort onto the backing pod, FB-pf-port-picker-b/D137).
 type serviceResolvedMsg struct {
 	gen int
 	ref kube.ObjectRef
+	svc kube.ObjectRef
 	err error
 }
 
@@ -2055,6 +2085,10 @@ type serviceResolvedMsg struct {
 // endpoint pod off the update loop (M3-13c, mirroring the logs viewer's PodResolver
 // hop); the prompt then opens over that resolved pod (handleServiceResolved). Without a
 // service resolver wired a Service degrades to a toast rather than a silent no-op.
+//
+// With a port lister wired the resolved pod's *declared* ports are listed first and
+// offered as choices (FB-pf-port-picker-b, resolvePortsFor); the free-text prompt stays
+// the fallback for an object that declares nothing (D137).
 func (m Model) openPortForwardPrompt(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.portForwarder == nil {
 		return m, nil
@@ -2069,10 +2103,10 @@ func (m Model) openPortForwardPrompt(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		ref := msg.Object
 		return m, func() tea.Msg {
 			pod, err := resolver.PodForService(context.Background(), ref)
-			return serviceResolvedMsg{gen: gen, ref: pod, err: err}
+			return serviceResolvedMsg{gen: gen, ref: pod, svc: ref, err: err}
 		}
 	}
-	return m.showPortForwardPrompt(msg.Resource, msg.Object)
+	return m.resolvePortsFor(msg.Resource, msg.Object, kube.ObjectRef{})
 }
 
 // showPortForwardPrompt opens the modal's ports prompt over ref (a Pod — either a Pod
@@ -2092,8 +2126,11 @@ func (m Model) showPortForwardPrompt(res kube.Resource, ref kube.ObjectRef) (tea
 // (M3-13c). A result whose gen no longer matches (a newer port-forward request
 // superseded it) is dropped; a resolution error (a selector-less Service, no
 // matching/ready pod, RBAC denial) degrades to a status-bar toast (D74) without
-// opening the prompt. On success it opens the ports prompt over the resolved pod,
-// titled as a Pod so the user sees which endpoint pod is forwarding.
+// opening the prompt. On success it feeds the resolved pod into the declared-ports
+// resolution (FB-pf-port-picker-b) — reading the *Service's* ports, since those are
+// what the user knows it by and ServicePorts maps each onto the pod-side number a
+// forward must target — which opens the picker or falls back to the ports prompt over
+// the resolved pod, titled as a Pod so the user sees which endpoint pod is forwarding.
 func (m Model) handleServiceResolved(msg serviceResolvedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.pfResolveGen {
 		return m, nil // superseded by a newer port-forward request; drop.
@@ -2101,7 +2138,7 @@ func (m Model) handleServiceResolved(msg serviceResolvedMsg) (tea.Model, tea.Cmd
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg("port-forward", msg.err))
 	}
-	return m.showPortForwardPrompt(pfPodResource, msg.ref)
+	return m.resolvePortsFor(pfPodResource, msg.ref, msg.svc)
 }
 
 // runPortForward parses the submitted port spec and starts the stashed forward off
@@ -3185,7 +3222,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.viewer.Active() || m.modal.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3356,6 +3393,7 @@ func (m *Model) resize() {
 	m.resPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
+	m.portPicker.SetSize(m.width, bodyH)
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
@@ -3708,6 +3746,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	case m.ctrPicker.Active():
 		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
+	case m.portPicker.Active():
+		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	case m.forwardsPanel:

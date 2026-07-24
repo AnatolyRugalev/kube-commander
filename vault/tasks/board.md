@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — FB-pf-port-picker-a done: the port-forward port picker's kube-layer primitive (`kube.PodPorts`/`ServicePorts`, D137) landed; FB-pf-port-picker-b (the picker UI) is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — FB-pf-port-picker-b done: the port-forward flow now offers the target's declared ports as a picker (D138); FB-pf-local-port is the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-pf-port-picker-b** Port-forward port picker — TUI wire: offer a picker of the declared ports (from FB-pf-port-picker-a) instead of free-text remote entry
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-24
-      notes: A `PortLister` seam over `kube.PodPorts`/`ServicePorts` (mirroring `ContainerLister`/`ServiceResolver`), resolved off the update loop and generation-guarded like `pfResolveGen`; multiple ports open the reused modal picker (like the logs container picker, M3-07a), a single declared port forwards directly, no declared ports falls back to today's free-text ports prompt (principle 3). Keymap-driven (D11), message-only (principle 1). Depends on FB-pf-port-picker-a.
+_(none)_
 
 ## Blocked
 
@@ -147,6 +145,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-pf-port-picker-b** Port-forward port picker — TUI wire (`internal/tui/ports.go`): a `PortLister` seam over `kube.PodPorts`/`ServicePorts` lists the target's declared ports off the update loop (`pfResolveGen`-guarded); one port forwards directly (local = remote), several open the reused modal picker (`80 → 8080 (http · app)` rows), and no lister / an empty list / a listing error all fall back to the free-text ports prompt — done 2026-07-24 (D138)
 - [x] **FB-pf-port-picker-a** Port-forward port picker — kube-layer declared-ports primitive (`internal/kube/ports.go`): `Clients.PodPorts` (declared containerPorts, native sidecars included) + `Clients.ServicePorts` (service ports resolved to the pod-side targetPort, named targets looked up on the backing pod); TCP-only, de-duplicated, apimachinery-free `Port` — done 2026-07-24 (D137)
 - [x] **M3-15c** Unify YAML view + edit — retired the standalone read-only YAML viewer (`openYAMLViewer`/`yamlLoadedMsg`/`viewerKindYAML`/`rowActionYAML`/`ActionYAML`/`res.yaml`); the View/Edit YAML action (`e`, gated `canGet`) is now the only YAML surface, `y` unbound; `YAMLGetter` seam kept; `docs/keybindings.md` regenerated — done 2026-07-24 (D135, D136)
 - [x] **M3-15b** Edit — TUI wire (the suspend flow): `res.edit`/`e` → `GetYAML` (existing `YAMLGetter`) → temp file → `tea.Exec` `$EDITOR` → read back → `Editor` seam (`kube.Update`, M3-15a) only on change; no-change / editor-abort / apply-rejection degrade to a status-bar toast without mutating; `$EDITOR` resolved `KUBE_EDITOR`→`EDITOR`→`vi` (space-split for flags). First slice of the unify-yaml-view-and-edit feedback (D69/D135; feedback triaged into M3-15c + deleted); live `$EDITOR` suspend dogfood raised as a human-task, so the M3 Edit exit criterion stays unticked — done 2026-07-24 (D135)

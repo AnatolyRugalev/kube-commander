@@ -3420,3 +3420,23 @@ leg must not silently contradict:**
    forward target), so its ports are offered; a plain init container has exited before a
    forward could reach it. Ports are de-duplicated by number (one forward target = one
    choice) and kept in declaration order — regular containers first, then sidecars.
+
+### D138 — Port-forward port picker: a pick is a whole spec (local = remote), and the picker never gates the action
+**2026-07-24** (FB-pf-port-picker-b). The TUI wire over D137: the Port-forward action
+lists the target's declared ports through a `PortLister` seam
+(`kube.PodPorts`/`ServicePorts`) before deciding what to open. **Constraints a future
+leg must not silently contradict:**
+1. **The picker is an affordance over the free-text prompt, never a replacement for
+   it.** No lister wired, a listing error, or an empty list all fall back to the
+   M3-13a ports prompt — silently, since the user gets exactly the surface they had
+   before the picker existed and a toast beside a freshly-opened prompt is noise. No
+   path may dead-end because port discovery failed (D137 pt 1 / principle 3).
+2. **A picked port is a complete forward spec, not a prefilled prompt.** One declared
+   port forwards immediately; a pick from the picker forwards immediately. The spec is
+   the bare pod-side number — kubectl's shorthand for local = remote — so a pick is one
+   keystroke, and a local clash still degrades to the D130 bind hint naming the `:0`
+   retry. Making the *local* side editable is FB-pf-local-port and must not turn the
+   pick back into a typing step for the common case.
+3. **The listing shares `pfResolveGen` with the Service→pod hop.** One generation
+   guards the whole port-forward resolution chain (Service → pod → ports), so a
+   superseded request is dropped wherever it is; do not add a second counter.
