@@ -2070,7 +2070,7 @@ func (m Model) showPortForwardPrompt(res kube.Resource, ref kube.ObjectRef) (tea
 	m.mutateRes = res
 	m.mutateRef = ref
 	target := viewerTitle(res, ref)
-	cmd := m.modal.ShowPrompt(portForwardModalKind, "Port-forward", "Ports for "+target+" (e.g. 8080:80):", "")
+	cmd := m.modal.ShowPrompt(portForwardModalKind, "Port-forward", "Ports for "+target+" (e.g. 8080:80, :80=free local):", "")
 	return m, cmd
 }
 
@@ -2169,10 +2169,19 @@ func (m Model) handleForwardDone(msg forwardDoneMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	label := f.label
+	specs := f.specs
 	f.cancel() // release the context bridged to Stop; idempotent.
 	m.removeForward(msg.id)
 	m.clampForwardsSel() // a removed entry may have left the panel cursor past the end.
 	if msg.err != nil {
+		// A local-listener bind failure (almost always: the local port is already
+		// taken — e.g. forwarding Redis 6379 while Redis runs locally) surfaces from
+		// client-go as an opaque "unable to listen on any of the requested ports:
+		// [{6379 6379}]". Replace it with an actionable hint naming the requested
+		// local port(s) and how to let the OS pick a free one (feedback 2026-07-24).
+		if isPortForwardBindErr(msg.err) {
+			return m, m.surfaceError(ErrorMsg{Context: "port-forward " + label + ": " + portForwardBindHint(specs)})
+		}
 		return m, m.surfaceError(NewErrorMsg("port-forward "+label, msg.err))
 	}
 	return m, m.surfaceNotice("stopped port-forward " + label)
@@ -2207,6 +2216,60 @@ func (m *Model) stopForwards() {
 		f.cancel()
 	}
 	m.forwards = nil
+}
+
+// portForwardBindErr is the sentinel substring in client-go's error when it cannot
+// bind the local listener for any requested port. Matching it lets the shell replace
+// the opaque "unable to listen on any of the requested ports: [{6379 6379}]" with an
+// actionable hint instead of a dead-end (feedback 2026-07-24). It is a substring
+// (not equality) because client-go appends the offending {local remote} pairs.
+const portForwardBindErr = "unable to listen on any of the requested ports"
+
+// isPortForwardBindErr reports whether err is a local-listener bind failure — the
+// case that almost always means the requested local port is already in use.
+func isPortForwardBindErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), portForwardBindErr)
+}
+
+// portForwardBindHint turns the requested port specs into an actionable retry message
+// for a local-listener bind failure: it names the local port(s) that couldn't bind
+// and shows how to let the OS pick a free one — a ":<remote>" or ":0" prefix (both
+// already accepted by kube.PortForward: a leading ":" means an OS-assigned local
+// port). e.g. specs ["6379"] → `local port 6379 already in use — retry with :6379
+// (or :0) to auto-assign a free local port`.
+func portForwardBindHint(specs []string) string {
+	locals := make([]string, 0, len(specs))
+	example := ":0"
+	for i, s := range specs {
+		local, remote := splitPortSpec(s)
+		if local != "" {
+			locals = append(locals, local)
+		}
+		if i == 0 && remote != "" {
+			example = ":" + remote // the first spec gives a concrete retry example.
+		}
+	}
+	if len(locals) == 0 {
+		// All specs already auto-assign the local port, so a bind failure isn't a
+		// port clash — keep the message generic rather than misleading.
+		return "could not bind the local listener — retry with :0 to auto-assign a free local port"
+	}
+	word := "port"
+	if len(locals) > 1 {
+		word = "ports"
+	}
+	return fmt.Sprintf("local %s %s already in use — retry with %s (or :0) to auto-assign a free local port",
+		word, strings.Join(locals, ", "), example)
+}
+
+// splitPortSpec parses one kubectl port-forward spec into its local and remote
+// halves: "8080:80" → ("8080","80"), "80" → ("80","80"), ":80" → ("","80"). It does
+// not validate the numbers — kube.PortForward already rejects malformed specs.
+func splitPortSpec(spec string) (local, remote string) {
+	if i := strings.IndexByte(spec, ':'); i >= 0 {
+		return spec[:i], spec[i+1:]
+	}
+	return spec, spec
 }
 
 // forwardPortsLabel renders a forward's ports for the status notice: the bound

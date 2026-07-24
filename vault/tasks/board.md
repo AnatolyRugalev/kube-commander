@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — HT-exec-dogfood: closed the exec live-cluster dogfood human-task (maintainer-confirmed exec works against a real cluster in a real terminal) — ticked the M3 exec exit criterion, deleted the task file. Top-unblocked next: M3-15b (Edit TUI suspend wire); feedback inbox (6 items) preempts the board. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — FB-pf-bind-toast: port-forward bind failures now surface an actionable retry hint (D130) instead of client-go's raw listener error; feedback file deleted, parts 1/2 triaged to FB-pf-port-picker/FB-pf-local-port. Feedback inbox now 5 items (still preempts the board): highest-priority next is normal-priority — oldest is `cluster-search-multi-resource`. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FB-pf-bind-toast** Port-forward: actionable toast on local-listener bind failure + surface the `:0` auto-local syntax (first slice of feedback `2026-07-24-port-forward-picker-and-local-port`, Priority high)
-      status: in-progress | owner: claude-opus | added: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -84,6 +83,12 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
+- [ ] **FB-pf-port-picker** Port-forward: offer a picker of the pod's declared ports (containerPorts / the resolved Service's ports) instead of free-text remote entry — pick a known target port
+      status: todo | owner: — | added: 2026-07-24 (triaged from feedback 2026-07-24-port-forward-picker-and-local-port, part 1)
+      notes: Needs a pod-ports introspection seam (containers' ports from the pod spec; a Service contributes its ports/targetPorts) + reuse the modal picker (like the logs container picker, M3-07a). Keymap-driven (D11), message-only (principle 1). Bigger than one leg — split when picked (picker over remote ports → then local-port field, FB-pf-local-port).
+- [ ] **FB-pf-local-port** Port-forward: editable local port with one-keystroke "use a free port" (`:0` auto-assign) in the picker/prompt flow
+      status: todo | owner: — | added: 2026-07-24 (triaged from feedback 2026-07-24-port-forward-picker-and-local-port, part 1/2)
+      notes: Default local = remote, editable; a gesture that rewrites the spec to `:0` (OS-assigned free local port, already supported by kube.PortForward + reported via Ports()). Builds on FB-pf-port-picker; supersedes needing the D130 retry-hint for the common clash once shipped (the hint stays as the fallback). Depends on the picker UI.
 - [ ] **M3-15b** Edit — TUI wire (the suspend flow): `res.edit`/`e` → `GetYAML` → temp
       file → `tea.ExecProcess` `$EDITOR` → read back → `Editor` seam (`kube.Update`, M3-15a).
       status: todo | owner: — | added: 2026-07-24 (split from M3-15)
@@ -96,6 +101,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **FB-pf-bind-toast** Feedback (high, `2026-07-24-port-forward-picker-and-local-port`, first slice): a port-forward local-listener bind failure now surfaces an actionable status-bar hint (naming the clashing local port(s) + `:0`/`:<remote>` free-local-port retry) instead of client-go's raw "unable to listen on any of the requested ports"; prompt hint surfaces the `:80=free local` syntax; parts 1/2 (port picker, editable/auto local port) triaged to FB-pf-port-picker/FB-pf-local-port — done 2026-07-24 (D130)
 - [x] **HT-exec-dogfood** Closed the exec live-cluster dogfood human-task — maintainer confirmed the Exec-shell action works end-to-end against a real cluster in a real terminal (shell drops in, TUI restores cleanly); ticked the M3 exec exit criterion, deleted `vault/human-tasks/2026-07-24-exec-live-cluster-dogfood.md` — done 2026-07-24
 - [x] **M3-15a** Edit — kube-layer apply/update primitive (`internal/kube/apply.go`): `Clients.Update` parses the edited `$EDITOR` bytes (YAML→JSON→unstructured, int64-safe) and PUT-updates the object through the generic dynamic client (built-ins + CRDs, no kubectl, D2); the buffer's `metadata.resourceVersion` gives optimistic concurrency (concurrent change → Conflict, not clobber), identity (name/namespace) guarded before any request — rename/empty/invalid/null rejected without mutation; no-change left to the caller (M3-15b) — done 2026-07-24 (D129)
 - [x] **M3-14b-4** Exec — kubectl parity fallback: when `kubectl` is on PATH `execInto` suspends into `kubectl exec -i -t <pod> [-c ctr] -- /bin/sh` via `tea.ExecProcess` (pointed at the same cluster via `--kubeconfig`/`--context`/`-n`, new `WithKubeconfig` option wired in `run.go`), else the in-process SPDY path (14b-1) — kubectl owns its own raw PTY/resize/edge-cases when present, SPDY keeps exec working with no kubectl (#68/D2); `lookupKubectl` seam (overridable in tests) + pure `kubectlExecArgs` builder, hermetically tested — done 2026-07-24 (D128)

@@ -3215,3 +3215,23 @@ contradict:**
 3. **No-change detection is the caller's job** (M3-15b): the TUI compares the edited
    bytes to the original and simply never calls `Update` on a no-op editor exit, so
    `Update` always intends to write.
+
+### D130 — Port-forward: bind failures are actionable, not raw; `:0`/`:remote` is the free-local-port escape
+**2026-07-24.** A local-listener bind failure (client-go's `unable to listen on any
+of the requested ports: [{6379 6379}]`) is **not surfaced raw**. The shell detects it
+by that sentinel substring (`isPortForwardBindErr`) and replaces it with an actionable
+status-bar hint (`portForwardBindHint`) naming the clashing local port(s) and telling
+the user to retry with a leading-colon spec — `:6379` or `:0` — to have the OS assign a
+free local port (feedback `2026-07-24-port-forward-picker-and-local-port`, part 2).
+This leans on an existing kube-layer capability, **not** a new one: `kube.PortForward`
+already accepts kubectl's `:<remote>` syntax (leading colon → OS-assigned local port),
+and `PortForward.Ports()` reports the bound local port once Ready fires, which the
+status notice already shows. **Constraints a future leg must not silently contradict:**
+1. Never show client-go's raw listener error to the user; route bind failures through
+   the hint. Other transport errors still go through `NewErrorMsg` (classified).
+2. `:0` / `:<remote>` staying a valid, documented way to auto-assign a free local port
+   is load-bearing for this UX — don't remove leading-colon handling from the spec
+   parse or the prompt hint.
+3. The remaining parts of that feedback — a **port picker** from the pod's declared
+   ports (FB-pf-port-picker) and **editable/auto local port** with a one-keystroke
+   "use a free port" (FB-pf-local-port) — are deferred board tasks, not done here.

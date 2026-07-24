@@ -5019,6 +5019,74 @@ func TestPortForwardStartErrorDegrades(t *testing.T) {
 	}
 }
 
+// TestPortForwardBindFailureDegrades proves a local-listener bind failure (the local
+// port already in use) drops the forward and surfaces a status-bar error rather than
+// leaving a phantom entry — the raw client-go error is replaced by an actionable hint
+// (feedback 2026-07-24; the hint text itself is covered by TestPortForwardBindHint).
+func TestPortForwardBindFailureDegrades(t *testing.T) {
+	fw := newFakeForward()
+	pf := &fakePortForwarder{handle: fw}
+	m := openPodTable(t, "Pod", WithPortForwarder(pf))
+	m, _ = dispatchRowAction(t, m, rowActionPortForward)
+
+	next, _ := m.Update(modal.ConfirmedMsg{Kind: portForwardModalKind, Value: "6379"})
+	m = next.(Model)
+	if len(m.forwards) != 1 {
+		t.Fatalf("the started forward should be tracked, got %d", len(m.forwards))
+	}
+	id := m.forwards[0].id
+
+	// The forward dies before ever becoming ready with client-go's bind-failure error.
+	bindErr := errors.New("unable to listen on any of the requested ports: [{6379 6379}]")
+	next, _ = m.Update(forwardDoneMsg{id: id, err: bindErr})
+	m = next.(Model)
+	if len(m.forwards) != 0 {
+		t.Fatalf("a bind failure should drop the forward, got %d", len(m.forwards))
+	}
+	if !m.status.HasError() {
+		t.Fatal("a bind failure should surface a status-bar error")
+	}
+}
+
+// TestPortForwardBindErrDetection pins the sentinel-substring match that separates a
+// local-listener bind failure from any other transport error.
+func TestPortForwardBindErrDetection(t *testing.T) {
+	if !isPortForwardBindErr(errors.New("unable to listen on any of the requested ports: [{6379 6379}]")) {
+		t.Fatal("client-go's bind-failure error should be recognised")
+	}
+	if isPortForwardBindErr(errors.New("dial tcp: connection refused")) {
+		t.Fatal("an unrelated transport error must not be treated as a bind failure")
+	}
+	if isPortForwardBindErr(nil) {
+		t.Fatal("a nil error is not a bind failure")
+	}
+}
+
+// TestPortForwardBindHint pins the actionable retry message built from the requested
+// specs: it names the clashing local port(s) and shows the ":0"/":<remote>" escape.
+func TestPortForwardBindHint(t *testing.T) {
+	cases := []struct {
+		name  string
+		specs []string
+		want  []string // substrings that must all be present
+	}{
+		{"same-port", []string{"6379"}, []string{"local port 6379 already in use", "retry with :6379", ":0"}},
+		{"explicit-local", []string{"8080:80"}, []string{"local port 8080 already in use", "retry with :80", ":0"}},
+		{"multiple", []string{"8080:80", "6379"}, []string{"local ports 8080, 6379 already in use", ":0"}},
+		{"already-auto", []string{":80"}, []string{"could not bind the local listener", ":0"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := portForwardBindHint(tc.specs)
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("hint %q missing %q", got, want)
+				}
+			}
+		})
+	}
+}
+
 // TestPortForwardInertWithoutForwarder proves the port-forward intent is a no-op with
 // no forwarder wired: no prompt opens and no command is issued.
 func TestPortForwardInertWithoutForwarder(t *testing.T) {
