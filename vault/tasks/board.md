@@ -7,7 +7,11 @@ _Last updated: 2026-07-24 — M3-13c: port-forward for Services — a Service ca
 
 ## In Progress
 
-_(none)_
+- [ ] **M3-14a** Exec — kube-layer exec primitive (`internal/kube/exec.go`): `Clients.Exec`
+      over the pod `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl
+      binary, D2); apimachinery-free `ExecOptions`/`TerminalSize`/`TerminalSizeQueue` boundary
+      (mirrors PortForward's `ForwardedPort`, D33); injectable executor factory for hermetic
+      tests (D18). status: in-progress | owner: claude-opus | added: 2026-07-24
 
 ## Blocked
 
@@ -83,11 +87,16 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-- [ ] **M3-14** Exec shell: `tea.ExecProcess` suspend → `remotecommand` raw PTY (fallback
-      `kubectl exec` when the binary is present); container picker reuse; restore the TUI
-      on exit. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-22
-      notes: One of the only two sanctioned TUI-suspending actions (goals). New kube-layer
-      exec primitive may be its own sub-slice (mirrors the M1 verb-then-wire rhythm).
+- [ ] **M3-14** Exec shell (split into M3-14a kube primitive / M3-14b TUI wire, D52 rhythm):
+      status: in-progress | owner: claude-opus | added: 2026-07-22
+      notes: One of the only two sanctioned TUI-suspending actions (goals). M3-14a is the
+      kube-layer exec primitive (in progress); M3-14b wires it into the TUI.
+- [ ] **M3-14b** Exec — TUI wire: `tea.Exec` suspend driving `kube.Exec` with a raw PTY
+      (`ExecCommand` adapter feeding os.Stdin/out + a `TerminalSizeQueue`), reusing the M3-07a
+      container picker, default shell probe (`/bin/sh`), restore the TUI on exit; fallback
+      `kubectl exec` when the binary is present. Linux/macOS only (D7). status: todo | owner: — | added: 2026-07-24
+      notes: Depends on M3-14a. `tea.Exec` (not ExecProcess) so the exec runs via an
+      `ExecCommand` whose Run() calls `kube.Exec`; window-resize wired through a size queue.
 - [ ] **M3-15** Edit: `tea.ExecProcess` suspend to `$EDITOR` on the object's YAML; apply
       on save (server-side apply / update), report result. status: todo | owner: — | added: 2026-07-22
       notes: The second sanctioned suspend action. Round-trip: `GetYAML` → temp file →
