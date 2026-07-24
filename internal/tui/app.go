@@ -771,6 +771,13 @@ type Model struct {
 	// delivers the result as an execDoneMsg the update loop reports. See exec.go.
 	execer Execer
 
+	// editor applies an edited object's YAML after the $EDITOR suspend (M3-15b; nil →
+	// the Edit action is inert). Like exec it is a suspend flow off the update loop
+	// (tea.Exec), so there is no channel/goroutine here — the fetch runs off the loop
+	// (reusing yamlGetter), bubbletea drives the editCommand, and the result lands as
+	// an editDoneMsg the update loop reports. See edit.go.
+	editor Editor
+
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
 	// and it re-scopes to whatever is showing. filtering is whether it is open and
@@ -1083,6 +1090,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execDoneMsg:
 		return m.handleExecDone(msg)
+
+	case editFetchedMsg:
+		return m.handleEditFetched(msg)
+
+	case editDoneMsg:
+		return m.handleEditDone(msg)
 
 	case drainMsg:
 		return m.handleDrainMsg(msg)
@@ -1565,6 +1578,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openPortForwardPrompt(msg)
 	case rowActionExec:
 		return m.openExec(msg)
+	case rowActionEdit:
+		return m.openEdit(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
 	}

@@ -3338,3 +3338,35 @@ contradict:**
 4. **Container picker (M3-07a) and pod-owning resolution (M3-07b) still feed logs** —
    LOGS-02 keeps that resolve-then-stream plumbing and the gen-tagged log pump (D53);
    this decision changes the *sink*, not how a pod/container is chosen.
+
+### D135 — View YAML and Edit unify into one object-YAML action ($EDITOR edit-in-place); the standalone read-only YAML viewer is retired
+**2026-07-24** (feedback `2026-07-24-unify-yaml-view-and-edit`). A separate read-only
+**View YAML** (`y`, M3-03) and **Edit** (`e`, M3-15) are redundant: viewing and editing
+are the same act on an object's YAML. They **collapse into one action that opens the
+object's YAML in the user's `$EDITOR`** (the sanctioned suspend, D2/D125) — change
+nothing and you just close it (a clean no-op), change something and it applies on save
+through `kube.Update` (M3-15a/D129). Describe and logs **stay read-only** (you can't
+apply a describe); this unification is specifically the object's own YAML. **Supersedes
+the M3-03-vs-M3-15 split.** Delivered bottom-up:
+- **M3-15b** (this leg): the Edit → `$EDITOR` **suspend + apply machinery** wired to the
+  `res.edit` action — fetch YAML (reusing the M1-07a `YAMLGetter`) → temp file →
+  `tea.Exec` `$EDITOR` → read back → `Editor` seam (`kube.Update`) only on change;
+  no-change / editor-abort / apply-rejection all degrade to a status-bar toast without a
+  partial mutation (principle 3). `$EDITOR` resolution is `KUBE_EDITOR` → `EDITOR` → `vi`,
+  space-split for flags (`code -w`).
+- **M3-15c** (follow-up): retire the standalone read-only YAML viewer path
+  (`openYAMLViewer` / `yamlLoadedMsg` / `handleYAMLLoaded` / `viewerKindYAML`) and collapse
+  the surface to **one key** — edit becomes the object-YAML action, `res.yaml`/`View YAML`
+  goes away; coordinate the freed key with the D133 delete/describe layout and regenerate
+  `docs/keybindings.md`. The `YAMLGetter` seam **stays** — the edit flow fetches through it.
+
+**Constraints a future leg must not silently contradict:**
+1. **Edit is the single object-YAML action; there is no separate read-only YAML viewer**
+   once M3-15c lands. Do not reintroduce a `y`-opens-a-read-only-viewer path.
+2. **A no-op edit (buffer unchanged) never calls `Update`** — the caller compares the
+   read-back bytes to the fetched bytes; only a real change applies (kube.Update owns
+   validation + optimistic concurrency, M3-15a).
+3. **Describe/logs remain read-only viewers** — unification is the object's YAML only.
+4. The live `$EDITOR` suspend needs a **human dogfood** (like exec, D125); the M3 "Edit
+   round-trips through `$EDITOR`" exit criterion stays unticked until that lands
+   (`vault/human-tasks/2026-07-24-edit-live-cluster-dogfood.md`).

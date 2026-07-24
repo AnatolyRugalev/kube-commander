@@ -143,6 +143,7 @@ func runTUI(opts runOptions) error {
 		})),
 		tui.WithServiceResolver(clients),
 		tui.WithExecer(clients),
+		tui.WithEditor(clients),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
