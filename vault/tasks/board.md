@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — FB-confirm-yn-keys: confirm modal now accepts `y`/
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-delete-key-d** Feedback (normal, `2026-07-24-delete-default-key-d`): make the default delete binding `d` (vim `dd` muscle memory), relocate describe off `d`
+      status: in-progress | owner: claude-opus | added: 2026-07-24
 
 ## Blocked
 
