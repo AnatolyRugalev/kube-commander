@@ -590,17 +590,20 @@ type Model struct {
 	logCh       <-chan kube.LogEvent
 	logCancel   context.CancelFunc
 
-	// containerLister resolves a pod's containers before streaming (M3-07a; nil → the
-	// logs viewer streams the default/sole container directly, no picker). When wired,
-	// opening logs on a pod first fetches its container names: a single container
-	// streams directly, multiple open ctrPicker so the user chooses which to stream.
-	// logStreamRes/logStreamRef stash the pod the picker's selection streams — the
-	// picker's SelectedMsg carries only the chosen container name (D65), so the object
-	// it applies to is held here between the picker opening and the pick landing. Touched
-	// only from the single-threaded update loop.
+	// containerLister resolves a pod's containers before streaming logs or opening an
+	// exec session (M3-07a/M3-14b-2; nil → the default/sole container is used directly,
+	// no picker). When wired, logs (or exec) on a pod first fetches its container names:
+	// a single container is used directly, multiple open ctrPicker so the user chooses.
+	// ctrStreamRes/ctrStreamRef stash the pod the picker's selection applies to and
+	// ctrPurpose which terminal it routes to (logs stream vs exec session) — the picker's
+	// SelectedMsg carries only the chosen container name (D65), so the object + purpose
+	// are held here between the picker opening and the pick landing. Only one picker is
+	// ever up at a time, so a single stash serves both purposes. Touched only from the
+	// single-threaded update loop.
 	containerLister ContainerLister
-	logStreamRes    kube.Resource
-	logStreamRef    kube.ObjectRef
+	ctrStreamRes    kube.Resource
+	ctrStreamRef    kube.ObjectRef
+	ctrPurpose      ctrPurpose
 
 	// podResolver resolves a backing pod for a pod-owning workload kind so its logs
 	// can be streamed (M3-07b; nil → logs on a non-pod kind degrade to a toast). When
@@ -2586,6 +2589,35 @@ type logMsg struct {
 // streamLogsInto rather than the namespace/resource/action paths.
 const containerPickerKind = "container"
 
+// ctrPurpose disambiguates why the shared container picker (ctrPicker) is open: the
+// same resolve-then-pick path resolves a pod's container for either the logs viewer
+// (M3-07a) or an exec session (M3-14b-2), and the pick routes to the matching terminal
+// (streamLogsInto vs execInto — see streamOrExec). It is held on the model (ctrPurpose)
+// between the picker opening and the pick landing, alongside the ctrStreamRes/Ref stash.
+type ctrPurpose int
+
+const (
+	ctrPurposeLogs ctrPurpose = iota
+	ctrPurposeExec
+)
+
+// label names the purpose for a status-bar error context ("logs"/"exec").
+func (p ctrPurpose) label() string {
+	if p == ctrPurposeExec {
+		return "exec"
+	}
+	return "logs"
+}
+
+// pickerTitle is the container picker's title for this purpose (M3-14b-2), so a
+// multi-container prompt reads as either a logs or an exec container choice.
+func (p ctrPurpose) pickerTitle() string {
+	if p == ctrPurposeExec {
+		return "Exec container"
+	}
+	return "Logs container"
+}
+
 // containersLoadedMsg carries the outcome of the async PodContainers fetch issued
 // when logs are opened over a pod with a container lister wired (M3-07a). gen ties it
 // to the viewerGen bumped when the fetch was requested, so a result that lands after
@@ -2598,6 +2630,10 @@ type containersLoadedMsg struct {
 	ref        kube.ObjectRef
 	containers []string
 	err        error
+	// purpose routes the resolved container to its terminal (M3-14b-2): the logs
+	// viewer or an exec session. Threaded through the async fetch so the result knows
+	// which flow requested it.
+	purpose ctrPurpose
 }
 
 // podLogResource labels the logs viewer for a pod resolved from a pod-owning
@@ -2629,7 +2665,7 @@ func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.Resource.GVK.Kind == "Pod" {
-		return m.resolveContainersFor(msg.Resource, msg.Object)
+		return m.resolveContainersFor(msg.Resource, msg.Object, ctrPurposeLogs)
 	}
 	// Pod-owning workload kind: resolve a backing pod first (its container resolution
 	// then applies to the resolved pod). Without a resolver wired keep the routing
@@ -2649,26 +2685,41 @@ func (m Model) openLogsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// resolveContainersFor starts the container-resolution/stream flow over podRef (a pod
-// of res) — the shared tail of openLogsViewer's pod path and the pod-owning resolution
-// (M3-07b). It cancels any prior stream, then: with a container lister wired it fetches
-// the pod's containers off the update loop (a fresh viewerGen so a superseded request
-// is dropped — handleContainersLoaded), where a single container streams directly and
-// multiple open the picker; with no lister wired it streams the pod's default/sole
-// container directly (empty Container) — the M3-05/06 behaviour.
-func (m Model) resolveContainersFor(res kube.Resource, podRef kube.ObjectRef) (tea.Model, tea.Cmd) {
+// resolveContainersFor starts the container-resolution flow over podRef (a pod of res)
+// for the given purpose — logs (openLogsViewer's pod path + the M3-07b pod-owning
+// resolution) or exec (openExec, M3-14b-2). It cancels any prior stream, then: with a
+// container lister wired it fetches the pod's containers off the update loop (a fresh
+// viewerGen so a superseded request is dropped — handleContainersLoaded), where a
+// single container is used directly and multiple open the picker; with no lister wired
+// it uses the pod's default/sole container directly (empty Container) — the M3-05/06
+// (logs) / M3-14b-1 (exec) behaviour. The resolved container routes to its terminal via
+// streamOrExec.
+func (m Model) resolveContainersFor(res kube.Resource, podRef kube.ObjectRef, purpose ctrPurpose) (tea.Model, tea.Cmd) {
 	m.stopLogStream()
 	if m.containerLister == nil {
 		m.viewerGen++
-		return m.streamLogsInto(res, podRef, "", m.viewerGen)
+		return m.streamOrExec(res, podRef, "", purpose, m.viewerGen)
 	}
 	m.viewerGen++
 	gen := m.viewerGen
 	lister := m.containerLister
 	return m, func() tea.Msg {
 		names, err := lister.PodContainers(context.Background(), podRef)
-		return containersLoadedMsg{gen: gen, res: res, ref: podRef, containers: names, err: err}
+		return containersLoadedMsg{gen: gen, res: res, ref: podRef, containers: names, err: err, purpose: purpose}
 	}
+}
+
+// streamOrExec routes a resolved container to its purpose's terminal (M3-14b-2): a logs
+// purpose opens the streaming viewer (streamLogsInto), an exec purpose suspends into a
+// shell (execInto). It is the shared tail of both the single-container fast path and the
+// picker selection, so the resolve-then-pick plumbing is identical for logs and exec and
+// only the terminal differs. gen guards the logs stream; the exec path ignores it (an
+// exec opens no viewer).
+func (m Model) streamOrExec(res kube.Resource, ref kube.ObjectRef, container string, purpose ctrPurpose, gen int) (tea.Model, tea.Cmd) {
+	if purpose == ctrPurposeExec {
+		return m.execInto(res, ref, container)
+	}
+	return m.streamLogsInto(res, ref, container, gen)
 }
 
 // handlePodResolved acts on a backing pod resolved for a pod-owning kind (M3-07b). A
@@ -2684,46 +2735,49 @@ func (m Model) handlePodResolved(msg podResolvedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg("logs", msg.err))
 	}
-	return m.resolveContainersFor(podLogResource, msg.ref)
+	return m.resolveContainersFor(podLogResource, msg.ref, ctrPurposeLogs)
 }
 
-// handleContainersLoaded acts on a resolved container set (M3-07a). A result whose gen
-// no longer matches (a newer viewer superseded it) is dropped. A fetch error, or a pod
-// that reports no containers, degrades to a status-bar toast (D74) without opening the
-// viewer. A single container streams directly (reusing the fetch's gen so the stream is
-// still guarded by the same generation); multiple open the container picker, stashing
-// the pod so the pick knows what to stream.
+// handleContainersLoaded acts on a resolved container set (M3-07a/M3-14b-2). A result
+// whose gen no longer matches (a newer viewer/exec superseded it) is dropped. A fetch
+// error, or a pod that reports no containers, degrades to a status-bar toast (D74)
+// without opening the viewer/session. A single container is used directly for the
+// requested purpose (reusing the fetch's gen so a logs stream is still guarded by the
+// same generation); multiple open the container picker, stashing the pod + purpose so
+// the pick knows what to do with the chosen container.
 func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.viewerGen {
-		return m, nil // superseded by a newer viewer/stream open; drop.
+		return m, nil // superseded by a newer viewer/stream/exec open; drop.
 	}
 	if msg.err != nil {
-		return m, m.surfaceError(NewErrorMsg("logs", msg.err))
+		return m, m.surfaceError(NewErrorMsg(msg.purpose.label(), msg.err))
 	}
 	switch len(msg.containers) {
 	case 0:
-		label := "logs for " + msg.ref.Name
+		label := msg.purpose.label() + " for " + msg.ref.Name
 		return m, m.surfaceError(ErrorMsg{Context: label + ": no containers"})
 	case 1:
-		return m.streamLogsInto(msg.res, msg.ref, msg.containers[0], msg.gen)
+		return m.streamOrExec(msg.res, msg.ref, msg.containers[0], msg.purpose, msg.gen)
 	default:
-		m.logStreamRes = msg.res
-		m.logStreamRef = msg.ref
+		m.ctrStreamRes = msg.res
+		m.ctrStreamRef = msg.ref
+		m.ctrPurpose = msg.purpose
+		m.ctrPicker.SetTitle(msg.purpose.pickerTitle())
 		m.ctrPicker.SetItems(msg.containers)
 		m.ctrPicker.Show()
 		return m, nil
 	}
 }
 
-// handleContainerSelected streams the container the user picked from the container
-// picker (M3-07a): it closes the picker and opens the logs stream over the stashed pod
-// with the chosen container, on a fresh viewerGen (the pick is a new open). A picked
-// value applies to the pod recorded when the picker opened (logStreamRes/Ref).
+// handleContainerSelected acts on the container the user picked from the container
+// picker (M3-07a/M3-14b-2): it closes the picker and routes the chosen container to the
+// stashed purpose's terminal (streamOrExec — logs stream or exec session) over the
+// stashed pod, on a fresh viewerGen (the pick is a new open). The picked value applies
+// to the pod + purpose recorded when the picker opened (ctrStreamRes/Ref/ctrPurpose).
 func (m Model) handleContainerSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	m.ctrPicker.Hide()
-	m.stopLogStream()
 	m.viewerGen++
-	return m.streamLogsInto(m.logStreamRes, m.logStreamRef, msg.Value, m.viewerGen)
+	return m.streamOrExec(m.ctrStreamRes, m.ctrStreamRef, msg.Value, m.ctrPurpose, m.viewerGen)
 }
 
 // streamLogsInto opens the read-only logs viewer over ref (a pod of res) and starts

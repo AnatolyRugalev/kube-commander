@@ -3110,3 +3110,30 @@ update loop, exactly as D124 requires. Binding constraints for future exec legs:
    the `kubectl exec` binary fallback is **M3-14b-4**. A clean shell exit → neutral status
    notice; any failure (attach error, missing shell, non-zero exit) → transient error
    toast (D74), never a panic. Inert with no `Execer` wired or an empty ref.
+
+### D126 — The container-resolution path is purpose-tagged (logs ↔ exec) and routes the resolved container via `streamOrExec`; the shared `ctrPicker` is disambiguated by `ctrPurpose`
+
+**Date:** 2026-07-24 · M3-14b-2.
+
+The M3-07a resolve-then-pick container path (fetch a pod's containers → single one used
+directly, multiple open the shared `ctrPicker`) is now shared by **both** the logs viewer
+and the exec session. `resolveContainersFor(res, podRef, purpose)` carries a `ctrPurpose`
+(`ctrPurposeLogs`/`ctrPurposeExec`) through the async fetch (`containersLoadedMsg.purpose`)
+and the picker stash (`ctrPurpose` + the renamed `ctrStreamRes`/`ctrStreamRef`), and
+**`streamOrExec`** is the single terminal that routes a resolved container to
+`streamLogsInto` (logs) or `execInto` (exec). Binding constraints:
+
+1. **One picker, purpose-routed.** `ctrPicker` is reused, not duplicated: only one is ever
+   up, so a single stash serves both purposes. A future action that also picks a container
+   adds a `ctrPurpose` value + a `streamOrExec` arm — it must **not** branch on the picker
+   Kind (all pickers share `containerPickerKind`, D65) or add a second container picker. The
+   picker title (`pickerTitle()`) disambiguates the prompt for the user.
+2. **Exec goes through the same fast-path/pick split.** `openExec` no longer suspends
+   directly (that was M3-14b-1's default-container behaviour); it calls
+   `resolveContainersFor(..., ctrPurposeExec)`. A single-container pod (or **no
+   `ContainerLister` wired** → empty container, the M3-14b-1 fallback) execs directly; a
+   multi-container pod prompts. `execInto(res, ref, container)` is the exec terminal —
+   `newExecCommand` now takes the chosen container (empty = default/sole).
+3. **`viewerGen` guards the exec fetch too.** The exec container fetch bumps/checks
+   `viewerGen` for supersession like the logs fetch, even though exec opens no viewer; the
+   `gen` is unused past `streamOrExec` on the exec arm.

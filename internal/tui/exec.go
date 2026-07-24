@@ -24,10 +24,11 @@ import (
 // puts it raw for the exec's lifetime and restores it before returning — nested
 // inside bubbletea's own release/restore.
 //
-// This slice execs the pod's default/sole container with /bin/sh and seeds only the
-// initial terminal size (multi-container picker reuse → M3-14b-2, live SIGWINCH
-// resize → M3-14b-3, kubectl-binary fallback → M3-14b-4). Linux/macOS only — the
-// raw-PTY path is a non-goal on native Windows (WSL2 instead, D7).
+// A multi-container Pod prompts which container to exec into via the shared container
+// picker (M3-14b-2, reusing the M3-07a ctrPicker); a single-container Pod execs
+// directly. The exec runs /bin/sh and seeds only the initial terminal size (live
+// SIGWINCH resize → M3-14b-3, kubectl-binary fallback → M3-14b-4). Linux/macOS only —
+// the raw-PTY path is a non-goal on native Windows (WSL2 instead, D7).
 
 // Execer is the narrow slice of the kube layer the shell needs to run the exec
 // action (M3-14b-1): open an interactive session in a pod's container (M3-14a's
@@ -63,18 +64,34 @@ type execDoneMsg struct {
 	err   error
 }
 
-// openExec suspends the TUI into an interactive shell in the selected Pod's default
-// container (M3-14b-1). With no execer wired, or an empty ref (a row with no name,
-// guarded so an empty ref never reaches the kube layer), it is a no-op — exactly as
-// the Exec-shell entry is absent from a non-Pod kind's actions menu. It returns the
-// tea.Exec command bubbletea runs from a released terminal; the callback reports the
-// session result to the status bar (handleExecDone).
+// openExec starts the Exec-shell flow over the selected Pod (M3-14b-1/2). With no
+// execer wired, or an empty ref (a row with no name, guarded so an empty ref never
+// reaches the kube layer), it is a no-op — exactly as the Exec-shell entry is absent
+// from a non-Pod kind's actions menu. Otherwise it resolves the Pod's containers
+// (reusing the M3-07a container-resolution path, tagged with the exec purpose): a
+// single-container Pod execs directly, a multi-container Pod prompts which container
+// via the shared picker (execInto is the terminal both routes reach).
 func (m Model) openExec(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	if m.execer == nil || msg.Object.Name == "" {
 		return m, nil
 	}
-	label := viewerTitle(msg.Resource, msg.Object)
-	cmd := newExecCommand(m.execer, msg.Object)
+	return m.resolveContainersFor(msg.Resource, msg.Object, ctrPurposeExec)
+}
+
+// execInto suspends the TUI into an interactive shell in ref's container (M3-14b-2).
+// container "" execs the pod's default/sole container (the M3-14b-1 behaviour, used
+// when no container lister is wired); a resolved single container or a picked one is
+// passed by name. It is the exec twin of streamLogsInto — the terminal both the
+// single-container fast path and the picker selection route to (streamOrExec). It
+// returns the tea.Exec command bubbletea runs from a released terminal; the callback
+// reports the session result to the status bar (handleExecDone). Guarded against a
+// nil execer / empty ref so an empty target never reaches the kube layer.
+func (m Model) execInto(res kube.Resource, ref kube.ObjectRef, container string) (tea.Model, tea.Cmd) {
+	if m.execer == nil || ref.Name == "" {
+		return m, nil
+	}
+	label := viewerTitle(res, ref)
+	cmd := newExecCommand(m.execer, ref, container)
 	return m, tea.Exec(cmd, func(err error) tea.Msg {
 		return execDoneMsg{label: label, err: err}
 	})
@@ -102,16 +119,17 @@ func (m Model) handleExecDone(msg execDoneMsg) (tea.Model, tea.Cmd) {
 type execCommand struct {
 	execer    Execer
 	ref       kube.ObjectRef
-	container string   // "" → the pod's default/sole container (14b-1)
+	container string   // "" → the pod's default/sole container; else the chosen one (14b-2)
 	command   []string // the shell argv
 
 	stdin  io.Reader
 	stdout io.Writer
 }
 
-// newExecCommand builds the exec adapter for the selected pod's default container.
-func newExecCommand(execer Execer, ref kube.ObjectRef) *execCommand {
-	return &execCommand{execer: execer, ref: ref, command: defaultExecShell}
+// newExecCommand builds the exec adapter for container in ref's pod (M3-14b-2); an
+// empty container execs the pod's default/sole container (M3-14b-1).
+func newExecCommand(execer Execer, ref kube.ObjectRef, container string) *execCommand {
+	return &execCommand{execer: execer, ref: ref, container: container, command: defaultExecShell}
 }
 
 // SetStdin/SetStdout capture the terminal streams bubbletea hands the exec. SetStderr

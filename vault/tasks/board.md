@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — M3-14b-1: exec TUI wire (in-process SPDY primary path) — the Exec-shell action suspends via `tea.Exec` into an `execCommand` whose `Run()` drives the blocking `kube.Exec` (D124) off the update loop, putting the local terminal raw itself (x/term) with a seed-once size queue, execing a Pod's default container with `/bin/sh` and reporting the result to the status bar; `Execer` seam, hermetic tests, live interactive exec raised as a human-task dogfood (D125). Split M3-14b → 14b-1 (done) + 14b-2 (picker reuse) / 14b-3 (SIGWINCH resize) / 14b-4 (kubectl fallback). Top-unblocked next: M3-14b-2. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-24 — M3-14b-2: exec multi-container picker reuse — `openExec` now routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); a single-container Pod execs directly, a multi-container Pod prompts via the reused `ctrPicker`, and `streamOrExec` routes the resolved container to `streamLogsInto` or `execInto` (D126). Top-unblocked next: M3-14b-3 (live SIGWINCH resize). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M3-14b-2** Exec — multi-container picker reuse
-      status: in-progress | owner: claude-opus | added: 2026-07-24 | claimed: 2026-07-24
+_(none)_
 
 ## Blocked
 
@@ -102,6 +101,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **M3-14b-2** Exec — multi-container picker reuse: `openExec` routes through the shared M3-07a container-resolution path tagged with a new `ctrPurpose` (logs↔exec); single-container Pod execs directly, multi-container prompts via the reused `ctrPicker`, `streamOrExec` routes to `streamLogsInto`/`execInto`; `newExecCommand` takes the chosen container — done 2026-07-24 (D126)
 - [x] **M3-14b-1** Exec — TUI wire (in-process SPDY primary path): `tea.Exec`→`execCommand.Run()` drives blocking `kube.Exec` off the loop, local raw terminal (x/term) + seed-once size queue, Pod default container `/bin/sh`, result to status bar; `Execer` seam; live exec dogfood raised as a human-task — done 2026-07-24 (D125)
 - [x] **M3-14a** Exec — kube-layer exec primitive (`internal/kube/exec.go`): blocking `Clients.Exec` over the pod `exec` subresource via `remotecommand.NewSPDYExecutor` (SPDY, no kubectl binary, D2); apimachinery-free `ExecOptions`/`TerminalSize`/`TerminalSizeQueue` surface with a `sizeQueueAdapter` (D33); TTY folds stderr into stdout + wires the size queue; injectable executor factory, hermetic fake tests (D18) — done 2026-07-24 (D124)
 - [x] **M3-13c** Port-forward for Services: a Service can't be forwarded directly (kube.PortForward posts to the pod subresource), so the Port-forward action — re-extended to apply to `Service` as well as `Pod` — resolves it to a backing endpoint pod first via a new `ServiceResolver` seam (`WithServiceResolver`; `kube.PodForService`: `spec.selector` → newest ready pod via `newestReadyPod`, selector-less/no-pods → toast), then opens the ports prompt over — and forwards — the resolved pod; resolve-then-prompt runs off the update loop, generation-guarded (`pfResolveGen`), no resolver → toast (a Pod still forwards directly) — done 2026-07-24 (D123)

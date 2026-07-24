@@ -6,8 +6,11 @@ import (
 	"errors"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
 
 // fakeExecer is a hermetic Execer (M3-14b-1): it records the pod addressed and the
@@ -87,7 +90,7 @@ func TestExecInertOnEmptyRef(t *testing.T) {
 func TestExecCommandRunStreamsTTYShell(t *testing.T) {
 	f := &fakeExecer{}
 	ref := kube.ObjectRef{Namespace: "web", Name: "api-1", UID: "u1"}
-	c := newExecCommand(f, ref)
+	c := newExecCommand(f, ref, "")
 
 	var in bytes.Buffer
 	var out bytes.Buffer
@@ -124,11 +127,144 @@ func TestExecCommandRunStreamsTTYShell(t *testing.T) {
 	}
 }
 
+// execFetch delivers the Exec-shell intent over the selected pod and returns the model
+// plus the async container-fetch cmd openExec issues when a container lister is wired
+// (M3-14b-2). A nil-lister model suspends directly instead (no fetch) — the M3-14b-1 path.
+func execFetch(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	return dispatchRowAction(t, m, rowActionExec)
+}
+
+// resolveExecContainers runs the container-fetch cmd, asserting it produced a
+// containersLoadedMsg carrying the exec purpose, and delivers it — returning the model
+// plus any follow-on cmd (the tea.Exec suspend for a single container; nil once the
+// picker is shown).
+func resolveExecContainers(t *testing.T, m Model, fetchCmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+	msg := fetchCmd()
+	clm, ok := msg.(containersLoadedMsg)
+	if !ok {
+		t.Fatalf("opening exec with a lister produced %T, want containersLoadedMsg", msg)
+	}
+	if clm.purpose != ctrPurposeExec {
+		t.Fatalf("the exec container fetch should carry the exec purpose, got %v", clm.purpose)
+	}
+	next, follow := m.Update(clm)
+	return next.(Model), follow
+}
+
+// TestExecSingleContainerExecsDirectly proves a single-container pod skips the picker:
+// resolving its one container suspends straight into an exec session (a non-nil
+// tea.Exec cmd), with no picker shown.
+func TestExecSingleContainerExecsDirectly(t *testing.T) {
+	l := &fakeContainerLister{names: []string{"app"}}
+	m := podExecModel(t, WithExecer(&fakeExecer{}), WithContainerLister(l))
+
+	m, fetchCmd := execFetch(t, m)
+	if fetchCmd == nil {
+		t.Fatal("exec with a lister wired should issue the async container fetch")
+	}
+	if m.ctrPicker.Active() {
+		t.Fatal("the picker should not open until the container resolves")
+	}
+	m, execCmd := resolveExecContainers(t, m, fetchCmd)
+	if l.calls != 1 {
+		t.Fatalf("PodContainers called %d times, want 1", l.calls)
+	}
+	if m.ctrPicker.Active() {
+		t.Fatal("a single-container pod should not open the container picker")
+	}
+	if execCmd == nil {
+		t.Fatal("a single-container pod should suspend directly into an exec session")
+	}
+}
+
+// TestExecMultiContainerOpensPicker proves a multi-container pod prompts which container
+// to exec into (the picker opens, stamped with the exec purpose) rather than execing
+// blindly — and no exec starts before a pick.
+func TestExecMultiContainerOpensPicker(t *testing.T) {
+	f := &fakeExecer{}
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := podExecModel(t, WithExecer(f), WithContainerLister(l))
+
+	m, fetchCmd := execFetch(t, m)
+	m, follow := resolveExecContainers(t, m, fetchCmd)
+	if !m.ctrPicker.Active() {
+		t.Fatal("a multi-container pod should open the container picker for exec")
+	}
+	if m.ctrPurpose != ctrPurposeExec {
+		t.Fatal("the open picker should carry the exec purpose so the pick routes to exec")
+	}
+	if follow != nil {
+		t.Fatal("opening the picker issues no follow-on command")
+	}
+	if f.calls != 0 {
+		t.Fatal("no exec should start before a container is picked")
+	}
+	if m.ctrPicker.Len() != 2 {
+		t.Fatalf("the picker should list 2 containers, got %d", m.ctrPicker.Len())
+	}
+}
+
+// TestExecContainerPickSuspendsIntoSession proves picking a container from an
+// exec-purpose picker closes it and suspends into an exec session (a non-nil tea.Exec
+// cmd) rather than opening the logs viewer.
+func TestExecContainerPickSuspendsIntoSession(t *testing.T) {
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := podExecModel(t, WithExecer(&fakeExecer{}), WithContainerLister(l))
+
+	m, fetchCmd := execFetch(t, m)
+	m, _ = resolveExecContainers(t, m, fetchCmd)
+
+	next, execCmd := m.Update(picker.SelectedMsg{Kind: containerPickerKind, Value: "sidecar"})
+	m = next.(Model)
+	if m.ctrPicker.Active() {
+		t.Fatal("picking a container should close the picker")
+	}
+	if m.viewer.Active() {
+		t.Fatal("an exec pick must not open the logs viewer (wrong purpose route)")
+	}
+	if execCmd == nil {
+		t.Fatal("picking a container should suspend into an exec session")
+	}
+}
+
+// TestExecContainerResolveErrorDegrades proves a PodContainers failure on the exec path
+// degrades to a status-bar error toast (labelled "exec"), opening no picker or session.
+func TestExecContainerResolveErrorDegrades(t *testing.T) {
+	l := &fakeContainerLister{err: errors.New("forbidden")}
+	m := podExecModel(t, WithExecer(&fakeExecer{}), WithContainerLister(l))
+
+	m, fetchCmd := execFetch(t, m)
+	m, _ = resolveExecContainers(t, m, fetchCmd)
+	if m.ctrPicker.Active() {
+		t.Fatal("a resolve error should not open the picker")
+	}
+	if !m.status.HasError() {
+		t.Fatal("a container-resolve failure should surface a status-bar error toast")
+	}
+}
+
+// TestExecCommandRunUsesChosenContainer proves a picked (non-empty) container is passed
+// through to kube.Exec — the last hop of the picker-reuse route (M3-14b-2).
+func TestExecCommandRunUsesChosenContainer(t *testing.T) {
+	f := &fakeExecer{}
+	c := newExecCommand(f, kube.ObjectRef{Name: "api-1"}, "sidecar")
+	c.SetStdin(&bytes.Buffer{})
+	c.SetStdout(&bytes.Buffer{})
+	if err := c.Run(); err != nil {
+		t.Fatalf("Run returned %v, want nil", err)
+	}
+	if f.gotOpts.Container != "sidecar" {
+		t.Fatalf("exec container = %q, want sidecar (the picked container)", f.gotOpts.Container)
+	}
+}
+
 // TestExecCommandRunPropagatesError proves a failed attach (RBAC, missing shell) or a
 // non-zero shell exit is returned from Run so the callback can toast it.
 func TestExecCommandRunPropagatesError(t *testing.T) {
 	f := &fakeExecer{err: errors.New("forbidden")}
-	c := newExecCommand(f, kube.ObjectRef{Name: "api-1"})
+	c := newExecCommand(f, kube.ObjectRef{Name: "api-1"}, "")
 	c.SetStdin(&bytes.Buffer{})
 	c.SetStdout(&bytes.Buffer{})
 	if err := c.Run(); err == nil {
