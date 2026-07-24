@@ -7,7 +7,8 @@ _Last updated: 2026-07-24 — HT-exec-dogfood: closed the exec live-cluster dogf
 
 ## In Progress
 
-_(none)_
+- [ ] **FB-pf-bind-toast** Port-forward: actionable toast on local-listener bind failure + surface the `:0` auto-local syntax (first slice of feedback `2026-07-24-port-forward-picker-and-local-port`, Priority high)
+      status: in-progress | owner: claude-opus | added: 2026-07-24
 
 ## Blocked
 
