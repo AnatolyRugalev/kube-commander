@@ -7,7 +7,14 @@ _Last updated: 2026-07-25 — SEARCH-03a done: `kube.Search` now streams typed `
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-03b** Search progress + cap surfacing in the view: a "searching N/M kinds…"
+      progress line and an explicit cap state ("first 200 matches — narrow the query"),
+      plus a search-context hint bar. Per-kind failures stay silent (D131 pt 3).
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (SEARCH-03 split) | claimed: 2026-07-25
+      notes: SEARCH-03a gives the wiring `SearchKindDone`/`SearchDone{Capped}`; this slice
+      counts them into the model (`searchDone`/`searchTotal`/`searchCapped`, reset per
+      query) and renders them in the searchview header, plus the hint bar. Depends on
+      SEARCH-03a.
 
 ## Blocked
 
@@ -98,14 +105,6 @@ SEARCH-03 was split D52-style into the kube-layer signal (**SEARCH-03a**) and th
 surfacing (**SEARCH-03b**): the progress line and the cap state are unrenderable until
 `kube.Search` can say *which kind finished* and *why it stopped*.
 
-- [ ] **SEARCH-03b** Search progress + cap surfacing in the view: a "searching N/M kinds…"
-      progress line and an explicit cap state ("first 200 matches — narrow the query"),
-      plus a search-context hint bar. Per-kind failures stay silent (D131 pt 3).
-      status: todo | owner: — | added: 2026-07-25 (SEARCH-03 split) | was: SEARCH-03
-      notes: SEARCH-03a gives the wiring `SearchKindDone`/`SearchDone{Capped}`; this slice
-      counts them into the model (`searchDone`/`searchTotal`/`searchCapped`, reset per
-      query) and renders them in the searchview header, plus the hint bar. Depends on
-      SEARCH-03a.
 - [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
       **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
       fuzzy / label / field matching beyond name substring.
