@@ -7,7 +7,10 @@ _Last updated: 2026-07-25 — SEARCH-02b done: cluster search is live end-to-end
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-03a** Search completion/progress signal in the kube layer (`kube.Search`
+      channel widened from `SearchHit` to a `SearchEvent`: match · kind-done · terminal
+      done-with-cap-reason), TUI pump adapted (no surfacing yet)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 | started: 2026-07-25
 
 ## Blocked
 
@@ -94,16 +97,18 @@ SEARCH-02 was split D52-style into the component (**SEARCH-02a**) and the app wi
 (**SEARCH-02b**), mirroring LOGS-01 → LOGS-02. Both are done: cluster search is live on
 `ctrl+s` (D141) and the remaining slices refine it.
 
-- [ ] **SEARCH-03** Search progress + cap surfacing: a "searching N/M kinds…" progress
-      line and an explicit cap state ("first 200 matches — narrow the query"), plus a
-      search-context hint bar. Per-kind failures stay silent (D131 pt 3).
-      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131) | narrowed: 2026-07-25
-      notes: SEARCH-02b already streams hits kind-by-kind, caps at `searchHitLimit`, and
-      cancels in flight on a query change (D141), so what remains is the *surfacing*:
-      per-kind completion counting needs a done-signal from `kube.Search` (today the
-      channel close is the only completion signal — it cannot distinguish "all kinds
-      finished" from "cap reached"), so this slice likely widens the kube-layer channel
-      item or adds a second channel. Depends on SEARCH-02b.
+SEARCH-03 was split D52-style into the kube-layer signal (**SEARCH-03a**) and the view
+surfacing (**SEARCH-03b**): the progress line and the cap state are unrenderable until
+`kube.Search` can say *which kind finished* and *why it stopped*.
+
+- [ ] **SEARCH-03b** Search progress + cap surfacing in the view: a "searching N/M kinds…"
+      progress line and an explicit cap state ("first 200 matches — narrow the query"),
+      plus a search-context hint bar. Per-kind failures stay silent (D131 pt 3).
+      status: todo | owner: — | added: 2026-07-25 (SEARCH-03 split) | was: SEARCH-03
+      notes: SEARCH-03a gives the wiring `SearchKindDone`/`SearchDone{Capped}`; this slice
+      counts them into the model (`searchDone`/`searchTotal`/`searchCapped`, reset per
+      query) and renders them in the searchview header, plus the hint bar. Depends on
+      SEARCH-03a.
 - [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
       **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
       fuzzy / label / field matching beyond name substring.
