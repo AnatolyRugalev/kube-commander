@@ -7,7 +7,14 @@ _Last updated: 2026-07-25 — SEARCH-03b done: the search header now reports `se
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-02** Wire `res.logs` to the new logs view — retire the shared-viewer logs path
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (LOGS triage, D134) | claimed: 2026-07-25
+      notes: Replace `openLogsViewer`/`streamLogsInto`/`logFollow`/`logTitle` + the
+      `viewerKindLogs` special-casing in `app.go` so logs stream into the LOGS-01 component
+      instead of the shared M3-01 viewer (which keeps serving YAML/describe/secret). Keep the
+      container picker (M3-07a) and pod-owning resolution (M3-07b) feeding it; keep the
+      gen-tagged log pump (D53). Must stay launchable and not regress the running binary (D68);
+      raise a dogfood human-task if a real-terminal filter/throughput check is warranted.
 
 ## Blocked
 
@@ -113,14 +120,6 @@ indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wi
 retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
 nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
 
-- [ ] **LOGS-02** Wire `res.logs` to the new logs view — retire the shared-viewer logs path
-      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
-      notes: Replace `openLogsViewer`/`streamLogsInto`/`logFollow`/`logTitle` + the
-      `viewerKindLogs` special-casing in `app.go` so logs stream into the LOGS-01 component
-      instead of the shared M3-01 viewer (which keeps serving YAML/describe/secret). Keep the
-      container picker (M3-07a) and pod-owning resolution (M3-07b) feeding it; keep the
-      gen-tagged log pump (D53). Must stay launchable and not regress the running binary (D68);
-      raise a dogfood human-task if a real-terminal filter/throughput check is warranted.
 - [ ] **LOGS-03** Regex filter mode + match highlighting
       status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
       notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
