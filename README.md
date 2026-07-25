@@ -113,9 +113,12 @@ one table: type a query and matching objects stream in **across kinds** (Pods,
 Deployments, StatefulSets, DaemonSets, Services, ConfigMaps, Secrets, PVCs, Jobs,
 CronJobs, Ingresses) in the current namespace, shown as `Kind  namespace/name`. Press
 Enter on a hit to jump straight to it — the table switches to that kind with the object
-selected. `Esc` clears the query, and `Esc` again closes the search. This is a
-deliberate, one-shot query (it lists those kinds once per query, never watches
-everything); `/` remains the filter that narrows the rows of the table already open.
+selected. `Esc` clears the query, and `Esc` again closes the search. The header tracks
+the sweep (`searching 4/11 kinds…`) so a slow kind reads as progress rather than a hang,
+and says so explicitly when there were more matches than it shows (`first 200 matches —
+narrow the query`). This is a deliberate, one-shot query (it lists those kinds once per
+query, never watches everything); `/` remains the filter that narrows the rows of the
+table already open.
 
 The other subcommands report information and exit:
 

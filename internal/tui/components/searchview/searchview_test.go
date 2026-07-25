@@ -251,6 +251,117 @@ func TestEmptyHintDistinguishesBlankSearchingAndNoMatch(t *testing.T) {
 	}
 }
 
+// TestProgressLineCountsKindsDone proves the header's progress segment reports the
+// fan-out's kind count once it is known, and only while a search is in flight — the
+// SEARCH-03b ask ("searching N/M kinds…", so a slow kind reads as progress, not a hang).
+func TestProgressLineCountsKindsDone(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+
+	// Before the fan-out launches (the debounce window) the count is unknown, so the
+	// in-flight state is still the bare "searching…" rather than a bogus 0/0.
+	m.SetSearching(true)
+	if !strings.Contains(m.View(), "searching…") || strings.Contains(m.View(), "kinds") {
+		t.Errorf("pre-launch should say searching… with no kind count; got:\n%s", m.View())
+	}
+
+	m.StartProgress(3)
+	if !strings.Contains(m.View(), "searching 0/3 kinds…") {
+		t.Errorf("launched search should show 0/3; got:\n%s", m.View())
+	}
+	m.MarkKindDone()
+	m.MarkKindDone()
+	if !strings.Contains(m.View(), "searching 2/3 kinds…") {
+		t.Errorf("two kinds done should show 2/3; got:\n%s", m.View())
+	}
+	if done, total := m.Progress(); done != 2 || total != 3 {
+		t.Errorf("Progress() = %d/%d; want 2/3", done, total)
+	}
+
+	// A stray extra kind-done cannot render 4/3.
+	m.MarkKindDone()
+	m.MarkKindDone()
+	if done, _ := m.Progress(); done != 3 {
+		t.Errorf("kinds done clamped at the total; got %d, want 3", done)
+	}
+
+	// Completion clears the line: the result count is the whole story once idle.
+	m.SetSearching(false)
+	if strings.Contains(m.View(), "kinds") {
+		t.Errorf("a finished search should drop the progress line; got:\n%s", m.View())
+	}
+}
+
+// TestCappedStateSurfacesAndOutranksProgress proves the cap is stated in the header as
+// an actionable line, wins over the progress count while the rest of the fan-out drains,
+// and survives completion (the results really are truncated).
+func TestCappedStateSurfacesAndOutranksProgress(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.SetSearching(true)
+	m.StartProgress(4)
+	for _, n := range []string{"api-0", "api-1"} {
+		m.AppendHit(hit("Pod", "default", n))
+	}
+	m.MarkKindDone()
+
+	m.SetCapped(true)
+	if !m.Capped() {
+		t.Fatal("SetCapped(true) should be reported by Capped()")
+	}
+	view := m.View()
+	if !strings.Contains(view, "first 2 matches — narrow the query") {
+		t.Errorf("cap should name the count and the fix; got:\n%s", view)
+	}
+	if strings.Contains(view, "kinds") {
+		t.Errorf("the cap line should replace the progress count; got:\n%s", view)
+	}
+	m.SetSearching(false)
+	if !strings.Contains(m.View(), "narrow the query") {
+		t.Errorf("cap state must survive the search ending; got:\n%s", m.View())
+	}
+}
+
+// TestQueryChangeResetsProgressAndCap proves the fan-out state is dropped together with
+// the results it describes — on a keystroke, on nav.back's clear, and on Reset — so the
+// header never shows a previous query's progress or cap.
+func TestQueryChangeResetsProgressAndCap(t *testing.T) {
+	arm := func() Model {
+		m := newSearch()
+		m, _ = typeQuery(m, "api")
+		m.SetSearching(true)
+		m.StartProgress(5)
+		m.MarkKindDone()
+		m.AppendHit(hit("Pod", "default", "api-0"))
+		m.SetCapped(true)
+		return m
+	}
+
+	m, _ := typeQuery(arm(), "x")
+	if done, total := m.Progress(); done != 0 || total != 0 || m.Capped() {
+		t.Errorf("a keystroke should reset progress/cap; got %d/%d capped=%v", done, total, m.Capped())
+	}
+
+	m, _ = arm().Update(keymap.ActionBack) // clears query + results
+	if done, total := m.Progress(); done != 0 || total != 0 || m.Capped() {
+		t.Errorf("nav.back's clear should reset progress/cap; got %d/%d capped=%v", done, total, m.Capped())
+	}
+
+	m = arm()
+	m.Reset()
+	if done, total := m.Progress(); done != 0 || total != 0 || m.Capped() {
+		t.Errorf("Reset should clear progress/cap; got %d/%d capped=%v", done, total, m.Capped())
+	}
+
+	// A relaunch re-zeroes the counters even without a query change (the scope may
+	// have shrunk between two searches of the same query).
+	m = arm()
+	m.StartProgress(2)
+	if done, total := m.Progress(); done != 0 || total != 2 || m.Capped() {
+		t.Errorf("StartProgress should restart at 0/total, uncapped; got %d/%d capped=%v", done, total, m.Capped())
+	}
+}
+
 func TestNavigationMovesCursorWithinResults(t *testing.T) {
 	m := newSearch()
 	for _, n := range []string{"api-0", "api-1", "api-2"} {

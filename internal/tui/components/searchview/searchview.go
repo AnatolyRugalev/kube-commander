@@ -4,11 +4,14 @@
 // 2026-07-24-cluster-search-multi-resource, D131) whose kube-layer fan-out primitive is
 // kube.Search (SEARCH-01).
 //
-// This slice (SEARCH-02a) is the component in isolation — the query field, the
-// streaming result list, cursor navigation, and the three messages the wiring reacts to.
-// It runs no search itself and knows nothing about clients: SEARCH-02b registers the
-// search.cluster action, runs kube.Search off the update loop, and feeds hits in.
-// Streaming progress/cap (SEARCH-03) and the scope widen (SEARCH-04) are later slices.
+// SEARCH-02a built the component in isolation — the query field, the streaming result
+// list, cursor navigation, and the three messages the wiring reacts to. It runs no
+// search itself and knows nothing about clients: SEARCH-02b registers the search.cluster
+// action, runs kube.Search off the update loop, and feeds hits in. SEARCH-03b added the
+// header's fan-out state (StartProgress/MarkKindDone/SetCapped → "searching N/M kinds…"
+// and the cap line), still push-only: the counters are fed from kube's SearchKindDone /
+// SearchDone{Capped} events (D142) by the wiring, and reset here whenever the results
+// they describe are dropped. The scope widen (SEARCH-04) is a later slice.
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -119,6 +122,20 @@ type Model struct {
 
 	searching bool // a search is in flight (header indicator; the wiring sets it)
 
+	// kindsDone / kindsTotal are the fan-out's progress: how many of the kinds the
+	// current query was launched over have reported done (kube's SearchKindDone,
+	// SEARCH-03a) against how many were requested. kindsTotal is 0 until the wiring
+	// launches — during the debounce window there is no scope yet — so a 0 total means
+	// "in flight, count unknown", not "nothing to search".
+	kindsDone  int
+	kindsTotal int
+
+	// capped marks a search the hit cap truncated (kube's SearchDone{Capped}): there
+	// were more matches than are shown, so the answer is a narrower query. Sticky for
+	// the query it belongs to — it survives the fan-out completing and is cleared, like
+	// the counters, when the query changes.
+	capped bool
+
 	active bool // whether the view is shown (captures input) — "" View when false
 	width  int  // full screen width
 	height int  // full screen height
@@ -186,6 +203,41 @@ func (m *Model) SetSearching(b bool) { m.searching = b }
 
 // Searching reports whether a search is in flight.
 func (m Model) Searching() bool { return m.searching }
+
+// StartProgress records that a fan-out over total kinds has just launched: the
+// progress counters restart at 0/total and any previous cap state is dropped. The
+// wiring calls it when it launches the debounced search, which is the first moment the
+// kind count is known (the scope is derived from what discovery currently offers).
+func (m *Model) StartProgress(total int) {
+	if total < 0 {
+		total = 0
+	}
+	m.kindsDone = 0
+	m.kindsTotal = total
+	m.capped = false
+}
+
+// MarkKindDone counts one kind that has finished being searched. kube emits exactly one
+// kind-done per requested kind — including for a denied kind and for one the cap cut
+// short (D142 pt 2) — so the count can reach the total on any outcome and a forbidden
+// group can never leave the progress line stuck one short. Clamped at the total so a
+// stray event can't render a nonsense 12/11.
+func (m *Model) MarkKindDone() {
+	if m.kindsTotal > 0 && m.kindsDone >= m.kindsTotal {
+		return
+	}
+	m.kindsDone++
+}
+
+// Progress reports the kinds finished and the kinds requested for the current query.
+func (m Model) Progress() (done, total int) { return m.kindsDone, m.kindsTotal }
+
+// SetCapped records that the hit cap truncated this query's matches (there are more on
+// the cluster than are shown).
+func (m *Model) SetCapped(b bool) { m.capped = b }
+
+// Capped reports whether the current query's matches were truncated by the cap.
+func (m Model) Capped() bool { return m.capped }
 
 // AppendHit adds one streamed result and re-renders the list. The cursor stays on the
 // row it was on, so results arriving under the reader never move their selection.
@@ -278,11 +330,16 @@ func queryChanged(q string) tea.Cmd {
 	return func() tea.Msg { return QueryChangedMsg{Kind: kind, Query: q} }
 }
 
-// clearHits drops every result and rewinds the cursor.
+// clearHits drops every result and rewinds the cursor. It also drops the progress
+// counters and the cap flag: they describe the fan-out that produced those results, so
+// they go stale at exactly the same moment (a query change, nav.back's clear, Reset) —
+// keeping the reset in one place is why a caller never has to re-zero them itself.
 func (m *Model) clearHits() {
 	m.hits = m.hits[:0]
 	m.rebuild()
 	m.list.Select(0)
+	m.kindsDone, m.kindsTotal = 0, 0
+	m.capped = false
 }
 
 // rebuild regenerates the list items from the hits, keeping arrival order.
@@ -376,17 +433,41 @@ func (m Model) emptyHint() string {
 }
 
 // header builds the one-line status bar: "search · <scope> · N results" plus the
-// in-flight marker, clipped to the screen width.
+// progress/cap segment, clipped to the screen width.
 func (m Model) header() string {
 	seg := kind
 	if m.scope != "" {
 		seg += " · " + m.scope
 	}
 	seg += " · " + itoa(len(m.hits)) + " results"
-	if m.searching {
-		seg += " · searching…"
+	if s := m.progress(); s != "" {
+		seg += " · " + s
 	}
 	return m.styles.Header.Width(m.width).MaxWidth(m.width).Render(clip(seg, m.width))
+}
+
+// progress is the header's fan-out segment, in one of four states:
+//
+//   - capped — the cap truncated the matches, so the count on screen is not the whole
+//     answer and the fix is a narrower query. It wins over the progress line even while
+//     the remaining kinds drain, because it is the only state the reader must act on,
+//     and it stays up after the search ends (the counters do not).
+//   - searching with a known kind count — "searching 3/11 kinds…", so a slow kind reads
+//     as progress rather than as a hang, and a big scope is visibly a big scope.
+//   - searching with no count yet — the debounce window, before the wiring has picked
+//     the scope: still "searching…", so the keystroke is never followed by silence.
+//   - idle and uncapped — nothing; the result count already says everything.
+func (m Model) progress() string {
+	switch {
+	case m.capped:
+		return "first " + itoa(len(m.hits)) + " matches — narrow the query"
+	case m.searching && m.kindsTotal > 0:
+		return "searching " + itoa(m.kindsDone) + "/" + itoa(m.kindsTotal) + " kinds…"
+	case m.searching:
+		return "searching…"
+	default:
+		return ""
+	}
 }
 
 // itoa is a tiny non-negative int→string (avoids importing strconv for one use).

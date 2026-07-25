@@ -122,6 +122,19 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
+	// The search context (SEARCH-03b) offers only keys the search view actually
+	// honours: its always-open query field swallows every text-producing key, so the
+	// text-keyed browse actions would be a lie in that hint.
+	search := descs(hm.ShortHelpContext(HelpSearch))
+	if !search[ActionDrillIn.Describe()] || !search[ActionBack.Describe()] {
+		t.Error("search context should offer drill-in and back")
+	}
+	for _, a := range []Action{ActionFilter, ActionSort, ActionActions, ActionNamespace, ActionHelp, ActionQuit} {
+		if search[a.Describe()] {
+			t.Errorf("%q is typed into the search query field, not honoured — it must not be hinted", a)
+		}
+	}
+
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
 	if err != nil {

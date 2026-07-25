@@ -23,7 +23,8 @@ import (
 // still-running lists once the cap is reached (D131 pt 4), so this is both a result
 // bound and a load bound on a big cluster. It is far more rows than a reader will
 // ever walk — the answer to "too many matches" is a narrower query, not a longer
-// list — and SEARCH-03 surfaces the cap state in the view.
+// list, which is exactly what the view's cap state says once kube reports
+// SearchDone{Capped} (SEARCH-03b).
 const searchHitLimit = 200
 
 // searchDebounce is how long the query must sit still before the fan-out launches.
@@ -79,6 +80,7 @@ func (m Model) openSearch() (tea.Model, tea.Cmd) {
 	m.searchView.Reset()
 	m.searchView.SetScope(m.searchScope())
 	cmd := m.searchView.Show()
+	m.syncHints() // the search view owns input now → search-context hints
 	return m, cmd
 }
 
@@ -175,6 +177,10 @@ func (m Model) handleSearchDebounced(msg searchDebouncedMsg) (tea.Model, tea.Cmd
 		m.searchView.SetSearching(false)
 		return m, nil
 	}
+	// The kind count is only known here — the scope is derived from what discovery
+	// currently offers — so this is where the view's progress line gets its
+	// denominator (SEARCH-03b).
+	m.searchView.StartProgress(len(resources))
 	ctx, cancel := context.WithCancel(context.Background())
 	m.searchCancel = cancel
 	m.searchCh = m.searcher.Search(ctx, resources, m.namespace, msg.query, searchHitLimit)
@@ -202,19 +208,26 @@ func (m Model) pumpSearch(gen int) tea.Cmd {
 // indicator clears, leaving the hits on screen (the view says "no matches" itself when
 // there were none, D140 pt 5).
 //
-// A match is appended; the progress and terminal events (SEARCH-03a) are pumped
-// through but not yet rendered — SEARCH-03b counts them into the "searching N/M
-// kinds…" line and the cap state. The terminal SearchDone is deliberately *not*
-// treated as the end of the stream: the channel close remains the single point where
-// the pump chain stops, so there is one teardown path however the search ended.
+// A match is appended; a kind-done advances the view's progress line (one per requested
+// kind, D142 pt 2, so it reaches N/N whatever each kind's outcome was — a denied group
+// is silent, D131 pt 3, not a stalled counter); the terminal event's Capped flag turns
+// on the "first N matches — narrow the query" state, the one thing the channel close
+// cannot say for itself. The terminal SearchDone is deliberately *not* treated as the
+// end of the stream: the channel close remains the single point where the pump chain
+// stops, so there is one teardown path however the search ended.
 func (m Model) handleSearchMsg(s searchMsg) (tea.Model, tea.Cmd) {
 	if s.gen != m.searchGen || !m.searchView.Active() {
 		return m, nil
 	}
 	switch inner := s.msg.(type) {
 	case SearchEventMsg:
-		if inner.Event.Type == kube.SearchMatch {
+		switch inner.Event.Type {
+		case kube.SearchMatch:
 			m.searchView.AppendHit(inner.Event.Hit)
+		case kube.SearchKindDone:
+			m.searchView.MarkKindDone()
+		case kube.SearchDone:
+			m.searchView.SetCapped(inner.Event.Capped)
 		}
 		return m, m.pumpSearch(s.gen)
 	case SearchClosedMsg:
@@ -266,6 +279,7 @@ func (m *Model) closeSearch() {
 	m.searchView.Hide()
 	m.stopSearch()
 	m.searchGen++
+	m.syncHints() // back to the browse view → menu/table-context hints
 }
 
 // stopSearch cancels the running fan-out (if any) and clears its handle so no further

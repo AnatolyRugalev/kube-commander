@@ -3554,3 +3554,23 @@ guarantees a consumer may build on:
 5. **Cancelled ⇒ silent.** Once the caller's ctx is cancelled nothing further is emitted,
    terminal event included; `sendEvent` pre-checks `ctx.Err()` because a buffered channel
    plus a done ctx makes a bare `select` deliver at random.
+
+### D143 — A focus context's key hint may only advertise keys that context actually honours; a full-screen view gets its own `HelpContext`
+**2026-07-25** (SEARCH-03b). The bottom hint is registry-generated (D11) but the *subset*
+is chosen per focus context, and until now there were only the two browse contexts
+(menu / table). The cluster-search view exposed the gap: it replaces the browse body and
+its query field is always open (D140 pt 1), so the root routes every text-producing key
+into the field — `/`, `n`, `s`, `a`, `?` and `q` type a character there instead of firing
+filter / next-match / sort / actions / help / quit. A hint inherited from the table
+context would therefore have advertised six keys that do nothing.
+
+1. **A hint entry is a promise.** A context's `contextShortHelpActions` set may contain
+   only actions that context really honours. Prefer a short, true hint over a full,
+   partly-false one — the search context is four entries (up, down, drill-in, back) and
+   deliberately omits help and quit.
+2. **A view that captures all input owns a `HelpContext`.** Any future full-screen
+   mini-app (LOGS-02's logs view next) adds a `HelpContext` in `keymap/help.go` and a
+   `syncHints` case, rather than reusing a browse context or hard-coding keys in the view.
+   Keys still come from the registry; only the *selection* is per context.
+3. **`syncHints` is called wherever input ownership moves**, not only where pane focus
+   moves — opening and closing a capturing view included.

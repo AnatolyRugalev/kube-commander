@@ -3270,7 +3270,13 @@ func (m Model) sortNext() (tea.Model, tea.Cmd) {
 // current width).
 func (m *Model) syncHints() {
 	ctx := keymap.HelpMenu
-	if m.table.Focused() {
+	switch {
+	case m.searchView.Active():
+		// The search mini-app replaces the browse body and captures every keypress, so
+		// the browse hints (filter, sort, actions, namespace…) are all unreachable while
+		// it is up — it gets its own context (SEARCH-03b).
+		ctx = keymap.HelpSearch
+	case m.table.Focused():
 		ctx = keymap.HelpTable
 	}
 	m.hintbar.SetHint(m.help.ShortHelpContextView(ctx))

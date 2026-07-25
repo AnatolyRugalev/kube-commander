@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/searchview"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // searchKey is the default search.cluster key (ctrl+s). A ctrl chord carries no text,
@@ -318,6 +320,140 @@ func TestSearchProgressEventsPumpThrough(t *testing.T) {
 	}
 	if next.(Model).searchView.Searching() {
 		t.Fatal("the close should clear the in-flight indicator")
+	}
+}
+
+// TestSearchProgressRendersAgainstTheLaunchedScope proves SEARCH-03b's progress line:
+// the denominator is the kind count the fan-out was actually launched over (not a
+// guess), each kind-done advances it, and the line is gone once the search completes.
+func TestSearchProgressRendersAgainstTheLaunchedScope(t *testing.T) {
+	s := &fakeSearcher{keepOpen: true}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+
+	// Before the launch there is no count to show — only "searching…".
+	if strings.Contains(m.View().Content, "kinds") {
+		t.Fatalf("the debounce window has no kind count yet: %q", m.View().Content)
+	}
+	next, _ := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+
+	total := len(s.gotRes)
+	if total < 2 {
+		t.Fatalf("the curated scope should hold several kinds, got %d", total)
+	}
+	if done, got := m.searchView.Progress(); done != 0 || got != total {
+		t.Fatalf("launching should arm the progress at 0/%d, got %d/%d", total, done, got)
+	}
+	if want := fmt.Sprintf("searching 0/%d kinds…", total); !strings.Contains(m.View().Content, want) {
+		t.Fatalf("the header should render %q: %q", want, m.View().Content)
+	}
+
+	// Two kinds report done (one of them a failure — silent, D131 pt 3, but still
+	// counted so a denied group can't stall the line).
+	for _, ev := range []kube.SearchEvent{
+		{Type: kube.SearchKindDone, Resource: kindResource("pods", "Pod")},
+		{Type: kube.SearchKindDone, Resource: kindResource("secrets", "Secret"), Failed: true},
+	} {
+		next, _ = m.Update(searchMsg{gen: m.searchGen, msg: SearchEventMsg{Event: ev}})
+		m = next.(Model)
+	}
+	if done, _ := m.searchView.Progress(); done != 2 {
+		t.Fatalf("two kind-done events should advance the progress to 2, got %d", done)
+	}
+	if want := fmt.Sprintf("searching 2/%d kinds…", total); !strings.Contains(m.View().Content, want) {
+		t.Fatalf("the header should render %q: %q", want, m.View().Content)
+	}
+	// A failed kind must not shout: nothing on screen names it or its error.
+	if strings.Contains(m.View().Content, "Secret") || strings.Contains(m.View().Content, "failed") {
+		t.Fatalf("per-kind failure stays silent (D131 pt 3): %q", m.View().Content)
+	}
+
+	// The channel close ends the search; the progress line goes with the in-flight state.
+	next, _ = m.Update(searchMsg{gen: m.searchGen, msg: SearchClosedMsg{}})
+	if strings.Contains(next.(Model).View().Content, "kinds") {
+		t.Fatalf("a completed search should drop the progress line: %q", next.(Model).View().Content)
+	}
+}
+
+// TestSearchCapSurfacedInView proves the cap state reaches the screen: kube's terminal
+// SearchDone{Capped} (the one thing the channel close cannot express) becomes the
+// actionable "first N matches — narrow the query" line, and it survives completion.
+func TestSearchCapSurfacedInView(t *testing.T) {
+	s := &fakeSearcher{
+		hits: []kube.SearchHit{
+			searchHit("Pod", "pods", "web", "api-1"),
+			searchHit("Pod", "pods", "web", "api-2"),
+		},
+		events: []kube.SearchEvent{{Type: kube.SearchDone, Capped: true}},
+	}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+	next, pump := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+
+	// Drain hit, hit, terminal-done, then the close.
+	for pump != nil {
+		next, pump = m.Update(pump().(searchMsg))
+		m = next.(Model)
+	}
+	if !m.searchView.Capped() {
+		t.Fatal("the terminal SearchDone{Capped} should put the view in the capped state")
+	}
+	if want := "first 2 matches — narrow the query"; !strings.Contains(m.View().Content, want) {
+		t.Fatalf("the header should render %q: %q", want, m.View().Content)
+	}
+
+	// An uncapped search says nothing of the sort.
+	s2 := &fakeSearcher{
+		hits:   []kube.SearchHit{searchHit("Pod", "pods", "web", "api-1")},
+		events: []kube.SearchEvent{{Type: kube.SearchDone}},
+	}
+	m2 := openSearchView(t, s2, WithNamespace("web"))
+	m2, tick2 := typeQuery(t, m2, "api")
+	n2, p2 := m2.Update(tick2().(searchDebouncedMsg))
+	m2 = n2.(Model)
+	for p2 != nil {
+		n2, p2 = m2.Update(p2().(searchMsg))
+		m2 = n2.(Model)
+	}
+	if m2.searchView.Capped() || strings.Contains(m2.View().Content, "narrow the query") {
+		t.Fatalf("an exhaustive search must not claim it was capped: %q", m2.View().Content)
+	}
+}
+
+// TestSearchHintBarUsesSearchContext proves the bottom hint tracks the search view
+// (SEARCH-03b): while it is up the hint offers only what the view actually honours —
+// the browse keys are unreachable because the always-open query field eats every text
+// key (D140 pt 1) — and closing the view restores the browse hint.
+func TestSearchHintBarUsesSearchContext(t *testing.T) {
+	// A wide terminal so the hint renderer elides nothing — the point here is which
+	// bindings the context offers, not how they are truncated.
+	wide, _ := New(WithSearcher(&fakeSearcher{})).Update(tea.WindowSizeMsg{Width: 220, Height: 24})
+	m := wide.(Model)
+	browseHint := m.hintbar.View()
+	if !strings.Contains(browseHint, keymap.ActionNamespace.Describe()) {
+		t.Fatalf("the browse hint should offer the namespace switch: %q", browseHint)
+	}
+
+	m, _ = press(t, m, searchKey)
+	hint := m.hintbar.View()
+	if !strings.Contains(hint, keymap.ActionDrillIn.Describe()) {
+		t.Errorf("the search hint should offer drill-in (open the hit): %q", hint)
+	}
+	if !strings.Contains(hint, keymap.ActionBack.Describe()) {
+		t.Errorf("the search hint should offer back (clear then close): %q", hint)
+	}
+	for _, unreachable := range []keymap.Action{keymap.ActionFilter, keymap.ActionNamespace, keymap.ActionHelp, keymap.ActionQuit} {
+		if strings.Contains(hint, unreachable.Describe()) {
+			t.Errorf("%q is unreachable while the query field owns text keys; hint must not offer it: %q",
+				unreachable, hint)
+		}
+	}
+
+	next, _ := m.Update(searchview.ClosedMsg{Kind: "search"})
+	if got := next.(Model).hintbar.View(); got != browseHint {
+		t.Errorf("closing the search view should restore the browse hint: %q, want %q", got, browseHint)
 	}
 }
 

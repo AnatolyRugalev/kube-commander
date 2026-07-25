@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-25 — SEARCH-03a done: `kube.Search` now streams typed `SearchEvent`s (match · kind-done · terminal done-with-cap, D142), so SEARCH-03b can render the progress line and the cap state; LOGS-02 remains the alternative top item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-25 — SEARCH-03b done: the search header now reports `searching N/M kinds…` and the cap state, and a full-screen capturing view owns its own key-hint context (D143), leaving SEARCH-04 (scope widen) and LOGS-02 (the more valuable of the two) as the top items. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-03b** Search progress + cap surfacing in the view: a "searching N/M kinds…"
-      progress line and an explicit cap state ("first 200 matches — narrow the query"),
-      plus a search-context hint bar. Per-kind failures stay silent (D131 pt 3).
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (SEARCH-03 split) | claimed: 2026-07-25
-      notes: SEARCH-03a gives the wiring `SearchKindDone`/`SearchDone{Capped}`; this slice
-      counts them into the model (`searchDone`/`searchTotal`/`searchCapped`, reset per
-      query) and renders them in the searchview header, plus the hint bar. Depends on
-      SEARCH-03a.
+_(none)_
 
 ## Blocked
 
@@ -102,8 +95,8 @@ SEARCH-02 was split D52-style into the component (**SEARCH-02a**) and the app wi
 `ctrl+s` (D141) and the remaining slices refine it.
 
 SEARCH-03 was split D52-style into the kube-layer signal (**SEARCH-03a**) and the view
-surfacing (**SEARCH-03b**): the progress line and the cap state are unrenderable until
-`kube.Search` can say *which kind finished* and *why it stopped*.
+surfacing (**SEARCH-03b**); both are done, so progress and the cap are on screen and only
+the scope widen (SEARCH-04) is left in this line.
 
 - [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
       **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
@@ -142,6 +135,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-03b** Search progress + cap surfacing: the searchview header reports `searching N/M kinds…` (fed from `SearchKindDone`, silent on a failed kind) and `first 200 matches — narrow the query` (from `SearchDone{Capped}`), reset with the results they describe; plus a `keymap.HelpSearch` hint context so the bottom hint stops advertising the six text keys the always-open query field swallows — done 2026-07-25 (D143)
 - [x] **SEARCH-03a** Search progress/completion signal in the kube layer: `kube.Search`'s channel item widened from `SearchHit` to a typed `SearchEvent` (`SearchMatch` · one `SearchKindDone` per requested kind, `Failed` only for a genuine List error · terminal `SearchDone{Capped}`), TUI pump adapted (`SearchEventMsg`) with the close still the single teardown point — no surfacing yet — done 2026-07-25 (D142)
 - [x] **SEARCH-02b** Cluster search app wiring (`internal/tui/search.go`): `search.cluster` (`ctrl+s`) opens the SEARCH-02a view as the full-screen body, a `Searcher` seam (`WithSearcher`, nil → search-inert) runs `kube.Search` over `CommonSearchResources` of the menu's available kinds in the current namespace after a 250 ms debounce, hits stream in through a `searchGen`-tagged pump (cancel + drop on query change/close/quit), and `enter` switches browse to the hit's kind with the object selected once the watch's rows arrive (`table.SelectObject` pending selection) — done 2026-07-25 (D141)
 - [x] **SEARCH-02a** Cluster-search view component (`internal/tui/components/searchview`): full-screen always-open query field over a streaming cross-kind result list (kind-aligned `Kind  ns/name` rows from `kube.SearchHit`), keymap-driven cursor that streamed hits never move, `SelectedMsg`/`ClosedMsg`/`QueryChangedMsg`, clear-then-close `nav.back`, and an empty list that always says which empty it is — done 2026-07-24 (D140)

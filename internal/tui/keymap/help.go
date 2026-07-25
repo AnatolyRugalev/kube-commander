@@ -62,16 +62,28 @@ const (
 	// HelpTable is the right resource-table focus: navigate rows, filter/search
 	// them, and step back out to the menu.
 	HelpTable
+	// HelpSearch is the cluster-search mini-app (SEARCH-02b), which replaces the
+	// browse body and captures every keypress while it is up: navigate the streamed
+	// results, open one, or clear-then-close the query.
+	HelpSearch
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
 // is ordered as shown and rendered enabled-only. Filter/search/sort appear only in
 // the table context (they act on a resource table, no-ops on the menu), while
 // drill-in appears only in the menu context (opening the selected resource);
-// namespace, help and quit are always-relevant and shown in both.
+// namespace, help and quit are always-relevant and shown in both browse contexts.
+//
+// The search context is deliberately the short one. Its query field is always open
+// (D140 pt 1), so the root routes every text-producing key into it: `/` `n` `s` `a`
+// `?` and `q` all type a character there instead of firing their browse action, and a
+// hint that advertised them would be a lie. What is left is the genuinely available
+// set — move the result cursor, open a hit, clear-then-close — every one of them a
+// no-text key the view actually consumes.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:  {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable: {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionBack},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a
