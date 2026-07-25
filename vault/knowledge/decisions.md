@@ -3574,3 +3574,30 @@ context would therefore have advertised six keys that do nothing.
    Keys still come from the registry; only the *selection* is per context.
 3. **`syncHints` is called wherever input ownership moves**, not only where pane focus
    moves — opening and closing a capturing view included.
+
+### D144 — Streaming content gets a dedicated full-screen view; the shared viewer is for one-shot content only
+**2026-07-25** (LOGS-02). Logs left the shared read-only viewer (M3-01) for the LOGS-01
+component, completing the split D134 asked for. The shared viewer had grown a logs
+*mode*: a `viewerKindLogs` stamp, `logFollow`/`logTitle` on the root model, a follow
+marker spliced into the title, and an up-scroll-pauses-follow rule that had to run before
+forwarding the action. All of it existed because one component was serving two content
+shapes.
+
+1. **The shared viewer serves one-shot content only** — YAML, describe, secret: fetched
+   once, centered, sized to its content. A future surface that *streams* (events,
+   `kubectl top`, an action's progress) does not get a kind on the shared viewer; it gets
+   its own full-screen view, as logs and search now have. There is no `viewerKindLogs`
+   to bring back.
+2. **State the view renders is the view's, not the shell's.** Follow and the live grep
+   live inside `logsview`; the root holds only the stream handles (`logCh`/`logCancel`)
+   and the generation. A shell field mirroring what a component already renders is the
+   shape this decision removes — do not reintroduce it for the next view.
+3. **`viewerGen` stays the one "an async open was superseded" clock** across every content
+   surface, shared viewer and logs view alike. The container (M3-07a) and pod-owning
+   (M3-07b) resolutions are shared with exec and tag their async work with it, so a second
+   per-view counter would have to be bumped in the same places — a guard that can be
+   forgotten is worse than a coarse one.
+4. **A full-screen view with a text field needs two hint contexts** (D143 pt 1 applied):
+   one for the field closed, one for it open, because an open field turns every
+   text-producing key into input. `syncHints` is re-run wherever the field opens or closes,
+   not just where the view does.

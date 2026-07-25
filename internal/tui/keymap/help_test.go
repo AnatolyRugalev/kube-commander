@@ -135,6 +135,29 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
+	// The logs contexts (LOGS-02) are the same rule applied to a view with two input
+	// states. Grep closed, every advertised key acts — including `q`, which closes the
+	// view like any pager. Grep open, the field swallows text keys, so `/` `f` and `q`
+	// drop out and only the no-text keys remain. Neither context offers help (swallowed).
+	logs := descs(hm.ShortHelpContext(HelpLogs))
+	for _, a := range []Action{ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionBack, ActionQuit} {
+		if !logs[a.Describe()] {
+			t.Errorf("logs context should offer %q — the view honours it with the grep closed", a)
+		}
+	}
+	if logs[ActionHelp.Describe()] {
+		t.Error("the logs view swallows app.help; the hint must not offer it")
+	}
+	logsFilter := descs(hm.ShortHelpContext(HelpLogsFilter))
+	if !logsFilter[ActionBack.Describe()] || !logsFilter[ActionDown.Describe()] {
+		t.Error("logs-filter context should offer back (clear the grep) and scrolling")
+	}
+	for _, a := range []Action{ActionFilter, ActionLogsFollow, ActionQuit, ActionHelp} {
+		if logsFilter[a.Describe()] {
+			t.Errorf("%q is typed into the open logs grep, not honoured — it must not be hinted", a)
+		}
+	}
+
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
 	if err != nil {

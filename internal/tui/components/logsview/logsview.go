@@ -5,11 +5,12 @@
 // live filter that narrows the output *while following* — à la stern / k9s logs
 // (feedback 2026-07-24-logs-dedicated-view-live-grep, D134).
 //
-// This slice (LOGS-01) is the component in isolation — an append buffer, a live
-// case-insensitive substring filter, follow/pause with auto-scroll, and a full-screen
-// header. It is not wired to the app yet (LOGS-02 retires the shared-viewer logs path
-// and streams into this instead). Regex + match highlighting (LOGS-03) and the
-// long-line / timestamp nice-to-haves (LOGS-04) are later slices.
+// LOGS-01 built the component — an append buffer, a live case-insensitive substring
+// filter, follow/pause with auto-scroll, and a full-screen header — and LOGS-02 wired
+// it up: `res.logs` now streams here instead of into the shared viewer, which the app
+// no longer stamps with a logs kind (D144). The wiring lives in `internal/tui/logs.go`.
+// Regex + match highlighting (LOGS-03) and the long-line / timestamp nice-to-haves
+// (LOGS-04) are later slices.
 //
 // Like the shared viewer and the picker it wraps a bubbles component (viewport +
 // textinput) but drives it entirely through keymap.Actions — it never matches a raw
@@ -115,8 +116,9 @@ func (m *Model) Append(line string) {
 	m.render()
 }
 
-// Empty reports whether no lines have streamed yet — used by the wiring (LOGS-02) to
-// decide whether a terminal open failure closes an empty view or leaves partial output.
+// Empty reports whether no lines have streamed yet — the wiring (LOGS-02) uses it to
+// decide whether a stream error closes an empty view (an open failure) or leaves the
+// partial output on screen (a mid-stream drop).
 func (m Model) Empty() bool { return len(m.lines) == 0 }
 
 // Following reports whether the view is auto-scrolling with the stream.

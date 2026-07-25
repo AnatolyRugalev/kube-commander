@@ -2506,10 +2506,11 @@ func drainLogPump(t *testing.T, m Model, cmd tea.Cmd) Model {
 	return m
 }
 
-// TestLogsViewerOpensAndStreamsContent drives the whole M3-05 path: the `L` key
-// dispatches the logs intent, handling it opens the viewer and starts the Logs stream
-// against the selected row, and each streamed line is appended into the viewer content.
-func TestLogsViewerOpensAndStreamsContent(t *testing.T) {
+// TestLogsViewOpensAndStreamsContent drives the whole M3-05 path, now landing in the
+// dedicated logs view (LOGS-02): the `L` key dispatches the logs intent, handling it
+// opens the logs view and starts the Logs stream against the selected row, and each
+// streamed line is appended into it. The shared viewer stays shut — logs left it (D144).
+func TestLogsViewOpensAndStreamsContent(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "line one"}, {Line: "line two"}}}
 	m := logsViewerModel(t, s)
 
@@ -2524,8 +2525,11 @@ func TestLogsViewerOpensAndStreamsContent(t *testing.T) {
 	}
 	next, pumpCmd := m.Update(intent)
 	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("handling the logs intent should open the viewer")
+	if !m.logsView.Active() {
+		t.Fatal("handling the logs intent should open the logs view")
+	}
+	if m.viewer.Active() {
+		t.Fatal("logs must not open the shared viewer any more (D144)")
 	}
 	if pumpCmd == nil {
 		t.Fatal("opening the logs viewer should issue a log-pump command")
@@ -2538,70 +2542,75 @@ func TestLogsViewerOpensAndStreamsContent(t *testing.T) {
 	}
 
 	m = drainLogPump(t, m, pumpCmd)
-	if !m.viewer.Active() {
-		t.Fatal("the viewer should stay open across the stream")
+	if !m.logsView.Active() {
+		t.Fatal("the logs view should stay open across the stream")
 	}
 	view := m.View().Content
 	if !strings.Contains(view, "line one") || !strings.Contains(view, "line two") {
-		t.Fatalf("viewer should show the streamed log lines: %q", view)
+		t.Fatalf("the logs view should show the streamed log lines: %q", view)
+	}
+	// Full-screen, not an overlay (D134): the browse panes are replaced, so the menu's
+	// own rows are gone from the frame while the logs view is up.
+	if strings.Contains(view, "Workloads") {
+		t.Fatalf("the logs view should replace the browse body, not overlay it: %q", view)
 	}
 }
 
-// TestLogsViewerCloses proves nav.back (esc) dismisses the viewer and tears the log
+// TestLogsViewCloses proves nav.back (esc) dismisses the logs view and tears the log
 // stream down (its ClosedMsg, delivered back through Update, hides it).
-func TestLogsViewerCloses(t *testing.T) {
+func TestLogsViewCloses(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
 	m := logsViewerModel(t, s)
 	_, cmd := press(t, m, logsKey)
 	next, pumpCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
 	m = drainLogPump(t, m, pumpCmd)
-	if !m.viewer.Active() {
-		t.Fatal("precondition: the viewer should be open")
+	if !m.logsView.Active() {
+		t.Fatal("precondition: the logs view should be open")
 	}
 
 	m, closeCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
 	if closeCmd == nil {
-		t.Fatal("nav.back in the viewer should emit a ClosedMsg command")
+		t.Fatal("nav.back in the logs view should emit a ClosedMsg command")
 	}
 	next, _ = m.Update(closeCmd())
 	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("delivering the viewer's ClosedMsg should hide it")
+	if m.logsView.Active() {
+		t.Fatal("delivering the logs view's ClosedMsg should hide it")
 	}
 	if m.logCh != nil || m.logCancel != nil {
-		t.Fatal("closing the viewer should tear down the log stream")
+		t.Fatal("closing the logs view should tear down the log stream")
 	}
 }
 
-// TestLogsViewerOpenErrorDegrades proves a Logs open failure closes the viewer and
-// surfaces a transient status-bar toast rather than leaving an empty box (D74).
-func TestLogsViewerOpenErrorDegrades(t *testing.T) {
+// TestLogsViewOpenErrorDegrades proves a Logs open failure leaves the logs view closed
+// and surfaces a transient status-bar toast rather than an empty full-screen frame (D74).
+func TestLogsViewOpenErrorDegrades(t *testing.T) {
 	s := &fakeLogStreamer{err: errors.New("forbidden")}
 	m := logsViewerModel(t, s)
 	_, cmd := press(t, m, logsKey)
 	next, _ := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("an open failure should not leave the viewer showing an empty box")
+	if m.logsView.Active() {
+		t.Fatal("an open failure should not leave the logs view showing an empty frame")
 	}
 	if !m.status.HasError() {
 		t.Fatal("an open failure should surface a status-bar toast")
 	}
 }
 
-// TestLogsViewerStreamErrorKeepsShownLines proves a mid-stream error after some lines
-// already showed leaves those lines on screen (the viewer stays open) while surfacing
-// a toast — a streaming viewer degrades without discarding partial output.
-func TestLogsViewerStreamErrorKeepsShownLines(t *testing.T) {
+// TestLogsViewStreamErrorKeepsShownLines proves a mid-stream error after some lines
+// already showed leaves those lines on screen (the view stays open) while surfacing a
+// toast — a streaming view degrades without discarding partial output.
+func TestLogsViewStreamErrorKeepsShownLines(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "before the drop"}, {Err: errors.New("connection reset")}}}
 	m := logsViewerModel(t, s)
 	_, cmd := press(t, m, logsKey)
 	next, pumpCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
 	m = drainLogPump(t, m, pumpCmd)
-	if !m.viewer.Active() {
-		t.Fatal("a mid-stream error after output should leave the viewer open")
+	if !m.logsView.Active() {
+		t.Fatal("a mid-stream error after output should leave the logs view open")
 	}
 	if !strings.Contains(m.View().Content, "before the drop") {
 		t.Fatal("the lines shown before the error should remain on screen")
@@ -2611,16 +2620,15 @@ func TestLogsViewerStreamErrorKeepsShownLines(t *testing.T) {
 	}
 }
 
-// TestLogsViewerInertWithoutStreamer proves the logs intent is a no-op with no
-// streamer wired (the viewer never opens) — the pre-wiring app and hermetic tests
-// stay inert.
-func TestLogsViewerInertWithoutStreamer(t *testing.T) {
+// TestLogsViewInertWithoutStreamer proves the logs intent is a no-op with no streamer
+// wired (the view never opens) — the pre-wiring app and hermetic tests stay inert.
+func TestLogsViewInertWithoutStreamer(t *testing.T) {
 	m := openPodTable(t, "Pod") // no WithLogStreamer
 	_, cmd := press(t, m, logsKey)
 	next, pumpCmd := m.Update(cmd().(rowActionMsg))
 	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("the logs viewer should not open without a streamer wired")
+	if m.logsView.Active() {
+		t.Fatal("the logs view should not open without a streamer wired")
 	}
 	if pumpCmd != nil {
 		t.Fatal("no streamer → no log-pump command")
@@ -2631,7 +2639,7 @@ func TestLogsViewerInertWithoutStreamer(t *testing.T) {
 // degrades to a toast when no pod resolver is wired (M3-07b resolves a backing pod
 // only when WithPodResolver is set; without it the app and the non-resolver hermetic
 // tests stay inert) rather than opening an empty viewer.
-func TestLogsViewerNonPodDegrades(t *testing.T) {
+func TestLogsViewNonPodDegrades(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "x"}}}
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
 	m := sizedWith(t, WithWatcher(fw), WithLogStreamer(s))
@@ -2646,8 +2654,8 @@ func TestLogsViewerNonPodDegrades(t *testing.T) {
 	}
 	next, _ = m.Update(rowActionMsg{Action: rowActionLogs, Resource: m.current, Object: row.Object})
 	m = next.(Model)
-	if m.viewer.Active() {
-		t.Fatal("logs on a non-pod kind should not open the viewer yet (M3-07)")
+	if m.logsView.Active() {
+		t.Fatal("logs on a non-pod kind should not open the logs view yet (M3-07)")
 	}
 	if s.calls != 0 {
 		t.Fatal("logs on a non-pod kind should not call the streamer")
@@ -2657,10 +2665,10 @@ func TestLogsViewerNonPodDegrades(t *testing.T) {
 	}
 }
 
-// TestLogsViewerStaleLineDropped proves the generation guard: a line from a stream
-// whose viewer was superseded by a newer open is dropped rather than appended to the
-// current content.
-func TestLogsViewerStaleLineDropped(t *testing.T) {
+// TestLogsViewStaleLineDropped proves the generation guard: a line from a stream whose
+// open was superseded by a newer one is dropped rather than appended to the current
+// content.
+func TestLogsViewStaleLineDropped(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "stale line"}}}
 	m := logsViewerModel(t, s)
 	row, ok := m.table.SelectedRow()
@@ -2694,9 +2702,9 @@ func TestLogsViewerStaleLineDropped(t *testing.T) {
 // followKey is the default logs.follow toggle key (`f`).
 var followKey = tea.Key{Code: 'f', Text: "f"}
 
-// openLogsViewerHelper opens the logs viewer over the selected pod row and drains the
-// initial stream, returning the model with the viewer up.
-func openLogsViewerHelper(t *testing.T, m Model) Model {
+// openLogsViewHelper opens the logs view over the selected pod row and drains the
+// initial stream, returning the model with the view up.
+func openLogsViewHelper(t *testing.T, m Model) Model {
 	t.Helper()
 	_, cmd := press(t, m, logsKey)
 	next, pumpCmd := m.Update(cmd().(rowActionMsg))
@@ -2704,45 +2712,47 @@ func openLogsViewerHelper(t *testing.T, m Model) Model {
 	return drainLogPump(t, m, pumpCmd)
 }
 
-// TestLogsViewerOpensFollowing proves M3-06's default: the logs viewer opens in follow
-// mode and asks the streamer for a following stream (LogOptions{Follow:true}), so the
-// stream stays open and reconnects (M1-07d) rather than ending at EOF.
-func TestLogsViewerOpensFollowing(t *testing.T) {
+// TestLogsViewOpensFollowing proves M3-06's default survives the rehome: the logs view
+// opens in follow mode and asks the streamer for a following stream
+// (LogOptions{Follow:true}), so the stream stays open and reconnects (M1-07d) rather
+// than ending at EOF. Follow state is the component's now, not the model's (D144).
+func TestLogsViewOpensFollowing(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "line one"}}}
 	m := logsViewerModel(t, s)
-	m = openLogsViewerHelper(t, m)
-	if !m.logFollow {
-		t.Fatal("the logs viewer should open in follow mode")
+	m = openLogsViewHelper(t, m)
+	if !m.logsView.Following() {
+		t.Fatal("the logs view should open in follow mode")
 	}
 	if !s.gotOpts.Follow {
-		t.Fatal("the follow logs viewer should open the stream with Follow:true")
+		t.Fatal("the following logs view should open the stream with Follow:true")
 	}
 	if !strings.Contains(m.View().Content, "[following]") {
-		t.Fatalf("the viewer title should mark it as following: %q", m.View().Content)
+		t.Fatalf("the logs header should mark it as following: %q", m.View().Content)
 	}
 }
 
-// TestLogsFollowToggle proves the `f` key toggles follow off and back on inside the
-// logs viewer, and the title marker tracks the state.
+// TestLogsFollowToggle proves the `f` key still toggles follow off and back on inside
+// the logs view, and the header marker tracks the state — routed through the view's
+// action path now that the shared viewer's logs special-casing is gone.
 func TestLogsFollowToggle(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
 	m := logsViewerModel(t, s)
-	m = openLogsViewerHelper(t, m)
+	m = openLogsViewHelper(t, m)
 
 	m, _ = press(t, m, followKey) // pause
-	if m.logFollow {
+	if m.logsView.Following() {
 		t.Fatal("pressing follow while following should pause it")
 	}
 	if !strings.Contains(m.View().Content, "[paused]") {
-		t.Fatalf("a paused logs viewer should mark [paused]: %q", m.View().Content)
+		t.Fatalf("a paused logs view should mark [paused]: %q", m.View().Content)
 	}
 
 	m, _ = press(t, m, followKey) // resume
-	if !m.logFollow {
+	if !m.logsView.Following() {
 		t.Fatal("pressing follow while paused should resume it")
 	}
 	if !strings.Contains(m.View().Content, "[following]") {
-		t.Fatalf("a resumed logs viewer should mark [following]: %q", m.View().Content)
+		t.Fatalf("a resumed logs view should mark [following]: %q", m.View().Content)
 	}
 }
 
@@ -2752,21 +2762,21 @@ func TestLogsFollowToggle(t *testing.T) {
 func TestLogsFollowPausesOnManualUpScroll(t *testing.T) {
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
 	m := logsViewerModel(t, s)
-	m = openLogsViewerHelper(t, m)
+	m = openLogsViewHelper(t, m)
 
 	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"}) // down: still following
-	if !m.logFollow {
+	if !m.logsView.Following() {
 		t.Fatal("a down-scroll should not pause follow")
 	}
 	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"}) // up: pauses
-	if m.logFollow {
+	if m.logsView.Following() {
 		t.Fatal("a manual up-scroll while following should pause follow")
 	}
 }
 
-// TestLogsFollowInertOnDescribeViewer proves logs.follow is inert on a non-logs viewer:
-// pressing `f` while the describe viewer is up does nothing (there is nothing to follow)
-// and leaves the viewer open.
+// TestLogsFollowInertOnDescribeViewer proves logs.follow is inert on the shared viewer:
+// pressing `f` while the describe viewer is up does nothing (there is nothing to follow —
+// the shared viewer only shows one-shot content now, D144) and leaves the viewer open.
 func TestLogsFollowInertOnDescribeViewer(t *testing.T) {
 	d := &fakeDescriber{text: "Name: web-1\n"}
 	m := describeViewerModel(t, d)
@@ -2859,8 +2869,8 @@ func TestLogsSingleContainerStreamsDirectly(t *testing.T) {
 	if m.ctrPicker.Active() {
 		t.Fatal("a single-container pod should not open the container picker")
 	}
-	if !m.viewer.Active() {
-		t.Fatal("a single-container pod should stream directly into the viewer")
+	if !m.logsView.Active() {
+		t.Fatal("a single-container pod should stream directly into the logs view")
 	}
 	if s.gotOpts.Container != "app" {
 		t.Fatalf("stream container = %q, want app", s.gotOpts.Container)
@@ -2912,14 +2922,14 @@ func TestLogsContainerPickStreamsChosen(t *testing.T) {
 	if m.ctrPicker.Active() {
 		t.Fatal("picking a container should close the picker")
 	}
-	if !m.viewer.Active() {
-		t.Fatal("picking a container should open the logs viewer")
+	if !m.logsView.Active() {
+		t.Fatal("picking a container should open the logs view")
 	}
 	if s.gotOpts.Container != "sidecar" {
 		t.Fatalf("stream container = %q, want sidecar", s.gotOpts.Container)
 	}
 	if !strings.Contains(m.View().Content, "sidecar") {
-		t.Fatalf("the viewer title should name the chosen container: %q", m.View().Content)
+		t.Fatalf("the logs header should name the chosen container: %q", m.View().Content)
 	}
 	m = drainLogPump(t, m, pumpCmd)
 	if !strings.Contains(m.View().Content, "sidecar log") {
@@ -3096,7 +3106,7 @@ func TestLogsPodOwningKindResolvesPod(t *testing.T) {
 	if l.gotRef.Name != "api-xyz" {
 		t.Fatalf("the container lister was asked for %q, want the resolved pod api-xyz", l.gotRef.Name)
 	}
-	if !m.viewer.Active() {
+	if !m.logsView.Active() {
 		t.Fatal("a single-container resolved pod should stream directly")
 	}
 	if s.gotRef.Name != "api-xyz" {
@@ -3108,7 +3118,7 @@ func TestLogsPodOwningKindResolvesPod(t *testing.T) {
 		t.Fatalf("the resolved pod's log line should show: %q", content)
 	}
 	if !strings.Contains(content, "Pod web/api-xyz") {
-		t.Fatalf("the viewer title should name the resolved pod, not the workload: %q", content)
+		t.Fatalf("the logs header should name the resolved pod, not the workload: %q", content)
 	}
 }
 
@@ -3123,8 +3133,8 @@ func TestLogsPodOwningKindNoListerStreamsDirectly(t *testing.T) {
 	m, resolveCmd := openWorkloadLogsResolve(t, m)
 	next, pumpCmd := m.Update(resolveCmd().(podResolvedMsg))
 	m = next.(Model)
-	if !m.viewer.Active() {
-		t.Fatal("no lister → the resolved pod should stream directly into the viewer")
+	if !m.logsView.Active() {
+		t.Fatal("no lister → the resolved pod should stream directly into the logs view")
 	}
 	if s.gotRef.Name != "api-xyz" {
 		t.Fatalf("the stream ref = %q, want the resolved pod api-xyz", s.gotRef.Name)

@@ -120,6 +120,20 @@ narrow the query`). This is a deliberate, one-shot query (it lists those kinds o
 query, never watches everything); `/` remains the filter that narrows the rows of the
 table already open.
 
+Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
+StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
+— to open the **dedicated full-screen logs view**. It tails the container live (a
+multi-container pod asks which one first) and gives logs the whole screen rather than a
+centered box, because throughput is the point. The header shows the object, the
+container, and `[following]`/`[paused]`. Press `/` to open a **live grep**: typing
+narrows the streamed lines *while the log keeps following*, with a `matched/total`
+count, and nothing is re-fetched — `Esc` clears the filter and the full stream is still
+there. Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward
+gesture pauses it so the next line does not yank you back); `f` again resumes and jumps
+to the newest line. `Esc` with no filter open, or `q`, closes the view. YAML, describe
+and secret content still open in the shared centered viewer — only logs stream, so only
+logs get their own screen.
+
 The other subcommands report information and exit:
 
 ```bash

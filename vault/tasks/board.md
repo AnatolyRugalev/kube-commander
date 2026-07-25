@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-25 — SEARCH-03b done: the search header now reports `searching N/M kinds…` and the cap state, and a full-screen capturing view owns its own key-hint context (D143), leaving SEARCH-04 (scope widen) and LOGS-02 (the more valuable of the two) as the top items. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-25 — LOGS-02 done: `res.logs` now streams into the dedicated full-screen logs view with its live grep and the shared viewer is one-shot-content-only (D144), leaving LOGS-03 (regex + highlight) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory); a logs-throughput dogfood raised. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-02** Wire `res.logs` to the new logs view — retire the shared-viewer logs path
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (LOGS triage, D134) | claimed: 2026-07-25
-      notes: Replace `openLogsViewer`/`streamLogsInto`/`logFollow`/`logTitle` + the
-      `viewerKindLogs` special-casing in `app.go` so logs stream into the LOGS-01 component
-      instead of the shared M3-01 viewer (which keeps serving YAML/describe/secret). Keep the
-      container picker (M3-07a) and pod-owning resolution (M3-07b) feeding it; keep the
-      gen-tagged log pump (D53). Must stay launchable and not regress the running binary (D68);
-      raise a dogfood human-task if a real-terminal filter/throughput check is warranted.
+_(none)_
 
 ## Blocked
 
@@ -120,6 +113,10 @@ indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wi
 retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
 nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
 
+LOGS-01 (component) and LOGS-02 (wiring) are both done, so the dedicated logs view is
+live on `res.logs` and the shared viewer no longer has a logs mode (D144); the remaining
+slices refine the view itself.
+
 - [ ] **LOGS-03** Regex filter mode + match highlighting
       status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
       notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
@@ -134,6 +131,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **LOGS-02** Wire `res.logs` to the dedicated logs view — retired the shared-viewer logs path (`streamLogsInto`/`syncLogViewerTitle`/`logFollow`/`logTitle`/`viewerKindLogs`/`isScrollUp`) for `internal/tui/logs.go`: logs stream full-screen into the LOGS-01 component with its live grep (`/` narrows while following), follow/pause and the grep live in the view not the shell, the container picker (M3-07a) + pod-owning resolution (M3-07b) still feed it on the same `viewerGen`, plus `HelpLogs`/`HelpLogsFilter` hint contexts; logs-throughput dogfood raised — done 2026-07-25 (D144)
 - [x] **SEARCH-03b** Search progress + cap surfacing: the searchview header reports `searching N/M kinds…` (fed from `SearchKindDone`, silent on a failed kind) and `first 200 matches — narrow the query` (from `SearchDone{Capped}`), reset with the results they describe; plus a `keymap.HelpSearch` hint context so the bottom hint stops advertising the six text keys the always-open query field swallows — done 2026-07-25 (D143)
 - [x] **SEARCH-03a** Search progress/completion signal in the kube layer: `kube.Search`'s channel item widened from `SearchHit` to a typed `SearchEvent` (`SearchMatch` · one `SearchKindDone` per requested kind, `Failed` only for a genuine List error · terminal `SearchDone{Capped}`), TUI pump adapted (`SearchEventMsg`) with the close still the single teardown point — no surfacing yet — done 2026-07-25 (D142)
 - [x] **SEARCH-02b** Cluster search app wiring (`internal/tui/search.go`): `search.cluster` (`ctrl+s`) opens the SEARCH-02a view as the full-screen body, a `Searcher` seam (`WithSearcher`, nil → search-inert) runs `kube.Search` over `CommonSearchResources` of the menu's available kinds in the current namespace after a 250 ms debounce, hits stream in through a `searchGen`-tagged pump (cancel + drop on query change/close/quit), and `enter` switches browse to the hit's kind with the object selected once the watch's rows arrive (`table.SelectObject` pending selection) — done 2026-07-25 (D141)

@@ -66,6 +66,12 @@ const (
 	// browse body and captures every keypress while it is up: navigate the streamed
 	// results, open one, or clear-then-close the query.
 	HelpSearch
+	// HelpLogs is the dedicated logs mini-app (LOGS-02) with its live grep closed:
+	// scroll the stream, open the grep, toggle follow, close the view.
+	HelpLogs
+	// HelpLogsFilter is the same logs mini-app with its live grep *open*, which
+	// captures text — so it advertises only the keys that still act there.
+	HelpLogsFilter
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
@@ -80,10 +86,18 @@ const (
 // hint that advertised them would be a lie. What is left is the genuinely available
 // set — move the result cursor, open a hit, clear-then-close — every one of them a
 // no-text key the view actually consumes.
+//
+// The logs mini-app needs *two* contexts for the same reason (D143 pt 1). With its grep
+// closed it honours every key it advertises, `q` included (quit closes the view, as it
+// does in any pager). With the grep open the field captures text, so `/` `f` and `q`
+// type a character — those drop out, leaving the no-text keys that still act: scroll,
+// and esc to clear the grep. Neither context offers help: the view swallows it.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
-	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionBack},
+	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionBack},
+	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionBack, ActionQuit},
+	HelpLogsFilter: {ActionDown, ActionUp, ActionBack},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

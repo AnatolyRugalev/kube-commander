@@ -17,6 +17,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/hintbar"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/logsview"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
@@ -536,10 +537,13 @@ type Model struct {
 	viewer     viewer.Model
 	modal      modal.Model
 	welcome    welcome.Model
-	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b): unlike
-	// every field above it is not an overlay — while it is up it *is* the body,
-	// composited in place of the browse panes (D134).
+	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b) and logsView
+	// the dedicated logs mini-app (LOGS-01/02): unlike every field above neither is an
+	// overlay — while one is up it *is* the body, composited in place of the browse
+	// panes (D134). Follow state and the live grep live inside logsView, not on the
+	// model, so the shell holds no second copy of what the view renders.
 	searchView searchview.Model
+	logsView   logsview.Model
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
@@ -600,14 +604,15 @@ type Model struct {
 	describer  Describer
 	viewerGen  int
 
-	// logStreamer streams a pod's logs into the same shared viewer (M3-05; nil → the
-	// res.logs action is inert). Unlike the one-shot YAML/describe fetches a log stream
-	// is a channel pumped line by line (D53): logCh is re-read to pull the next line and
-	// logCancel tears the stream's goroutine down when the viewer closes or a newer
-	// viewer supersedes it. Each pumped line rides the shared viewerGen (a logMsg), so a
-	// line from a superseded stream — one whose viewer was closed or replaced — is
-	// dropped rather than appended to the wrong content, exactly as watchGen guards the
-	// table watch. logCh/logCancel are touched only from the single-threaded update loop.
+	// logStreamer streams a pod's logs into the dedicated logs view (M3-05, rehomed by
+	// LOGS-02/D144; nil → the res.logs action is inert). Unlike the one-shot YAML/describe
+	// fetches a log stream is a channel pumped line by line (D53): logCh is re-read to
+	// pull the next line and logCancel tears the stream's goroutine down when the logs
+	// view closes or a newer open supersedes it. Each pumped line rides the shared
+	// viewerGen (a logMsg), so a line from a superseded stream — one whose view was
+	// closed or replaced — is dropped rather than appended under the wrong object,
+	// exactly as watchGen guards the table watch. logCh/logCancel are touched only from
+	// the single-threaded update loop.
 	logStreamer LogStreamer
 	logCh       <-chan kube.LogEvent
 	logCancel   context.CancelFunc
@@ -653,19 +658,6 @@ type Model struct {
 	// on screen (EnsureLineVisible). Reset on every open/load.
 	secretSel        int
 	secretEntryLines []int
-
-	// logFollow is whether the open logs viewer is following (M3-06): the stream is
-	// opened with LogOptions{Follow:true} so it stays open and reconnects (M1-07d),
-	// and while logFollow is true each appended line snaps the viewport to the bottom
-	// (viewer.GotoBottom) so the newest output is always shown. logs.follow (`f`)
-	// toggles it inside the viewer; a manual up-scroll pauses it (so history can be
-	// read without being yanked back down), and re-enabling snaps to the bottom.
-	// logTitle is the base viewer title (without the follow marker) so the toggle can
-	// re-render "[following]"/"[paused]" without re-deriving the object ref. Both are
-	// consulted only while the logs viewer is up (viewerKindLogs), so a stale value
-	// left from a closed logs viewer is harmless. Touched only from the update loop.
-	logFollow bool
-	logTitle  string
 
 	// resByLabel maps each entry of the resource command palette (resPicker) back to
 	// its kube.Resource. The picker is generic over strings (D65), so the palette
@@ -914,6 +906,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		modal:       modal.New(s),
 		welcome:     welcome.New(s),
 		searchView:  searchview.New(s),
+		logsView:    logsview.New(s),
 		filterInput: fi,
 	}
 	for _, opt := range opts {
@@ -1009,6 +1002,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// resolved before them.
 		if m.searchView.Active() {
 			return m.routeSearchKey(msg)
+		}
+		// The logs view's live grep captures text while it is open (LOGS-02), so its keys
+		// are split raw here rather than resolved through the sequencer. With the filter
+		// closed the logs view takes the ordinary action path (handleLogsAction) so `gg`
+		// and `G` still work in a log.
+		if m.logsView.Filtering() {
+			return m.routeLogsFilterKey(msg)
 		}
 		if m.activePicker() != nil {
 			return m.routePickerKey(msg)
@@ -1204,11 +1204,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case viewer.ClosedMsg:
-		// The viewer dismissed itself (nav.back). Hide it, tear down any live log
-		// stream feeding it, and return focus to the browse view underneath (the table
-		// keeps whatever selection it had).
+		// The viewer dismissed itself (nav.back). Hide it and return focus to the browse
+		// view underneath (the table keeps whatever selection it had). No log stream to
+		// tear down — logs have their own view now (D144).
 		m.viewer.Hide()
-		m.stopLogStream()
+		return m, nil
+
+	case logsview.ClosedMsg:
+		// The logs view dismissed itself (nav.back with the filter already closed). Hide
+		// it and cancel the stream feeding it; the browse view underneath is untouched,
+		// so the table keeps whatever selection it had.
+		m.closeLogs()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -2512,11 +2518,11 @@ func (m Model) forwardsPanelView() string {
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
 // is showing. The M3 viewers all reuse one viewer.Model; each open path restamps the
 // kind (viewer.SetKind) so the kind rides ClosedMsg for routing and the shell can gate
-// kind-specific behaviour — the M3-06 follow toggle acts only while viewerKindLogs is
-// up. The shell still hides the viewer uniformly on close regardless of kind.
+// kind-specific behaviour — the secret reveal/copy keys act only while viewerKindSecret
+// is up. The shell still hides the viewer uniformly on close regardless of kind. There
+// is no logs kind: logs left the shared viewer for their own full-screen view (D144).
 const (
 	viewerKindDescribe = "describe"
-	viewerKindLogs     = "logs"
 	viewerKindSecret   = "secret"
 )
 
@@ -2728,13 +2734,13 @@ type logMsg struct {
 // containerPickerKind is the Kind stamped on the logs container picker
 // (picker.New(s, "container")). Every picker emits the same SelectedMsg/CancelledMsg
 // types (D65), so the root branches on this Kind to route a picked container into
-// streamLogsInto rather than the namespace/resource/action paths.
+// openLogs rather than the namespace/resource/action paths.
 const containerPickerKind = "container"
 
 // ctrPurpose disambiguates why the shared container picker (ctrPicker) is open: the
-// same resolve-then-pick path resolves a pod's container for either the logs viewer
+// same resolve-then-pick path resolves a pod's container for either the logs view
 // (M3-07a) or an exec session (M3-14b-2), and the pick routes to the matching terminal
-// (streamLogsInto vs execInto — see streamOrExec). It is held on the model (ctrPurpose)
+// (openLogs vs execInto — see streamOrExec). It is held on the model (ctrPurpose)
 // between the picker opening and the pick landing, alongside the ctrStreamRes/Ref stash.
 type ctrPurpose int
 
@@ -2852,16 +2858,16 @@ func (m Model) resolveContainersFor(res kube.Resource, podRef kube.ObjectRef, pu
 }
 
 // streamOrExec routes a resolved container to its purpose's terminal (M3-14b-2): a logs
-// purpose opens the streaming viewer (streamLogsInto), an exec purpose suspends into a
+// purpose opens the dedicated logs view (openLogs), an exec purpose suspends into a
 // shell (execInto). It is the shared tail of both the single-container fast path and the
 // picker selection, so the resolve-then-pick plumbing is identical for logs and exec and
 // only the terminal differs. gen guards the logs stream; the exec path ignores it (an
-// exec opens no viewer).
+// exec opens no view).
 func (m Model) streamOrExec(res kube.Resource, ref kube.ObjectRef, container string, purpose ctrPurpose, gen int) (tea.Model, tea.Cmd) {
 	if purpose == ctrPurposeExec {
 		return m.execInto(res, ref, container)
 	}
-	return m.streamLogsInto(res, ref, container, gen)
+	return m.openLogs(res, ref, container, gen)
 }
 
 // handlePodResolved acts on a backing pod resolved for a pod-owning kind (M3-07b). A
@@ -2920,114 +2926,6 @@ func (m Model) handleContainerSelected(msg picker.SelectedMsg) (tea.Model, tea.C
 	m.ctrPicker.Hide()
 	m.viewerGen++
 	return m.streamOrExec(m.ctrStreamRes, m.ctrStreamRef, msg.Value, m.ctrPurpose, m.viewerGen)
-}
-
-// streamLogsInto opens the read-only logs viewer over ref (a pod of res) and starts
-// streaming container's logs into the shared viewer at generation gen. It shows the
-// viewer immediately (empty, so the gesture feels instant) and pumps the log channel
-// line by line off the update loop (D53), appending each line as it lands — a large or
-// slow log never blocks Update. The viewer opens following (like `kubectl logs -f`); a
-// non-empty container is named in the title so the user sees which one is tailing. The
-// stream runs on a cancellable context torn down when the viewer closes or a newer
-// viewer supersedes it (stopLogStream); its lines are tagged with gen so a superseded
-// stream's lines are dropped (handleLogMsg). An open failure degrades to a status-bar
-// toast + closes the viewer (D74); a mid-stream error after some lines already showed
-// leaves them on screen. container "" streams the pod's default/sole container.
-func (m Model) streamLogsInto(res kube.Resource, ref kube.ObjectRef, container string, gen int) (tea.Model, tea.Cmd) {
-	m.stopLogStream() // idempotent; ensures no prior stream survives this open.
-	m.viewer.SetKind(viewerKindLogs)
-	m.logFollow = true // the logs viewer opens following, like `kubectl logs -f`.
-	m.logTitle = "Logs " + viewerTitle(res, ref)
-	if container != "" {
-		m.logTitle += " · " + container
-	}
-	m.syncLogViewerTitle()
-	m.viewer.SetContent("") // clear any prior object's content before the stream lands.
-	m.viewer.Show()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	// Follow keeps the stream open and reconnects transparently across transport
-	// drops (M1-07d), so the viewer tails live output; stopLogStream cancels it on
-	// close/supersede/quit.
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true, Container: container})
-	if err != nil {
-		cancel()
-		m.viewer.Hide()
-		return m, m.surfaceError(NewErrorMsg("logs", err))
-	}
-	m.logCancel = cancel
-	m.logCh = ch
-	return m, m.pumpLogs(gen)
-}
-
-// syncLogViewerTitle re-renders the logs viewer's title with a follow marker so the
-// user always sees whether the log is tailing live ("[following]") or paused for
-// scrollback ("[paused]"). It is a no-op-safe helper called on open and whenever
-// follow toggles; it reads logTitle (the base, object-named title) so it never needs
-// the object ref again.
-func (m *Model) syncLogViewerTitle() {
-	marker := " [paused]"
-	if m.logFollow {
-		marker = " [following]"
-	}
-	m.viewer.SetTitle(m.logTitle + marker)
-}
-
-// pumpLogs issues the tea.Cmd that pulls the next line from the current log channel,
-// tagged with the viewer generation that started the stream so a line from a
-// superseded viewer is recognisable as stale. It returns nil when no stream is active.
-func (m Model) pumpLogs(gen int) tea.Cmd {
-	ch := m.logCh
-	if ch == nil {
-		return nil
-	}
-	pump := logPump(ch)
-	return func() tea.Msg { return logMsg{gen: gen, msg: pump()} }
-}
-
-// handleLogMsg applies one log-pump message to the viewer and re-issues the pump to
-// pull the next line — the one-receive-per-Cmd loop that keeps Update from ever
-// blocking (M2-02/D53). A message from a superseded stream (wrong gen) or one that
-// arrives after the viewer closed is dropped and its chain stops. A line is appended
-// preserving the scroll position (AppendContent); a closed channel ends the chain (the
-// normal EOF of a non-following stream); a bridged stream error degrades — it surfaces
-// a transient status-bar toast (D74) and closes the viewer only if nothing was shown
-// yet (an open failure), leaving any partial lines on screen for a mid-stream drop.
-func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
-	if l.gen != m.viewerGen || !m.viewer.Active() {
-		return m, nil // superseded viewer or closed; drop and stop this chain.
-	}
-	switch inner := l.msg.(type) {
-	case LogLineMsg:
-		m.viewer.AppendContent(inner.Line)
-		if m.logFollow {
-			m.viewer.GotoBottom() // follow mode tails the newest output (M3-06).
-		}
-		return m, m.pumpLogs(l.gen)
-	case LogClosedMsg:
-		m.stopLogStream() // stream ended (EOF); release the context, keep the lines shown.
-		return m, nil
-	case ErrorMsg:
-		empty := m.viewer.Empty()
-		m.stopLogStream()
-		if empty {
-			m.viewer.Hide() // nothing shown yet (an open failure) → close the empty box.
-		}
-		return m, m.surfaceError(inner)
-	}
-	return m, nil
-}
-
-// stopLogStream cancels the live log stream (if any) and clears its handles, so the
-// stream's goroutine is torn down and no stale line is pumped. Safe to call with no
-// stream active. Called before starting a new stream, when the viewer closes, and on
-// quit — the log twin of the watch's cancel-on-reselect teardown.
-func (m *Model) stopLogStream() {
-	if m.logCancel != nil {
-		m.logCancel()
-		m.logCancel = nil
-	}
-	m.logCh = nil
 }
 
 // viewerTitle labels the viewer with the browsed kind and the object's name
@@ -3276,6 +3174,16 @@ func (m *Model) syncHints() {
 		// the browse hints (filter, sort, actions, namespace…) are all unreachable while
 		// it is up — it gets its own context (SEARCH-03b).
 		ctx = keymap.HelpSearch
+	case m.logsView.Active():
+		// The logs mini-app likewise replaces the body (LOGS-02). It has two input
+		// states, and D143 pt 1 makes the difference matter: with the grep field open
+		// every text-producing key (`/`, `f`, `q`) types instead of firing, so only the
+		// no-text keys may be advertised.
+		if m.logsView.Filtering() {
+			ctx = keymap.HelpLogsFilter
+		} else {
+			ctx = keymap.HelpLogs
+		}
 	case m.table.Focused():
 		ctx = keymap.HelpTable
 	}
@@ -3311,7 +3219,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3489,9 +3397,10 @@ func (m *Model) resize() {
 	// The confirm modal (M3-09) is a small centered overlay; it too sits within the
 	// body area so the top status line and bottom hint line stay visible around it.
 	m.modal.SetSize(m.width, bodyH)
-	// The search mini-app is not an overlay: it fills the same body area outright
-	// (D134), so it takes the full body geometry rather than centering within it.
+	// The search and logs mini-apps are not overlays: each fills the same body area
+	// outright (D134), so they take the full body geometry rather than centering in it.
 	m.searchView.SetSize(m.width, bodyH)
+	m.logsView.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -3541,6 +3450,14 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// help/viewer capture pattern). It consumes actions, never raw keys (D11).
 	if m.modal.Active() {
 		return m.handleModalAction(a)
+	}
+	// The dedicated logs view (LOGS-02) is a full-screen mini-app: while it is up it
+	// captures every action — scrolling, the live grep, the follow toggle, close — and
+	// swallows the rest, so the browse panes underneath never move. It opens no overlay
+	// and no overlay can open over it, so its precedence relative to the viewer below is
+	// only a formality; it is listed here beside the other capturing surfaces.
+	if m.logsView.Active() {
+		return m.handleLogsAction(a)
 	}
 	// The read-only viewer (M3-03) captures input while it is up: it scrolls on
 	// navigation and closes on nav.back/quit, and swallows everything else so the
@@ -3669,7 +3586,6 @@ func (m Model) handleModalAction(a keymap.Action) (tea.Model, tea.Cmd) {
 func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionQuit {
 		m.viewer.Hide()
-		m.stopLogStream() // tear down any log stream feeding the viewer.
 		return m, nil
 	}
 	// secret.reveal (`r`) toggles reveal/mask while the secret viewer is up (M3-08a); it
@@ -3715,39 +3631,15 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// logs.follow (`f`) toggles follow while the logs viewer is up (M3-06); it is inert
-	// on the YAML/describe viewers (nothing to follow). Re-enabling snaps to the bottom
-	// so a re-followed log resumes tailing the newest line.
+	// logs.follow is inert here: it belongs to the dedicated logs view (LOGS-02/D144),
+	// and the shared viewer only ever shows one-shot content (YAML/describe/secret) —
+	// there is nothing to follow. Swallowed rather than forwarded so it cannot scroll.
 	if a == keymap.ActionLogsFollow {
-		if m.viewer.Kind() == viewerKindLogs {
-			m.logFollow = !m.logFollow
-			if m.logFollow {
-				m.viewer.GotoBottom()
-			}
-			m.syncLogViewerTitle()
-		}
 		return m, nil
-	}
-	// A manual up-scroll while following pauses follow (M3-06): the reader wants to
-	// inspect earlier output without the next line yanking the viewport back to the
-	// bottom. `f` (or nav.bottom's own scroll) resumes it. Down-scrolls keep following.
-	if m.viewer.Kind() == viewerKindLogs && m.logFollow && isScrollUp(a) {
-		m.logFollow = false
-		m.syncLogViewerTitle()
 	}
 	var cmd tea.Cmd
 	m.viewer, cmd = m.viewer.Update(a)
 	return m, cmd
-}
-
-// isScrollUp reports whether a is an upward-scroll navigation action — the gestures
-// that move away from the tail of a following log and so pause follow (M3-06).
-func isScrollUp(a keymap.Action) bool {
-	switch a {
-	case keymap.ActionUp, keymap.ActionTop, keymap.ActionHalfPageUp, keymap.ActionPageUp:
-		return true
-	}
-	return false
 }
 
 // routeNav dispatches a navigation action to the focused pane and handles the
@@ -3832,6 +3724,11 @@ func (m Model) View() tea.View {
 		// keeping only the status bar above and the hint line below. No overlay can be
 		// open at the same time — it captures all input and opens none.
 		body = m.searchView.View()
+	case m.logsView.Active():
+		// The logs mini-app is the other full-screen view (LOGS-02): logs want every
+		// row for throughput, so it too replaces the browse body rather than centering
+		// as an overlay, and it likewise opens no overlay while it is up.
+		body = m.logsView.View()
 	case m.modal.Active():
 		// The confirm modal (M3-09) is the topmost overlay: it opens over the browse
 		// view (never over another overlay), so listing it first keeps the switch's
