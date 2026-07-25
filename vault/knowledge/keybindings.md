@@ -106,6 +106,7 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Stop all port-forwards | `X` (`forwards.stopAll`) | port-forward panel only; cancels every active forward at once (M3-13b) |
 | Set the local port | `p` (`forwards.localPort`) | port picker only; prompt seeded with the remote port, blank = free port (FB-pf-local-port/D139) |
 | Free local port | `0` (`forwards.freeLocal`) | port picker only; forwards `:<remote>` so the OS assigns the local port — `enter` still forwards local = remote (D139) |
+| Cluster search | `Ctrl+s` (`search.cluster`) | app-global full-screen search across the curated kinds in the current namespace; `enter` jumps to the hit, `esc` clears then closes (SEARCH-02b/D141). Distinct from `/` (`app.filter`), which narrows the open table. A ctrl chord by necessity: the view's query field is always open, so a text key would type instead of firing (D140 pt 1) |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
 | Resource palette | `:` (`resources.switch`) | |

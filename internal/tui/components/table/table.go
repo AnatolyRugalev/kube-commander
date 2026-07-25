@@ -392,6 +392,24 @@ func (m Model) RowAt(contentRow int) (int, bool) {
 // navigation uses the same moveTo.
 func (m *Model) SelectRow(i int) { m.moveTo(i) }
 
+// SelectObject moves the selection to the displayed row holding the object ref
+// identifies — matched on namespace + name, the identity a caller that did not read
+// this table's rows can supply (a cluster-search hit, SEARCH-02b) — and reports
+// whether such a row is currently displayed. It matches on name rather than UID so a
+// recreated object still resolves, and searches the *displayed* rows, so a row hidden
+// by an active filter is not selectable (the selection must always be something the
+// reader can see). Not found leaves the selection untouched, so a caller can retry as
+// more of a live watch's rows arrive.
+func (m *Model) SelectObject(ref kube.ObjectRef) bool {
+	for i, r := range m.table.Rows {
+		if r.Object.Name == ref.Name && r.Object.Namespace == ref.Namespace {
+			m.moveTo(i)
+			return true
+		}
+	}
+	return false
+}
+
 // SetSize sets the table's total size (including its border).
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h

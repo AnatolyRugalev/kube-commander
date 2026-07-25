@@ -20,6 +20,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/searchview"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/viewer"
@@ -535,6 +536,10 @@ type Model struct {
 	viewer     viewer.Model
 	modal      modal.Model
 	welcome    welcome.Model
+	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b): unlike
+	// every field above it is not an overlay — while it is up it *is* the body,
+	// composited in place of the browse panes (D134).
+	searchView searchview.Model
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
@@ -797,6 +802,26 @@ type Model struct {
 	// an editDoneMsg the update loop reports. See edit.go.
 	editor Editor
 
+	// searcher runs the cluster-search fan-out behind the search.cluster action
+	// (SEARCH-02b; nil → search-inert, the view never opens). Like a log stream the
+	// search is a channel pumped item by item (D53): searchCh is re-read to pull the
+	// next hit and searchCancel tears the fan-out down when the query changes, the view
+	// closes, or the app quits. searchGen tags every debounce tick and pumped hit with
+	// the query it belongs to, so a hit from a superseded query — one whose channel is
+	// still draining after cancellation — is dropped rather than shown under a query it
+	// does not describe (D140 pt 3), exactly as watchGen guards the table watch.
+	//
+	// searchTarget/hasSearchTarget are the pending selection a drill-in leaves behind:
+	// the hit's kind is switched to immediately, but its row only exists once the fresh
+	// watch's first RESET lands, so the watch pump applies the selection when it does.
+	// All are touched only from the single-threaded update loop.
+	searcher        Searcher
+	searchCh        <-chan kube.SearchHit
+	searchCancel    context.CancelFunc
+	searchGen       int
+	searchTarget    kube.ObjectRef
+	hasSearchTarget bool
+
 	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
 	// and it re-scopes to whatever is showing. filtering is whether it is open and
@@ -888,6 +913,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		viewer:      viewer.New(s, viewerKindDescribe),
 		modal:       modal.New(s),
 		welcome:     welcome.New(s),
+		searchView:  searchview.New(s),
 		filterInput: fi,
 	}
 	for _, opt := range opts {
@@ -978,6 +1004,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// The search mini-app captures every keypress while it is up (its query field is
+		// always open, D140 pt 1) and nothing it does opens a picker or modal, so it is
+		// resolved before them.
+		if m.searchView.Active() {
+			return m.routeSearchKey(msg)
+		}
 		if m.activePicker() != nil {
 			return m.routePickerKey(msg)
 		}
@@ -1152,6 +1184,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case logMsg:
 		return m.handleLogMsg(msg)
 
+	case searchview.QueryChangedMsg:
+		return m.handleSearchQueryChanged(msg)
+
+	case searchDebouncedMsg:
+		return m.handleSearchDebounced(msg)
+
+	case searchMsg:
+		return m.handleSearchMsg(msg)
+
+	case searchview.SelectedMsg:
+		return m.handleSearchSelected(msg)
+
+	case searchview.ClosedMsg:
+		// The search view dismissed itself (nav.back on an empty query). Hide it and
+		// cancel any fan-out still running; the browse view underneath is untouched, so
+		// the table keeps whatever selection it had.
+		m.closeSearch()
+		return m, nil
+
 	case viewer.ClosedMsg:
 		// The viewer dismissed itself (nav.back). Hide it, tear down any live log
 		// stream feeding it, and return focus to the browse view underneath (the table
@@ -1191,6 +1242,11 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.watchGen++
 	m.watchCh = nil
 	m.table.SetTable(kube.Table{}) // blank until the watch's first RESET arrives.
+	// Any selection a previous search drill-in was still waiting for belongs to the
+	// resource being left, so it is dropped here; a drill-in re-arms it after this
+	// returns (handleSearchSelected).
+	m.searchTarget = kube.ObjectRef{}
+	m.hasSearchTarget = false
 	// A fresh resource (or re-scoped namespace) starts unfiltered: SetTable clears
 	// the table's filter (D78); mirror that in the shell's filter state so a stale
 	// prompt/indicator from the previous resource does not linger.
@@ -1272,6 +1328,9 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 	switch inner := w.msg.(type) {
 	case ResourceEventMsg:
 		m.table.ApplyEvent(inner.Event)
+		// A search drill-in switched to this kind and is waiting for its object's row;
+		// select it as soon as the watch delivers it (SEARCH-02b).
+		m.applyPendingSelect()
 		return m, m.pumpWatch()
 	case ErrorMsg:
 		// The watch loop retries and re-lists on recovery (a fresh RESET follows),
@@ -3246,7 +3305,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3424,6 +3483,9 @@ func (m *Model) resize() {
 	// The confirm modal (M3-09) is a small centered overlay; it too sits within the
 	// body area so the top status line and bottom hint line stay visible around it.
 	m.modal.SetSize(m.width, bodyH)
+	// The search mini-app is not an overlay: it fills the same body area outright
+	// (D134), so it takes the full body geometry rather than centering within it.
+	m.searchView.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -3504,6 +3566,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.discoveryCancel() // and any in-flight discovery pass.
 		}
 		m.stopLogStream() // and any in-flight log stream.
+		m.stopSearch()    // and any in-flight cluster-search fan-out (SEARCH-02b).
 		m.stopDrain()     // and any in-flight node drain (cancel-on-quit, M3-11b).
 		m.stopForwards()  // and every background port-forward (cancel-on-exit, M3-13a).
 		return m, tea.Quit
@@ -3565,6 +3628,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.table.ClearSort()
 		}
 		return m, nil
+	case keymap.ActionSearch:
+		return m.openSearch()
 	case keymap.ActionActions:
 		return m.openActionsMenu()
 	case keymap.ActionDescribe, keymap.ActionLogs,
@@ -3755,6 +3820,12 @@ func (m Model) View() tea.View {
 	// 2026-07-22-popups-should-overlay).
 	body := m.browseBody()
 	switch {
+	case m.searchView.Active():
+		// The search mini-app is a full-screen view, not an overlay: it *replaces* the
+		// browse body while it is up (results span kinds and want every row, D134),
+		// keeping only the status bar above and the hint line below. No overlay can be
+		// open at the same time — it captures all input and opens none.
+		body = m.searchView.View()
 	case m.modal.Active():
 		// The confirm modal (M3-09) is the topmost overlay: it opens over the browse
 		// view (never over another overlay), so listing it first keeps the switch's

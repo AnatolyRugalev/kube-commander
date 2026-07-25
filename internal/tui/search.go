@@ -1,0 +1,274 @@
+package tui
+
+import (
+	"context"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/searchview"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+)
+
+// This file is the app wiring of the cluster-search mini-app (SEARCH-02b): the
+// search.cluster action, the Searcher seam over kube.Search (D131), the debounce +
+// generation-guarded hit pump that feeds the SEARCH-02a view, and the drill-in that
+// switches the browse view to a hit. The view itself owns the query and the result
+// list (D140) and never touches a client; everything concurrent lives here, behind
+// messages (principle 1).
+
+// searchHitLimit caps how many hits one query collects. kube.Search cancels the
+// still-running lists once the cap is reached (D131 pt 4), so this is both a result
+// bound and a load bound on a big cluster. It is far more rows than a reader will
+// ever walk — the answer to "too many matches" is a narrower query, not a longer
+// list — and SEARCH-03 surfaces the cap state in the view.
+const searchHitLimit = 200
+
+// searchDebounce is how long the query must sit still before the fan-out launches.
+// Every keystroke drops the previous query's results (D140 pt 3) and would otherwise
+// start a fresh fan-out over every curated kind, so typing "nginx" would issue five
+// full sweeps of the namespace; waiting a beat means one. It is short enough to feel
+// immediate and long enough that ordinary typing never launches a search per key.
+const searchDebounce = 250 * time.Millisecond
+
+// Searcher runs a one-shot, cancellable cluster search over the given kinds and
+// streams the matches back (kube.Clients implements it via Search). It is the
+// narrow seam the search mini-app needs, injected with WithSearcher — nil leaves the
+// model search-inert (the search.cluster action never opens the view), exactly as a
+// nil watcher leaves it watch-inert.
+type Searcher interface {
+	Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchHit
+}
+
+// WithSearcher wires the cluster-search client (nil → search-inert).
+func WithSearcher(s Searcher) Option {
+	return func(m *Model) { m.searcher = s }
+}
+
+// searchDebouncedMsg fires when a query has sat still for searchDebounce and the
+// fan-out may launch. Its gen must still match the model's searchGen, or the query
+// moved on while the timer ran and the tick is stale (the seqTimeoutMsg guard).
+type searchDebouncedMsg struct {
+	gen   int
+	query string
+}
+
+// searchMsg wraps one message from the search pump with the generation of the query
+// it belongs to. Every query change and every close bumps searchGen, so a hit from a
+// superseded fan-out — whose channel is still draining after cancellation — is
+// dropped rather than appended under a query it does not describe (D140 pt 3), and
+// its pump chain stops instead of racing a second reader onto the live channel. The
+// same stale-message guard watchGen gives the table watch.
+type searchMsg struct {
+	gen int
+	msg tea.Msg
+}
+
+// openSearch shows the cluster-search view (search.cluster). It is a no-op without a
+// searcher wired (search-inert) — an empty search box that can never return anything
+// is worse than an unbound key. The view opens clean (Reset drops any previous
+// query and its hits) with the scope it will search named in its header, and captures
+// every keypress until it closes: while it is up the root routes text into its query
+// field and control keys to it as actions (routeSearchKey, D140 pt 1).
+func (m Model) openSearch() (tea.Model, tea.Cmd) {
+	if m.searcher == nil {
+		return m, nil
+	}
+	m.searchView.Reset()
+	m.searchView.SetScope(m.searchScope())
+	cmd := m.searchView.Show()
+	return m, cmd
+}
+
+// searchScope is the human label for what a search covers: the watched namespace, or
+// the all-namespaces sentinel when the app is unscoped. It only describes the scope —
+// the kind set is the curated default (D131 pt 2) and the widen is SEARCH-04.
+func (m Model) searchScope() string {
+	if m.namespace == "" {
+		return namespaceAllItem
+	}
+	return m.namespace
+}
+
+// searchResources is the kind set one query fans out over: the curated default scope
+// (D131 pt 2) selected from the kinds the menu currently offers — the same source the
+// resource palette draws on, so discovered kinds and per-context extras are included
+// and an unavailable kind is skipped. Never the full discovered set: that whole-cluster
+// widen is opt-in (SEARCH-04), because enumerating every type is the expensive
+// enumeration the fast-start design avoids (D8/principle 4).
+func (m Model) searchResources() []kube.Resource {
+	items := m.menu.Items()
+	all := make([]kube.Resource, 0, len(items))
+	for _, it := range items {
+		if it.Kind != menu.ItemResource || !it.Available {
+			continue
+		}
+		all = append(all, it.Resource)
+	}
+	return kube.CommonSearchResources(all)
+}
+
+// routeSearchKey resolves one keypress while the search view is up. The view's query
+// field is always open (D140 pt 1), so the split is by whether the key carries text:
+// a mapped key with no text (esc/enter/arrows/ctrl+…) is a control Action the view
+// consumes — navigation moves the result cursor, nav.drillIn opens the hit, nav.back
+// clears the query then closes — while anything text-producing or editing (a rune, or
+// an unmapped no-text key like backspace) is query input. So `q` types a `q` instead
+// of quitting, exactly as it does in the table filter; app.quit (ctrl+c) closes the
+// search view rather than the app, the way the help overlay and the viewer own quit
+// while they are open. No view matches a raw key for behaviour (D11).
+func (m Model) routeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+		if action == keymap.ActionQuit {
+			m.closeSearch()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.searchView, cmd = m.searchView.Update(action)
+		return m, cmd
+	}
+	var cmd tea.Cmd
+	m.searchView, cmd = m.searchView.UpdateQuery(msg)
+	return m, cmd
+}
+
+// handleSearchQueryChanged reacts to the view's QueryChangedMsg — the only cue the
+// wiring gets that the query moved. It cancels whatever fan-out was in flight and
+// makes its remaining hits stale (the searchGen bump), then arms the debounce timer
+// for the new query; an emptied query (nav.back's first press, or the last character
+// deleted) cancels and searches nothing. The view has already dropped the previous
+// query's hits, so the screen never shows results from a query that is no longer
+// typed (D140 pt 3). The in-flight indicator goes up now rather than when the lists
+// actually start, so a keystroke is never followed by a silent, blank pause.
+func (m Model) handleSearchQueryChanged(msg searchview.QueryChangedMsg) (tea.Model, tea.Cmd) {
+	m.stopSearch()
+	m.searchGen++
+	if msg.Query == "" || m.searcher == nil {
+		m.searchView.SetSearching(false)
+		return m, nil
+	}
+	m.searchView.SetSearching(true)
+	gen, query := m.searchGen, msg.Query
+	return m, tea.Tick(searchDebounce, func(time.Time) tea.Msg {
+		return searchDebouncedMsg{gen: gen, query: query}
+	})
+}
+
+// handleSearchDebounced launches the fan-out for a query that has sat still long
+// enough. A tick whose generation was superseded (the user typed on, or closed the
+// view) is dropped, so only the latest query ever reaches the cluster. The search
+// itself runs off the update loop on its own cancellable context — stopSearch tears
+// it down on the next query change, on close, and on quit — and its hits stream in
+// through the generation-tagged pump.
+func (m Model) handleSearchDebounced(msg searchDebouncedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.searchGen || !m.searchView.Active() || m.searcher == nil {
+		return m, nil
+	}
+	resources := m.searchResources()
+	if len(resources) == 0 {
+		// Nothing in the curated scope is available (discovery failed outright, or
+		// every curated kind is denied): degrade to "no matches" rather than spin on
+		// an in-flight indicator that will never clear (principle 3).
+		m.searchView.SetSearching(false)
+		return m, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.searchCancel = cancel
+	m.searchCh = m.searcher.Search(ctx, resources, m.namespace, msg.query, searchHitLimit)
+	return m, m.pumpSearch(msg.gen)
+}
+
+// pumpSearch issues the tea.Cmd that pulls the next hit from the current search
+// channel, tagged with the generation of the query that started it so a hit from a
+// superseded fan-out is recognisable as stale. It returns nil when no search is
+// running.
+func (m Model) pumpSearch(gen int) tea.Cmd {
+	ch := m.searchCh
+	if ch == nil {
+		return nil
+	}
+	pump := searchPump(ch)
+	return func() tea.Msg { return searchMsg{gen: gen, msg: pump()} }
+}
+
+// handleSearchMsg folds one pumped hit into the view and re-issues the pump to pull
+// the next — the one-receive-per-Cmd loop that keeps Update from ever blocking
+// (M2-02/D53), which is also what makes results appear kind by kind instead of all at
+// once. A message from a superseded query, or one arriving after the view closed, is
+// dropped and its chain stops. The closed channel ends the fan-out: the in-flight
+// indicator clears, leaving the hits on screen (the view says "no matches" itself when
+// there were none, D140 pt 5).
+func (m Model) handleSearchMsg(s searchMsg) (tea.Model, tea.Cmd) {
+	if s.gen != m.searchGen || !m.searchView.Active() {
+		return m, nil
+	}
+	switch inner := s.msg.(type) {
+	case SearchHitMsg:
+		m.searchView.AppendHit(inner.Hit)
+		return m, m.pumpSearch(s.gen)
+	case SearchClosedMsg:
+		m.stopSearch()
+		m.searchView.SetSearching(false)
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleSearchSelected drills into the highlighted hit: it closes the search view and
+// switches the browse view to the hit's kind through the same selectResource path a
+// menu drill-in or the resource palette takes (start the watch, mark the kind active,
+// focus the table). The object itself cannot be selected yet — the fresh watch blanks
+// the table and repopulates it when its first RESET lands — so the hit's identity is
+// stashed as a pending selection the watch pump applies as soon as its row appears.
+func (m Model) handleSearchSelected(msg searchview.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.closeSearch()
+	next, cmd := m.selectResource(msg.Hit.Resource)
+	sel := next.(Model)
+	// Set after selectResource, which clears any pending selection of its own.
+	sel.searchTarget = msg.Hit.Ref
+	sel.hasSearchTarget = true
+	return sel, cmd
+}
+
+// applyPendingSelect selects the object a search drill-in is waiting for, once the
+// live watch has delivered its row. It is called after every applied watch delta, and
+// clears the pending target the first time the row is found — so the reader's own
+// navigation is never yanked back to it by a later delta. A target whose row never
+// arrives (deleted between the search and the watch, or filtered out) simply stays
+// pending until the next resource selection clears it, leaving the table's own
+// selection untouched.
+func (m *Model) applyPendingSelect() {
+	if !m.hasSearchTarget {
+		return
+	}
+	if m.table.SelectObject(m.searchTarget) {
+		m.searchTarget = kube.ObjectRef{}
+		m.hasSearchTarget = false
+	}
+}
+
+// closeSearch dismisses the search view and cancels any fan-out feeding it, bumping
+// the generation so hits still draining from the cancelled search are dropped rather
+// than appended to a view that is no longer up. It mutates the receiver, so callers
+// pass the addressable model they are about to return.
+func (m *Model) closeSearch() {
+	m.searchView.Hide()
+	m.stopSearch()
+	m.searchGen++
+}
+
+// stopSearch cancels the running fan-out (if any) and clears its handle so no further
+// hit is pumped. Safe to call with no search running. Called before launching a new
+// query, when the fan-out completes, when the view closes, and on quit — the search
+// twin of stopLogStream. It deliberately does not bump the generation: completion is
+// not a supersede, and a later close/query change owns that bump.
+func (m *Model) stopSearch() {
+	if m.searchCancel != nil {
+		m.searchCancel()
+		m.searchCancel = nil
+	}
+	m.searchCh = nil
+}

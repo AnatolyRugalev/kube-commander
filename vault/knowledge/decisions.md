@@ -3494,3 +3494,39 @@ rhythm (LOGS-01 → LOGS-02). **Constraints a future leg must not silently contr
 5. **An empty result list always says why** — `type to search this cluster` /
    `searching…` / `no matches`. An empty search view must never be ambiguous between
    "nothing typed", "still working", and "nothing found".
+
+### D141 — Cluster search is a full-screen mini-app on `ctrl+s`: debounced launch, generation-guarded hits, drill-in via a pending selection
+**2026-07-25** (SEARCH-02b). The app wiring of the cluster search — the half D140's view
+deliberately left out (`internal/tui/search.go`). **Constraints a future leg must not
+silently contradict:**
+1. **The search view is the body, not an overlay.** While it is up `View` renders it in
+   place of the two-pane browse body (status bar above, hint line below), it captures
+   every keypress before the pickers/modal, and `overlayActive()` counts it so mouse
+   events stay inert (D134). It never opens an overlay of its own, so the
+   single-overlay invariant holds.
+2. **Every keystroke is a query change; only a settled query reaches the cluster.** A
+   `QueryChangedMsg` cancels the in-flight fan-out and arms a `searchDebounce`
+   (250 ms) tick; the tick launches `kube.Search` only if its `searchGen` still
+   matches. So typing never issues one fan-out per keystroke — the load bound that
+   makes cross-kind search safe on a big cluster — while the in-flight indicator goes
+   up immediately, so a keystroke is never followed by a silent blank.
+3. **`searchGen` is the single staleness clock.** It is bumped by a query change and by
+   closing the view (never by a fan-out merely completing), and it tags both the
+   debounce tick and every pumped hit; a mismatch drops the message *and* stops its
+   pump chain. Hits stream in one receive per Cmd (D53), so results appear kind by
+   kind.
+4. **Drilling into a hit switches kind now and selects the object later.** The wiring
+   closes the view, drives the ordinary `selectResource` path, and stashes the hit's
+   ref as a **pending selection** that the watch pump applies (`table.SelectObject`,
+   matched on namespace+name) as soon as the row arrives — cleared on the first hit so
+   later deltas never yank the reader back, and dropped whenever another resource is
+   selected. Never block the drill-in on a synchronous list.
+5. **The scope is derived, not stored.** The kind set is `CommonSearchResources` over
+   the menu's currently *available* resource items (the resource palette's source), so
+   discovered kinds and per-context extras are in and denied ones are out, and there is
+   no second copy of the discovery result to keep in sync. An empty scope degrades to
+   "no matches" rather than an indicator that never clears.
+6. **`search.cluster` is `ctrl+s` — a no-text chord by necessity.** The query field is
+   always open (D140 pt 1), so any text-carrying default would type instead of firing;
+   app.quit's chord closes the search view rather than the app (the help/viewer
+   precedent), and `q` types a `q`.

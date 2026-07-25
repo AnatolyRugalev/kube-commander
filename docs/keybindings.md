@@ -103,6 +103,12 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `forwards.localPort` | `p` | Set the local port for the highlighted port (port picker) |
 | `forwards.freeLocal` | `0` | Forward the highlighted port on a free local port (port picker) |
 
+## search
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `search.cluster` | `ctrl+s` | Search the cluster across kinds |
+
 ## confirm
 
 | Action | Keys | Description |

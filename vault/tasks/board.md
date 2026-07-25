@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-24 — SEARCH-02a done: the cluster-search view component landed (D140), leaving SEARCH-02b (the app wiring + `search.cluster` action) as the top unblocked item. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-25 — SEARCH-02b done: cluster search is live end-to-end on `ctrl+s` (D141), leaving SEARCH-03 (progress/cap surfacing, now narrowed) and LOGS-02 as the top unblocked items. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-02b** Search mini-app **app wiring** + `search.cluster` action
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-25
-      notes: see the SEARCH section below for the full item.
+_(none)_
 
 ## Blocked
 
@@ -92,24 +90,20 @@ An M4-class capability pulled forward by feedback. One-shot, concurrent, curated
 default — never "watch everything" (D131). Built bottom-up (D52): kube primitive first
 (done), then the TUI search mini-app, then streaming/progress, then scope-widening/fuzzy.
 
-SEARCH-02 was split D52-style into the component (**SEARCH-02a**, in progress) and the
-app wiring (**SEARCH-02b**), mirroring LOGS-01 → LOGS-02.
+SEARCH-02 was split D52-style into the component (**SEARCH-02a**) and the app wiring
+(**SEARCH-02b**), mirroring LOGS-01 → LOGS-02. Both are done: cluster search is live on
+`ctrl+s` (D141) and the remaining slices refine it.
 
-- [ ] **SEARCH-02b** Search mini-app **app wiring** + `search.cluster` action: a registered
-      key (D11) opens the SEARCH-02a view; `enter` drills into the selected hit (switch
-      browse to that kind + select the row); `esc` closes. Message-only (principle 1).
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (SEARCH triage, D131) | claimed: 2026-07-25
-      notes: Wire `kube.Search` (SEARCH-01) over `CommonSearchResources(discovered)` in the
-      current namespace behind a `Searcher` seam (`WithSearcher`, nil → search-inert); run
-      the fan-out off the update loop, stream hits in via a gen-tagged pump (like the log
-      pump D53), cancel the previous query on `QueryChangedMsg` / on close. Register
-      `search.cluster` + regenerate `docs/keybindings.md`. Depends on SEARCH-02a.
-- [ ] **SEARCH-03** Streaming results + progress + cap indicator: show hits as each kind
-      returns (not only when all finish), a "searching N/M kinds…" progress line, the cap
-      state, and cancel-in-flight on query change. Per-kind failures stay silent (D131 pt 3).
-      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
-      notes: `kube.Search` already streams + caps + cancels; this is the TUI surfacing of
-      progress/cap. Depends on SEARCH-02.
+- [ ] **SEARCH-03** Search progress + cap surfacing: a "searching N/M kinds…" progress
+      line and an explicit cap state ("first 200 matches — narrow the query"), plus a
+      search-context hint bar. Per-kind failures stay silent (D131 pt 3).
+      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131) | narrowed: 2026-07-25
+      notes: SEARCH-02b already streams hits kind-by-kind, caps at `searchHitLimit`, and
+      cancels in flight on a query change (D141), so what remains is the *surfacing*:
+      per-kind completion counting needs a done-signal from `kube.Search` (today the
+      channel close is the only completion signal — it cannot distinguish "all kinds
+      finished" from "cap reached"), so this slice likely widens the kube-layer channel
+      item or adds a second channel. Depends on SEARCH-02b.
 - [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
       **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
       fuzzy / label / field matching beyond name substring.
@@ -147,6 +141,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-02b** Cluster search app wiring (`internal/tui/search.go`): `search.cluster` (`ctrl+s`) opens the SEARCH-02a view as the full-screen body, a `Searcher` seam (`WithSearcher`, nil → search-inert) runs `kube.Search` over `CommonSearchResources` of the menu's available kinds in the current namespace after a 250 ms debounce, hits stream in through a `searchGen`-tagged pump (cancel + drop on query change/close/quit), and `enter` switches browse to the hit's kind with the object selected once the watch's rows arrive (`table.SelectObject` pending selection) — done 2026-07-25 (D141)
 - [x] **SEARCH-02a** Cluster-search view component (`internal/tui/components/searchview`): full-screen always-open query field over a streaming cross-kind result list (kind-aligned `Kind  ns/name` rows from `kube.SearchHit`), keymap-driven cursor that streamed hits never move, `SelectedMsg`/`ClosedMsg`/`QueryChangedMsg`, clear-then-close `nav.back`, and an empty list that always says which empty it is — done 2026-07-24 (D140)
 - [x] **FB-pf-local-port** Port-forward local port (`internal/tui/ports.go`): every declared port now opens the picker (a lone one no longer auto-forwards, which dead-ended a local clash), where `enter` still forwards local = remote, `forwards.freeLocal` (`0`) forwards `:<remote>` on an OS-assigned local port, and `forwards.localPort` (`p`) opens a prompt seeded with the remote number (blank = free port); the bind hint stopped suggesting the invalid `:0` — done 2026-07-24 (D139)
 - [x] **FB-pf-port-picker-b** Port-forward port picker — TUI wire (`internal/tui/ports.go`): a `PortLister` seam over `kube.PodPorts`/`ServicePorts` lists the target's declared ports off the update loop (`pfResolveGen`-guarded); one port forwards directly (local = remote), several open the reused modal picker (`80 → 8080 (http · app)` rows), and no lister / an empty list / a listing error all fall back to the free-text ports prompt — done 2026-07-24 (D138)

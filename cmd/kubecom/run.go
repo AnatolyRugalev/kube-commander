@@ -143,6 +143,7 @@ func runTUI(opts runOptions) error {
 		})),
 		tui.WithServiceResolver(clients),
 		tui.WithPortLister(clients),
+		tui.WithSearcher(clients),
 		tui.WithExecer(clients),
 		tui.WithEditor(clients),
 		tui.WithNamespace(namespace),

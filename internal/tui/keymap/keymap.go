@@ -97,6 +97,13 @@ const (
 	// up; elsewhere they are inert (like logs.follow / secret.reveal outside a viewer).
 	ActionLocalPort     Action = "forwards.localPort"
 	ActionFreeLocalPort Action = "forwards.freeLocal"
+	// ActionSearch opens the cluster-search mini-app (SEARCH-02b/D131): a
+	// full-screen view whose always-open query field runs a one-shot, cross-kind
+	// search over the curated kind set in the current namespace, and whose
+	// nav.drillIn switches the browse view to the selected hit. It is app-global
+	// (not row-scoped) and distinct from app.filter, which narrows the rows of the
+	// one table already open.
+	ActionSearch Action = "search.cluster"
 	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
 	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
 	// **confirm key context** (contextOf), not the browse context: `n`/`enter`/`esc`
@@ -181,6 +188,7 @@ var actionMeta = []struct {
 	{ActionStopForwards, "Stop all port-forwards (in the panel)"},
 	{ActionLocalPort, "Set the local port for the highlighted port (port picker)"},
 	{ActionFreeLocalPort, "Forward the highlighted port on a free local port (port picker)"},
+	{ActionSearch, "Search the cluster across kinds"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
 }
@@ -258,6 +266,12 @@ var defaultBindings = map[Action][]string{
 	// is rejected: remote port must be > 0), which the shell builds itself (D139).
 	ActionLocalPort:     {"p"},
 	ActionFreeLocalPort: {"0"},
+	// Cluster search joins the ctrl+<letter> family of app-global switchers
+	// (ctrl+n = ns.switch): a mnemonic **s**earch key that is not a plain letter, so
+	// it cannot be swallowed by the always-open query field it opens (every
+	// text-carrying key types into that field, D140 pt 1). Raw mode clears the
+	// terminal's IXON flow control, so ctrl+s reaches the app rather than pausing it.
+	ActionSearch: {"ctrl+s"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
 	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
 	// in the browse context (app.searchNext/nav.drillIn/nav.back); `y` is browse-free

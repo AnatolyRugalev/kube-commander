@@ -148,6 +148,37 @@ func logPump(ch <-chan kube.LogEvent) tea.Cmd {
 	}
 }
 
+// SearchHitMsg is one object matched by a cluster-search fan-out (SEARCH-02b),
+// carried into the update loop verbatim from kube.Search's channel. A search has no
+// error channel — a per-kind List failure is swallowed by the kube layer and simply
+// contributes nothing (D131 pt 3) — so a consumer only ever sees hits and the
+// terminal SearchClosedMsg.
+type SearchHitMsg struct {
+	Hit kube.SearchHit
+}
+
+// SearchClosedMsg tells the model a Search channel has closed and the pump has
+// stopped: the fan-out finished, hit its cap, or was cancelled (a new query or the
+// view closing). Like WatchClosedMsg it is the pump's terminal message — the model
+// must not re-issue the pump after it.
+type SearchClosedMsg struct{}
+
+// searchPump reads one hit from a kube.Search channel and returns it as a
+// SearchHitMsg, or SearchClosedMsg when the channel closes. The model re-issues it
+// after each hit to pull the next (one receive per Cmd, M2-02/D53) and stops on the
+// close, so results stream into the view as each kind returns rather than landing in
+// one batch at the end. The whole receive happens inside the returned tea.Cmd, off
+// the update goroutine.
+func searchPump(ch <-chan kube.SearchHit) tea.Cmd {
+	return func() tea.Msg {
+		hit, ok := <-ch
+		if !ok {
+			return SearchClosedMsg{}
+		}
+		return SearchHitMsg{Hit: hit}
+	}
+}
+
 // DrainProgressMsg is one progress step from a streaming node drain (M3-11b),
 // carried into the update loop verbatim from a kube.DrainEvent's Message ("evicted
 // ns/web (2/5)"). A drain failure is *not* delivered as a DrainProgressMsg — the

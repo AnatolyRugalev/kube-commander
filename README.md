@@ -108,6 +108,15 @@ pop-up list of every browsable resource kind. Type `/` to filter it by substring
 press Enter to switch the table to that kind. This is the pane-free way to change the
 browsed resource, so you can work with the left menu hidden.
 
+Press `Ctrl+s` (`search.cluster`, rebindable) to search the whole cluster instead of
+one table: type a query and matching objects stream in **across kinds** (Pods,
+Deployments, StatefulSets, DaemonSets, Services, ConfigMaps, Secrets, PVCs, Jobs,
+CronJobs, Ingresses) in the current namespace, shown as `Kind  namespace/name`. Press
+Enter on a hit to jump straight to it — the table switches to that kind with the object
+selected. `Esc` clears the query, and `Esc` again closes the search. This is a
+deliberate, one-shot query (it lists those kinds once per query, never watches
+everything); `/` remains the filter that narrows the rows of the table already open.
+
 The other subcommands report information and exit:
 
 ```bash
