@@ -102,6 +102,13 @@ type Styles struct {
 	// Header is a table's column-header row (bold, accented).
 	Header lipgloss.Style
 
+	// Match highlights the span of text that matched an active query — the logs
+	// view's live grep (LOGS-03) and any future in-content search. It paints a
+	// background so a match is findable by eye in a wall of log output, using the
+	// Warn hue rather than Selection so a highlight is never confused with the
+	// cursor (the two can appear on the same line).
+	Match lipgloss.Style
+
 	// Pane frames a component; PaneFocus is the same frame when the pane holds
 	// focus (accented border). Both use a rounded border.
 	Pane      lipgloss.Style
@@ -141,6 +148,9 @@ func New(t Theme) Styles {
 		Header: lipgloss.NewStyle().
 			Foreground(t.Header).
 			Bold(true),
+		Match: lipgloss.NewStyle().
+			Foreground(t.StatusBarBg).
+			Background(t.Warn),
 		Pane:      pane,
 		PaneFocus: pane.BorderForeground(t.BorderFocus),
 		StatusBar: lipgloss.NewStyle().

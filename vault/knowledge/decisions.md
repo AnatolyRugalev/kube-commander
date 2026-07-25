@@ -3601,3 +3601,30 @@ shapes.
    one for the field closed, one for it open, because an open field turns every
    text-producing key into input. `syncHints` is re-run wherever the field opens or closes,
    not just where the view does.
+
+### D145 — A live filter degrades to its last working pattern, and a match is shown where it was found
+**2026-07-25** (LOGS-03). The logs grep gained a second mode: `logs.regex` reads the same
+field as a case-insensitive regex instead of a case-insensitive substring, and either way
+the matched spans are highlighted in the shown lines.
+
+1. **A filter that cannot be parsed keeps narrowing by the last one that could**, and says
+   so. A pattern is typed one character at a time, so `err(` exists on the way to
+   `err(or)?`; blanking the view at every intermediate keystroke would make regex mode
+   unusable. The compiled pattern is kept, the header flags the query on screen as
+   `invalid regex`, and only when *nothing* has ever compiled is the match set empty.
+   This is the shape for any future incremental query (a table filter, cluster search):
+   degrade to the last good result and label it — never silently apply something the user
+   did not type, never blank on a half-typed one.
+2. **A mode toggle for a text field must be bound to a chord carrying no text.** The field
+   swallows every text-producing key while it is open (D140 pt 1), so a plain letter could
+   only toggle before typing — where the mode matters least. `logs.regex` is `ctrl+r`, and
+   because it acts in both states it is hinted in *both* logs contexts (D144 pt 4).
+3. **The unfiltered render path stays free of match work.** An empty query returns the
+   joined buffer with no matcher built and no highlighting — the high-throughput streaming
+   case costs what it did before. Cost is opt-in with the filter, and regex cost only in
+   regex mode; substring mode keeps its `strings.Contains` test and computes spans only
+   for lines already kept.
+4. **Highlighting is a `styles.Match` role, not a per-view colour.** Any surface that
+   shows *where* a query matched renders through it. Because it wraps a span in ANSI, a
+   test asserting on rendered *content* must strip styling first — a matching line is no
+   longer one contiguous run of bytes in the frame.

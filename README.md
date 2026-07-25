@@ -128,7 +128,12 @@ centered box, because throughput is the point. The header shows the object, the
 container, and `[following]`/`[paused]`. Press `/` to open a **live grep**: typing
 narrows the streamed lines *while the log keeps following*, with a `matched/total`
 count, and nothing is re-fetched — `Esc` clears the filter and the full stream is still
-there. Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward
+there. Matches are highlighted in the lines they were found in. `Ctrl+R`
+(`logs.regex`) switches that grep between plain substring and **regex** (both
+case-insensitive; the prompt reads `re/` and the header shows `[re]`), and it works
+while you are typing, so a substring you started can become a pattern without retyping
+it — a pattern that does not compile yet keeps the last working one and the header says
+`invalid regex`. Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward
 gesture pauses it so the next line does not yank you back); `f` again resumes and jumps
 to the newest line. `Esc` with no filter open, or `q`, closes the view. YAML, describe
 and secret content still open in the shared centered viewer — only logs stream, so only

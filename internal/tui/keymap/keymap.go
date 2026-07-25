@@ -70,6 +70,13 @@ const (
 	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
 	// elsewhere it is inert.
 	ActionLogsFollow Action = "logs.follow"
+	// ActionLogsRegex toggles the logs view's live grep between case-insensitive
+	// substring matching (the default) and case-insensitive **regex** matching
+	// (LOGS-03). It is bound to a no-text chord on purpose: the grep field swallows
+	// every text-producing key while it is open (D140 pt 1), so a plain letter could
+	// only toggle the mode *before* typing — where the mode matters least. It is
+	// meaningful only while the logs view is up; elsewhere it is inert.
+	ActionLogsRegex Action = "logs.regex"
 	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
 	// open secret viewer (M3-08a). Values start masked; this is the deliberate
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
@@ -182,6 +189,7 @@ var actionMeta = []struct {
 	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
+	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
@@ -255,7 +263,11 @@ var defaultBindings = map[Action][]string{
 	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
 	ActionEdit:   {"e"},
 	ActionDelete: {"d"},
-	ActionLogsFollow:   {"f"},
+	ActionLogsFollow: {"f"},
+	// The regex toggle joins the ctrl+<letter> family for the reason given at its
+	// declaration: it has to keep working with the grep field open, and only a key
+	// carrying no text survives that field. ctrl+r is free in the browse context.
+	ActionLogsRegex:    {"ctrl+r"},
 	ActionRevealSecret: {"r"},
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},

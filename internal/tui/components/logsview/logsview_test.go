@@ -5,10 +5,22 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
+
+// plain is the view with styling removed. Since LOGS-03 highlights matched spans, a
+// matching line is no longer one contiguous run of bytes in View() — the Match style
+// wraps the span — so any assertion about *content* has to strip first. Assertions
+// about the highlight itself compare against the rendered span (see matchSpan).
+func plain(v string) string { return ansi.Strip(v) }
+
+// matchSpan is how a highlighted span looks in the view: the text rendered through the
+// shared Match style. Comparing against it keeps the test honest about the styling
+// without restating an escape sequence.
+func matchSpan(s string) string { return styles.Default().Match.Render(s) }
 
 func newLogs() Model {
 	m := New(styles.Default())
@@ -111,7 +123,7 @@ func TestLiveFilterNarrowsShownLines(t *testing.T) {
 	if !m.Filtering() {
 		t.Fatal("filter should be open")
 	}
-	v := m.View()
+	v := plain(m.View())
 	if !strings.Contains(v, "alpha error one") || !strings.Contains(v, "gamma ERROR two") {
 		t.Errorf("filter should keep the two matching lines; got:\n%s", v)
 	}
@@ -129,7 +141,7 @@ func TestFilterNarrowsWhileFollowing(t *testing.T) {
 	m = typeFilter(m, "keep")
 	m.Append("drop this")
 	m.Append("keep this")
-	v := m.View()
+	v := plain(m.View())
 	if strings.Contains(v, "drop this") {
 		t.Errorf("a line streamed under an active filter must be excluded if it doesn't match; got:\n%s", v)
 	}
@@ -142,7 +154,7 @@ func TestBackClearsFilterThenCloses(t *testing.T) {
 	m := newLogs()
 	m.Append("only line")
 	m = typeFilter(m, "zzz") // matches nothing
-	if strings.Contains(m.View(), "only line") {
+	if strings.Contains(plain(m.View()), "only line") {
 		t.Fatalf("precondition: filter should hide the non-matching line")
 	}
 	// First back clears the filter (restores the stream), no ClosedMsg.
@@ -153,7 +165,7 @@ func TestBackClearsFilterThenCloses(t *testing.T) {
 	if m.Filtering() {
 		t.Errorf("back should close the filter")
 	}
-	if !strings.Contains(m.View(), "only line") {
+	if !strings.Contains(plain(m.View()), "only line") {
 		t.Errorf("clearing the filter should restore the stream; got:\n%s", m.View())
 	}
 	// Second back closes the view.
@@ -170,12 +182,176 @@ func TestBackClearsFilterThenCloses(t *testing.T) {
 	}
 }
 
+// --- LOGS-03: regex mode + match highlighting ---
+
+// TestRegexModeMatchesPattern: with logs.regex on, the same field is a pattern, not a
+// substring — anchors and alternation work, and the header marks the mode.
+func TestRegexModeMatchesPattern(t *testing.T) {
+	m := newLogs()
+	m.Append("GET /healthz 200")
+	m.Append("GET /api/pods 500")
+	m.Append("GET /api/pods 503")
+	m, _ = m.Update(keymap.ActionLogsRegex)
+	if !m.Regex() {
+		t.Fatal("logs.regex should turn regex mode on")
+	}
+	m = typeFilter(m, "50[03]$")
+	v := plain(m.View())
+	if strings.Contains(v, "healthz") {
+		t.Errorf("the 200 line does not match 50[03]$; got:\n%s", v)
+	}
+	if !strings.Contains(v, "/api/pods 500") || !strings.Contains(v, "/api/pods 503") {
+		t.Errorf("both 5xx lines should match; got:\n%s", v)
+	}
+	if !strings.Contains(v, "[re]") || !strings.Contains(v, "2/3") {
+		t.Errorf("header should mark regex mode and count 2/3; got:\n%s", v)
+	}
+	// Substring mode would treat the same query literally: nothing matches.
+	m, _ = m.Update(keymap.ActionLogsRegex)
+	if m.Regex() {
+		t.Fatal("a second logs.regex should turn regex mode off")
+	}
+	if v := plain(m.View()); strings.Contains(v, "/api/pods 500") || !strings.Contains(v, "0/3") {
+		t.Errorf("back in substring mode the pattern is literal text and matches nothing; got:\n%s", v)
+	}
+}
+
+// TestRegexIsCaseInsensitiveByDefault: the regex grep matches the substring grep's
+// case-insensitive default, and an explicit (?-i) in the query still overrides it.
+func TestRegexIsCaseInsensitiveByDefault(t *testing.T) {
+	m := newLogs()
+	m.Append("Error: boom")
+	m, _ = m.Update(keymap.ActionLogsRegex)
+	m = typeFilter(m, "error")
+	if !strings.Contains(plain(m.View()), "Error: boom") {
+		t.Errorf("regex mode should default to case-insensitive; got:\n%s", plain(m.View()))
+	}
+	m2 := newLogs()
+	m2.Append("Error: boom")
+	m2, _ = m2.Update(keymap.ActionLogsRegex)
+	m2 = typeFilter(m2, "(?-i)error")
+	if strings.Contains(plain(m2.View()), "Error: boom") {
+		t.Errorf("an explicit (?-i) should win over the default; got:\n%s", plain(m2.View()))
+	}
+}
+
+// TestInvalidRegexKeepsLastGoodAndSaysSo: a half-typed pattern must not blank the view.
+// The last pattern that compiled keeps narrowing and the header says the query on
+// screen is not the one being applied (principle 3 / D145).
+func TestInvalidRegexKeepsLastGoodAndSaysSo(t *testing.T) {
+	m := newLogs()
+	m.SetSize(80, 12) // a realistic terminal: the header clips from the right at 40
+	m.Append("err one")
+	m.Append("ok two")
+	m, _ = m.Update(keymap.ActionLogsRegex)
+	m = typeFilter(m, "err")
+	if !strings.Contains(plain(m.View()), "err one") {
+		t.Fatalf("precondition: `err` should match; got:\n%s", plain(m.View()))
+	}
+	// Keep typing toward `err(or)?` — `err(` alone does not compile.
+	m, _ = m.UpdateFilter(tea.KeyPressMsg(tea.Key{Code: '(', Text: "("}))
+	v := plain(m.View())
+	if !strings.Contains(v, "err one") {
+		t.Errorf("an uncompilable query should keep the last good match set; got:\n%s", v)
+	}
+	if strings.Contains(v, "ok two") {
+		t.Errorf("the last good pattern still excludes non-matches; got:\n%s", v)
+	}
+	if !strings.Contains(v, "invalid regex") {
+		t.Errorf("header should flag the query as invalid, not pass it off as a match; got:\n%s", v)
+	}
+	// Completing the pattern clears the flag and re-applies the new one.
+	for _, r := range "or)?" {
+		m, _ = m.UpdateFilter(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
+	}
+	if v := plain(m.View()); strings.Contains(v, "invalid regex") || !strings.Contains(v, "err one") {
+		t.Errorf("a completed pattern should clear the flag and match; got:\n%s", v)
+	}
+}
+
+// TestInvalidRegexWithNoLastGoodMatchesNothing: the other half of the degrade — when
+// nothing has ever compiled there is no set to fall back to, so the view is empty (and
+// labelled) rather than showing an unfiltered stream the query never asked for.
+func TestInvalidRegexWithNoLastGoodMatchesNothing(t *testing.T) {
+	m := newLogs()
+	m.SetSize(80, 12)
+	m.Append("err one")
+	m.Append("ok two")
+	m, _ = m.Update(keymap.ActionLogsRegex)
+	m = typeFilter(m, "*")
+	v := plain(m.View())
+	if strings.Contains(v, "err one") || strings.Contains(v, "ok two") {
+		t.Errorf("an invalid query with no last-good pattern must not show the stream; got:\n%s", v)
+	}
+	if !strings.Contains(v, "0/2") || !strings.Contains(v, "invalid regex") {
+		t.Errorf("header should report 0/2 and flag the query; got:\n%s", v)
+	}
+}
+
+// TestMatchedSpansAreHighlighted: every occurrence in a shown line is painted with the
+// shared Match style, in both grep modes; the untouched text around it is left alone.
+func TestMatchedSpansAreHighlighted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		regex bool
+		query string
+	}{
+		{"substring", false, "err"},
+		{"regex", true, "e.r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newLogs()
+			m.Append("err and err again")
+			if tc.regex {
+				m, _ = m.Update(keymap.ActionLogsRegex)
+			}
+			m = typeFilter(m, tc.query)
+			v := m.View()
+			if n := strings.Count(v, matchSpan("err")); n != 2 {
+				t.Errorf("both occurrences should be highlighted; got %d in:\n%q", n, v)
+			}
+			if !strings.Contains(plain(v), "err and err again") {
+				t.Errorf("highlighting must not alter the line's text; got:\n%s", plain(v))
+			}
+		})
+	}
+}
+
+// TestUnfilteredStreamIsNotHighlighted: with no query the body is the raw buffer — the
+// fast path the high-throughput stream depends on, with no per-line match work at all.
+func TestUnfilteredStreamIsNotHighlighted(t *testing.T) {
+	m := newLogs()
+	m.Append("plain line")
+	if v := m.View(); !strings.Contains(v, "plain line") {
+		t.Errorf("an unfiltered line should render verbatim, unstyled; got:\n%q", v)
+	}
+}
+
+// TestNonASCIIFoldStillMatches: a fold that changes the byte length can't be sliced at
+// lowered offsets, so the line is shown unhighlighted rather than dropped or corrupted.
+func TestNonASCIIFoldStillMatches(t *testing.T) {
+	m := newLogs()
+	m.Append("İstanbul error") // 'İ' lowercases to two runes, changing the byte length
+	m = typeFilter(m, "error")
+	if !strings.Contains(plain(m.View()), "İstanbul error") {
+		t.Errorf("a matching line must survive an awkward fold intact; got:\n%s", plain(m.View()))
+	}
+	spans, ok := spanSubstring("İstanbul error", "error")
+	if !ok || spans != nil {
+		t.Errorf("spanSubstring(fold-changing line) = %v, %v; want nil, true", spans, ok)
+	}
+}
+
 func TestResetClearsBufferAndRearmsFollow(t *testing.T) {
 	m := newLogs()
 	appendLines(&m, 10)
 	m, _ = m.Update(keymap.ActionTop) // pause
 	m = typeFilter(m, "line-1")
+	m, _ = m.Update(keymap.ActionLogsRegex)
 	m.Reset()
+	if m.Regex() {
+		t.Errorf("Reset should drop regex mode so a new object opens on the plain grep")
+	}
 	if !m.Empty() {
 		t.Errorf("Reset should clear the buffer")
 	}
@@ -195,7 +371,7 @@ func TestInactiveIgnoresActions(t *testing.T) {
 	m.SetSize(40, 12)
 	appendLines(&m, 10) // not shown
 	var cmd tea.Cmd
-	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow} {
+	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsRegex} {
 		m, cmd = m.Update(a)
 		if cmd != nil {
 			t.Errorf("inactive view emitted a cmd for %v; want nil", a)

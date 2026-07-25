@@ -9,8 +9,10 @@
 // filter, follow/pause with auto-scroll, and a full-screen header — and LOGS-02 wired
 // it up: `res.logs` now streams here instead of into the shared viewer, which the app
 // no longer stamps with a logs kind (D144). The wiring lives in `internal/tui/logs.go`.
-// Regex + match highlighting (LOGS-03) and the long-line / timestamp nice-to-haves
-// (LOGS-04) are later slices.
+// LOGS-03 added the second grep mode: `logs.regex` switches the same field between
+// case-insensitive substring and case-insensitive regex, and whichever mode is active,
+// the matched spans are highlighted in the shown lines (D145). The long-line / timestamp
+// nice-to-haves (LOGS-04) are a later slice.
 //
 // Like the shared viewer and the picker it wraps a bubbles component (viewport +
 // textinput) but drives it entirely through keymap.Actions — it never matches a raw
@@ -23,6 +25,7 @@
 package logsview
 
 import (
+	"regexp"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -42,6 +45,14 @@ const kind = "logs"
 const (
 	headerHeight = 1
 	filterHeight = 1
+)
+
+// The two grep prompts, which double as the mode indicator inside the field: the
+// bare `/` is the default case-insensitive substring grep, `re/` the regex one
+// (LOGS-03). The header repeats the mode as `[re]` for when the field is closed.
+const (
+	promptSubstring = "/ "
+	promptRegex     = "re/ "
 )
 
 // ClosedMsg is emitted when the user dismisses the logs view (nav.back with the filter
@@ -69,6 +80,20 @@ type Model struct {
 	following bool // auto-scroll to the newest line as it streams (toggled by logs.follow)
 	filtering bool // whether the filter field is open and capturing text
 
+	// regex switches the grep from case-insensitive substring to case-insensitive
+	// regex (logs.regex, LOGS-03). re holds the last query that *compiled* in that
+	// mode and reBad marks that the query on screen is not it — together they are the
+	// degrade: a half-typed pattern keeps narrowing by the last good one instead of
+	// blanking the view, and the header says so (principle 3). re is nil when the
+	// mode is off, the query is empty, or nothing has compiled yet.
+	regex bool
+	re    *regexp.Regexp
+	reBad bool
+
+	// matched is the number of lines the current query kept, computed by render (the
+	// one place the buffer is scanned) so View never re-runs the match to label it.
+	matched int
+
 	active bool // whether the view is shown (captures input) — "" View when false
 	width  int  // full screen width
 	height int  // full screen height
@@ -82,7 +107,7 @@ func New(s styles.Styles) Model {
 	vp := viewport.New()
 	vp.MouseWheelEnabled = false
 	fi := textinput.New()
-	fi.Prompt = "/ "
+	fi.Prompt = promptSubstring
 	return Model{
 		styles:    s,
 		viewport:  vp,
@@ -99,11 +124,15 @@ func (m Model) Kind() string { return kind }
 func (m *Model) SetTitle(t string) { m.title = t }
 
 // Reset clears the buffer and filter and re-arms following, so opening the view over a
-// new object always starts clean and tailing regardless of a prior session.
+// new object always starts clean and tailing regardless of a prior session. The grep
+// mode resets with it: a new object's logs open on the plain substring grep, the mode
+// a reader who never touched logs.regex expects (the toggle is per-session, not sticky
+// across objects).
 func (m *Model) Reset() {
 	m.lines = m.lines[:0]
 	m.following = true
 	m.closeFilter()
+	m.setRegex(false)
 	m.render()
 }
 
@@ -131,6 +160,9 @@ func (m Model) Filtering() bool { return m.filtering }
 // Query is the current (raw) filter query, or "" when no filter is applied.
 func (m Model) Query() string { return m.filter.Value() }
 
+// Regex reports whether the grep is in regex mode (logs.regex, LOGS-03).
+func (m Model) Regex() bool { return m.regex }
+
 // Show reveals the view (it then captures input until Hide). Hide dismisses it and
 // closes any open filter so it reopens clean next time.
 func (m *Model) Show() { m.active = true }
@@ -157,8 +189,9 @@ func (m *Model) SetSize(w, h int) {
 // the viewport (vim nav + gg/G + half/full page, D10); any *upward* scroll pauses
 // following so the reader can look back without the stream yanking them to the bottom
 // (mirrors the shared viewer's M3-06 follow semantics, now inside the component).
-// app.filter opens the live grep; logs.follow toggles follow (re-enabling jumps to the
-// newest line); nav.back closes the filter if open, else closes the view (ClosedMsg).
+// app.filter opens the live grep; logs.regex switches that grep between substring and
+// regex matching (LOGS-03); logs.follow toggles follow (re-enabling jumps to the newest
+// line); nav.back closes the filter if open, else closes the view (ClosedMsg).
 // The view consumes actions, never raw keys (D11); an inactive view ignores everything.
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	if !m.active {
@@ -199,6 +232,12 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		if m.following {
 			m.viewport.GotoBottom()
 		}
+	case keymap.ActionLogsRegex:
+		// Toggling re-interprets the query already typed, so the shown set changes
+		// under the reader's cursor — deliberately: it is how you promote a substring
+		// grep you are mid-way through into a pattern without retyping it.
+		m.setRegex(!m.regex)
+		m.render()
 	case keymap.ActionBack:
 		// One esc clears an open filter (restoring the full stream); a second closes
 		// the view — the filter must never be lost by the same key that dismisses.
@@ -223,12 +262,15 @@ func (m Model) UpdateFilter(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.filter, cmd = m.filter.Update(msg)
+	m.compile()
 	m.render()
 	return m, cmd
 }
 
 // closeFilter clears and hides the filter field, restoring the full stream. Safe to
-// call when the filter is already closed. Does not re-render (callers do).
+// call when the filter is already closed. Does not re-render (callers do). The regex
+// *mode* survives (only Reset clears it); its compiled pattern does not, because the
+// query it came from is gone.
 func (m *Model) closeFilter() {
 	if !m.filtering {
 		return
@@ -236,29 +278,141 @@ func (m *Model) closeFilter() {
 	m.filtering = false
 	m.filter.Blur()
 	m.filter.Reset()
+	m.compile()
 	m.resizeViewport()
 }
 
-// shown returns the filtered lines (case-insensitive substring; LOGS-03 upgrades this
-// to optional regex) and how many matched, in stream order. An empty query matches all.
-func (m Model) shown() (string, int) {
+// setRegex switches the grep mode, re-points the field's prompt at the matching
+// indicator, and re-derives the compiled pattern from the query already typed.
+func (m *Model) setRegex(on bool) {
+	m.regex = on
+	if on {
+		m.filter.Prompt = promptRegex
+	} else {
+		m.filter.Prompt = promptSubstring
+	}
+	m.compile()
+}
+
+// compile re-derives the regex-mode pattern from the current query. A query that does
+// not compile leaves the last good pattern in place and raises reBad, so the view keeps
+// narrowing by something the reader chose rather than blanking every time a pattern is
+// half-typed (`err(` on the way to `err(or)?`) — principle 3. With no last good pattern
+// there is nothing to fall back to and the match set is empty, which the header labels.
+// Substring mode needs no compilation, so it clears both fields.
+func (m *Model) compile() {
+	if !m.regex || m.filter.Value() == "" {
+		m.re, m.reBad = nil, false
+		return
+	}
+	// Case-insensitive by default (D10's spirit: the common case needs no ceremony);
+	// an explicit (?-i) in the query still wins, since it is applied later.
+	re, err := regexp.Compile("(?i)" + m.filter.Value())
+	if err != nil {
+		m.reBad = true // keep m.re: the last good pattern still narrows.
+		return
+	}
+	m.re, m.reBad = re, false
+}
+
+// matcher is a compiled query: it reports the byte spans of a line that matched and
+// whether the line matched at all. The two are separate because a line can match
+// without being highlightable (see spanSubstring).
+type matcher func(line string) (spans [][]int, ok bool)
+
+// matcher builds the matcher for the current query and mode, or nil when the query
+// cannot match anything at all (regex mode with a query that has never compiled). The
+// caller handles the empty query before asking.
+func (m Model) matcher() matcher {
+	if m.regex {
+		re := m.re
+		if re == nil {
+			return nil
+		}
+		return func(line string) ([][]int, bool) {
+			sp := re.FindAllStringIndex(line, -1)
+			return sp, len(sp) > 0
+		}
+	}
 	q := strings.ToLower(m.filter.Value())
-	if q == "" {
+	return func(line string) ([][]int, bool) { return spanSubstring(line, q) }
+}
+
+// spanSubstring finds every case-insensitive occurrence of the (already lowercased)
+// query in line. Offsets come from the lowercased copy, so they only index the original
+// when folding preserved its byte length; for the rare fold that does not (ﬁ, İ), the
+// line still matches — the match is real — but is shown unhighlighted rather than
+// sliced at offsets that no longer line up.
+func spanSubstring(line, lowerQuery string) ([][]int, bool) {
+	low := strings.ToLower(line)
+	if len(low) != len(line) {
+		return nil, strings.Contains(low, lowerQuery)
+	}
+	var spans [][]int
+	for off := 0; off <= len(low)-len(lowerQuery); {
+		i := strings.Index(low[off:], lowerQuery)
+		if i < 0 {
+			break
+		}
+		spans = append(spans, []int{off + i, off + i + len(lowerQuery)})
+		off += i + len(lowerQuery)
+	}
+	return spans, len(spans) > 0
+}
+
+// highlight paints the matched spans of line with the Match style, leaving the rest as
+// it streamed. Spans arrive in order and non-overlapping (both FindAllStringIndex and
+// spanSubstring guarantee it); anything out of range or zero-width is skipped so a
+// pathological pattern (`x*`) can only fail to highlight, never corrupt the line.
+func (m Model) highlight(line string, spans [][]int) string {
+	if len(spans) == 0 {
+		return line
+	}
+	var b strings.Builder
+	last := 0
+	for _, s := range spans {
+		if s[0] < last || s[1] > len(line) || s[0] >= s[1] {
+			continue
+		}
+		b.WriteString(line[last:s[0]])
+		b.WriteString(m.styles.Match.Render(line[s[0]:s[1]]))
+		last = s[1]
+	}
+	b.WriteString(line[last:])
+	return b.String()
+}
+
+// shown returns the body to render — the matching lines in stream order, with their
+// matched spans highlighted — and how many matched. An empty query matches everything
+// and takes the untouched fast path: the whole buffer joined, no matcher built and no
+// highlighting done, so the unfiltered stream (the high-throughput case) costs exactly
+// what it did before LOGS-03.
+func (m Model) shown() (string, int) {
+	if m.filter.Value() == "" {
 		return strings.Join(m.lines, "\n"), len(m.lines)
+	}
+	match := m.matcher()
+	if match == nil {
+		return "", 0
 	}
 	kept := make([]string, 0, len(m.lines))
 	for _, l := range m.lines {
-		if strings.Contains(strings.ToLower(l), q) {
-			kept = append(kept, l)
+		spans, ok := match(l)
+		if !ok {
+			continue
 		}
+		kept = append(kept, m.highlight(l, spans))
 	}
 	return strings.Join(kept, "\n"), len(kept)
 }
 
 // render rebuilds the viewport content from the filtered buffer, keeping the newest
-// line pinned while following. Called on every append, filter change, and resize.
+// line pinned while following. Called on every append, filter/mode change, and resize.
+// It is the only place the buffer is scanned: the match count it records is what the
+// header reports, so View costs nothing beyond drawing.
 func (m *Model) render() {
-	content, _ := m.shown()
+	content, matched := m.shown()
+	m.matched = matched
 	m.viewport.SetContent(content)
 	if m.following {
 		m.viewport.GotoBottom()
@@ -307,17 +461,28 @@ func (m Model) View() string {
 }
 
 // header builds the one-line status bar: "<title>  [following]/[paused]  <matched/total>"
-// plus the active query, clipped to the screen width.
+// plus the active query, clipped to the screen width. Regex mode adds a `[re]` marker
+// (the field's own `re/` prompt is only visible while it is open), and a query that
+// does not compile is called out rather than left to look like a query that simply
+// matched nothing — the counts beside it are the last good pattern's (D145).
 func (m Model) header() string {
 	state := "[paused]"
 	if m.following {
 		state = "[following]"
 	}
 	seg := m.title + "  " + state
-	// Show the query and matched/total whenever a filter is narrowing the stream.
+	if m.regex {
+		seg += "  [re]"
+	}
+	// Show the query and matched/total whenever a filter is narrowing the stream. The
+	// invalid-query flag sits *before* the counts: the header is clipped from the right
+	// at narrow widths, and "the counts are not this query's" outranks the counts.
 	if q := m.filter.Value(); q != "" {
-		_, matched := m.shown()
-		seg += "  /" + q + "  " + itoa(matched) + "/" + itoa(len(m.lines))
+		seg += "  /" + q
+		if m.reBad {
+			seg += "  invalid regex"
+		}
+		seg += "  " + itoa(m.matched) + "/" + itoa(len(m.lines))
 	}
 	return m.styles.Header.Width(m.width).MaxWidth(m.width).Render(clip(seg, m.width))
 }

@@ -86,6 +86,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `logs.follow` | `f` | Toggle log follow (auto-scroll) in the logs viewer |
+| `logs.regex` | `ctrl+r` | Toggle regex matching for the logs filter |
 
 ## secret
 

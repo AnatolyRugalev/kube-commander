@@ -37,7 +37,7 @@ set, killing nearly all kubectl shell-outs.
 
 ## Exit criteria
 
-- [x] Logs/describe render in-TUI for the relevant kinds; no external pager needed. (logs cover pods + pod-owning kinds via a resolved backing pod, M3-05…07b/D112, and moved off the shared viewer into their own full-screen view with a live grep, LOGS-01/02/D144; describe M3-04. Object YAML unified into the View/Edit action — it opens in `$EDITOR`, not a standalone in-TUI viewer (D135/M3-15c) — so YAML is tracked by the Edit exit criterion below, not here.)
+- [x] Logs/describe render in-TUI for the relevant kinds; no external pager needed. (logs cover pods + pod-owning kinds via a resolved backing pod, M3-05…07b/D112, and moved off the shared viewer into their own full-screen view with a live substring/regex grep that highlights matches, LOGS-01/02/03/D144/D145; describe M3-04. Object YAML unified into the View/Edit action — it opens in `$EDITOR`, not a standalone in-TUI viewer (D135/M3-15c) — so YAML is tracked by the Edit exit criterion below, not here.)
 - [x] Secret contents viewable with explicit reveal + copy. (reveal/decode masked on open, `secret.reveal`/`r`, M3-08a/D113; per-entry cursor + `secret.copy`/`c` OSC-52 clipboard yank, M3-08b/D114)
 - [x] Each workload action works with a confirmation step and reports success/failure to the status bar. (delete M3-09/D115; scale prompt + rollout-restart confirm M3-10/D117; cordon/uncordon M3-11a — direct, no confirm since idempotent, D120; drain M3-11b — confirm + streamed eviction progress, D121; CronJob suspend/resume M3-12 — direct, no confirm since idempotent, D120)
 - [x] Port-forwards run in background, are listed, and stop cleanly on exit.

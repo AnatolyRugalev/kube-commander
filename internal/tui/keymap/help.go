@@ -91,13 +91,15 @@ const (
 // closed it honours every key it advertises, `q` included (quit closes the view, as it
 // does in any pager). With the grep open the field captures text, so `/` `f` and `q`
 // type a character — those drop out, leaving the no-text keys that still act: scroll,
-// and esc to clear the grep. Neither context offers help: the view swallows it.
+// esc to clear the grep, and the regex toggle (LOGS-03), which is bound to a no-text
+// chord precisely so it survives the open field and so is hinted in *both* logs
+// contexts. Neither context offers help: the view swallows it.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionBack},
-	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionBack, ActionQuit},
-	HelpLogsFilter: {ActionDown, ActionUp, ActionBack},
+	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionBack, ActionQuit},
+	HelpLogsFilter: {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

@@ -157,6 +157,11 @@ func TestShortHelpContext(t *testing.T) {
 			t.Errorf("%q is typed into the open logs grep, not honoured — it must not be hinted", a)
 		}
 	}
+	// The regex toggle carries no text, so unlike follow/quit it survives the open grep
+	// and belongs in *both* logs contexts (LOGS-03).
+	if !logsFilter[ActionLogsRegex.Describe()] || !descs(hm.ShortHelpContext(HelpLogs))[ActionLogsRegex.Describe()] {
+		t.Error("logs.regex acts in both logs states and should be hinted in both")
+	}
 
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})

@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-25 — LOGS-02 done: `res.logs` now streams into the dedicated full-screen logs view with its live grep and the shared viewer is one-shot-content-only (D144), leaving LOGS-03 (regex + highlight) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit dogfood human-task still open (advisory); a logs-throughput dogfood raised. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-25 — LOGS-03 done: the logs grep now reads as substring or regex (`ctrl+r`) with matched spans highlighted and an uncompilable pattern degrading to the last good one (D145), leaving LOGS-04 (long-line/throughput nice-to-haves) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-03** Regex filter mode + match highlighting
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (LOGS triage, D134) | claimed: 2026-07-25
-      notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
-      regex degrades to no-match/last-good, principle 3) and highlight matched spans in the
-      shown lines. Depends on LOGS-01. Keep the unfiltered render path untouched (the
-      throughput human-task suspects it); the toggle must be a registered, rebindable action
-      that survives the open grep (D11/D143).
+_(none)_
 
 ## Blocked
 
@@ -119,9 +113,10 @@ indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wi
 retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
 nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
 
-LOGS-01 (component) and LOGS-02 (wiring) are both done, so the dedicated logs view is
-live on `res.logs` and the shared viewer no longer has a logs mode (D144); the remaining
-slices refine the view itself.
+LOGS-01 (component), LOGS-02 (wiring) and LOGS-03 (regex + highlighting) are done, so the
+dedicated logs view is live on `res.logs`, the shared viewer no longer has a logs mode
+(D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
+the LOGS-04 nice-to-haves are left in this line.
 
 - [ ] **LOGS-04** Long-line + throughput nice-to-haves: wrap toggle / horizontal scroll, timestamps toggle, jump-to-latest
       status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
@@ -132,6 +127,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **LOGS-03** Regex grep mode + match highlighting in the logs view — `logs.regex` (`ctrl+r`, a no-text chord so it still fires while the grep field is open) re-reads the query as a case-insensitive regex, matched spans are painted with a new shared `styles.Match` role in either mode, an uncompilable pattern keeps narrowing by the last good one and the header says `invalid regex`, and the unfiltered render path stays match-work-free (plus one pre-existing double scan removed) — done 2026-07-25 (D145)
 - [x] **LOGS-02** Wire `res.logs` to the dedicated logs view — retired the shared-viewer logs path (`streamLogsInto`/`syncLogViewerTitle`/`logFollow`/`logTitle`/`viewerKindLogs`/`isScrollUp`) for `internal/tui/logs.go`: logs stream full-screen into the LOGS-01 component with its live grep (`/` narrows while following), follow/pause and the grep live in the view not the shell, the container picker (M3-07a) + pod-owning resolution (M3-07b) still feed it on the same `viewerGen`, plus `HelpLogs`/`HelpLogsFilter` hint contexts; logs-throughput dogfood raised — done 2026-07-25 (D144)
 - [x] **SEARCH-03b** Search progress + cap surfacing: the searchview header reports `searching N/M kinds…` (fed from `SearchKindDone`, silent on a failed kind) and `first 200 matches — narrow the query` (from `SearchDone{Capped}`), reset with the results they describe; plus a `keymap.HelpSearch` hint context so the bottom hint stops advertising the six text keys the always-open query field swallows — done 2026-07-25 (D143)
 - [x] **SEARCH-03a** Search progress/completion signal in the kube layer: `kube.Search`'s channel item widened from `SearchHit` to a typed `SearchEvent` (`SearchMatch` · one `SearchKindDone` per requested kind, `Failed` only for a genuine List error · terminal `SearchDone{Capped}`), TUI pump adapted (`SearchEventMsg`) with the close still the single teardown point — no surfacing yet — done 2026-07-25 (D142)

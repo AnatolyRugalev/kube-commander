@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/logsview"
@@ -18,6 +19,15 @@ import (
 
 // filterKey is the default app.filter key (`/`) — the logs view's live grep.
 var filterKey = tea.Key{Code: '/', Text: "/"}
+
+// regexKey is the default logs.regex chord (`ctrl+r`) — the grep's mode toggle. It
+// carries no text on purpose, which is what lets it act while the grep field is open.
+var regexKey = tea.Key{Code: 'r', Mod: tea.ModCtrl}
+
+// frame is the rendered screen with styling removed. LOGS-03 highlights matched spans,
+// so a matching line is no longer a contiguous run of bytes in the frame — content
+// assertions have to strip first.
+func frame(m Model) string { return ansi.Strip(m.View().Content) }
 
 // openLogsWithLines opens the logs view over a pod row and streams the given lines
 // into it, returning the model with the view up and following.
@@ -58,7 +68,7 @@ func TestLogsGrepNarrowsStreamedLines(t *testing.T) {
 	if q := m.logsView.Query(); q != "500" {
 		t.Fatalf("the grep query = %q, want 500", q)
 	}
-	view := m.View().Content
+	view := frame(m)
 	if !strings.Contains(view, "POST /api/v1 500") {
 		t.Fatalf("the matching line should stay on screen: %q", view)
 	}
@@ -74,7 +84,7 @@ func TestLogsGrepNarrowsStreamedLines(t *testing.T) {
 	if m.logsView.Filtering() {
 		t.Fatal("esc should close the grep field")
 	}
-	if view := m.View().Content; !strings.Contains(view, "/healthz") {
+	if view := frame(m); !strings.Contains(view, "/healthz") {
 		t.Fatalf("clearing the grep should restore the full stream: %q", view)
 	}
 	if !m.logsView.Active() {
@@ -100,6 +110,45 @@ func TestLogsGrepSwallowsTextKeys(t *testing.T) {
 	}
 	if m.logsView.Following() != following {
 		t.Fatal("`f` typed into the grep must not toggle follow")
+	}
+}
+
+// TestLogsRegexToggleSurvivesOpenGrep proves the routing consequence of LOGS-03: the
+// regex toggle is bound to a no-text chord (`ctrl+r`), so unlike `f` or `q` it still
+// fires *while the grep field is open* — which is where a reader actually decides their
+// substring is really a pattern. It works with the grep closed too (the sequencer path).
+func TestLogsRegexToggleSurvivesOpenGrep(t *testing.T) {
+	m := openLogsWithLines(t, "GET /healthz 200", "POST /api/v1 500")
+
+	// With the grep closed the key goes through the sequencer like any browse key.
+	m, _ = press(t, m, regexKey)
+	if !m.logsView.Regex() {
+		t.Fatal("logs.regex with the grep closed should turn regex mode on")
+	}
+	m, _ = press(t, m, regexKey)
+	if m.logsView.Regex() {
+		t.Fatal("a second logs.regex should turn it back off")
+	}
+
+	// With the grep open it carries no text, so it is routed as an action, not typed.
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "200|500")
+	if view := frame(m); strings.Contains(view, "/healthz") {
+		t.Fatalf("as a literal substring `200|500` matches nothing: %q", view)
+	}
+	m, _ = press(t, m, regexKey)
+	if !m.logsView.Regex() {
+		t.Fatal("logs.regex must still fire while the grep field is open")
+	}
+	if q := m.logsView.Query(); q != "200|500" {
+		t.Fatalf("the toggle must not type into the grep; query = %q", q)
+	}
+	view := frame(m)
+	if !strings.Contains(view, "/healthz") || !strings.Contains(view, "/api/v1") {
+		t.Fatalf("the same query read as a pattern should match both lines: %q", view)
+	}
+	if !strings.Contains(view, "2/2") {
+		t.Fatalf("the header should re-count under the new mode: %q", view)
 	}
 }
 
