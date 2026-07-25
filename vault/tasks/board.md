@@ -7,7 +7,13 @@ _Last updated: 2026-07-25 — LOGS-02 done: `res.logs` now streams into the dedi
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-03** Regex filter mode + match highlighting
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (LOGS triage, D134) | claimed: 2026-07-25
+      notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
+      regex degrades to no-match/last-good, principle 3) and highlight matched spans in the
+      shown lines. Depends on LOGS-01. Keep the unfiltered render path untouched (the
+      throughput human-task suspects it); the toggle must be a registered, rebindable action
+      that survives the open grep (D11/D143).
 
 ## Blocked
 
@@ -117,11 +123,6 @@ LOGS-01 (component) and LOGS-02 (wiring) are both done, so the dedicated logs vi
 live on `res.logs` and the shared viewer no longer has a logs mode (D144); the remaining
 slices refine the view itself.
 
-- [ ] **LOGS-03** Regex filter mode + match highlighting
-      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
-      notes: Toggle the LOGS-01 substring filter to a regex (case-insensitive default; invalid
-      regex degrades to no-match/last-good, principle 3) and highlight matched spans in the
-      shown lines. Depends on LOGS-01.
 - [ ] **LOGS-04** Long-line + throughput nice-to-haves: wrap toggle / horizontal scroll, timestamps toggle, jump-to-latest
       status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
       notes: The feedback's explicit "later, don't block" list. Depends on LOGS-01.
