@@ -816,7 +816,7 @@ type Model struct {
 	// watch's first RESET lands, so the watch pump applies the selection when it does.
 	// All are touched only from the single-threaded update loop.
 	searcher        Searcher
-	searchCh        <-chan kube.SearchHit
+	searchCh        <-chan kube.SearchEvent
 	searchCancel    context.CancelFunc
 	searchGen       int
 	searchTarget    kube.ObjectRef

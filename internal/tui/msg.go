@@ -148,13 +148,15 @@ func logPump(ch <-chan kube.LogEvent) tea.Cmd {
 	}
 }
 
-// SearchHitMsg is one object matched by a cluster-search fan-out (SEARCH-02b),
-// carried into the update loop verbatim from kube.Search's channel. A search has no
-// error channel — a per-kind List failure is swallowed by the kube layer and simply
-// contributes nothing (D131 pt 3) — so a consumer only ever sees hits and the
-// terminal SearchClosedMsg.
-type SearchHitMsg struct {
-	Hit kube.SearchHit
+// SearchEventMsg is one event from a cluster-search fan-out (SEARCH-02b), carried
+// into the update loop verbatim from kube.Search's channel: a match, a kind that
+// finished (the progress signal), or the terminal done-with-cap-reason
+// (SEARCH-03a). A search has no error channel — a per-kind List failure is
+// swallowed by the kube layer into SearchKindDone{Failed} and simply contributes
+// nothing (D131 pt 3) — so a consumer only ever sees events and the terminal
+// SearchClosedMsg.
+type SearchEventMsg struct {
+	Event kube.SearchEvent
 }
 
 // SearchClosedMsg tells the model a Search channel has closed and the pump has
@@ -163,19 +165,19 @@ type SearchHitMsg struct {
 // must not re-issue the pump after it.
 type SearchClosedMsg struct{}
 
-// searchPump reads one hit from a kube.Search channel and returns it as a
-// SearchHitMsg, or SearchClosedMsg when the channel closes. The model re-issues it
-// after each hit to pull the next (one receive per Cmd, M2-02/D53) and stops on the
+// searchPump reads one event from a kube.Search channel and returns it as a
+// SearchEventMsg, or SearchClosedMsg when the channel closes. The model re-issues it
+// after each event to pull the next (one receive per Cmd, M2-02/D53) and stops on the
 // close, so results stream into the view as each kind returns rather than landing in
 // one batch at the end. The whole receive happens inside the returned tea.Cmd, off
 // the update goroutine.
-func searchPump(ch <-chan kube.SearchHit) tea.Cmd {
+func searchPump(ch <-chan kube.SearchEvent) tea.Cmd {
 	return func() tea.Msg {
-		hit, ok := <-ch
+		ev, ok := <-ch
 		if !ok {
 			return SearchClosedMsg{}
 		}
-		return SearchHitMsg{Hit: hit}
+		return SearchEventMsg{Event: ev}
 	}
 }
 

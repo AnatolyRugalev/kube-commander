@@ -3530,3 +3530,27 @@ silently contradict:**
    always open (D140 pt 1), so any text-carrying default would type instead of firing;
    app.quit's chord closes the search view rather than the app (the help/viewer
    precedent), and `q` types a `q`.
+
+### D142 — `kube.Search` streams typed `SearchEvent`s: one kind-done per requested kind, a terminal done that names the cap, and the close as the only teardown
+**2026-07-25** (SEARCH-03a). A bare hit channel could not express *how far along* a
+search was or *why it stopped* — the close meant "finished", "capped", and "cancelled"
+alike (D131 pt 4). The channel item is therefore widened once, and these are the
+guarantees a consumer may build on:
+
+1. **Three event types, one channel.** `SearchMatch` (a hit), `SearchKindDone` (a kind
+   finished), `SearchDone` (terminal). One stream, so a consumer keeps one pump (D53) and
+   one staleness clock (D141 pt 3); no second channel to select on.
+2. **Exactly one `SearchKindDone` per resource passed in** — including a kind whose List
+   failed or was cut short — so `N / len(resources)` is a progress fraction that always
+   completes. Per-kind failure stays silent (D131 pt 3): `Failed` is informational and
+   set **only** for a genuine List error, never for the cap's or the caller's
+   cancellation, so a "kinds failed" surface can never over-count.
+3. **`SearchDone{Capped}` is the only truthful cap signal.** `Capped` means *matches were
+   truncated*, not *limit matches were emitted*: a search whose hits exactly fill the cap
+   is exhaustive. Do not infer a cap from counting hits against the limit.
+4. **The channel close remains the single teardown point.** `SearchDone` is a fact about
+   the search, not a lifecycle event: a consumer must not stop pumping on it (the close
+   comes next). One teardown path however the search ended.
+5. **Cancelled ⇒ silent.** Once the caller's ctx is cancelled nothing further is emitted,
+   terminal event included; `sendEvent` pre-checks `ctx.Err()` because a buffered channel
+   plus a done ctx makes a bare `select` deliver at random.

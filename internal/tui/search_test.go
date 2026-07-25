@@ -18,11 +18,13 @@ import (
 var searchKey = tea.Key{Code: 's', Mod: tea.ModCtrl}
 
 // fakeSearcher is a hermetic Searcher: it records what each query asked for and hands
-// back a channel preloaded with the configured hits (closed unless keepOpen, so a test
-// can assert either the streaming/completion path or the cancellation path). The
-// contexts are kept so a test can assert a fan-out was torn down.
+// back a channel preloaded with the configured hits as SearchMatch events, then any
+// extra events (progress / terminal, SEARCH-03a), closed unless keepOpen so a test can
+// assert either the streaming/completion path or the cancellation path. The contexts
+// are kept so a test can assert a fan-out was torn down.
 type fakeSearcher struct {
 	hits     []kube.SearchHit
+	events   []kube.SearchEvent
 	keepOpen bool
 
 	calls    int
@@ -33,16 +35,19 @@ type fakeSearcher struct {
 	gotLimit int
 }
 
-func (f *fakeSearcher) Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchHit {
+func (f *fakeSearcher) Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchEvent {
 	f.calls++
 	f.ctxs = append(f.ctxs, ctx)
 	f.gotRes = resources
 	f.gotNS = namespace
 	f.gotQuery = query
 	f.gotLimit = limit
-	ch := make(chan kube.SearchHit, len(f.hits)+1)
+	ch := make(chan kube.SearchEvent, len(f.hits)+len(f.events)+1)
 	for _, h := range f.hits {
-		ch <- h
+		ch <- kube.SearchEvent{Type: kube.SearchMatch, Hit: h}
+	}
+	for _, ev := range f.events {
+		ch <- ev
 	}
 	if !f.keepOpen {
 		close(ch)
@@ -272,6 +277,47 @@ func TestSearchHitsStreamIn(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("the streamed results should render %q: %q", want, view)
 		}
+	}
+}
+
+// TestSearchProgressEventsPumpThrough proves the widened stream (SEARCH-03a) keeps the
+// pump chain intact: a kind-completion and the terminal done event are neither appended
+// as results nor mistaken for the end of the stream — the channel close stays the single
+// teardown point, so SEARCH-03b can count them without touching the lifecycle.
+func TestSearchProgressEventsPumpThrough(t *testing.T) {
+	s := &fakeSearcher{
+		hits: []kube.SearchHit{searchHit("Pod", "pods", "web", "api-1")},
+		events: []kube.SearchEvent{
+			{Type: kube.SearchKindDone, Resource: kindResource("pods", "Pod")},
+			{Type: kube.SearchDone, Capped: true},
+		},
+	}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+	next, pump := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+
+	// hit → kind-done → terminal done: every one re-issues the pump, only the hit
+	// lands in the result list.
+	for i, want := range []int{1, 1, 1} {
+		if pump == nil {
+			t.Fatalf("event %d should have a pump command", i+1)
+		}
+		next, pump = m.Update(pump().(searchMsg))
+		m = next.(Model)
+		if got := m.searchView.Len(); got != want {
+			t.Fatalf("after event %d the view should hold %d result(s), got %d", i+1, want, got)
+		}
+	}
+	if !m.searchView.Searching() {
+		t.Fatal("the terminal event is not the teardown — the close is (indicator still in flight)")
+	}
+	next, done := m.Update(pump().(searchMsg))
+	if done != nil {
+		t.Fatal("the closed channel must end the pump chain")
+	}
+	if next.(Model).searchView.Searching() {
+		t.Fatal("the close should clear the in-flight indicator")
 	}
 }
 

@@ -20,8 +20,59 @@ type SearchHit struct {
 	Ref      ObjectRef
 }
 
+// SearchEventType discriminates the messages a search streams. A consumer
+// switches on it; every other SearchEvent field is only meaningful for the type
+// that documents it.
+type SearchEventType int
+
+const (
+	// SearchMatch carries one matched object in Hit.
+	SearchMatch SearchEventType = iota
+	// SearchKindDone reports that Resource has finished being searched — it
+	// listed and was scanned, its List failed (Failed set), or the cap/a
+	// cancellation cut it short. Exactly one is emitted per resource passed to
+	// Search, so counting them against len(resources) is the progress signal
+	// ("searching N/M kinds…"). It says nothing about how many hits that kind
+	// contributed.
+	SearchKindDone
+	// SearchDone is the terminal event: the fan-out is over and no further event
+	// follows before the channel closes. Capped tells the consumer *why* it
+	// stopped — the hit cap, rather than exhausting every kind — which the close
+	// alone cannot distinguish. It is not emitted once the caller's ctx is
+	// cancelled: an abandoned search reports nothing, it just closes.
+	SearchDone
+)
+
+// SearchEvent is one message from a cluster search. Type selects which of the
+// remaining fields is set: Hit for SearchMatch, Resource/Failed for
+// SearchKindDone, Capped for SearchDone.
+//
+// The stream is widened past bare hits so a consumer can distinguish progress
+// from completion and a capped search from an exhaustive one (SEARCH-03) — the
+// channel close on its own can express neither.
+type SearchEvent struct {
+	Type SearchEventType
+
+	// Hit is the matched object (SearchMatch only).
+	Hit SearchHit
+
+	// Resource is the kind that finished (SearchKindDone only).
+	Resource Resource
+	// Failed marks a kind whose List errored, so it contributed nothing
+	// (SearchKindDone only). A List cut short by the cap or by ctx cancellation
+	// is not Failed. Informational: per-kind failure is silent by default
+	// (D131 pt 3) and must not abort or degrade the rest of the search.
+	Failed bool
+
+	// Capped marks a search stopped by the hit cap rather than by exhausting
+	// every kind (SearchDone only) — there were more matches than were emitted.
+	// A search that emits exactly limit hits with nothing left over is not
+	// Capped.
+	Capped bool
+}
+
 // searchChanBuffer bounds how far the fan-out may run ahead of a slow consumer.
-// Hits are tiny and the consumer is a Bubble Tea Update, so a modest buffer
+// Events are tiny and the consumer is a Bubble Tea Update, so a modest buffer
 // absorbs bursts (many kinds returning at once) without unbounded growth.
 const searchChanBuffer = 64
 
@@ -33,10 +84,10 @@ type rowLister interface {
 }
 
 // Search fans out a one-shot, cancellable name search across resources in
-// namespace and streams matching objects onto the returned channel. Each kind is
+// namespace and streams SearchEvents onto the returned channel. Each kind is
 // listed concurrently (reusing the server-side Table List, M1-05a); a row whose
 // object name contains query (case-insensitive substring) is emitted as a
-// SearchHit. A cluster-scoped kind ignores namespace (listed cluster-wide).
+// SearchMatch. A cluster-scoped kind ignores namespace (listed cluster-wide).
 //
 // This is a one-shot query, NOT a watch: it lists each kind exactly once and
 // never re-lists. Cross-type enumeration is the expensive work the fast-cold-
@@ -46,46 +97,64 @@ type rowLister interface {
 //
 // Behaviour a consumer can rely on:
 //   - Per-kind failure isolation: a denied or broken kind contributes nothing and
-//     never aborts the search (principle 3) — its List error is swallowed.
+//     never aborts the search (principle 3) — its List error is swallowed into
+//     SearchKindDone{Failed: true}.
+//   - Progress: exactly one SearchKindDone per resource, so N/len(resources) is a
+//     progress fraction.
 //   - Cap: at most limit hits are emitted (limit <= 0 means no cap); once the cap
-//     is reached the still-running lists are cancelled.
+//     is reached the still-running lists are cancelled and the terminal
+//     SearchDone reports Capped.
 //   - Cancellation: the channel is closed when every kind has been searched, the
 //     cap is reached, or ctx is cancelled. A background goroutine owns all sends,
 //     so consumer state is only ever mutated in its own Update.
-func (c *Clients) Search(ctx context.Context, resources []Resource, namespace, query string, limit int) <-chan SearchHit {
+func (c *Clients) Search(ctx context.Context, resources []Resource, namespace, query string, limit int) <-chan SearchEvent {
 	return searchRows(ctx, c, resources, namespace, query, limit)
 }
 
 // searchRows is the injectable core of Search: it takes a rowLister (real or
 // fake) so the concurrent fan-out, matching, cap, and per-kind fault isolation
 // are testable without a live apiserver (D18), mirroring the getTable/List split.
-func searchRows(ctx context.Context, lister rowLister, resources []Resource, namespace, query string, limit int) <-chan SearchHit {
-	out := make(chan SearchHit, searchChanBuffer)
+func searchRows(ctx context.Context, lister rowLister, resources []Resource, namespace, query string, limit int) <-chan SearchEvent {
+	out := make(chan SearchEvent, searchChanBuffer)
 	go func() {
 		defer close(out)
 
 		// A local child context so reaching the cap can cancel the sibling
-		// lists without disturbing the caller's ctx.
+		// lists without disturbing the caller's ctx. Sends are guarded by the
+		// caller's ctx (outer), not this one: the cap cancels the *listing*, but
+		// the progress and terminal events it produces must still reach the
+		// consumer — only the caller walking away stops delivery.
+		outer := ctx
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
 		needle := strings.ToLower(query)
 		var (
-			wg   sync.WaitGroup
-			mu   sync.Mutex
-			sent int
+			wg     sync.WaitGroup
+			mu     sync.Mutex
+			sent   int
+			capped bool
 		)
 		for _, r := range resources {
 			wg.Add(1)
 			go func(r Resource) {
-				defer wg.Done()
+				done := SearchEvent{Type: SearchKindDone, Resource: r}
+				defer func() {
+					sendEvent(outer, out, done)
+					wg.Done()
+				}()
+
 				ns := namespace
 				if !r.Namespaced {
 					ns = "" // cluster-scoped: namespace does not apply
 				}
 				tbl, err := lister.List(ctx, r, ns, metav1.ListOptions{})
 				if err != nil || tbl == nil {
-					return // per-kind failure degrades to no contribution
+					// A List aborted because the cap (or the caller) cancelled
+					// the context is not a failing kind — only a genuine List
+					// error is, and it degrades to no contribution.
+					done.Failed = ctx.Err() == nil
+					return
 				}
 				for _, row := range tbl.Rows {
 					name := row.Object.Name
@@ -99,6 +168,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					// concurrent kinds; the send itself happens off-lock.
 					mu.Lock()
 					if limit > 0 && sent >= limit {
+						capped = true
 						mu.Unlock()
 						cancel() // cap reached — stop the other in-flight lists
 						return
@@ -106,22 +176,36 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					sent++
 					mu.Unlock()
 
-					if !sendHit(ctx, out, SearchHit{Resource: r, Ref: row.Object}) {
+					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{Resource: r, Ref: row.Object}}
+					if !sendEvent(outer, out, hit) {
 						return
 					}
 				}
 			}(r)
 		}
 		wg.Wait()
+
+		mu.Lock()
+		stoppedAtCap := capped
+		mu.Unlock()
+		sendEvent(outer, out, SearchEvent{Type: SearchDone, Capped: stoppedAtCap})
 	}()
 	return out
 }
 
-// sendHit delivers h on out unless ctx is cancelled first; it returns false when
-// the send is abandoned so the producing goroutine can unwind promptly.
-func sendHit(ctx context.Context, out chan<- SearchHit, h SearchHit) bool {
+// sendEvent delivers ev on out unless ctx is cancelled first; it returns false
+// when the send is abandoned so the producing goroutine can unwind promptly.
+//
+// The explicit pre-check matters: out is buffered, so with a cancelled ctx *both*
+// select arms are ready and the runtime would pick one at random — a cancelled
+// search would emit events (including the terminal one) roughly half the time.
+// Checking first makes "cancelled ⇒ nothing more is emitted" hold.
+func sendEvent(ctx context.Context, out chan<- SearchEvent, ev SearchEvent) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	select {
-	case out <- h:
+	case out <- ev:
 		return true
 	case <-ctx.Done():
 		return false

@@ -34,12 +34,12 @@ const searchHitLimit = 200
 const searchDebounce = 250 * time.Millisecond
 
 // Searcher runs a one-shot, cancellable cluster search over the given kinds and
-// streams the matches back (kube.Clients implements it via Search). It is the
-// narrow seam the search mini-app needs, injected with WithSearcher — nil leaves the
-// model search-inert (the search.cluster action never opens the view), exactly as a
-// nil watcher leaves it watch-inert.
+// streams the matches — and its own progress (SEARCH-03a) — back (kube.Clients
+// implements it via Search). It is the narrow seam the search mini-app needs,
+// injected with WithSearcher — nil leaves the model search-inert (the search.cluster
+// action never opens the view), exactly as a nil watcher leaves it watch-inert.
 type Searcher interface {
-	Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchHit
+	Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchEvent
 }
 
 // WithSearcher wires the cluster-search client (nil → search-inert).
@@ -194,20 +194,28 @@ func (m Model) pumpSearch(gen int) tea.Cmd {
 	return func() tea.Msg { return searchMsg{gen: gen, msg: pump()} }
 }
 
-// handleSearchMsg folds one pumped hit into the view and re-issues the pump to pull
+// handleSearchMsg folds one pumped event into the view and re-issues the pump to pull
 // the next — the one-receive-per-Cmd loop that keeps Update from ever blocking
 // (M2-02/D53), which is also what makes results appear kind by kind instead of all at
 // once. A message from a superseded query, or one arriving after the view closed, is
 // dropped and its chain stops. The closed channel ends the fan-out: the in-flight
 // indicator clears, leaving the hits on screen (the view says "no matches" itself when
 // there were none, D140 pt 5).
+//
+// A match is appended; the progress and terminal events (SEARCH-03a) are pumped
+// through but not yet rendered — SEARCH-03b counts them into the "searching N/M
+// kinds…" line and the cap state. The terminal SearchDone is deliberately *not*
+// treated as the end of the stream: the channel close remains the single point where
+// the pump chain stops, so there is one teardown path however the search ended.
 func (m Model) handleSearchMsg(s searchMsg) (tea.Model, tea.Cmd) {
 	if s.gen != m.searchGen || !m.searchView.Active() {
 		return m, nil
 	}
 	switch inner := s.msg.(type) {
-	case SearchHitMsg:
-		m.searchView.AppendHit(inner.Hit)
+	case SearchEventMsg:
+		if inner.Event.Type == kube.SearchMatch {
+			m.searchView.AppendHit(inner.Event.Hit)
+		}
 		return m, m.pumpSearch(s.gen)
 	case SearchClosedMsg:
 		m.stopSearch()
