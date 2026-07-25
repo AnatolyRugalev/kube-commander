@@ -7,7 +7,9 @@ _Last updated: 2026-07-24 — SEARCH-02a done: the cluster-search view component
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-02b** Search mini-app **app wiring** + `search.cluster` action
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 | claimed: 2026-07-25
+      notes: see the SEARCH section below for the full item.
 
 ## Blocked
 
@@ -96,7 +98,7 @@ app wiring (**SEARCH-02b**), mirroring LOGS-01 → LOGS-02.
 - [ ] **SEARCH-02b** Search mini-app **app wiring** + `search.cluster` action: a registered
       key (D11) opens the SEARCH-02a view; `enter` drills into the selected hit (switch
       browse to that kind + select the row); `esc` closes. Message-only (principle 1).
-      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-24 (SEARCH triage, D131) | claimed: 2026-07-25
       notes: Wire `kube.Search` (SEARCH-01) over `CommonSearchResources(discovered)` in the
       current namespace behind a `Searcher` seam (`WithSearcher`, nil → search-inert); run
       the fan-out off the update loop, stream hits in via a gen-tagged pump (like the log
