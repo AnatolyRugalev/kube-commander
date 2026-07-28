@@ -11,7 +11,9 @@
 // header's fan-out state (StartProgress/MarkKindDone/SetCapped → "searching N/M kinds…"
 // and the cap line), still push-only: the counters are fed from kube's SearchKindDone /
 // SearchDone{Capped} events (D142) by the wiring, and reset here whenever the results
-// they describe are dropped. The scope widen (SEARCH-04) is a later slice.
+// they describe are dropped. SEARCH-04a added the kind-scope widen: the view holds the
+// all-kinds flag, names it in the header while it is on, and emits ScopeChangedMsg so
+// the wiring re-runs the query over the wider set — it still resolves no kinds itself.
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -61,6 +63,20 @@ type SelectedMsg struct {
 // Kind mirrors the other components' ClosedMsg shape so the root routes them uniformly.
 type ClosedMsg struct {
 	Kind string
+}
+
+// ScopeChangedMsg is emitted when the user changes *what* a query covers rather than
+// the query itself (SEARCH-04a): today the all-kinds widen. It carries the new scope
+// state so the wiring can pick the kind set and re-run the current query — the view
+// has already dropped the hits belonging to the narrower scope, exactly as a query
+// change does, because those results no longer describe what the header says.
+//
+// It is a separate message from QueryChangedMsg because the two mean different things
+// to a consumer that cares: the query is still whatever the reader typed, so the field
+// must not be re-read or reset, only re-run.
+type ScopeChangedMsg struct {
+	Kind     string
+	AllKinds bool
 }
 
 // QueryChangedMsg is emitted whenever the query text actually changes — including the
@@ -115,6 +131,12 @@ type Model struct {
 	query  textinput.Model // always focused while the view is active
 	list   list.Model
 	scope  string // human label for what is being searched (e.g. a namespace), header only
+
+	// allKinds is the kind-scope widen (SEARCH-04a): false searches the curated
+	// default set, true every discovered kind. The view only holds and announces the
+	// flag — which kinds that actually resolves to is the wiring's business, since it
+	// is the side that knows what discovery found.
+	allKinds bool
 
 	// hits is the authoritative result set in arrival order; the list is rebuilt from
 	// it on every append so labels stay column-aligned as new kinds stream in.
@@ -186,16 +208,24 @@ func (m *Model) Hide() {
 // Active reports whether the view is shown and capturing input.
 func (m Model) Active() bool { return m.active }
 
-// Reset clears the query, the results, and the in-flight indicator so the next open
-// starts clean.
+// Reset clears the query, the results, the in-flight indicator and the all-kinds widen
+// so the next open starts clean. The widen is deliberately *not* sticky across opens: it
+// is the expensive scope, and a mode left on from a search two minutes ago would make the
+// next `ctrl+s` quietly sweep the whole cluster. It survives within one open — a reader
+// refining a query under it keeps it — which is the span it belongs to.
 func (m *Model) Reset() {
 	m.query.Reset()
 	m.clearHits()
 	m.searching = false
+	m.allKinds = false
 }
 
 // Query is the current query text.
 func (m Model) Query() string { return m.query.Value() }
+
+// AllKinds reports whether the kind scope is widened to every discovered kind. The
+// wiring reads it when it picks the kind set for a query.
+func (m Model) AllKinds() bool { return m.allKinds }
 
 // SetSearching records whether a search is in flight (shown in the header). The wiring
 // sets it when it launches a query and clears it when the fan-out completes.
@@ -263,7 +293,8 @@ func (m Model) Selected() (kube.SearchHit, bool) {
 
 // Update handles a resolved keymap action while the view is active. Navigation moves
 // the result cursor (bubbles/list manages pagination); nav.drillIn emits SelectedMsg
-// for the highlighted hit; nav.back clears a non-empty query first (dropping its
+// for the highlighted hit; search.allKinds flips the kind-scope widen and emits
+// ScopeChangedMsg; nav.back clears a non-empty query first (dropping its
 // results and emitting QueryChangedMsg{""} so the wiring cancels the in-flight search)
 // and only closes the view (ClosedMsg) on a second press — one esc must never lose both
 // the query and the view. The view consumes actions, never raw keys (D11); an inactive
@@ -291,6 +322,15 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, func() tea.Msg { return SelectedMsg{Kind: kind, Hit: h} }
+	case keymap.ActionSearchAllKinds:
+		// The widen changes what the current query means, so the hits it produced
+		// under the narrower scope go with it — clearHits also drops the progress
+		// counters and the cap flag, which described that fan-out. An empty query
+		// still toggles: the reader is choosing the scope before typing, and the
+		// header says so immediately.
+		m.allKinds = !m.allKinds
+		m.clearHits()
+		return m, scopeChanged(m.allKinds)
 	case keymap.ActionBack:
 		if m.query.Value() != "" {
 			m.query.Reset()
@@ -330,10 +370,17 @@ func queryChanged(q string) tea.Cmd {
 	return func() tea.Msg { return QueryChangedMsg{Kind: kind, Query: q} }
 }
 
+// scopeChanged builds the ScopeChangedMsg command for the new widen state.
+func scopeChanged(allKinds bool) tea.Cmd {
+	return func() tea.Msg { return ScopeChangedMsg{Kind: kind, AllKinds: allKinds} }
+}
+
 // clearHits drops every result and rewinds the cursor. It also drops the progress
 // counters and the cap flag: they describe the fan-out that produced those results, so
-// they go stale at exactly the same moment (a query change, nav.back's clear, Reset) —
-// keeping the reset in one place is why a caller never has to re-zero them itself.
+// they go stale at exactly the same moment (a query change, a scope change, nav.back's
+// clear, Reset) — keeping the reset in one place is why a caller never has to re-zero
+// them itself. It leaves the widen alone: the scope outlives the results it produced,
+// and only Reset (a fresh open) turns it back off.
 func (m *Model) clearHits() {
 	m.hits = m.hits[:0]
 	m.rebuild()
@@ -434,10 +481,20 @@ func (m Model) emptyHint() string {
 
 // header builds the one-line status bar: "search · <scope> · N results" plus the
 // progress/cap segment, clipped to the screen width.
+//
+// The widen gets a segment only when it is *on* (`all kinds`), the same asymmetry
+// LOGS-04a's `[wrap]` uses (D146): the curated scope is the default a reader already
+// has in mind, while the widen is the expensive, exceptional state, and the header is
+// clipped from the right so a segment spent naming the normal case costs the progress
+// line. What the curated scope contains is not guessable from the header either way —
+// the progress segment's "searching 3/11 kinds…" is where the size of the scope shows.
 func (m Model) header() string {
 	seg := kind
 	if m.scope != "" {
 		seg += " · " + m.scope
+	}
+	if m.allKinds {
+		seg += " · all kinds"
 	}
 	seg += " · " + itoa(len(m.hits)) + " results"
 	if s := m.progress(); s != "" {

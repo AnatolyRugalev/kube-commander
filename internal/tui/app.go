@@ -1187,6 +1187,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchview.QueryChangedMsg:
 		return m.handleSearchQueryChanged(msg)
 
+	case searchview.ScopeChangedMsg:
+		return m.handleSearchScopeChanged(msg)
+
 	case searchDebouncedMsg:
 		return m.handleSearchDebounced(msg)
 

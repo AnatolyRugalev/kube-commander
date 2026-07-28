@@ -125,6 +125,13 @@ const (
 	// (not row-scoped) and distinct from app.filter, which narrows the rows of the
 	// one table already open.
 	ActionSearch Action = "search.cluster"
+	// ActionSearchAllKinds widens a cluster search from the curated default kind
+	// set to **every discovered kind** (SEARCH-04a/D131 pt 2). It is meaningful
+	// only while the search view is up — the toggle belongs to the query on
+	// screen, not to the app — and elsewhere it is inert, like logs.follow outside
+	// the logs view. Off on every open: the widen is the expensive scope, so it is
+	// something a reader asks for per search rather than a mode they can leave on.
+	ActionSearchAllKinds Action = "search.allKinds"
 	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
 	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
 	// **confirm key context** (contextOf), not the browse context: `n`/`enter`/`esc`
@@ -213,6 +220,7 @@ var actionMeta = []struct {
 	{ActionLocalPort, "Set the local port for the highlighted port (port picker)"},
 	{ActionFreeLocalPort, "Forward the highlighted port on a free local port (port picker)"},
 	{ActionSearch, "Search the cluster across kinds"},
+	{ActionSearchAllKinds, "Toggle searching all kinds (cluster search)"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
 }
@@ -310,6 +318,13 @@ var defaultBindings = map[Action][]string{
 	// text-carrying key types into that field, D140 pt 1). Raw mode clears the
 	// terminal's IXON flow control, so ctrl+s reaches the app rather than pausing it.
 	ActionSearch: {"ctrl+s"},
+	// The all-kinds widen has to be a no-text chord for the same reason
+	// search.cluster is: it acts *inside* the search view, whose query field is
+	// always open and swallows every text-carrying key (D140 pt 1) — a plain `a`
+	// would type an `a`. ctrl+a is free in the browse context and reads as "all".
+	// It costs the query field its readline start-of-line binding, which the field
+	// had already lost to nav.top's `home`; a search query is one short line.
+	ActionSearchAllKinds: {"ctrl+a"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
 	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
 	// in the browse context (app.searchNext/nav.drillIn/nav.back); `y` is browse-free

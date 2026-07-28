@@ -3,15 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — LOGS-04b done: `t` shows each log line's server timestamp as a display toggle over stamps the stream already carries (D148), closing the LOGS line and leaving SEARCH-04 (scope widen) as the only open M3 item. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — SEARCH-04a done: `ctrl+a` widens a cluster search to every discovered kind over a bounded fan-out (D149), after SEARCH-04 was split into 04a/04b/04c; the namespace widen and richer matching remain. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-04a** All-kinds scope widen for cluster search (+ bounded fan-out)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 | claimed: 2026-07-28
-      notes: The widen the feedback asked for, plus the concurrency bound that makes it
-      safe (D131 pt 2 "rate-limit-aware"). Namespace widen is SEARCH-04b, richer matching
-      SEARCH-04c.
+_(none)_
 
 ## Blocked
 
@@ -106,15 +102,19 @@ SEARCH-04 was three unrelated surfaces behind one line item, so it was split on 
 into **SEARCH-04a** (widen the *kind* scope), **SEARCH-04b** (widen the *namespace*
 scope) and **SEARCH-04c** (richer matching). The two widens share nothing but the header
 segment they write to, and the matching work touches the kube layer's matcher rather than
-the scope at all.
+the scope at all. **SEARCH-04a is done**: `search.allKinds` (`ctrl+a`) swaps the curated
+set for every discovered kind and re-runs the query, and `kube.Search` now lists a bounded
+number of kinds at a time so the widen cannot flood the apiserver (D149).
 
 - [ ] **SEARCH-04b** Namespace widen: a toggle that searches **all namespaces** even while
       the app is scoped to one (`kube.Search` already accepts `""`; the work is the toggle,
       the header segment, and the re-run).
       status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
       notes: Off by default (D131 pt 2). Cheaper than the kind widen — one namespace scan
-      per kind either way — but it is the other half of "scope". Depends on SEARCH-04a for
-      the scope-toggle plumbing (ScopeChangedMsg, the re-run path).
+      per kind either way — but it is the other half of "scope". The plumbing SEARCH-04a
+      built is ready for it: add a flag beside the view's `allKinds`, extend
+      `ScopeChangedMsg`, and pass `""` for the namespace; the re-run path, the header
+      segment rule (name it only when on) and the debounce are already there.
 - [ ] **SEARCH-04c** Richer matching: fuzzy / label / field selectors beyond the current
       case-insensitive name substring.
       status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
@@ -148,6 +148,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-04a** All-kinds scope widen for cluster search — `search.allKinds` (`ctrl+a`) swaps the curated kind set for every discovered kind and re-runs the query; the header names the widened scope only while it is on, the widen resets on every fresh open, and `kube.Search` now lists at most 8 kinds at a time so the widen cannot flood the apiserver (D149) — done 2026-07-28 (D149)
 - [x] **LOGS-04b** Timestamps toggle in the logs view — `logs.timestamps` (`t`) draws each line's server stamp; the stream always requests timestamps (free on a followed stream) and the view keeps them in a buffer parallel to the messages, so the toggle is a redraw not a restream and the grep still matches only the message (D148) — done 2026-07-28 (D148)
 - [x] **LOGS-04c** Jump-to-latest in the logs view — `nav.bottom` (`G`) now re-arms following as well as scrolling, the inverse of "any upward scroll pauses"; incremental downward movement still does not (D147) — done 2026-07-28 (D147)
 - [x] **LOGS-04a** Wrap toggle + horizontal scroll for long lines in the logs view — done 2026-07-28 (D146)

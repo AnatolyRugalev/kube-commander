@@ -3707,3 +3707,35 @@ stamps hidden, and the toggle only changes whether they are drawn.
    *lose sight of*. `[wrap]` is needed because wrapping and clipping look identical until
    a line is too long; timestamps are on every row the instant they are on, so they get
    no marker — and the header keeps a segment it would otherwise spend at narrow widths.
+
+## D149 — A scope widen is per-visit, announced only when on, and bounded at the source (2026-07-28, SEARCH-04a)
+
+`search.allKinds` (`ctrl+a`) widens a cluster search from the curated kind set to every
+discovered kind — the opt-in widen D131 pt 2 held back. Four constraints come with it.
+
+1. **An expensive opt-in scope resets on every open, never on a keystroke within one.**
+   The widen survives typing, refining and clearing the query — the reader chose it for
+   *this* search — but `Reset` (a fresh `ctrl+s`) drops it. A sticky expensive mode is
+   the failure the fast-cold-start design exists to avoid (D8/principle 4): it turns a
+   choice made once into a cost paid forever, invisibly, on a keystroke that reads as
+   cheap. Any future opt-in that costs the cluster real work decides the same way; a
+   *display* toggle (D148's timestamps) has no such constraint and may live longer.
+2. **Changing the scope invalidates results exactly as changing the query does.** Hits,
+   progress counters and the cap flag are dropped and the in-flight fan-out is cancelled
+   and superseded — the same generation guard, the same debounce. A result set means
+   *query × scope*, so a count carried across a scope change is a lie about the header
+   above it. The debounce is kept on the scope path deliberately: a toggle held down
+   would otherwise queue one full-cluster sweep per repeat.
+3. **Name the widened state, not the default.** D146's "name state the reader can lose
+   sight of" applied to a scope: the header gains `all kinds` only while the widen is on.
+   The default costs no header segment (they are clipped from the right, and the
+   progress line's `N/M kinds` already sizes the scope), and the widen's discoverability
+   is the *hint bar's* job — which is why this is the one search key that is hinted while
+   the logs view's self-announcing toggles are not.
+4. **Bound the fan-out where it is issued, not where it is triggered.** `kube.Search`
+   lists at most `searchConcurrency` (8) kinds at once. A widen that hands a hundred-plus
+   kinds to an unbounded fan-out puts all of them on the wire in one breath — client-go
+   applies no client-side rate limit unless one is configured — so the bound belongs in
+   the search primitive, where every caller gets it, not in the TUI toggle that happens
+   to make it matter. Queued kinds still report `SearchKindDone`, including when the cap
+   cancels them before they get a slot, so the progress line always reaches `M/M`.

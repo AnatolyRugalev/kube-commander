@@ -213,8 +213,184 @@ func TestSearchScopeIsCurated(t *testing.T) {
 	}
 	for _, unwanted := range []string{"Node", "Namespace", "Event", "Role"} {
 		if kinds[unwanted] {
-			t.Errorf("the curated search scope must not include %s (the widen is opt-in, SEARCH-04)", unwanted)
+			t.Errorf("the curated search scope must not include %s (the widen is opt-in, SEARCH-04a)", unwanted)
 		}
+	}
+}
+
+// allKindsKey is the default search.allKinds key (ctrl+a). Like search.cluster it is a
+// ctrl chord carrying no text, so it survives the search view's always-open query field
+// instead of being typed into it (D140 pt 1).
+var allKindsKey = tea.Key{Code: 'a', Mod: tea.ModCtrl}
+
+// scopeChangedFrom extracts the view's ScopeChangedMsg from a keypress's command,
+// flattening any batch exactly as queryChangedFrom does for a query change.
+func scopeChangedFrom(t *testing.T, cmd tea.Cmd) searchview.ScopeChangedMsg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("the all-kinds widen should produce a command")
+	}
+	var find func(tea.Msg) (searchview.ScopeChangedMsg, bool)
+	find = func(msg tea.Msg) (searchview.ScopeChangedMsg, bool) {
+		switch msg := msg.(type) {
+		case searchview.ScopeChangedMsg:
+			return msg, true
+		case tea.BatchMsg:
+			for _, c := range msg {
+				if c == nil {
+					continue
+				}
+				if got, ok := find(c()); ok {
+					return got, true
+				}
+			}
+		}
+		return searchview.ScopeChangedMsg{}, false
+	}
+	got, ok := find(cmd())
+	if !ok {
+		t.Fatalf("expected a ScopeChangedMsg among the produced commands, got %T", cmd())
+	}
+	return got
+}
+
+// pressAllKinds toggles the widen through the sequencer and delivers the resulting
+// ScopeChangedMsg, returning the model and the command that change produced (the
+// debounce tick that re-runs the query, or nil when there is nothing to re-run).
+func pressAllKinds(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	m, keyCmd := press(t, m, allKindsKey)
+	next, cmd := m.Update(scopeChangedFrom(t, keyCmd))
+	return next.(Model), cmd
+}
+
+// TestSearchAllKindsWidensTheFanOut is SEARCH-04a end to end: the same query, re-run
+// after the widen, goes out over every kind the menu offers instead of the curated
+// subset — and the kinds the curated scope deliberately excludes are exactly the ones
+// that appear.
+func TestSearchAllKindsWidensTheFanOut(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+	next, _ := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+
+	curated := map[string]bool{}
+	for _, r := range s.gotRes {
+		curated[r.GVK.Kind] = true
+	}
+	if curated["Node"] || curated["Event"] {
+		t.Fatalf("the default fan-out should be curated, got kinds %v", s.gotRes)
+	}
+
+	m, widened := pressAllKinds(t, m)
+	if !m.searchView.AllKinds() {
+		t.Fatal("search.allKinds should widen the kind scope through the sequencer")
+	}
+	if widened == nil {
+		t.Fatal("widening should re-run the current query, not wait for another keystroke")
+	}
+	debounced, ok := widened().(searchDebouncedMsg)
+	if !ok {
+		t.Fatalf("the widen should arm a searchDebouncedMsg, got %T", widened())
+	}
+	if debounced.query != "api" {
+		t.Fatalf("the re-run should carry the query already typed, got %q", debounced.query)
+	}
+	next, _ = m.Update(debounced)
+	m = next.(Model)
+
+	if s.calls != 2 {
+		t.Fatalf("the widen should launch exactly one further fan-out, got %d total", s.calls)
+	}
+	all := map[string]bool{}
+	for _, r := range s.gotRes {
+		all[r.GVK.Kind] = true
+	}
+	for _, want := range []string{"Pod", "Deployment", "Node", "Namespace", "Event"} {
+		if !all[want] {
+			t.Errorf("the widened fan-out should include %s", want)
+		}
+	}
+	if s.gotQuery != "api" || s.gotNS != "web" {
+		t.Errorf("the widen changes the kinds only: got query %q in %q, want %q in %q",
+			s.gotQuery, s.gotNS, "api", "web")
+	}
+}
+
+// TestSearchAllKindsCancelsTheNarrowerFanOut proves the widen supersedes rather than
+// races: the in-flight curated search is torn down (D131 pt 4) exactly as a query change
+// tears it down, so two scopes never stream into one result list.
+func TestSearchAllKindsCancelsTheNarrowerFanOut(t *testing.T) {
+	s := &fakeSearcher{keepOpen: true}
+	m := openSearchView(t, s)
+	m, tick := typeQuery(t, m, "api")
+	next, _ := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+	if s.calls != 1 {
+		t.Fatalf("expected one in-flight fan-out, got %d", s.calls)
+	}
+
+	m, _ = pressAllKinds(t, m)
+	if err := s.ctxs[0].Err(); err == nil {
+		t.Fatal("widening the scope should cancel the fan-out running under the narrower one")
+	}
+	if !m.searchView.Searching() {
+		t.Error("the in-flight indicator should stay up across the re-run, not blink off")
+	}
+}
+
+// TestSearchAllKindsOnEmptyQuerySearchesNothing proves choosing the scope before typing
+// is free: the widen is recorded and announced, but an empty query is still not a search
+// for everything — nothing goes to the cluster until something is typed.
+func TestSearchAllKindsOnEmptyQuerySearchesNothing(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s)
+	m, cmd := pressAllKinds(t, m)
+	if !m.searchView.AllKinds() {
+		t.Fatal("the widen should be settable before a query is typed")
+	}
+	if cmd != nil {
+		t.Fatal("an empty query should arm no debounce tick, widened or not")
+	}
+	if s.calls != 0 {
+		t.Fatalf("an empty query must launch no fan-out, got %d", s.calls)
+	}
+	if !strings.Contains(m.View().Content, "all kinds") {
+		t.Errorf("the widened scope should be named in the frame; got:\n%s", m.View().Content)
+	}
+}
+
+// TestSearchAllKindsLetterTypesIntoTheQuery is the D140 pt 1 half: the widen is bound to
+// a chord, so a plain `a` is still text. Pressing it types rather than widening — the
+// same split that keeps `q` from quitting while the query field is open.
+func TestSearchAllKindsLetterTypesIntoTheQuery(t *testing.T) {
+	m := openSearchView(t, &fakeSearcher{})
+	m, _ = typeQuery(t, m, "a")
+	if m.searchView.AllKinds() {
+		t.Error("a plain `a` must type into the query, not widen the search scope")
+	}
+	if m.searchView.Query() != "a" {
+		t.Errorf("query = %q, want the typed %q", m.searchView.Query(), "a")
+	}
+}
+
+// TestSearchWidenDoesNotSurviveReopen proves the widen belongs to one visit to the view:
+// a fresh search.cluster starts curated, so an expensive scope chosen minutes ago can
+// never quietly make the next search sweep the cluster.
+func TestSearchWidenDoesNotSurviveReopen(t *testing.T) {
+	m := openSearchView(t, &fakeSearcher{})
+	m, _ = pressAllKinds(t, m)
+	if !m.searchView.AllKinds() {
+		t.Fatal("the widen should be on before the view is closed")
+	}
+	m.closeSearch()
+	m, _ = press(t, m, searchKey)
+	if !m.searchView.Active() {
+		t.Fatal("search.cluster should reopen the view")
+	}
+	if m.searchView.AllKinds() {
+		t.Error("reopening the search view must start from the curated scope")
 	}
 }
 

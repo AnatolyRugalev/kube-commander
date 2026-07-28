@@ -129,6 +129,13 @@ func TestShortHelpContext(t *testing.T) {
 	if !search[ActionDrillIn.Describe()] || !search[ActionBack.Describe()] {
 		t.Error("search context should offer drill-in and back")
 	}
+	// The all-kinds widen (SEARCH-04a) is bound to a no-text chord precisely so the
+	// query field cannot swallow it, and it is the one search key that does not
+	// announce itself — the header names the scope only once the widen is on. So it
+	// is hinted, unlike the logs view's self-announcing display toggles.
+	if !search[ActionSearchAllKinds.Describe()] {
+		t.Error("search context should offer the all-kinds widen — it is a no-text chord the view honours")
+	}
 	for _, a := range []Action{ActionFilter, ActionSort, ActionActions, ActionNamespace, ActionHelp, ActionQuit} {
 		if search[a.Describe()] {
 			t.Errorf("%q is typed into the search query field, not honoured — it must not be hinted", a)

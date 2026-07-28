@@ -111,6 +111,7 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Set the local port | `p` (`forwards.localPort`) | port picker only; prompt seeded with the remote port, blank = free port (FB-pf-local-port/D139) |
 | Free local port | `0` (`forwards.freeLocal`) | port picker only; forwards `:<remote>` so the OS assigns the local port — `enter` still forwards local = remote (D139) |
 | Cluster search | `Ctrl+s` (`search.cluster`) | app-global full-screen search across the curated kinds in the current namespace; `enter` jumps to the hit, `esc` clears then closes (SEARCH-02b/D141). Distinct from `/` (`app.filter`), which narrows the open table. A ctrl chord by necessity: the view's query field is always open, so a text key would type instead of firing (D140 pt 1) |
+| Widen search to all kinds | `Ctrl+a` (`search.allKinds`) | search view only; swaps the curated kind set for every discovered kind and re-runs the current query, header gains `all kinds` (SEARCH-04a/D149). A ctrl chord for the same reason as `Ctrl+s` — the query field is always open. Off again on every fresh open: the widen is per-search, not a mode |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
 | Resource palette | `:` (`resources.switch`) | |

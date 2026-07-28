@@ -76,6 +76,23 @@ type SearchEvent struct {
 // absorbs bursts (many kinds returning at once) without unbounded growth.
 const searchChanBuffer = 64
 
+// searchConcurrency bounds how many kinds are being listed at once. The curated
+// default scope is eleven kinds and a burst of eleven LISTs is nothing, but the
+// opt-in widen (SEARCH-04a) hands Search *every* discovered kind — well past a
+// hundred on a cluster with a few operators installed — and client-go applies no
+// client-side rate limit unless one is configured, so an unbounded fan-out would
+// put that whole set on the wire in one breath. That is the hazard D131 pt 2
+// named ("rate-limit-aware on big clusters"), and a semaphore is the cheapest
+// answer: it costs the curated path nothing (its kinds never queue) and turns the
+// widen into a steady stream of lists instead of a thundering herd.
+//
+// The number is a deliberate compromise rather than a measurement: high enough
+// that a few slow kinds cannot stall the sweep behind them, low enough to stay
+// polite to an apiserver that is also serving the browse view's live watches.
+// Progress stays legible either way — SearchKindDone still fires once per kind,
+// so a queued kind reads as "not done yet", exactly like a slow one.
+const searchConcurrency = 8
+
 // rowLister is the narrow List seam the search core needs, so the concurrent
 // fan-out is exercised hermetically (D18) without a live server. *Clients
 // satisfies it via List.
@@ -107,6 +124,10 @@ type rowLister interface {
 //   - Cancellation: the channel is closed when every kind has been searched, the
 //     cap is reached, or ctx is cancelled. A background goroutine owns all sends,
 //     so consumer state is only ever mutated in its own Update.
+//   - Bounded load: at most searchConcurrency kinds are listed at once, so a
+//     wide scope arrives as a steady stream of lists rather than all at once
+//     (D131 pt 2). Ordering is therefore not guaranteed and never was — hits
+//     stream in whatever order the kinds return.
 func (c *Clients) Search(ctx context.Context, resources []Resource, namespace, query string, limit int) <-chan SearchEvent {
 	return searchRows(ctx, c, resources, namespace, query, limit)
 }
@@ -135,6 +156,11 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 			sent   int
 			capped bool
 		)
+		// sem admits at most searchConcurrency kinds to the wire at once. Every
+		// kind still gets its goroutine — they are cheap, and one goroutine per
+		// kind is what keeps "exactly one SearchKindDone per resource" true no
+		// matter where a kind is when the cap or the caller cancels.
+		sem := make(chan struct{}, searchConcurrency)
 		for _, r := range resources {
 			wg.Add(1)
 			go func(r Resource) {
@@ -143,6 +169,17 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					sendEvent(outer, out, done)
 					wg.Done()
 				}()
+
+				// Wait for a slot, but never past cancellation: once the cap is
+				// reached the queued kinds must unwind immediately rather than
+				// each taking a turn to discover there is nothing left to do.
+				// They still report done — a kind cut short is not a failed one.
+				select {
+				case sem <- struct{}{}:
+					defer func() { <-sem }()
+				case <-ctx.Done():
+					return
+				}
 
 				ns := namespace
 				if !r.Namespaced {
@@ -216,8 +253,9 @@ func sendEvent(ctx context.Context, out chan<- SearchEvent, ev SearchEvent) bool
 // high-signal, common kinds a search targets by default (D131). Keyed by
 // GroupKind (version-agnostic) so it selects from whatever version discovery
 // resolved each kind to. Whole-cluster search over every discovered kind is an
-// opt-in widen (a later slice), NOT the default — listing every type is the
-// expensive enumeration the fast-start design (D8/principle 4) avoids.
+// opt-in widen the caller performs by simply not calling through here
+// (SEARCH-04a), NOT the default — listing every type is the expensive
+// enumeration the fast-start design (D8/principle 4) avoids.
 var commonSearchGroupKinds = map[schema.GroupKind]struct{}{
 	{Group: "", Kind: "Pod"}:                      {},
 	{Group: "", Kind: "Service"}:                  {},
@@ -235,9 +273,11 @@ var commonSearchGroupKinds = map[schema.GroupKind]struct{}{
 // CommonSearchResources filters all (typically the discovered resource set) down
 // to the curated default search scope — the common, high-signal kinds a cluster
 // search targets by default (D131) — preserving all's order. A curated kind the
-// cluster does not expose simply isn't included. Passing the full set instead
-// (whole-cluster search) is an opt-in widen a later slice adds; the default path
-// goes through here so it never enumerates every kind (D8/principle 4).
+// cluster does not expose simply isn't included. Passing the full set to Search
+// instead *is* the whole-cluster widen (SEARCH-04a): there is no widen flag
+// anywhere in this package, only the caller's choice of whether to filter through
+// here first. The default path does, so it never enumerates every kind
+// (D8/principle 4).
 func CommonSearchResources(all []Resource) []Resource {
 	out := make([]Resource, 0, len(commonSearchGroupKinds))
 	for _, r := range all {

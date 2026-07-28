@@ -84,8 +84,14 @@ const (
 // (D140 pt 1), so the root routes every text-producing key into it: `/` `n` `s` `a`
 // `?` and `q` all type a character there instead of firing their browse action, and a
 // hint that advertised them would be a lie. What is left is the genuinely available
-// set — move the result cursor, open a hit, clear-then-close — every one of them a
-// no-text key the view actually consumes.
+// set — move the result cursor, open a hit, widen the kind scope, clear-then-close —
+// every one of them a no-text key the view actually consumes.
+//
+// The all-kinds widen (SEARCH-04a) is hinted here, unlike the logs view's display
+// toggles, because it is the one search key that does *not* announce itself: the header
+// names the widened scope only once it is on, so a reader staring at "no matches" has no
+// other way to learn that the search was curated. This is also the app's shortest hint
+// line, so it is the one context with room to say so.
 //
 // The logs mini-app needs *two* contexts for the same reason (D143 pt 1). With its grep
 // closed it honours every key it advertises, `q` included (quit closes the view, as it
@@ -118,7 +124,7 @@ const (
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
-	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionBack},
+	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionBack},
 	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
 	HelpLogsFilter: {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
 }

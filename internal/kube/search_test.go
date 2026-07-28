@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -246,6 +247,127 @@ func TestSearchCancellationClosesChannelWithoutTerminalEvent(t *testing.T) {
 			t.Error("a cancelled search must not emit a terminal SearchDone")
 		}
 	}
+}
+
+// gateLister is a rowLister that parks every List until the test lets it go: it
+// announces each arrival on arrived and then blocks on proceed. That makes the
+// fan-out's *in-flight* set observable, which a lister that returns immediately
+// cannot be — the whole point of the bound is how many lists exist at one moment.
+type gateLister struct {
+	arrived chan string
+	proceed chan struct{}
+}
+
+func (g *gateLister) List(ctx context.Context, r Resource, namespace string, _ metav1.ListOptions) (*Table, error) {
+	g.arrived <- r.GVR.Resource
+	select {
+	case <-g.proceed:
+		return tbl(namespace, "api-"+r.GVR.Resource), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// manyResources builds n distinct listable kinds, enough to exceed the fan-out bound.
+func manyResources(n int) []Resource {
+	out := make([]Resource, 0, n)
+	for i := range n {
+		name := "kind" + itoa(i)
+		out = append(out, res("example.com", "v1", name, name+"s", true))
+	}
+	return out
+}
+
+// itoa is a test-local non-negative int→string (the package has no strconv import).
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
+// TestSearchBoundsConcurrentLists is the load half of D131 pt 2: the opt-in widen
+// hands Search every discovered kind, and an unbounded fan-out would put all of them
+// on the wire at once. At most searchConcurrency lists may be in flight; the rest wait
+// their turn and the sweep still completes over every kind.
+func TestSearchBoundsConcurrentLists(t *testing.T) {
+	const kinds = searchConcurrency * 3
+	g := &gateLister{arrived: make(chan string, kinds), proceed: make(chan struct{})}
+	resources := manyResources(kinds)
+
+	ch := searchRows(context.Background(), g, resources, "web", "api", 0)
+
+	// The bound's worth of lists must arrive; nothing beyond it may, while they are
+	// all still parked. The negative half needs a real window — an unbounded fan-out
+	// would show up as extra arrivals only once those goroutines are scheduled.
+	for range searchConcurrency {
+		<-g.arrived
+	}
+	select {
+	case extra := <-g.arrived:
+		t.Fatalf("list for %q started while %d were already in flight: fan-out is unbounded", extra, searchConcurrency)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Releasing them lets the queued kinds through; every kind must still be listed
+	// and reported exactly once, so the bound delays work rather than dropping it.
+	close(g.proceed)
+	events := drainSearch(ch)
+	done, failed := kindsDone(events)
+	if len(done) != kinds {
+		t.Fatalf("kinds done = %d, want one per requested kind (%d)", len(done), kinds)
+	}
+	if len(failed) != 0 {
+		t.Errorf("queued-then-released kinds must not be marked failed, got %v", failed)
+	}
+	if got := len(hitsOf(events)); got != kinds {
+		t.Errorf("hits = %d, want one per kind (%d) — a queued kind must still be searched", got, kinds)
+	}
+}
+
+// TestSearchCappedStillReportsQueuedKinds pins what the bound must not break: the cap
+// cancels the sweep while most kinds are still queued for a slot, and each of those has
+// to unwind reporting done-but-not-failed. Otherwise the view's "searching N/M kinds…"
+// line would stop short of M on every capped wide search, reading as a hang (D142 pt 2).
+func TestSearchCappedStillReportsQueuedKinds(t *testing.T) {
+	const kinds = searchConcurrency * 3
+	g := &gateLister{arrived: make(chan string, kinds), proceed: make(chan struct{})}
+
+	ch := searchRows(context.Background(), g, manyResources(kinds), "web", "api", 1)
+	for range searchConcurrency {
+		<-g.arrived
+	}
+	close(g.proceed) // the first hit through trips the cap and cancels the rest
+
+	events := drainSearch(ch)
+	done, failed := kindsDone(events)
+	if len(done) != kinds {
+		t.Fatalf("kinds done = %d, want one per requested kind (%d) even when the cap cut the sweep short", len(done), kinds)
+	}
+	if len(failed) != 0 {
+		t.Errorf("a kind cancelled by the cap is not a failed kind, got %v", failed)
+	}
+	if !terminal(t, events).Capped {
+		t.Error("a search stopped by the cap must report Capped")
+	}
+}
+
+// hitsOf extracts the match events from a drained stream.
+func hitsOf(events []SearchEvent) []SearchHit {
+	var out []SearchHit
+	for _, ev := range events {
+		if ev.Type == SearchMatch {
+			out = append(out, ev.Hit)
+		}
+	}
+	return out
 }
 
 func TestCommonSearchResourcesFiltersToCuratedSet(t *testing.T) {

@@ -85,8 +85,9 @@ func (m Model) openSearch() (tea.Model, tea.Cmd) {
 }
 
 // searchScope is the human label for what a search covers: the watched namespace, or
-// the all-namespaces sentinel when the app is unscoped. It only describes the scope —
-// the kind set is the curated default (D131 pt 2) and the widen is SEARCH-04.
+// the all-namespaces sentinel when the app is unscoped. It describes the *namespace*
+// scope only — the kind scope is the view's own all-kinds flag, which the view renders
+// itself (SEARCH-04a). Widening the namespace scope independently is SEARCH-04b.
 func (m Model) searchScope() string {
 	if m.namespace == "" {
 		return namespaceAllItem
@@ -94,12 +95,15 @@ func (m Model) searchScope() string {
 	return m.namespace
 }
 
-// searchResources is the kind set one query fans out over: the curated default scope
-// (D131 pt 2) selected from the kinds the menu currently offers — the same source the
-// resource palette draws on, so discovered kinds and per-context extras are included
-// and an unavailable kind is skipped. Never the full discovered set: that whole-cluster
-// widen is opt-in (SEARCH-04), because enumerating every type is the expensive
-// enumeration the fast-start design avoids (D8/principle 4).
+// searchResources is the kind set one query fans out over, taken from the kinds the menu
+// currently offers — the same source the resource palette draws on, so discovered kinds
+// and per-context extras are included and an unavailable kind is skipped.
+//
+// Which of them are searched is the view's all-kinds flag (SEARCH-04a): off (the default,
+// D131 pt 2) narrows to the curated high-signal set, on hands over everything discovery
+// found. The widen has to be asked for because enumerating every type is exactly the
+// expensive enumeration the fast-start design avoids (D8/principle 4) — the load it does
+// cost is bounded inside kube.Search, which lists a fixed number of kinds at a time.
 func (m Model) searchResources() []kube.Resource {
 	items := m.menu.Items()
 	all := make([]kube.Resource, 0, len(items))
@@ -108,6 +112,9 @@ func (m Model) searchResources() []kube.Resource {
 			continue
 		}
 		all = append(all, it.Resource)
+	}
+	if m.searchView.AllKinds() {
+		return all
 	}
 	return kube.CommonSearchResources(all)
 }
@@ -137,23 +144,43 @@ func (m Model) routeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// handleSearchQueryChanged reacts to the view's QueryChangedMsg — the only cue the
-// wiring gets that the query moved. It cancels whatever fan-out was in flight and
-// makes its remaining hits stale (the searchGen bump), then arms the debounce timer
-// for the new query; an emptied query (nav.back's first press, or the last character
-// deleted) cancels and searches nothing. The view has already dropped the previous
-// query's hits, so the screen never shows results from a query that is no longer
-// typed (D140 pt 3). The in-flight indicator goes up now rather than when the lists
-// actually start, so a keystroke is never followed by a silent, blank pause.
+// handleSearchQueryChanged reacts to the view's QueryChangedMsg — the cue that the query
+// moved (including to "" on nav.back's first press or the last character deleted). It
+// restarts the search on the new text; see restartSearch for what that entails.
 func (m Model) handleSearchQueryChanged(msg searchview.QueryChangedMsg) (tea.Model, tea.Cmd) {
+	return m.restartSearch(msg.Query)
+}
+
+// handleSearchScopeChanged reacts to the view's ScopeChangedMsg — the all-kinds widen was
+// toggled (SEARCH-04a). The scope is half of what a result set means, so changing it
+// invalidates the in-flight fan-out exactly as retyping the query would, and the answer is
+// the same: cancel, supersede, re-run whatever is currently typed. The query itself is
+// untouched, so it is read back off the view rather than carried in the message.
+//
+// It goes through the same debounce as typing rather than launching at once. The delay is
+// not the point — holding the widen down cannot produce a burst of full-cluster sweeps is.
+// A toggle is one keystroke, but two of them (on, off again) are two queries' worth of
+// listing, and under the widen that is the most expensive thing this app can be asked to
+// do; letting the last press win costs a beat and bounds the damage to one sweep.
+func (m Model) handleSearchScopeChanged(searchview.ScopeChangedMsg) (tea.Model, tea.Cmd) {
+	return m.restartSearch(m.searchView.Query())
+}
+
+// restartSearch cancels whatever fan-out was in flight, makes its remaining hits stale
+// (the searchGen bump), and arms the debounce timer for query. An empty query — or a
+// search-inert model — cancels and searches nothing. The view has already dropped the
+// previous results, so the screen never shows hits from a query or a scope that is no
+// longer in force (D140 pt 3). The in-flight indicator goes up now rather than when the
+// lists actually start, so a keystroke is never followed by a silent, blank pause.
+func (m Model) restartSearch(query string) (tea.Model, tea.Cmd) {
 	m.stopSearch()
 	m.searchGen++
-	if msg.Query == "" || m.searcher == nil {
+	if query == "" || m.searcher == nil {
 		m.searchView.SetSearching(false)
 		return m, nil
 	}
 	m.searchView.SetSearching(true)
-	gen, query := m.searchGen, msg.Query
+	gen := m.searchGen
 	return m, tea.Tick(searchDebounce, func(time.Time) tea.Msg {
 		return searchDebouncedMsg{gen: gen, query: query}
 	})

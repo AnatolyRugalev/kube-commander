@@ -120,6 +120,16 @@ narrow the query`). This is a deliberate, one-shot query (it lists those kinds o
 query, never watches everything); `/` remains the filter that narrows the rows of the
 table already open.
 
+That curated kind list is the default because it is the cheap one. Press `Ctrl+a`
+(`search.allKinds`, rebindable) to widen the same query to **every kind your cluster
+exposes** — CRDs, RBAC, events, nodes, the lot. The header adds `all kinds` while the
+widen is on, the query re-runs immediately, and the progress line's denominator jumps to
+show what you just asked for. It is off again the next time you open the search: the
+widen is per-search, not a mode you can leave on by accident. Widening is genuinely more
+work for the API server, so kubecom lists at most eight kinds at a time — a wide sweep
+takes longer and the progress line shows it, rather than hammering the cluster in one
+burst.
+
 Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
 StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
 — to open the **dedicated full-screen logs view**. It tails the container live (a

@@ -88,6 +88,9 @@ func TestInactiveViewIgnoresInput(t *testing.T) {
 	if _, cmd := m.Update(keymap.ActionDrillIn); cmd != nil {
 		t.Error("an inactive view should not emit on nav.drillIn")
 	}
+	if m2, cmd := m.Update(keymap.ActionSearchAllKinds); cmd != nil || m2.AllKinds() {
+		t.Error("an inactive view should not toggle the all-kinds widen")
+	}
 	m2, cmd := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: 'a', Text: "a"}))
 	if cmd != nil || m2.Query() != "" {
 		t.Error("an inactive view should not capture typing")
@@ -378,6 +381,119 @@ func TestNavigationMovesCursorWithinResults(t *testing.T) {
 	m, _ = m.Update(keymap.ActionTop)
 	if got, _ := m.Selected(); got.Ref.Name != "api-0" {
 		t.Errorf("nav.top selected %q; want api-0", got.Ref.Name)
+	}
+}
+
+// scopeChanges returns the AllKinds flag of every ScopeChangedMsg in msgs.
+func scopeChanges(msgs []tea.Msg) []bool {
+	var out []bool
+	for _, msg := range msgs {
+		if sc, ok := msg.(ScopeChangedMsg); ok {
+			out = append(out, sc.AllKinds)
+		}
+	}
+	return out
+}
+
+// TestAllKindsTogglesAndAnnouncesItself is SEARCH-04a's core: the widen flips the flag,
+// tells the wiring (so it can re-run the query over the wider kind set), and names itself
+// in the header — the widened scope is the exceptional, expensive one, so unlike the
+// curated default it is never silent (D146's rule applied to the search header).
+func TestAllKindsTogglesAndAnnouncesItself(t *testing.T) {
+	m := newSearch()
+	m.SetScope("default")
+	m, _ = typeQuery(m, "api")
+	if strings.Contains(m.View(), "all kinds") {
+		t.Errorf("the curated default scope must not claim to be widened; got:\n%s", m.View())
+	}
+
+	m, cmd := m.Update(keymap.ActionSearchAllKinds)
+	if !m.AllKinds() {
+		t.Fatal("search.allKinds should widen the kind scope")
+	}
+	if got := scopeChanges(drain(cmd)); len(got) != 1 || !got[0] {
+		t.Fatalf("scope changes = %v, want one ScopeChangedMsg{AllKinds: true} so the wiring re-runs", got)
+	}
+	if !strings.Contains(m.View(), "all kinds") {
+		t.Errorf("a widened search must say so in the header; got:\n%s", m.View())
+	}
+	if m.Query() != "api" {
+		t.Errorf("query = %q, want the widen to leave what the reader typed alone", m.Query())
+	}
+
+	m, cmd = m.Update(keymap.ActionSearchAllKinds)
+	if m.AllKinds() {
+		t.Error("a second press should narrow back to the curated scope")
+	}
+	if got := scopeChanges(drain(cmd)); len(got) != 1 || got[0] {
+		t.Fatalf("scope changes = %v, want one ScopeChangedMsg{AllKinds: false}", got)
+	}
+	if strings.Contains(m.View(), "all kinds") {
+		t.Errorf("narrowing back must drop the header segment; got:\n%s", m.View())
+	}
+}
+
+// TestAllKindsDropsResultsOfTheNarrowerScope pins why the widen is not a pure display
+// toggle: the hits on screen were produced under the old scope, so they no longer
+// describe what the header now says. They go, along with the progress and cap state that
+// described that same fan-out — the reader must never read a count from one scope under
+// the label of another.
+func TestAllKindsDropsResultsOfTheNarrowerScope(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	m.StartProgress(11)
+	m.MarkKindDone()
+	m.SetCapped(true)
+
+	m, _ = m.Update(keymap.ActionSearchAllKinds)
+	if m.Len() != 0 {
+		t.Errorf("hits = %d, want the narrower scope's results dropped", m.Len())
+	}
+	if done, total := m.Progress(); done != 0 || total != 0 {
+		t.Errorf("progress = %d/%d, want it reset with the results it described", done, total)
+	}
+	if m.Capped() {
+		t.Error("the cap belonged to the old scope's fan-out and must not survive it")
+	}
+	if m.Query() != "api" {
+		t.Errorf("query = %q, want it preserved — only the results are stale", m.Query())
+	}
+}
+
+// TestAllKindsTogglesOnAnEmptyQuery covers choosing the scope before typing: the reader
+// widens first, sees the header say so, and only then types. Nothing to re-run yet, but
+// the message still goes out — the wiring decides that an empty query searches nothing.
+func TestAllKindsTogglesOnAnEmptyQuery(t *testing.T) {
+	m := newSearch()
+	m, cmd := m.Update(keymap.ActionSearchAllKinds)
+	if !m.AllKinds() {
+		t.Fatal("the widen should be settable before a query is typed")
+	}
+	if got := scopeChanges(drain(cmd)); len(got) != 1 || !got[0] {
+		t.Fatalf("scope changes = %v, want the wiring told even on an empty query", got)
+	}
+	if !strings.Contains(m.View(), "all kinds") {
+		t.Errorf("the header should name the widened scope immediately; got:\n%s", m.View())
+	}
+}
+
+// TestAllKindsSurvivesTypingButNotReset draws the widen's lifetime: it belongs to one
+// visit to the search view (a reader refining a query keeps it) and not to the app, so a
+// fresh open never inherits a cluster-wide sweep set up minutes earlier.
+func TestAllKindsSurvivesTypingButNotReset(t *testing.T) {
+	m := newSearch()
+	m, _ = m.Update(keymap.ActionSearchAllKinds)
+	m, _ = typeQuery(m, "api")
+	if !m.AllKinds() {
+		t.Error("typing must not silently narrow the scope the reader chose")
+	}
+	m.Reset()
+	if m.AllKinds() {
+		t.Error("Reset (a fresh open) must start from the curated scope — the widen is not sticky")
+	}
+	if strings.Contains(m.View(), "all kinds") {
+		t.Errorf("a reset view must not still advertise the widen; got:\n%s", m.View())
 	}
 }
 
