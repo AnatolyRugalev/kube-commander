@@ -125,6 +125,14 @@ narrow the query`). This is a deliberate, one-shot query (it lists those kinds o
 query, never watches everything); `/` remains the filter that narrows the rows of the
 table already open.
 
+Matching is **fuzzy**, with nothing to turn on: a query whose letters appear in order but
+not together still matches, so `apisrv` finds `api-server` and `kdns` finds `kube-dns`.
+Fuzzy matches are always ranked *below* every name that contains what you typed outright,
+and the tighter ones come first, so widening the net can only add results at the bottom of
+the list — it never pushes a name you typed exactly further down. They are also capped to a
+small share of the results, so a loose query can never crowd out the exact match in a kind
+that answered a moment later.
+
 A query can also match **labels** instead of (or as well as) the name: type `-l` followed
 by a Kubernetes label selector, exactly as you would pass it to `kubectl`. `-l app=web`
 finds everything labelled `app=web`, `api -l app=web` narrows that to objects whose name

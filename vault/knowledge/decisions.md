@@ -3828,3 +3828,31 @@ order the kinds return; the *consumer* keeps them sorted. Four constraints.
    the object highlighted when the reader stopped moving is the object that drills in.
    Any future surface that re-sorts a list under a live cursor owes the same guarantee —
    an insert that shifts the selection is a wrong-object action waiting to happen.
+
+## D153 — Fuzzy is a fallback, ranked in its own band and budgeted against the cap (2026-07-28, SEARCH-04c-2b)
+
+`kube.Search`'s name matcher tries a contiguous substring first and only then a
+subsequence. Three constraints, all of them about keeping a widened matcher from
+degrading the result it widens.
+
+1. **A widened matcher is a *fallback*, never a replacement.** The passes are ordered
+   and a name that contains the query outright is scored on that occurrence, so adding
+   match kinds can only add results *below* the existing ones — it can never re-rank or
+   displace a match that was already there. Any future matcher (acronym, transposition,
+   edit distance) joins at the bottom of that chain, in a band of its own (D152 pt 3),
+   or it does not join.
+2. **Bands may weigh their terms differently, and should.** Position dominates a
+   contiguous match because its span is fixed — there is nothing else to read. A
+   scattered match's span *varies*, so tightness is the signal there and the positional
+   bonuses do not apply at all; gaps outweigh the start offset, which is also what makes
+   the tightest window the best-scoring one. Do not "unify" the two scoring formulas:
+   they answer different questions and the only cross-band rule is the band gap.
+3. **An emit-time cap must be budgeted by match quality, not just counted.** The hit cap
+   is applied in `kube` at emit time in arrival order — *before* any consumer has ranked
+   anything — so a low-quality match found early spends a slot a better one found later
+   can never reclaim. Ranking cannot repair that: it orders what arrived. So scattered
+   hits get a fixed fraction of the cap (`searchScatteredShare`) and no more; exhausting
+   it drops the hit without cancelling the sweep or setting `Capped` (nothing worth
+   telling a reader to narrow for). The asymmetry is the rule: a stricter match kind may
+   starve a looser one entirely, never the reverse. Any future stream that caps at emit
+   time and ranks downstream owes the same per-quality budget.

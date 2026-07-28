@@ -28,6 +28,12 @@ type SearchHit struct {
 	// Name half (a pure label-selector search) scores 0, so a consumer sorting
 	// on it keeps arrival order there.
 	//
+	// Scores fall in two disjoint bands: every contiguous (substring) match
+	// outranks every scattered (subsequence) one, whatever the positions inside
+	// them (D153). A consumer therefore never has to know which kind of match a
+	// hit was — sorting on the score alone already keeps the fuzzy matches below
+	// the exact ones.
+	//
 	// The hits are NOT emitted in score order — the fan-out streams them as the
 	// kinds return (see Search) and ranking is the consumer's job, deliberately
 	// (D152).
@@ -45,7 +51,9 @@ type SearchHit struct {
 // while Name is a client-side substring over the rows that come back (the server
 // has no "name contains" filter — a field selector can only match a name exactly).
 type SearchQuery struct {
-	// Name is a case-insensitive substring matched against each object's name.
+	// Name is matched case-insensitively against each object's name: as a
+	// contiguous substring first and, failing that, as a subsequence — its
+	// characters in order but not adjacent, so `apisrv` finds `api-server`.
 	// Empty matches every name.
 	Name string
 
@@ -130,19 +138,36 @@ func isSpace(b byte) bool { return b == ' ' || b == '\t' }
 // matching at the head of `api-7f9c-x2` is the object the reader meant, while the
 // same three letters landing mid-suffix are a coincidence.
 //
-// scoreSubstringBand is a floor reserved for contiguous matches. It is far larger
-// than every bonus below it because SEARCH-04c-2b adds scattered (subsequence)
-// matching underneath, and no scattered match may ever outrank a contiguous one
-// however well positioned it is (D152) — that band is what keeps fuzzy from
-// pushing noise into the middle of a good list. The two penalties are clamped for
-// the same reason: an unbounded length penalty on a long name would eventually
-// eat the band.
+// The two bands are floors reserved for a *kind* of match, and the gap between
+// them is the load-bearing part: every contiguous match scores at least
+// scoreSubstringBand-maxStartPenalty-maxLenPenalty (900), every scattered one at
+// most scoreScatteredBand (400), so no subsequence match can ever outrank a
+// substring one however well positioned it is (D152/D153). That is what lets the
+// fuzzy fallback add matches without ever pushing noise into the middle of a good
+// list. The penalties are clamped for the same reason: an unbounded length penalty
+// on a long name would eventually eat a whole band.
+//
+// The two bands weigh their terms differently, and that is deliberate rather than
+// an oversight (D153). In a contiguous match the span is fixed — it is the needle
+// — so *position* is the only thing left to read: a generated pod name carries the
+// workload's name at the front and entropy at the back, so `api` at the head of
+// `api-7f9c-x2` is the object the reader meant while the same three letters in the
+// suffix are a coincidence. In a scattered match the span varies, and *tightness*
+// is the signal instead: `apisrv` finding `api-server` is a real match, while the
+// same six characters strewn across `a-pod-in-some-random-vault` is the noise the
+// band exists to sink. So the position bonuses apply to contiguous matches only,
+// and a scattered match is scored on how much filler it had to jump over —
+// weighted above its start offset, so pulling a match into a tight window at the
+// end of a name always beats reading it as one that merely begins early.
 const (
 	scoreSubstringBand = 1000 // contiguous match: the band every substring hit sits in
-	scoreAtStart       = 400  // the name begins with the query
-	scoreAtBoundary    = 200  // the match begins right after a `-`/`.`/`_` separator
+	scoreScatteredBand = 400  // scattered match: the ceiling every subsequence hit sits under
+	scoreAtStart       = 400  // contiguous: the name begins with the match
+	scoreAtBoundary    = 200  // contiguous: the match begins right after a `-`/`.`/`_` separator
 	maxStartPenalty    = 50   // clamp on "how far into the name the match begins"
 	maxLenPenalty      = 50   // clamp on "how much name there is around the match"
+	maxGapPenalty      = 100  // clamp on "how much filler a scattered match jumped over"
+	gapPenaltyWeight   = 2    // scattered: gaps outweigh the start offset, so tightness wins
 )
 
 // nameMatcher matches and scores object names against the Name half of one
@@ -151,8 +176,8 @@ const (
 //
 // It is a type rather than a function because the needle wants preparing exactly
 // once (lower-casing it per row, over every object in a wide cluster sweep, is the
-// kind of waste a search feels), and because SEARCH-04c-2b's fuzzy fallback gets a
-// natural home here instead of another argument to thread through.
+// kind of waste a search feels), and because the two matchers below want one
+// prepared needle between them.
 type nameMatcher struct {
 	needle string // already lower-cased; "" matches everything
 }
@@ -162,25 +187,53 @@ func newNameMatcher(name string) nameMatcher {
 	return nameMatcher{needle: strings.ToLower(name)}
 }
 
-// match reports whether name matches the query and how well. An empty needle
-// matches every named object with score 0 (a label-only query ranks nothing); an
-// empty name never matches at all, not even the empty needle, because an object
-// without a name is not a result.
+// match reports whether name matches the query, how well, and whether the match
+// was scattered. An empty needle matches every named object with score 0 (a
+// label-only query ranks nothing) and is never scattered; an empty name never
+// matches at all, not even the empty needle, because an object without a name is
+// not a result.
 //
-// Matching is a case-insensitive contiguous substring — unchanged from before the
-// score existed, so this leg re-ranks the same result set rather than widening it.
+// Matching is case-insensitive and tried in two passes: a contiguous substring
+// first and, only if that fails, a subsequence — the needle's characters in order
+// but not adjacent, so `apisrv` finds `api-server` and `kdns` finds `kube-dns`.
+// The passes are ordered, not merged: a name that contains the needle outright is
+// scored on that occurrence, so widening the matcher can only add results below
+// the ones that were already there, never re-rank them.
+//
 // Of the possible occurrences the best-scoring one wins, and ties go to the
 // earliest, so the score describes the reading of the name a human would give it.
-func (m nameMatcher) match(name string) (int, bool) {
+//
+// The scattered flag is not derivable from the score by a caller: an empty-needle
+// hit also scores below the substring band, so "low score" and "fuzzy" are not the
+// same thing. It is returned separately because searchRows budgets scattered hits
+// (see searchScatteredShare) — nothing that merely orders hits needs it.
+//
+// Matching is byte-wise over the lower-cased strings. Object names are RFC 1123
+// in practice, so this is the same as character-wise; a needle with multi-byte
+// runes could in principle match across a rune boundary in the subsequence pass,
+// which produces a junk hit in the lowest band and is bounded by the budget.
+func (m nameMatcher) match(name string) (score int, scattered, ok bool) {
 	// The name check comes first, and stays first: an unnamed row is not a result
 	// even for the empty needle that otherwise matches everything.
 	if name == "" {
-		return 0, false
+		return 0, false, false
 	}
 	if m.needle == "" {
-		return 0, true
+		return 0, false, true
 	}
 	hay := strings.ToLower(name)
+	if s, found := m.substringScore(hay); found {
+		return s, false, true
+	}
+	if s, found := m.scatteredScore(hay); found {
+		return s, true, true
+	}
+	return 0, false, false
+}
+
+// substringScore scores the best contiguous occurrence of the needle in hay
+// (already lower-cased), or reports that there is none.
+func (m nameMatcher) substringScore(hay string) (int, bool) {
 	best, found := 0, false
 	for off := 0; off <= len(hay)-len(m.needle); {
 		i := strings.Index(hay[off:], m.needle)
@@ -188,7 +241,18 @@ func (m nameMatcher) match(name string) (int, bool) {
 			break
 		}
 		at := off + i
-		if s := m.substringScore(hay, at); !found || s > best {
+		s := scoreSubstringBand
+		switch {
+		case at == 0:
+			s += scoreAtStart
+		case isNameSeparator(hay[at-1]):
+			s += scoreAtBoundary
+		}
+		// Tie-breakers: an earlier match and a tighter name win, clamped so they
+		// can never cross a band.
+		s -= clamp(at, maxStartPenalty)
+		s -= clamp(len(hay)-len(m.needle), maxLenPenalty)
+		if !found || s > best {
 			best, found = s, true
 		}
 		off = at + 1
@@ -196,22 +260,50 @@ func (m nameMatcher) match(name string) (int, bool) {
 	return best, found
 }
 
-// substringScore scores the occurrence of the needle at index at in hay (both
-// lower-cased). Position dominates: matching at the head of the name is worth far
-// more than matching after a separator, which is worth far more than matching in
-// the middle of a word. The remaining two terms are tie-breakers — an earlier
-// match and a tighter name win — clamped so they can never cross a band.
-func (m nameMatcher) substringScore(hay string, at int) int {
-	s := scoreSubstringBand
-	switch {
-	case at == 0:
-		s += scoreAtStart
-	case isNameSeparator(hay[at-1]):
-		s += scoreAtBoundary
+// scatteredScore matches the needle against hay (already lower-cased) as a
+// subsequence and scores it in the scattered band, or reports no match. It is only
+// reached when the contiguous pass already failed.
+//
+// The window is found in two greedy passes because one is not enough. Taking each
+// needle character at its earliest position finds *a* match but often a needlessly
+// wide one — `abc` in `a-zz-b-zz-ab.c` matches a…b…c across the whole name before
+// it reaches the tight `ab.c` at the end — and the gaps are exactly what the score
+// is meant to punish. Walking back from where the forward pass ended pulls the
+// window as far right as it will go, giving the tightest window ending there. That
+// is not provably the tightest window in the name, but it is O(len(hay)) and it
+// fixes the case that actually misleads.
+//
+// Backtracking is only worth doing because gaps are weighted above the start
+// offset: shifting the window right by n costs n in start penalty and saves
+// gapPenaltyWeight*n in gaps, so the tightest window always scores best and there
+// is no need to score both candidates and take the max (which is what the
+// contiguous pass does over its occurrences).
+func (m nameMatcher) scatteredScore(hay string) (int, bool) {
+	end, n := -1, 0
+	for i := 0; i < len(hay) && n < len(m.needle); i++ {
+		if hay[i] == m.needle[n] {
+			n++
+			end = i
+		}
 	}
-	s -= clamp(at, maxStartPenalty)
+	if n < len(m.needle) {
+		return 0, false
+	}
+	start, n := end, len(m.needle)-1
+	for i := end; i >= 0 && n >= 0; i-- {
+		if hay[i] == m.needle[n] {
+			n--
+			start = i
+		}
+	}
+
+	s := scoreScatteredBand
+	s -= clamp(start, maxStartPenalty)
+	// The filler the match had to jump over — the term that separates `api-server`
+	// from `a-pod-in-some-random-vault`, and the scattered band's main signal.
+	s -= gapPenaltyWeight * clamp(end-start+1-len(m.needle), maxGapPenalty)
 	s -= clamp(len(hay)-len(m.needle), maxLenPenalty)
-	return s
+	return s, true
 }
 
 // isNameSeparator reports the characters that start a new word inside a
@@ -284,7 +376,10 @@ type SearchEvent struct {
 	// Capped marks a search stopped by the hit cap rather than by exhausting
 	// every kind (SearchDone only) — there were more matches than were emitted.
 	// A search that emits exactly limit hits with nothing left over is not
-	// Capped.
+	// Capped, and neither is one that merely dropped scattered hits over the
+	// scattered budget (searchScatteredShare): those are the matches the search
+	// itself rates worst, and telling a reader to narrow a query because some
+	// fuzzy near-misses were withheld would send them after nothing.
 	Capped bool
 }
 
@@ -310,6 +405,39 @@ const searchChanBuffer = 64
 // so a queued kind reads as "not done yet", exactly like a slow one.
 const searchConcurrency = 8
 
+// searchScatteredShare is the fraction of the hit cap that scattered
+// (subsequence) matches may occupy: at most limit/searchScatteredShare of the
+// emitted hits are fuzzy.
+//
+// It exists because the cap and the ranking act at different moments. The cap is
+// applied at emit time, in arrival order, before any consumer has ranked anything
+// — so without a budget the first kind to return could spend all 200 slots on
+// scattered junk and the exact match in a kind that returned a beat later would
+// never be emitted at all. Ranking cannot repair that: it orders what arrived, and
+// the good hit is not among it. A share, not a second cap, because the two must
+// stay coupled — the fuzzy allowance has to shrink with the caller's limit.
+//
+// Exhausting the share drops the hit and nothing else: the sweep is not cancelled
+// (only the real cap does that), the kind keeps being scanned for contiguous
+// matches, and the search is not reported Capped. The asymmetry is the point —
+// substring hits may fill the whole cap and starve fuzzy entirely, which is the
+// correct outcome; fuzzy may never starve substring.
+const searchScatteredShare = 4
+
+// scatteredLimit derives the scattered-hit budget from a search's hit cap. An
+// uncapped search (limit <= 0) budgets nothing either — the caller asked for
+// everything. A cap too small to divide still leaves room for one scattered hit,
+// so a tiny limit degrades to "mostly exact" rather than to "no fuzzy at all".
+func scatteredLimit(limit int) int {
+	if limit <= 0 {
+		return 0
+	}
+	if b := limit / searchScatteredShare; b > 0 {
+		return b
+	}
+	return 1
+}
+
 // rowLister is the narrow List seam the search core needs, so the concurrent
 // fan-out is exercised hermetically (D18) without a live server. *Clients
 // satisfies it via List.
@@ -320,9 +448,9 @@ type rowLister interface {
 // Search fans out a one-shot, cancellable search across resources in namespace and
 // streams SearchEvents onto the returned channel. Each kind is listed concurrently
 // (reusing the server-side Table List, M1-05a) under query.LabelSelector, and a
-// returned row whose object name contains query.Name (case-insensitive substring)
-// is emitted as a SearchMatch. A cluster-scoped kind ignores namespace (listed
-// cluster-wide).
+// returned row whose object name matches query.Name — as a substring, or failing
+// that as a subsequence — is emitted as a SearchMatch. A cluster-scoped kind
+// ignores namespace (listed cluster-wide).
 //
 // This is a one-shot query, NOT a watch: it lists each kind exactly once and
 // never re-lists. Cross-type enumeration is the expensive work the fast-cold-
@@ -338,7 +466,10 @@ type rowLister interface {
 //     progress fraction.
 //   - Cap: at most limit hits are emitted (limit <= 0 means no cap); once the cap
 //     is reached the still-running lists are cancelled and the terminal
-//     SearchDone reports Capped.
+//     SearchDone reports Capped. Within it, scattered (subsequence) hits are
+//     budgeted to a fraction of the cap (searchScatteredShare) so a fuzzy
+//     near-miss can never crowd out an exact match that a slower kind still owes;
+//     hits dropped that way neither stop the sweep nor set Capped.
 //   - Cancellation: the channel is closed when every kind has been searched, the
 //     cap is reached, or ctx is cancelled. A background goroutine owns all sends,
 //     so consumer state is only ever mutated in its own Update.
@@ -350,7 +481,9 @@ type rowLister interface {
 //     saying how well the name matched, and the consumer sorts on it. The stream
 //     stays in arrival order on purpose — emitting in rank order would mean
 //     holding every hit until the last kind returned, which is the streaming
-//     result list itself (D152).
+//     result list itself (D152). Scattered matches score in a band strictly below
+//     every substring match, so a consumer that sorts on Score alone already
+//     shows the fuzzy results last.
 //   - Selector faults are not special: a kind that rejects the label selector
 //     fails its List like any other broken kind (SearchKindDone{Failed}) and the
 //     rest of the search proceeds. Validating the selector before it is sent
@@ -382,11 +515,13 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 		// the rows on the wire instead of being filtered out after arriving.
 		opts := metav1.ListOptions{LabelSelector: query.LabelSelector}
 		var (
-			wg     sync.WaitGroup
-			mu     sync.Mutex
-			sent   int
-			capped bool
+			wg        sync.WaitGroup
+			mu        sync.Mutex
+			sent      int
+			scattered int
+			capped    bool
 		)
+		fuzzyCap := scatteredLimit(limit)
 		// sem admits at most searchConcurrency kinds to the wire at once. Every
 		// kind still gets its goroutine — they are cheap, and one goroutine per
 		// kind is what keeps "exactly one SearchKindDone per resource" true no
@@ -425,7 +560,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					return
 				}
 				for _, row := range tbl.Rows {
-					score, ok := matcher.match(row.Object.Name)
+					score, isScattered, ok := matcher.match(row.Object.Name)
 					if !ok {
 						continue
 					}
@@ -438,7 +573,18 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 						cancel() // cap reached — stop the other in-flight lists
 						return
 					}
+					if isScattered && fuzzyCap > 0 && scattered >= fuzzyCap {
+						// The scattered budget is spent. Drop this hit and keep
+						// going: unlike the cap this is not a reason to stop the
+						// sweep — every kind still owes the search its contiguous
+						// matches, which are the ones worth waiting for.
+						mu.Unlock()
+						continue
+					}
 					sent++
+					if isScattered {
+						scattered++
+					}
 					mu.Unlock()
 
 					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{Resource: r, Ref: row.Object, Score: score}}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -490,40 +491,65 @@ func equal(a, b []string) bool {
 	return true
 }
 
-// --- name matching / scoring (SEARCH-04c-2a) ---
+// --- name matching / scoring (SEARCH-04c-2a, SEARCH-04c-2b) ---
 
-func TestNameMatcherMatchesSameSetAsSubstring(t *testing.T) {
+func TestNameMatcherMatchKinds(t *testing.T) {
 	m := newNameMatcher("API")
 	for _, tc := range []struct {
-		name string
-		want bool
+		name          string
+		want          bool
+		wantScattered bool
 	}{
-		{"api-0", true},         // case-insensitive, as before
-		{"my-api-server", true}, // mid-name substring still matches
-		{"API", true},
-		{"a-p-i", false}, // scattered: not a match until SEARCH-04c-2b
-		{"nginx", false},
-		{"", false}, // an unnamed object is not a result
+		{name: "api-0", want: true},                      // case-insensitive, as before
+		{name: "my-api-server", want: true},              // mid-name substring
+		{name: "API", want: true},                        //
+		{name: "a-p-i", want: true, wantScattered: true}, // scattered: SEARCH-04c-2b
+		{name: "alpha-pod-images", want: true, wantScattered: true},
+		{name: "nginx", want: false}, // no `a`, `p`, `i` in order
+		{name: "ipa", want: false},   // right letters, wrong order
+		{name: "ap", want: false},    // needle not exhausted
+		{name: "", want: false},      // an unnamed object is not a result
 	} {
-		if _, ok := m.match(tc.name); ok != tc.want {
-			t.Errorf("match(%q) = %v, want %v", tc.name, ok, tc.want)
+		_, scattered, ok := m.match(tc.name)
+		if ok != tc.want {
+			t.Errorf("match(%q) ok = %v, want %v", tc.name, ok, tc.want)
+			continue
+		}
+		if ok && scattered != tc.wantScattered {
+			t.Errorf("match(%q) scattered = %v, want %v", tc.name, scattered, tc.wantScattered)
 		}
 	}
+}
+
+// mscore is the score of a name that is expected to match — for the tests that
+// only compare rankings and do not care how the match was found.
+func mscore(t *testing.T, m nameMatcher, name string) int {
+	t.Helper()
+	s, _, ok := m.match(name)
+	if !ok {
+		t.Fatalf("expected %q to match", name)
+	}
+	return s
 }
 
 func TestNameMatcherEmptyNeedleMatchesEverythingUnranked(t *testing.T) {
 	m := newNameMatcher("")
 	for _, n := range []string{"api-0", "nginx", "zzz"} {
-		score, ok := m.match(n)
+		score, scattered, ok := m.match(n)
 		if !ok {
 			t.Fatalf("empty needle should match %q", n)
 		}
 		if score != 0 {
 			t.Fatalf("empty needle score for %q = %d, want 0 (label-only query ranks nothing)", n, score)
 		}
+		// A label-only hit scores below the substring band but is not fuzzy, so
+		// it must not be charged to the scattered budget.
+		if scattered {
+			t.Fatalf("empty-needle hit for %q reported scattered", n)
+		}
 	}
 	// The one thing the empty needle must still reject.
-	if _, ok := m.match(""); ok {
+	if _, _, ok := m.match(""); ok {
 		t.Error("an unnamed object must not match even the empty needle")
 	}
 }
@@ -535,11 +561,7 @@ func TestNameMatcherRanksByMatchPosition(t *testing.T) {
 	names := []string{"legacyapi", "my-api", "api-server"}
 	scores := make([]int, len(names))
 	for i, n := range names {
-		s, ok := m.match(n)
-		if !ok {
-			t.Fatalf("expected %q to match", n)
-		}
-		scores[i] = s
+		scores[i] = mscore(t, m, n)
 	}
 	if scores[2] <= scores[1] || scores[1] <= scores[0] {
 		t.Fatalf("want api-server > my-api > legacyapi, got %v for %v", scores, names)
@@ -550,8 +572,8 @@ func TestNameMatcherRanksByMatchPosition(t *testing.T) {
 // is around the match — the tighter one wins.
 func TestNameMatcherPrefersTighterName(t *testing.T) {
 	m := newNameMatcher("api")
-	short, _ := m.match("api-0")
-	long, _ := m.match("api-0-abcdefghijklmnop")
+	short := mscore(t, m, "api-0")
+	long := mscore(t, m, "api-0-abcdefghijklmnop")
 	if short <= long {
 		t.Fatalf("api-0 (%d) should outrank api-0-abcdefghijklmnop (%d)", short, long)
 	}
@@ -561,27 +583,69 @@ func TestNameMatcherPrefersTighterName(t *testing.T) {
 // well later scores as the good match.
 func TestNameMatcherTakesBestOccurrence(t *testing.T) {
 	m := newNameMatcher("api")
-	best, ok := m.match("xapiy-api-0")
-	if !ok {
-		t.Fatal("expected a match")
-	}
-	buried, _ := m.match("xapiy-zzz-0")
+	best := mscore(t, m, "xapiy-api-0")
+	buried := mscore(t, m, "xapiy-zzz-0")
 	if best <= buried {
 		t.Fatalf("best occurrence = %d, want > the buried-only score %d", best, buried)
 	}
 }
 
-// The band is the constraint SEARCH-04c-2b must not break: the worst possible
-// substring score still has to leave room for a whole scattered band beneath it.
-func TestSubstringScoresStayInTheirBand(t *testing.T) {
+// The bands are the invariant the whole design rests on: the *worst* possible
+// substring score must still beat the *best* possible scattered one, so no fuzzy
+// near-miss can ever be ranked into the middle of the exact matches.
+func TestScoreBandsDoNotOverlap(t *testing.T) {
 	m := newNameMatcher("api")
-	floor := scoreSubstringBand - maxStartPenalty - maxLenPenalty
-	worst, ok := m.match("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzapizzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
-	if !ok {
-		t.Fatal("expected a match")
+	worstSubstring := mscore(t, m, "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzapizzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+	// The best a scattered match can do: at the very start of the shortest
+	// possible name that is not a substring match.
+	bestScattered := mscore(t, m, "apxi")
+
+	if floor := scoreSubstringBand - maxStartPenalty - maxLenPenalty; worstSubstring < floor {
+		t.Fatalf("worst substring score %d fell below the band floor %d", worstSubstring, floor)
 	}
-	if worst < floor {
-		t.Fatalf("worst substring score %d fell below the band floor %d", worst, floor)
+	if bestScattered > scoreScatteredBand {
+		t.Fatalf("best scattered score %d rose above the band ceiling %d", bestScattered, scoreScatteredBand)
+	}
+	if worstSubstring <= bestScattered {
+		t.Fatalf("bands overlap: worst substring %d <= best scattered %d", worstSubstring, bestScattered)
+	}
+}
+
+// The scattered band reads names by tightness, not position: `apisrv` finding
+// `api-server` is the match, the same six characters strewn across a long name is
+// the noise.
+func TestScatteredMatchesRankByTightness(t *testing.T) {
+	m := newNameMatcher("apisrv")
+	tight := mscore(t, m, "api-srv")
+	loose := mscore(t, m, "api-server")
+	spread := mscore(t, m, "a-pod-in-some-random-vault")
+	if tight <= loose || loose <= spread {
+		t.Fatalf("want api-srv > api-server > a-pod-in-some-random-vault, got %d, %d, %d", tight, loose, spread)
+	}
+
+	// Position still separates two equally tight matches — the earlier one wins.
+	early := mscore(t, m, "apixsrv-0")
+	late := mscore(t, m, "zzz-apixsrv")
+	if early <= late {
+		t.Fatalf("apixsrv-0 (%d) should outrank zzz-apixsrv (%d)", early, late)
+	}
+}
+
+// The backtrack, isolated. Forward-greedy alone would read the first name as a
+// match spread over its whole length; walking back from where the forward pass
+// ended finds the tight window at the end instead, which is what puts it above a
+// name of the same shape that genuinely has no tight window anywhere. Drop the
+// backtrack and this ordering inverts.
+func TestScatteredMatchPrefersTheTightestWindow(t *testing.T) {
+	m := newNameMatcher("abc")
+	filler := strings.Repeat("z", 20)
+	// Forward-greedy takes a(0), b(21), c(last); the backtrack finds the trailing
+	// `ab.c` — no contiguous `abc` anywhere, so this stays in the scattered band.
+	tightened := mscore(t, m, "a"+filler+"b"+filler+"ab.c")
+	// The same characters and roughly the same length, but nothing to tighten onto.
+	spread := mscore(t, m, "a"+filler+"z"+"b"+filler+"z"+"c")
+	if tightened <= spread {
+		t.Fatalf("tightened window (%d) should outrank the genuinely spread one (%d)", tightened, spread)
 	}
 }
 
@@ -604,5 +668,89 @@ func TestSearchScoresHits(t *testing.T) {
 	}
 	if scores["api-0"] <= scores["zzz-api-legacy"] {
 		t.Fatalf("api-0 (%d) should outrank zzz-api-legacy (%d)", scores["api-0"], scores["zzz-api-legacy"])
+	}
+}
+
+// The widen this leg exists for: a name the substring matcher would have missed is
+// now a hit, and it arrives ranked below the ones that were already there.
+func TestSearchMatchesScatteredNames(t *testing.T) {
+	pods := res("", "v1", "Pod", "pods", true)
+	f := &fakeLister{tables: map[string]*Table{
+		"pods": tbl("web", "api-server", "apisrv-0", "redis"),
+	}}
+
+	scores := map[string]int{}
+	for ev := range searchRows(context.Background(), f, []Resource{pods}, "web", nameQ("apisrv"), 0) {
+		if ev.Type == SearchMatch {
+			scores[ev.Hit.Ref.Name] = ev.Hit.Score
+		}
+	}
+	if len(scores) != 2 {
+		t.Fatalf("scores = %v, want the substring hit and the scattered one (and not redis)", scores)
+	}
+	if scores["apisrv-0"] <= scores["api-server"] {
+		t.Fatalf("the substring hit apisrv-0 (%d) must outrank the scattered api-server (%d)",
+			scores["apisrv-0"], scores["api-server"])
+	}
+}
+
+func TestScatteredLimitTracksTheCap(t *testing.T) {
+	for _, tc := range []struct{ limit, want int }{
+		{limit: 0, want: 0},    // uncapped search: no budget either
+		{limit: -1, want: 0},   //
+		{limit: 200, want: 50}, // the app's cap
+		{limit: 4, want: 1},    //
+		{limit: 2, want: 1},    // too small to divide, but never zero
+	} {
+		if got := scatteredLimit(tc.limit); got != tc.want {
+			t.Errorf("scatteredLimit(%d) = %d, want %d", tc.limit, got, tc.want)
+		}
+	}
+}
+
+// The cap runs at emit time, in arrival order, before any consumer has ranked
+// anything — so scattered hits get a fraction of it and no more. Without the
+// budget the ten junk names below would spend the whole cap and the five exact
+// matches behind them would never be emitted at all.
+//
+// One kind, so the row order is the arrival order and the assertion is exact.
+func TestSearchBudgetsScatteredHitsWithinTheCap(t *testing.T) {
+	pods := res("", "v1", "Pod", "pods", true)
+	names := []string{}
+	for i := 0; i < 10; i++ {
+		names = append(names, "a-p-i-s-r-v-junk-"+string(rune('a'+i))) // scattered only
+	}
+	for i := 0; i < 5; i++ {
+		names = append(names, "apisrv-"+string(rune('a'+i))) // contiguous
+	}
+
+	const limit = 8 // → a scattered budget of 2
+	events := drainSearch(searchRows(context.Background(), &fakeLister{
+		tables: map[string]*Table{"pods": tbl("web", names...)},
+	}, []Resource{pods}, "web", nameQ("apisrv"), limit))
+
+	var scattered, contiguous int
+	for _, ev := range events {
+		if ev.Type != SearchMatch {
+			continue
+		}
+		if ev.Hit.Score >= scoreSubstringBand-maxStartPenalty-maxLenPenalty {
+			contiguous++
+		} else {
+			scattered++
+		}
+	}
+	if want := scatteredLimit(limit); scattered != want {
+		t.Errorf("emitted %d scattered hits, want the budget %d", scattered, want)
+	}
+	// The point of the budget: every exact match still got through, even though
+	// the junk arrived first and there were more junk rows than the whole cap.
+	if contiguous != 5 {
+		t.Errorf("emitted %d contiguous hits, want all 5 — fuzzy must never starve exact", contiguous)
+	}
+	// Dropping scattered hits is not truncation worth telling the reader about:
+	// they are the matches this search itself rates worst.
+	if terminal(t, events).Capped {
+		t.Error("a search that only dropped over-budget scattered hits must not report Capped")
 	}
 }

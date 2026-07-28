@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — SEARCH-04c-2a done: cluster-search results are ranked by match score, ordered in the view rather than buffered in `kube.Search` (D152), leaving SEARCH-04c-2b (fuzzy matching) as the last item in the SEARCH line. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — SEARCH-04c-2b done and the SEARCH line is closed: cluster search now falls back to subsequence matching in a band strictly below every substring hit, with the emit-time cap budgeting scattered hits so fuzzy can never starve exact (D153). Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-04c-2b** Fuzzy (subsequence) name matching, on top of the ranked list
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 (SEARCH-04c-2 split) | claimed: 2026-07-28
+_(none)_
 
 ## Blocked
 
@@ -126,7 +125,9 @@ reader wanted under scattered ones. Ranking first also settles the ordering ques
 old note flagged — see D152: `kube.Search` keeps streaming in arrival order and the *view*
 does the ranking, as a stable ordered insert with the cursor pinned to its row.
 
-_(SEARCH-04c-2b is in progress — see In Progress.)_
+Both halves are done, so **the SEARCH line is closed**: the matcher falls back to
+subsequence matching under the band the score reserves for it, and the emit-time hit cap
+budgets scattered hits to a fraction of itself so fuzzy can never starve exact (D153).
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
@@ -154,6 +155,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-04c-2b** Fuzzy (subsequence) cluster-search matching — `kube.Search`'s name matcher falls back to a subsequence match when the contiguous pass finds nothing (`apisrv` finds `api-server`), scored in a band strictly below every substring hit and by tightness rather than position, so the noise lands at the bottom of the ranked list; the emit-time hit cap now budgets scattered hits to a fraction of itself, without cancelling the sweep or reporting `Capped`, so a fuzzy near-miss can never spend a slot an exact match in a slower kind still needs — done 2026-07-28 (D153)
 - [x] **SEARCH-04c-2a** Ranked cluster-search results — `kube.Search` scores every match by where the query lands in the name (`SearchHit.Score`, contiguous matches in a band no scattered match can reach) and still streams in arrival order, while `searchview` holds its hits in score order and inserts each streamed hit at its rank with the cursor carried along with its row, so the best answer rises to the top without buffering the sweep; matching itself is unchanged — done 2026-07-28 (D152)
 - [x] **SEARCH-04c-1** Label-selector matching for cluster search — a `-l <selector>` term in the query line is parsed into `kube.SearchQuery{Name, LabelSelector}` and evaluated by the apiserver on every kind's List (so it narrows the wire instead of costing client work), while the name substring stays client-side; an unparseable selector is reported under the query line and never sent — done 2026-07-28 (D151)
 - [x] **SEARCH-04b** All-namespaces scope widen for cluster search — `search.allNamespaces` (`ctrl+w`) searches every namespace and re-runs the query, replacing the namespace the header names rather than adding a segment, independent of the kind widen and leaving the app's own namespace scope untouched; `kubecom keys` now sizes its columns from the widest id — done 2026-07-28 (D150)
