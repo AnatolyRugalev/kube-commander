@@ -165,6 +165,14 @@ func TestShortHelpContext(t *testing.T) {
 			t.Errorf("%q is mode-dependent in the logs view and must not be hinted", a)
 		}
 	}
+	// The timestamps toggle (LOGS-04b) is hinted in neither context, for the other
+	// reason: it acts with the grep closed, but the closed-grep hint line is already the
+	// scarcest in the app (six entries elide at 220 columns) and a per-session display
+	// toggle that puts a stamp on every row the moment it fires does not need to be
+	// advertised. `?` and the generated doc carry it.
+	if logs[ActionLogsTimestamps.Describe()] || logsFilter[ActionLogsTimestamps.Describe()] {
+		t.Error("logs.timestamps self-announces and must not spend a hint slot")
+	}
 	// The regex toggle carries no text, so unlike follow/quit it survives the open grep
 	// and belongs in *both* logs contexts (LOGS-03).
 	if !logsFilter[ActionLogsRegex.Describe()] || !descs(hm.ShortHelpContext(HelpLogs))[ActionLogsRegex.Describe()] {

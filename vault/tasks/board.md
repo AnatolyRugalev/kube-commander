@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — LOGS-04c done: `G` in the logs view now catches up **and** keeps tailing (D147), leaving LOGS-04b (timestamps) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — LOGS-04b done: `t` shows each log line's server timestamp as a display toggle over stamps the stream already carries (D148), closing the LOGS line and leaving SEARCH-04 (scope widen) as the only open M3 item. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-04b** Timestamps toggle in the logs view
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (LOGS-04 split) | claimed: 2026-07-28
+_(none)_
 
 ## Blocked
 
@@ -119,17 +118,19 @@ dedicated logs view is live on `res.logs`, the shared viewer no longer has a log
 (D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
 the nice-to-haves are left, split D52-style into **LOGS-04a** (wrap toggle + horizontal
 scroll), **LOGS-04b** (timestamps) and **LOGS-04c** (jump-to-latest) — three unrelated
-surfaces that were one line item. LOGS-04a is done: long lines wrap on `logs.wrap` or
-scroll sideways on `nav.left`/`nav.right` (D146); LOGS-04c is done: `nav.bottom` rejoins
-the stream rather than just scrolling to it (D147). Only the timestamps slice is left.
-
-_(LOGS-04b is In Progress — see the top of this board.)_
+surfaces that were one line item. All three are done: long lines wrap on `logs.wrap` or
+scroll sideways on `nav.left`/`nav.right` (D146); `nav.bottom` rejoins the stream rather
+than just scrolling to it (D147); and `logs.timestamps` shows each line's server stamp as
+a pure display toggle over stamps the stream already carries (D148). **The LOGS line is
+closed** — the dedicated logs view is feature-complete for M3, with only the standing
+throughput dogfood human-task outstanding against it.
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
 
 
+- [x] **LOGS-04b** Timestamps toggle in the logs view — `logs.timestamps` (`t`) draws each line's server stamp; the stream always requests timestamps (free on a followed stream) and the view keeps them in a buffer parallel to the messages, so the toggle is a redraw not a restream and the grep still matches only the message (D148) — done 2026-07-28 (D148)
 - [x] **LOGS-04c** Jump-to-latest in the logs view — `nav.bottom` (`G`) now re-arms following as well as scrolling, the inverse of "any upward scroll pauses"; incremental downward movement still does not (D147) — done 2026-07-28 (D147)
 - [x] **LOGS-04a** Wrap toggle + horizontal scroll for long lines in the logs view — done 2026-07-28 (D146)
 - [x] **LOGS-03** Regex grep mode + match highlighting in the logs view — `logs.regex` (`ctrl+r`, a no-text chord so it still fires while the grep field is open) re-reads the query as a case-insensitive regex, matched spans are painted with a new shared `styles.Match` role in either mode, an uncompilable pattern keeps narrowing by the last good one and the header says `invalid regex`, and the unfiltered render path stays match-work-free (plus one pre-existing double scan removed) — done 2026-07-25 (D145)

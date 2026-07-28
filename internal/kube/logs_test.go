@@ -162,6 +162,46 @@ func TestPodLogOptionsZeroValue(t *testing.T) {
 	}
 }
 
+// TestSplitLogTimestamp covers the read side of LogOptions.Timestamps (LOGS-04b): a
+// stamped line splits into its two halves, and anything the parser does not recognise
+// degrades to "no stamp, whole line" so a caller that concatenates the results always
+// gets its input back — the property the logs view relies on to render an unstamped
+// line unchanged.
+func TestSplitLogTimestamp(t *testing.T) {
+	tests := []struct {
+		name       string
+		line       string
+		wantStamp  string
+		wantContent string
+	}{
+		{"nano", "2026-07-28T16:32:01.123456789Z hello world", "2026-07-28T16:32:01.123456789Z", "hello world"},
+		{"second granularity", "2026-07-28T16:32:01Z boom", "2026-07-28T16:32:01Z", "boom"},
+		{"offset zone", "2026-07-28T18:32:01+02:00 boom", "2026-07-28T18:32:01+02:00", "boom"},
+		{"message with spaces", "2026-07-28T16:32:01Z GET /api/pods 200", "2026-07-28T16:32:01Z", "GET /api/pods 200"},
+		{"empty message", "2026-07-28T16:32:01Z ", "2026-07-28T16:32:01Z", ""},
+		{"unstamped", "plain log line", "", "plain log line"},
+		{"no space", "2026-07-28T16:32:01Z", "", "2026-07-28T16:32:01Z"},
+		{"not a timestamp", "INFO starting up", "", "INFO starting up"},
+		{"empty", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stamp, content := SplitLogTimestamp(tt.line)
+			if stamp != tt.wantStamp || content != tt.wantContent {
+				t.Errorf("SplitLogTimestamp(%q) = %q, %q; want %q, %q", tt.line, stamp, content, tt.wantStamp, tt.wantContent)
+			}
+			// The split is lossless: the caller can always put the line back together.
+			rejoined := content
+			if stamp != "" {
+				rejoined = stamp + " " + content
+			}
+			if rejoined != tt.line {
+				t.Errorf("split is lossy: rejoined %q, want %q", rejoined, tt.line)
+			}
+		})
+	}
+}
+
 func TestStreamLogsLinesVerbatim(t *testing.T) {
 	// Trailing newline on the last line; each line delivered without its newline.
 	r := strings.NewReader("line one\nline two\nline three\n")

@@ -107,6 +107,14 @@ const (
 // advertised way back to the tail. Its registry description stays the plain "Jump to
 // bottom" too: a description is *global*, and lengthening it widens that column in the
 // `?` overlay until the next column no longer fits (D147 pt 3).
+//
+// The timestamps toggle (LOGS-04b) is not hinted for the same reason, applied
+// deliberately rather than by omission: with six entries already eliding at 220 columns
+// (LOGS-04a), the closed-grep context is the scarcest hint line in the app, and a
+// per-session display toggle is worth less of it than the grep, follow or wrap. Like
+// them it self-announces — pressing it puts a timestamp on every row — so `?` and the
+// generated doc carry it and the hint line stays about the keys a reader needs to be
+// told about.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},

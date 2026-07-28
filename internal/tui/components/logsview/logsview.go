@@ -14,8 +14,9 @@
 // the matched spans are highlighted in the shown lines (D145). LOGS-04a gave long lines
 // two ways to be read — `logs.wrap` soft-wraps them, and while it is off nav.left/right
 // scroll the clipped view horizontally. LOGS-04c made `nav.bottom` mean "the newest line,
-// and keep it newest": jumping to the end re-arms following (D147), leaving timestamps
-// (LOGS-04b) as the last slice.
+// and keep it newest": jumping to the end re-arms following (D147). LOGS-04b closed the
+// line with `logs.timestamps`, a pure *display* toggle over stamps the stream already
+// carries (D148) — no restream, and the grep still matches only the message.
 //
 // Like the shared viewer and the picker it wraps a bubbles component (viewport +
 // textinput) but drives it entirely through keymap.Actions — it never matches a raw
@@ -80,11 +81,20 @@ type Model struct {
 	filter   textinput.Model // the live grep field (shown only while filtering)
 	title    string          // object label shown in the header (e.g. "pod/api")
 
-	// lines is the authoritative unfiltered log buffer (every streamed line). The
-	// viewport always renders the subset matching the current filter query; lines is
-	// the source it is rebuilt from, so clearing the filter restores the full stream
-	// without re-fetching (mirrors the picker's `all` set).
-	lines []string
+	// lines is the authoritative unfiltered log buffer (every streamed line's
+	// *message*, never its timestamp). The viewport always renders the subset matching
+	// the current filter query; lines is the source it is rebuilt from, so clearing the
+	// filter restores the full stream without re-fetching (mirrors the picker's `all`
+	// set).
+	//
+	// stamps holds each line's server timestamp, parallel to lines and empty where the
+	// server sent none. Keeping it *beside* the message rather than prefixed into it is
+	// what makes the timestamps toggle free (LOGS-04b): with timestamps off, render
+	// joins exactly the bytes it joined before this existed, so the high-throughput
+	// default costs nothing; and the grep matches the message in either state, so a
+	// query can never be satisfied by the clock.
+	lines  []string
+	stamps []string
 
 	following bool // auto-scroll to the newest line as it streams (toggled by logs.follow)
 	filtering bool // whether the filter field is open and capturing text
@@ -106,6 +116,13 @@ type Model struct {
 	// viewport's horizontal offset; wrapping makes that offset meaningless (the
 	// viewport ignores it), which is why one toggle covers both modes.
 	wrap bool
+
+	// timestamps shows each line's server timestamp ahead of its message
+	// (logs.timestamps, LOGS-04b). Display only: the stream always requests timestamps
+	// (for a followed stream the kube layer forces them on the wire anyway, to anchor
+	// its reconnect), so toggling costs no restream and loses no buffer — the reader
+	// keeps their scroll position, their grep and every line already streamed.
+	timestamps bool
 
 	// matched is the number of lines the current query kept, computed by render (the
 	// one place the buffer is scanned) so View never re-runs the match to label it.
@@ -144,24 +161,30 @@ func (m *Model) SetTitle(t string) { m.title = t }
 
 // Reset clears the buffer and filter and re-arms following, so opening the view over a
 // new object always starts clean and tailing regardless of a prior session. The grep
-// mode and the wrap mode reset with it: a new object's logs open on the plain substring
-// grep, unwrapped and unscrolled — the state a reader who never touched logs.regex or
-// logs.wrap expects (both toggles are per-session, not sticky across objects).
+// mode, the wrap mode and the timestamps toggle reset with it: a new object's logs open
+// on the plain substring grep, unwrapped, unscrolled and unstamped — the state a reader
+// who never touched logs.regex, logs.wrap or logs.timestamps expects (all three are
+// per-session, not sticky across objects).
 func (m *Model) Reset() {
 	m.lines = m.lines[:0]
+	m.stamps = m.stamps[:0]
 	m.following = true
+	m.timestamps = false
 	m.closeFilter()
 	m.setRegex(false)
 	m.setWrap(false)
 	m.render()
 }
 
-// Append adds one streamed log line to the buffer and re-renders the filtered view. If
-// following, the viewport is pinned to the newest line so the stream tails; if paused
-// (the reader scrolled up), the scroll position is left undisturbed. This is the
+// Append adds one streamed log line to the buffer and re-renders the filtered view.
+// stamp is the line's server timestamp ("" when the server sent none); it is stored
+// beside the message and shown only while logs.timestamps is on — the grep never sees
+// it. If following, the viewport is pinned to the newest line so the stream tails; if
+// paused (the reader scrolled up), the scroll position is left undisturbed. This is the
 // streaming entry point the log pump (D53) feeds line by line.
-func (m *Model) Append(line string) {
+func (m *Model) Append(stamp, line string) {
 	m.lines = append(m.lines, line)
+	m.stamps = append(m.stamps, stamp)
 	m.render()
 }
 
@@ -188,6 +211,10 @@ func (m Model) Regex() bool { return m.regex }
 // while wrapping.
 func (m Model) Wrap() bool   { return m.wrap }
 func (m Model) HOffset() int { return m.viewport.XOffset() }
+
+// Timestamps reports whether each line's server timestamp is shown ahead of its message
+// (logs.timestamps, LOGS-04b).
+func (m Model) Timestamps() bool { return m.timestamps }
 
 // Show reveals the view (it then captures input until Hide). Hide dismisses it and
 // closes any open filter so it reopens clean next time.
@@ -220,7 +247,8 @@ func (m *Model) SetSize(w, h int) {
 // app.filter opens the live grep; logs.regex switches that grep between substring and
 // regex matching (LOGS-03); logs.wrap switches long lines between soft-wrapped and
 // clipped, and while clipped nav.left/nav.right scroll horizontally to the tail of a
-// long line (LOGS-04a); logs.follow toggles follow (re-enabling jumps to the newest
+// long line (LOGS-04a); logs.timestamps shows or hides each line's server timestamp
+// without touching the stream (LOGS-04b); logs.follow toggles follow (re-enabling jumps to the newest
 // line); nav.back closes the filter if open, else closes the view (ClosedMsg).
 // The view consumes actions, never raw keys (D11); an inactive view ignores everything.
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
@@ -289,6 +317,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		// Wrapping changes how many display rows the buffer occupies, so a followed
 		// view has to be re-pinned to the newest line — render does that.
 		m.setWrap(!m.wrap)
+		m.render()
+	case keymap.ActionLogsTimestamps:
+		// Display only — the timestamps are already in the buffer (LOGS-04b), so this
+		// re-renders what is on screen rather than re-requesting the stream: nothing is
+		// re-fetched, no line is lost, and the grep and scroll position survive. It does
+		// widen every line by the stamp, which is why render re-clamps the horizontal
+		// offset and re-pins a followed view.
+		m.timestamps = !m.timestamps
 		m.render()
 	case keymap.ActionBack:
 		// One esc clears an open filter (restoring the full stream); a second closes
@@ -457,26 +493,50 @@ func (m Model) highlight(line string, spans [][]int) string {
 	return b.String()
 }
 
+// stamp is line i's rendered timestamp prefix, or "" when timestamps are off or the
+// server sent none for that line. Muted, because the timestamp is context for the
+// message and should not compete with it for the eye. An unstamped line is simply not
+// padded: aligning it under its neighbours would mean inventing a timestamp it does not
+// have, and in practice a stream is either wholly stamped or wholly not.
+func (m Model) stamp(i int) string {
+	if !m.timestamps || i >= len(m.stamps) || m.stamps[i] == "" {
+		return ""
+	}
+	return m.styles.Subtle.Render(m.stamps[i]) + " "
+}
+
 // shown returns the body to render — the matching lines in stream order, with their
-// matched spans highlighted — and how many matched. An empty query matches everything
-// and takes the untouched fast path: the whole buffer joined, no matcher built and no
-// highlighting done, so the unfiltered stream (the high-throughput case) costs exactly
-// what it did before LOGS-03.
+// matched spans highlighted and, while logs.timestamps is on, their server timestamp
+// ahead of them — and how many matched. An empty query with timestamps off matches
+// everything and takes the untouched fast path: the whole buffer joined, no matcher
+// built, no highlighting and no per-line prefixing, so the unfiltered stream (the
+// high-throughput default) costs exactly what it did before LOGS-03/04b.
+//
+// The matcher only ever sees the message: a timestamp is not something the reader typed
+// a query about, and letting it match would mean the same query narrowed differently
+// depending on whether the clock happened to be on screen.
 func (m Model) shown() (string, int) {
 	if m.filter.Value() == "" {
-		return strings.Join(m.lines, "\n"), len(m.lines)
+		if !m.timestamps {
+			return strings.Join(m.lines, "\n"), len(m.lines)
+		}
+		kept := make([]string, len(m.lines))
+		for i, l := range m.lines {
+			kept[i] = m.stamp(i) + l
+		}
+		return strings.Join(kept, "\n"), len(kept)
 	}
 	match := m.matcher()
 	if match == nil {
 		return "", 0
 	}
 	kept := make([]string, 0, len(m.lines))
-	for _, l := range m.lines {
+	for i, l := range m.lines {
 		spans, ok := match(l)
 		if !ok {
 			continue
 		}
-		kept = append(kept, m.highlight(l, spans))
+		kept = append(kept, m.stamp(i)+m.highlight(l, spans))
 	}
 	return strings.Join(kept, "\n"), len(kept)
 }
@@ -540,7 +600,11 @@ func (m Model) View() string {
 // plus the active query, clipped to the screen width. Wrapping adds a `[wrap]` marker and
 // a horizontally scrolled clip adds `[+N]` (columns hidden to the left, LOGS-04a) —
 // without it a view scrolled past the start of every line looks like a view of blank
-// lines. Regex mode adds a `[re]` marker
+// lines. The timestamps toggle deliberately gets **no** marker: unlike wrap (which looks
+// identical to clipping until some line is wider than the screen) a timestamp is on every
+// row the moment it is on, so a marker would restate the body and cost a segment of a
+// header that is already clipped from the right at narrow widths (D146 names state the
+// reader can *lose sight of*; this is not that). Regex mode adds a `[re]` marker
 // (the field's own `re/` prompt is only visible while it is open), and a query that
 // does not compile is called out rather than left to look like a query that simply
 // matched nothing — the counts beside it are the last good pattern's (D145).

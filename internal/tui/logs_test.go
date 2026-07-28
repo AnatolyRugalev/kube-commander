@@ -225,6 +225,68 @@ func TestLogsJumpToLatestFromTheShell(t *testing.T) {
 	}
 }
 
+// tsKey is the default logs.timestamps key (`t`) — the LOGS-04b display toggle. Like
+// the wrap key beside it (and unlike the regex chord) it is an ordinary letter, so the
+// open grep types it.
+var tsKey = tea.Key{Code: 't', Text: "t"}
+
+// TestLogsStreamAsksForTimestamps is the wiring half of LOGS-04b/D148: the stream is
+// opened with Timestamps set even though the view starts with them hidden, because that
+// is what makes the toggle a redraw rather than a re-fetch. It costs nothing — a
+// following stream already forces them on the wire to anchor its reconnect.
+func TestLogsStreamAsksForTimestamps(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "2026-07-28T16:32:01Z hello"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewHelper(t, m)
+	if !s.gotOpts.Timestamps {
+		t.Error("the logs stream should be opened with Timestamps set")
+	}
+	if !s.gotOpts.Follow {
+		t.Error("the logs stream should still follow")
+	}
+	// The stamp is split off at the boundary, so the view shows the message only until
+	// the toggle asks for it.
+	if v := frame(m); strings.Contains(v, "2026-07-28T16:32:01Z") {
+		t.Errorf("the stamp must not be drawn before logs.timestamps is pressed; got:\n%s", v)
+	}
+	if v := frame(m); !strings.Contains(v, "hello") {
+		t.Errorf("the message should be shown; got:\n%s", v)
+	}
+	m, _ = press(t, m, tsKey)
+	if v := frame(m); !strings.Contains(v, "2026-07-28T16:32:01Z hello") {
+		t.Errorf("logs.timestamps should reveal the stamp already in the buffer; got:\n%s", v)
+	}
+}
+
+// TestLogsTimestampsToggleFromTheShell proves LOGS-04b's routing, the wrap test's twin:
+// `t` reaches the view through the ordinary sequencer path with the grep closed, and —
+// being a plain letter — types into the grep field while that is open, leaving the
+// toggle alone.
+func TestLogsTimestampsToggleFromTheShell(t *testing.T) {
+	m := openLogsWithLines(t, "GET /healthz 200")
+
+	m, _ = press(t, m, tsKey)
+	if !m.logsView.Timestamps() {
+		t.Fatal("logs.timestamps with the grep closed should turn timestamps on")
+	}
+	if !m.logsView.Active() {
+		t.Fatal("logs.timestamps should not close the logs view")
+	}
+	m, _ = press(t, m, tsKey)
+	if m.logsView.Timestamps() {
+		t.Fatal("a second logs.timestamps should turn them back off")
+	}
+
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "t")
+	if m.logsView.Timestamps() {
+		t.Fatal("`t` typed into the open grep must not toggle timestamps")
+	}
+	if q := m.logsView.Query(); q != "t" {
+		t.Fatalf("`t` should be typed into the grep; query = %q", q)
+	}
+}
+
 // TestLogsQuitClosesViewNotApp proves `q` with the grep *closed* closes the logs view
 // rather than exiting kubecom — a full-screen pager owns the quit key while it is up,
 // as the help modal, the shared viewer and the search view all do — and that it tears

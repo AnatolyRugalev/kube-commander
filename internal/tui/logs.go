@@ -46,7 +46,14 @@ func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string,
 	// Follow keeps the stream open and reconnects transparently across transport
 	// drops (M1-07d), so the view tails live output; stopLogStream cancels it on
 	// close/supersede/quit. The view opens following, so the stream must too.
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true, Container: container})
+	//
+	// Timestamps is asked for unconditionally, even though the view starts with them
+	// hidden (LOGS-04b/D148): a following stream already forces server timestamps on
+	// the wire so the kube layer can anchor its reconnect, so this costs nothing and
+	// only stops them being stripped before delivery. Having them in the buffer is
+	// what lets logs.timestamps be a redraw rather than a re-fetch — the reader never
+	// loses a line, their grep or their place to see when something happened.
+	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true, Container: container, Timestamps: true})
 	if err != nil {
 		cancel()
 		return m, m.surfaceError(NewErrorMsg("logs", err))
@@ -85,7 +92,14 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 	}
 	switch inner := l.msg.(type) {
 	case LogLineMsg:
-		m.logsView.Append(inner.Line)
+		// The stream is timestamped (see openLogs), so the line arrives as
+		// "<RFC3339Nano> <message>". Split it once here, at the boundary, and hand the
+		// two parts to the view separately: the message is what the grep matches and
+		// what is always drawn, the stamp only appears while logs.timestamps is on
+		// (LOGS-04b/D148). A line the server did not stamp splits to an empty stamp and
+		// itself, so it still shows verbatim.
+		stamp, line := kube.SplitLogTimestamp(inner.Line)
+		m.logsView.Append(stamp, line)
 		return m, m.pumpLogs(l.gen)
 	case LogClosedMsg:
 		m.stopLogStream() // stream ended (EOF); release the context, keep the lines shown.

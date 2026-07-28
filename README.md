@@ -142,7 +142,13 @@ clipped, so one log line stays one
 row: press `w` (`logs.wrap`) to fold long lines onto continuation rows instead (the
 header shows `[wrap]`), or leave it off and use `h`/`l` (or the arrow keys) to scroll
 sideways to the tail — the header then shows how many columns are hidden to the left, as
-`[+16]`. `Esc` with no filter open, or `q`, closes the view. YAML, describe
+`[+16]`. Press `t` (`logs.timestamps`) to put each line's **server timestamp** ahead of
+its message, the equivalent of `kubectl logs --timestamps`. It is a display toggle:
+the timestamps are already in the buffer, so turning them on or off redraws what is on
+screen — no re-fetch, no lost lines, and your grep and scroll position survive. They are
+off by default because an RFC3339 timestamp is 30 columns wide; the grep always matches
+the *message*, so a query never accidentally matches the clock, and `w`/`h`/`l` are
+there for the extra width. `Esc` with no filter open, or `q`, closes the view. YAML, describe
 and secret content still open in the shared centered viewer — only logs stream, so only
 logs get their own screen.
 

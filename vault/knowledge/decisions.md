@@ -3676,3 +3676,34 @@ as scrolling, making it the single "catch up and keep tailing" gesture.
    and lengthening it widens that column until the next one no longer fits (measured — the
    nav column's longest description sets the width). View-specific behaviour on a shared
    key is documented in the README and `knowledge/keybindings.md` instead.
+
+## D148 — A stream's optional metadata is fetched always and *displayed* on toggle; the grep matches the message (2026-07-28, LOGS-04b)
+
+`logs.timestamps` (`t`) shows each log line's server timestamp. The stream is opened with
+`kube.LogOptions.Timestamps` set **unconditionally**, even though the view starts with the
+stamps hidden, and the toggle only changes whether they are drawn.
+
+1. **Fetch the metadata always; toggle the display.** Where an optional field is cheap on
+   the wire, requesting it up front and toggling its display is strictly better than
+   re-requesting the stream: a restream drops the buffer, the scroll position and the
+   active filter, which for a live log is precisely the state the reader turned the toggle
+   on to interpret. Here it is also literally free — a *following* stream already forces
+   server timestamps on the wire so the kube layer can anchor its reconnect (D34), so
+   asking for them only stops them being stripped. A future streaming view with an
+   optional per-item field decides the same way unless the field is expensive to fetch.
+2. **Metadata is stored beside the payload, never prefixed into it.** The logs view keeps
+   a `stamps` buffer parallel to `lines`, and the boundary (`kube.SplitLogTimestamp` in
+   `internal/tui/logs.go`) splits once. This is what keeps the default render path
+   byte-for-byte and work-for-work what it was — the high-throughput case pays nothing for
+   a feature that is off — and it is the only shape in which point 3 is even expressible.
+3. **A filter matches the payload, not the metadata.** The grep matches the message in
+   both display states. A query whose meaning changed depending on whether the clock
+   happened to be on screen would be a worse tool than no toggle at all; and "narrow to
+   what I typed" must not be satisfiable by a timestamp nobody typed a query about.
+4. **The hint line is full; a self-announcing toggle does not get a slot.** The logs
+   closed-grep context already elides at 220 columns (D146), so new low-frequency
+   bindings there go to `?` and `docs/keybindings.md` only. The test for whether a
+   display state needs a header marker is D146's, sharpened: name state the reader can
+   *lose sight of*. `[wrap]` is needed because wrapping and clipping look identical until
+   a line is too long; timestamps are on every row the instant they are on, so they get
+   no marker — and the header keeps a segment it would otherwise spend at narrow widths.

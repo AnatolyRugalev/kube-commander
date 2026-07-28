@@ -84,6 +84,13 @@ const (
 	// so one toggle covers both. It is meaningful only while the logs view is up;
 	// elsewhere it is inert.
 	ActionLogsWrap Action = "logs.wrap"
+	// ActionLogsTimestamps shows or hides each log line's server timestamp in the
+	// logs view (LOGS-04b), the in-TUI equivalent of `kubectl logs --timestamps`.
+	// It is a *display* toggle, not a request flag: the stream always carries the
+	// timestamps, so flipping it re-renders the buffer already on screen instead of
+	// re-fetching the log. It is meaningful only while the logs view is up;
+	// elsewhere it is inert.
+	ActionLogsTimestamps Action = "logs.timestamps"
 	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
 	// open secret viewer (M3-08a). Values start masked; this is the deliberate
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
@@ -198,6 +205,7 @@ var actionMeta = []struct {
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
 	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
+	{ActionLogsTimestamps, "Toggle timestamps in the logs viewer"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
@@ -280,8 +288,13 @@ var defaultBindings = map[Action][]string{
 	// changes how lines are *laid out*, not how the grep field is read, so there is no
 	// reason to reach for it mid-query — and with the grep open `w` types a `w` like
 	// every other letter (D140 pt 1). `w` is free in the browse context.
-	ActionLogsWrap:     {"w"},
-	ActionRevealSecret: {"r"},
+	ActionLogsWrap: {"w"},
+	// The timestamps toggle is a plain letter for the same reason as the wrap toggle
+	// beside it: it changes how lines are *drawn*, not how the grep reads them, so
+	// there is no need to reach for it mid-query — and with the grep open `t` types a
+	// `t` like every other letter (D140 pt 1). `t` is free in the browse context.
+	ActionLogsTimestamps: {"t"},
+	ActionRevealSecret:   {"r"},
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},
 	ActionStopForwards: {"X"},

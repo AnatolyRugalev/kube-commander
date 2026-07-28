@@ -32,7 +32,7 @@ func newLogs() Model {
 // appendLines streams "line-1".."line-n" into m.
 func appendLines(m *Model, n int) {
 	for i := 1; i <= n; i++ {
-		m.Append("line-" + itoa(i))
+		m.Append("", "line-"+itoa(i))
 	}
 }
 
@@ -47,13 +47,13 @@ func typeFilter(m Model, q string) Model {
 
 func TestHiddenOrUnsizedIsEmpty(t *testing.T) {
 	m := New(styles.Default())
-	m.Append("hello")
+	m.Append("", "hello")
 	m.SetSize(40, 12) // sized but hidden
 	if v := m.View(); v != "" {
 		t.Errorf("hidden View() = %q; want empty", v)
 	}
 	m2 := New(styles.Default())
-	m2.Append("hello")
+	m2.Append("", "hello")
 	m2.Show() // shown but unsized
 	if v := m2.View(); v != "" {
 		t.Errorf("unsized View() = %q; want empty", v)
@@ -87,7 +87,7 @@ func TestUpwardScrollPausesAndDoesNotYank(t *testing.T) {
 		t.Errorf("header should show [paused] after scroll-up; got:\n%s", m.View())
 	}
 	// A new line arriving while paused must not yank the view to the bottom.
-	m.Append("line-51")
+	m.Append("", "line-51")
 	if !strings.Contains(m.View(), "line-1") {
 		t.Errorf("paused view should stay at the top, not jump to newest; got:\n%s", m.View())
 	}
@@ -132,7 +132,7 @@ func TestJumpToBottomResumesFollowing(t *testing.T) {
 	if v := plain(m.View()); !strings.Contains(v, "line-50") {
 		t.Errorf("nav.bottom should show the newest line; got:\n%s", v)
 	}
-	m.Append("line-51")
+	m.Append("", "line-51")
 	v := plain(m.View())
 	if !strings.Contains(v, "line-51") {
 		t.Errorf("after nav.bottom the view should keep tailing; got:\n%s", v)
@@ -170,9 +170,9 @@ func TestDownwardScrollDoesNotResumeFollowing(t *testing.T) {
 
 func TestLiveFilterNarrowsShownLines(t *testing.T) {
 	m := newLogs()
-	m.Append("alpha error one")
-	m.Append("beta ok")
-	m.Append("gamma ERROR two")
+	m.Append("", "alpha error one")
+	m.Append("", "beta ok")
+	m.Append("", "gamma ERROR two")
 	m = typeFilter(m, "error") // case-insensitive substring
 	if !m.Filtering() {
 		t.Fatal("filter should be open")
@@ -193,8 +193,8 @@ func TestLiveFilterNarrowsShownLines(t *testing.T) {
 func TestFilterNarrowsWhileFollowing(t *testing.T) {
 	m := newLogs()
 	m = typeFilter(m, "keep")
-	m.Append("drop this")
-	m.Append("keep this")
+	m.Append("", "drop this")
+	m.Append("", "keep this")
 	v := plain(m.View())
 	if strings.Contains(v, "drop this") {
 		t.Errorf("a line streamed under an active filter must be excluded if it doesn't match; got:\n%s", v)
@@ -206,7 +206,7 @@ func TestFilterNarrowsWhileFollowing(t *testing.T) {
 
 func TestBackClearsFilterThenCloses(t *testing.T) {
 	m := newLogs()
-	m.Append("only line")
+	m.Append("", "only line")
 	m = typeFilter(m, "zzz") // matches nothing
 	if strings.Contains(plain(m.View()), "only line") {
 		t.Fatalf("precondition: filter should hide the non-matching line")
@@ -242,9 +242,9 @@ func TestBackClearsFilterThenCloses(t *testing.T) {
 // substring — anchors and alternation work, and the header marks the mode.
 func TestRegexModeMatchesPattern(t *testing.T) {
 	m := newLogs()
-	m.Append("GET /healthz 200")
-	m.Append("GET /api/pods 500")
-	m.Append("GET /api/pods 503")
+	m.Append("", "GET /healthz 200")
+	m.Append("", "GET /api/pods 500")
+	m.Append("", "GET /api/pods 503")
 	m, _ = m.Update(keymap.ActionLogsRegex)
 	if !m.Regex() {
 		t.Fatal("logs.regex should turn regex mode on")
@@ -274,14 +274,14 @@ func TestRegexModeMatchesPattern(t *testing.T) {
 // case-insensitive default, and an explicit (?-i) in the query still overrides it.
 func TestRegexIsCaseInsensitiveByDefault(t *testing.T) {
 	m := newLogs()
-	m.Append("Error: boom")
+	m.Append("", "Error: boom")
 	m, _ = m.Update(keymap.ActionLogsRegex)
 	m = typeFilter(m, "error")
 	if !strings.Contains(plain(m.View()), "Error: boom") {
 		t.Errorf("regex mode should default to case-insensitive; got:\n%s", plain(m.View()))
 	}
 	m2 := newLogs()
-	m2.Append("Error: boom")
+	m2.Append("", "Error: boom")
 	m2, _ = m2.Update(keymap.ActionLogsRegex)
 	m2 = typeFilter(m2, "(?-i)error")
 	if strings.Contains(plain(m2.View()), "Error: boom") {
@@ -295,8 +295,8 @@ func TestRegexIsCaseInsensitiveByDefault(t *testing.T) {
 func TestInvalidRegexKeepsLastGoodAndSaysSo(t *testing.T) {
 	m := newLogs()
 	m.SetSize(80, 12) // a realistic terminal: the header clips from the right at 40
-	m.Append("err one")
-	m.Append("ok two")
+	m.Append("", "err one")
+	m.Append("", "ok two")
 	m, _ = m.Update(keymap.ActionLogsRegex)
 	m = typeFilter(m, "err")
 	if !strings.Contains(plain(m.View()), "err one") {
@@ -329,8 +329,8 @@ func TestInvalidRegexKeepsLastGoodAndSaysSo(t *testing.T) {
 func TestInvalidRegexWithNoLastGoodMatchesNothing(t *testing.T) {
 	m := newLogs()
 	m.SetSize(80, 12)
-	m.Append("err one")
-	m.Append("ok two")
+	m.Append("", "err one")
+	m.Append("", "ok two")
 	m, _ = m.Update(keymap.ActionLogsRegex)
 	m = typeFilter(m, "*")
 	v := plain(m.View())
@@ -355,7 +355,7 @@ func TestMatchedSpansAreHighlighted(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newLogs()
-			m.Append("err and err again")
+			m.Append("", "err and err again")
 			if tc.regex {
 				m, _ = m.Update(keymap.ActionLogsRegex)
 			}
@@ -375,7 +375,7 @@ func TestMatchedSpansAreHighlighted(t *testing.T) {
 // fast path the high-throughput stream depends on, with no per-line match work at all.
 func TestUnfilteredStreamIsNotHighlighted(t *testing.T) {
 	m := newLogs()
-	m.Append("plain line")
+	m.Append("", "plain line")
 	if v := m.View(); !strings.Contains(v, "plain line") {
 		t.Errorf("an unfiltered line should render verbatim, unstyled; got:\n%q", v)
 	}
@@ -385,7 +385,7 @@ func TestUnfilteredStreamIsNotHighlighted(t *testing.T) {
 // lowered offsets, so the line is shown unhighlighted rather than dropped or corrupted.
 func TestNonASCIIFoldStillMatches(t *testing.T) {
 	m := newLogs()
-	m.Append("İstanbul error") // 'İ' lowercases to two runes, changing the byte length
+	m.Append("", "İstanbul error") // 'İ' lowercases to two runes, changing the byte length
 	m = typeFilter(m, "error")
 	if !strings.Contains(plain(m.View()), "İstanbul error") {
 		t.Errorf("a matching line must survive an awkward fold intact; got:\n%s", plain(m.View()))
@@ -403,12 +403,16 @@ func TestResetClearsBufferAndRearmsFollow(t *testing.T) {
 	m = typeFilter(m, "line-1")
 	m, _ = m.Update(keymap.ActionLogsRegex)
 	m, _ = m.Update(keymap.ActionLogsWrap)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
 	m.Reset()
 	if m.Regex() {
 		t.Errorf("Reset should drop regex mode so a new object opens on the plain grep")
 	}
 	if m.Wrap() {
 		t.Errorf("Reset should drop wrap mode so a new object opens unwrapped")
+	}
+	if m.Timestamps() {
+		t.Errorf("Reset should drop the timestamps toggle so a new object opens unstamped")
 	}
 	if m.HOffset() != 0 {
 		t.Errorf("Reset should leave the view unscrolled; HOffset = %d", m.HOffset())
@@ -441,7 +445,7 @@ func longLine() string { return longHead + strings.Repeat("-", 60) + longTail }
 // continuation rows so its tail is readable without scrolling.
 func TestWrapTogglesLongLineHandling(t *testing.T) {
 	m := newLogs()
-	m.Append(longLine())
+	m.Append("", longLine())
 
 	if v := plain(m.View()); strings.Contains(v, longTail) {
 		t.Fatalf("a long line should be clipped by default: %q", v)
@@ -471,7 +475,7 @@ func TestWrapTogglesLongLineHandling(t *testing.T) {
 // says how far, and the offset clamps at both ends.
 func TestHorizontalScrollReachesLineTail(t *testing.T) {
 	m := newLogs()
-	m.Append(longLine())
+	m.Append("", longLine())
 
 	m, _ = m.Update(keymap.ActionRight)
 	if m.HOffset() != hStep {
@@ -512,7 +516,7 @@ func TestHorizontalScrollReachesLineTail(t *testing.T) {
 // wrap mode would silently scroll the view when wrapping was switched back off.
 func TestWrapZeroesTheHorizontalOffset(t *testing.T) {
 	m := newLogs()
-	m.Append(longLine())
+	m.Append("", longLine())
 	m, _ = m.Update(keymap.ActionRight)
 
 	m, _ = m.Update(keymap.ActionLogsWrap)
@@ -532,7 +536,7 @@ func TestWrapZeroesTheHorizontalOffset(t *testing.T) {
 // reader still wants the newest line, unlike an upward scroll (which does pause).
 func TestHorizontalScrollDoesNotPauseFollow(t *testing.T) {
 	m := newLogs()
-	m.Append(longLine())
+	m.Append("", longLine())
 	for _, a := range []keymap.Action{keymap.ActionRight, keymap.ActionLeft} {
 		m, _ = m.Update(a)
 		if !m.Following() {
@@ -546,8 +550,8 @@ func TestHorizontalScrollDoesNotPauseFollow(t *testing.T) {
 // rather than leaving them staring at blank rows.
 func TestHorizontalOffsetClampsWhenContentNarrows(t *testing.T) {
 	m := newLogs()
-	m.Append(longLine())
-	m.Append("short")
+	m.Append("", longLine())
+	m.Append("", "short")
 	for range 4 {
 		m, _ = m.Update(keymap.ActionRight)
 	}
@@ -569,7 +573,7 @@ func TestInactiveIgnoresActions(t *testing.T) {
 	m.SetSize(40, 12)
 	appendLines(&m, 10) // not shown
 	var cmd tea.Cmd
-	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsRegex, keymap.ActionLogsWrap, keymap.ActionRight} {
+	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsRegex, keymap.ActionLogsWrap, keymap.ActionLogsTimestamps, keymap.ActionRight} {
 		m, cmd = m.Update(a)
 		if cmd != nil {
 			t.Errorf("inactive view emitted a cmd for %v; want nil", a)
@@ -577,5 +581,181 @@ func TestInactiveIgnoresActions(t *testing.T) {
 	}
 	if m.View() != "" {
 		t.Errorf("inactive View() = %q; want empty", m.View())
+	}
+}
+
+// The LOGS-04b fixtures: two stamped lines as the stream delivers them — the timestamp
+// split off by kube.SplitLogTimestamp at the wiring boundary, the message on its own.
+const (
+	stamp1 = "2026-07-28T16:32:01.000000001Z"
+	stamp2 = "2026-07-28T16:32:02.000000002Z"
+)
+
+// newStampedLogs is the 40-column newLogs widened to 100. An RFC3339Nano stamp is 30
+// columns on its own, so a stamped line does not fit the narrow default view — which is
+// the width cost the toggle exists to let a reader opt into (and which LOGS-04a's wrap /
+// horizontal scroll exist to cope with). These tests are about *what* is drawn, so they
+// give it the room; the clipping itself is already covered by the LOGS-04a tests.
+func newStampedLogs() Model {
+	m := New(styles.Default())
+	m.SetSize(100, 12)
+	m.Show()
+	return m
+}
+
+// appendStamped streams the two stamped fixture lines into m.
+func appendStamped(m *Model) {
+	m.Append(stamp1, "alpha error one")
+	m.Append(stamp2, "beta ok two")
+}
+
+// TestTimestampsHiddenByDefault is the half of LOGS-04b that protects the default: the
+// stream carries timestamps unconditionally (so the toggle can be a redraw), which must
+// not mean they are *shown*. A reader who never presses the key sees exactly the lines
+// they saw before this existed.
+func TestTimestampsHiddenByDefault(t *testing.T) {
+	m := newLogs()
+	appendStamped(&m)
+	if m.Timestamps() {
+		t.Fatal("a fresh logs view should start with timestamps hidden")
+	}
+	v := plain(m.View())
+	if strings.Contains(v, stamp1) || strings.Contains(v, stamp2) {
+		t.Errorf("timestamps must not be drawn while the toggle is off; got:\n%s", v)
+	}
+	if !strings.Contains(v, "alpha error one") || !strings.Contains(v, "beta ok two") {
+		t.Errorf("the messages should show regardless; got:\n%s", v)
+	}
+}
+
+// TestTimestampsToggleShowsAndHides is the gesture itself: logs.timestamps puts each
+// line's stamp ahead of its message and a second press takes it away again, without
+// re-fetching anything — the buffer is untouched either way.
+func TestTimestampsToggleShowsAndHides(t *testing.T) {
+	m := newStampedLogs()
+	appendStamped(&m)
+
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	if !m.Timestamps() {
+		t.Fatal("logs.timestamps should turn timestamps on")
+	}
+	v := plain(m.View())
+	if !strings.Contains(v, stamp1+" alpha error one") {
+		t.Errorf("a stamped line should render as `<stamp> <message>`; got:\n%s", v)
+	}
+	if !strings.Contains(v, stamp2+" beta ok two") {
+		t.Errorf("every line should carry its own stamp; got:\n%s", v)
+	}
+
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	if m.Timestamps() {
+		t.Fatal("a second logs.timestamps should turn them back off")
+	}
+	if v := plain(m.View()); strings.Contains(v, stamp1) {
+		t.Errorf("hiding should remove the stamps again; got:\n%s", v)
+	}
+}
+
+// TestTimestampsSurviveTheToggleWithoutRefetch: the point of making this a display
+// toggle rather than a restream (D148) is that nothing is lost. Flipping it twice with a
+// grep open leaves the same lines matched by the same query.
+func TestTimestampsSurviveTheToggleWithoutRefetch(t *testing.T) {
+	m := newLogs()
+	appendStamped(&m)
+	m = typeFilter(m, "error")
+	before := m.matched
+
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+
+	if m.matched != before || m.matched != 1 {
+		t.Errorf("toggling timestamps changed the match set: %d, was %d", m.matched, before)
+	}
+	if q := m.Query(); q != "error" {
+		t.Errorf("toggling timestamps should not disturb the grep; query = %q", q)
+	}
+	if len(m.lines) != 2 {
+		t.Errorf("toggling timestamps must not touch the buffer; %d lines", len(m.lines))
+	}
+}
+
+// TestGrepNeverMatchesTheTimestamp is the load-bearing half of D148: the query is about
+// the message. A timestamp fragment must not narrow the stream in either display state —
+// otherwise the same query would mean different things depending on whether the clock
+// happened to be on screen.
+func TestGrepNeverMatchesTheTimestamp(t *testing.T) {
+	for _, shown := range []bool{false, true} {
+		m := newLogs()
+		appendStamped(&m)
+		if shown {
+			m, _ = m.Update(keymap.ActionLogsTimestamps)
+		}
+		m = typeFilter(m, "2026-07-28")
+		if m.matched != 0 {
+			t.Errorf("timestamps shown=%v: a timestamp query matched %d lines; want 0", shown, m.matched)
+		}
+		if v := plain(m.View()); strings.Contains(v, "alpha error one") {
+			t.Errorf("timestamps shown=%v: no line should survive a timestamp-only query; got:\n%s", shown, v)
+		}
+	}
+}
+
+// TestStampedLineHighlightsTheMessage: with timestamps on, the highlight still lands on
+// the matched span of the *message* — the stamp is a prefix, not part of the match, and
+// its presence must not shift the spans onto the wrong bytes.
+func TestStampedLineHighlightsTheMessage(t *testing.T) {
+	m := newStampedLogs()
+	appendStamped(&m)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	m = typeFilter(m, "error")
+
+	v := m.View()
+	if !strings.Contains(v, matchSpan("error")) {
+		t.Errorf("the matched span of the message should be highlighted; got:\n%s", v)
+	}
+	if p := plain(v); !strings.Contains(p, stamp1+" alpha error one") {
+		t.Errorf("the stamped, highlighted line should read back intact; got:\n%s", p)
+	}
+}
+
+// TestUnstampedLineRendersVerbatimWithTimestampsOn: a line the server did not stamp (or
+// one whose prefix did not parse) has no timestamp to show, so it renders exactly as it
+// streamed rather than being padded with an invented one.
+func TestUnstampedLineRendersVerbatimWithTimestampsOn(t *testing.T) {
+	m := newStampedLogs()
+	m.Append(stamp1, "stamped line")
+	m.Append("", "unstamped line")
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+
+	v := plain(m.View())
+	if !strings.Contains(v, stamp1+" stamped line") {
+		t.Errorf("the stamped line should carry its stamp; got:\n%s", v)
+	}
+	if !strings.Contains(v, "unstamped line") {
+		t.Errorf("the unstamped line should still show; got:\n%s", v)
+	}
+	for _, line := range strings.Split(v, "\n") {
+		if strings.Contains(line, "unstamped line") && strings.Contains(line, "2026-") {
+			t.Errorf("an unstamped line must not borrow a neighbour's stamp: %q", line)
+		}
+	}
+}
+
+// TestTimestampsGetNoHeaderMarker: unlike wrap, the toggle is visible on every row the
+// moment it is on, so it does not spend a segment of a header that is clipped from the
+// right at narrow widths. The header is checked for the *markers*, not the stamps —
+// with timestamps on, the body legitimately contains them.
+func TestTimestampsGetNoHeaderMarker(t *testing.T) {
+	m := newStampedLogs()
+	appendStamped(&m)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	header := strings.SplitN(plain(m.View()), "\n", 2)[0]
+	for _, marker := range []string{"[ts]", "[time]", "[timestamps]"} {
+		if strings.Contains(header, marker) {
+			t.Errorf("the timestamps toggle should not add a header marker; header = %q", header)
+		}
+	}
+	if !strings.Contains(header, "[following]") {
+		t.Errorf("the header should still report the follow state; header = %q", header)
 	}
 }

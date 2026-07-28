@@ -414,6 +414,25 @@ func parseLogTimestamp(raw string) (time.Time, string, bool) {
 	return ts, raw[i+1:], true
 }
 
+// SplitLogTimestamp splits a server-timestamped log line — "<RFC3339Nano> <message>",
+// the shape the API returns when LogOptions.Timestamps is set — into the timestamp
+// prefix and the message after it. It is the read side of that option: a consumer that
+// wants to show the timestamp *and* the message as separate things (the TUI's logs view,
+// which toggles the timestamp's display and always greps the message) asks for
+// Timestamps and splits here, rather than re-deriving the format.
+//
+// A line the server did not stamp — or one whose prefix does not parse — yields an empty
+// stamp and the whole line as content, so a caller that concatenates them gets the line
+// back unchanged. Both results are slices of line: splitting copies nothing.
+func SplitLogTimestamp(line string) (stamp, content string) {
+	if _, c, ok := parseLogTimestamp(line); ok {
+		// c is line's suffix after the single separating space (see parseLogTimestamp),
+		// so the stamp is everything before that space.
+		return line[:len(line)-len(c)-1], c
+	}
+	return "", line
+}
+
 // sendLog delivers ev on out unless ctx is cancelled first; it returns false when
 // the send is abandoned so callers can unwind promptly. The log-channel twin of
 // sendWatch.
