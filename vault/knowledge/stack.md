@@ -114,6 +114,19 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   discovery arrives later as a message.
 - **Fault isolation:** wrap per-group discovery so a failing/denied group returns
   a partial result, never an error that aborts the whole load.
+- **`labels.Parse` quirks** (`k8s.io/apimachinery/pkg/labels`, used by the search
+  query parser, SEARCH-04c-1):
+  - It accepts a **bare identifier** — `labels.Parse("nginx")` is the valid
+    existence selector *has label `nginx`*. So "does it parse as a selector" can
+    never be used to detect that a string *is* one; a search query needs an
+    explicit token (`-l`).
+  - `labels.Parse("")` is `Everything()`, whose `String()` is `""` — so an empty
+    selector round-trips to "no selector" and needs no special case.
+  - `app=` is **valid** (equals the empty value); `app=!!`, `!`, and `a b` are not.
+  - `Selector.String()` normalises (`tier in (a, b)` → `tier in (a,b)`), so
+    storing the parsed form is what makes selectors comparable in tests.
+  - Errors name the requirement but not the concept (`unable to parse
+    requirement: found '!', expected: identifier`) — wrap before showing a user.
 
 ## Testing (D18)
 - Default: **client-go fake clients** (`fake.Clientset`, fake dynamic + fake

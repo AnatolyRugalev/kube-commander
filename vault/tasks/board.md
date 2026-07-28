@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — SEARCH-04c split on pickup into 04c-1 (label selector, claimed) and 04c-2 (fuzzy matching); field selectors deliberately dropped. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — SEARCH-04c-1 done: a `-l app=web` term in the search query goes to the apiserver as a label selector (D151), leaving only SEARCH-04c-2 (fuzzy matching) in the SEARCH line. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-04c-1** Label-selector matching for cluster search (server-side, `metav1.ListOptions`)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 | claimed: 2026-07-28
-      notes: First slice of the SEARCH-04c split. The query field gains a `-l <selector>`
-      segment parsed into a `kube.SearchQuery{Name, LabelSelector}`; the selector goes to the
-      server on every kind's List, so it costs no client-side work. Name substring stays as
-      it is. Fuzzy matching (client-side scoring + a ranking decision) is SEARCH-04c-2.
+_(none)_
 
 ## Blocked
 
@@ -110,7 +105,7 @@ complete: `search.allKinds` (`ctrl+a`) swaps the curated set for every discovere
 over a fan-out `kube.Search` bounds to eight concurrent lists (D149), and
 `search.allNamespaces` (`ctrl+w`) searches every namespace without touching the app's own
 namespace scope (D150). They are independent flags, not a cycle, so all four scope
-combinations are reachable. Only **SEARCH-04c** is left in this line.
+combinations are reachable.
 
 SEARCH-04c was split on pickup, as its own notes predicted, into **SEARCH-04c-1** (label
 selector) and **SEARCH-04c-2** (fuzzy matching): the selector is a `metav1.ListOptions`
@@ -120,7 +115,9 @@ does not have a place for. A **field** selector was considered with the label on
 deliberately left out: per-kind field support varies (`spec.nodeName` is a Pod thing), a
 selector the kind does not support fails its List, and a failed kind is silent by design
 (D131 pt 3) — so a field selector would quietly drop most of the scope. Raise it as its
-own item if it is ever wanted.
+own item if it is ever wanted. **SEARCH-04c-1 is done** — `-l app=web` in the query line is
+a server-side label selector (D151) — so **SEARCH-04c-2 (fuzzy matching) is all that is
+left in the SEARCH line**.
 
 - [ ] **SEARCH-04c-2** Fuzzy name matching beyond the case-insensitive substring
       status: todo | owner: — | added: 2026-07-28 (SEARCH-04c split)
@@ -156,6 +153,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-04c-1** Label-selector matching for cluster search — a `-l <selector>` term in the query line is parsed into `kube.SearchQuery{Name, LabelSelector}` and evaluated by the apiserver on every kind's List (so it narrows the wire instead of costing client work), while the name substring stays client-side; an unparseable selector is reported under the query line and never sent — done 2026-07-28 (D151)
 - [x] **SEARCH-04b** All-namespaces scope widen for cluster search — `search.allNamespaces` (`ctrl+w`) searches every namespace and re-runs the query, replacing the namespace the header names rather than adding a segment, independent of the kind widen and leaving the app's own namespace scope untouched; `kubecom keys` now sizes its columns from the widest id — done 2026-07-28 (D150)
 - [x] **SEARCH-04a** All-kinds scope widen for cluster search — `search.allKinds` (`ctrl+a`) swaps the curated kind set for every discovered kind and re-runs the query; the header names the widened scope only while it is on, the widen resets on every fresh open, and `kube.Search` now lists at most 8 kinds at a time so the widen cannot flood the apiserver (D149) — done 2026-07-28 (D149)
 - [x] **LOGS-04b** Timestamps toggle in the logs view — `logs.timestamps` (`t`) draws each line's server stamp; the stream always requests timestamps (free on a followed stream) and the view keeps them in a buffer parallel to the messages, so the toggle is a redraw not a restream and the grep still matches only the message (D148) — done 2026-07-28 (D148)

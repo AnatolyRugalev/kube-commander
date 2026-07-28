@@ -672,3 +672,54 @@ func TestHideBlursAndShowRefocuses(t *testing.T) {
 		t.Errorf("Show should refocus the query field; Query() = %q", m3.Query())
 	}
 }
+
+// TestSearchViewQueryErrorReplacesTheEmptyHint proves a query that cannot be searched
+// says so where the results would be: the error outranks every other empty state,
+// including "no matches" — which for a query that was never run would be a claim about
+// the cluster the view is in no position to make.
+func TestSearchViewQueryErrorReplacesTheEmptyHint(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api -l app=")
+	m.SetSearching(false)
+	if got := m.View(); !strings.Contains(got, "no matches") {
+		t.Fatalf("a finished empty search should say so: %q", got)
+	}
+	m.SetQueryError("invalid selector: app=")
+	if got := m.QueryError(); got != "invalid selector: app=" {
+		t.Fatalf("QueryError() = %q, want the message the wiring set", got)
+	}
+	view := m.View()
+	if !strings.Contains(view, "invalid selector: app=") {
+		t.Fatalf("the query error should be shown in place of the empty hint: %q", view)
+	}
+	if strings.Contains(view, "no matches") {
+		t.Fatalf("a query that never ran must not report an empty cluster: %q", view)
+	}
+}
+
+// TestSearchViewQueryErrorClears proves the error is not sticky: the wiring clearing it
+// (a query that parses again) restores the ordinary empty state, and a fresh open never
+// inherits one.
+func TestSearchViewQueryErrorClears(t *testing.T) {
+	m := newSearch()
+	m.SetQueryError("invalid selector")
+	m.SetQueryError("")
+	if got := m.View(); !strings.Contains(got, "type to search this cluster") {
+		t.Fatalf("clearing the error should restore the empty hint: %q", got)
+	}
+	m.SetQueryError("invalid selector")
+	m.Reset()
+	if got := m.QueryError(); got != "" {
+		t.Fatalf("Reset should drop the query error, got %q", got)
+	}
+}
+
+// TestSearchViewEmptyHintAdvertisesTheSelector proves the one thing about this view a
+// reader cannot discover by pressing keys is on screen the moment they are looking for
+// what to type.
+func TestSearchViewEmptyHintAdvertisesTheSelector(t *testing.T) {
+	m := newSearch()
+	if got := m.View(); !strings.Contains(got, "-l app=web") {
+		t.Fatalf("the blank-query hint should show the label-selector syntax: %q", got)
+	}
+}

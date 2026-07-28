@@ -120,6 +120,15 @@ narrow the query`). This is a deliberate, one-shot query (it lists those kinds o
 query, never watches everything); `/` remains the filter that narrows the rows of the
 table already open.
 
+A query can also match **labels** instead of (or as well as) the name: type `-l` followed
+by a Kubernetes label selector, exactly as you would pass it to `kubectl`. `-l app=web`
+finds everything labelled `app=web`, `api -l app=web` narrows that to objects whose name
+also contains `api`, and the full selector syntax works (`-l tier in (fe, be)`,
+`-l app=web,env!=prod`, `-l !legacy`). The selector is evaluated by the API server, so it
+costs nothing extra — it makes the search *lighter*, not heavier, by filtering rows before
+they are sent. A selector that does not parse is reported under the query line and is
+never sent, so a typo can never masquerade as an empty cluster.
+
 That curated kind list is the default because it is the cheap one. Press `Ctrl+a`
 (`search.allKinds`, rebindable) to widen the same query to **every kind your cluster
 exposes** — CRDs, RBAC, events, nodes, the lot. The header adds `all kinds` while the

@@ -23,6 +23,10 @@ func res(group, version, kind, plural string, namespaced bool) Resource {
 	}
 }
 
+// nameQ is a name-substring-only SearchQuery — what every search was before the
+// label selector existed, and still the common case.
+func nameQ(name string) SearchQuery { return SearchQuery{Name: name} }
+
 // tbl builds a server-printed Table stub whose rows carry only object identity
 // (name/namespace) — all searchRows matches on.
 func tbl(ns string, names ...string) *Table {
@@ -42,16 +46,21 @@ type fakeLister struct {
 	tables map[string]*Table
 	errs   map[string]error
 
-	mu     sync.Mutex
-	nsSeen map[string]string
+	mu      sync.Mutex
+	nsSeen  map[string]string
+	selSeen map[string]string
 }
 
-func (f *fakeLister) List(_ context.Context, r Resource, namespace string, _ metav1.ListOptions) (*Table, error) {
+func (f *fakeLister) List(_ context.Context, r Resource, namespace string, opts metav1.ListOptions) (*Table, error) {
 	f.mu.Lock()
 	if f.nsSeen == nil {
 		f.nsSeen = map[string]string{}
 	}
+	if f.selSeen == nil {
+		f.selSeen = map[string]string{}
+	}
 	f.nsSeen[r.GVR.Resource] = namespace
+	f.selSeen[r.GVR.Resource] = opts.LabelSelector
 	f.mu.Unlock()
 
 	if err := f.errs[r.GVR.Resource]; err != nil {
@@ -129,7 +138,7 @@ func TestSearchMatchesAcrossKindsCaseInsensitive(t *testing.T) {
 		res("apps", "v1", "Deployment", "deployments", true),
 	}
 
-	got := collect(searchRows(context.Background(), lister, resources, "web", "api", 0))
+	got := collect(searchRows(context.Background(), lister, resources, "web", nameQ("api"), 0))
 	want := []string{"Deployment/api", "Pod/API-gateway", "Pod/api-server"}
 	if !equal(got, want) {
 		t.Fatalf("hits = %v, want %v", got, want)
@@ -140,8 +149,88 @@ func TestSearchEmptyQueryMatchesAllNamedRows(t *testing.T) {
 	lister := &fakeLister{tables: map[string]*Table{
 		"pods": tbl("web", "a", "b", ""), // the empty-name row is skipped
 	}}
-	got := collect(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", "", 0))
+	got := collect(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", nameQ(""), 0))
 	if want := []string{"Pod/a", "Pod/b"}; !equal(got, want) {
+		t.Fatalf("hits = %v, want %v", got, want)
+	}
+}
+
+func TestParseSearchQuery(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		wantName string
+		wantSel  string
+		wantErr  bool
+	}{
+		{name: "bare name", raw: "api", wantName: "api"},
+		{name: "name with hyphen l inside a word", raw: "my-lb", wantName: "my-lb"},
+		{name: "selector only", raw: "-l app=web", wantSel: "app=web"},
+		{name: "name and selector", raw: "api -l app=web", wantName: "api", wantSel: "app=web"},
+		{name: "selector with spaces", raw: "-l tier in (a, b)", wantSel: "tier in (a,b)"},
+		{name: "selector list", raw: "-l app=web,tier=fe", wantSel: "app=web,tier=fe"},
+		{name: "existence selector", raw: "-l !legacy", wantSel: "!legacy"},
+		// A dangling -l is not an error and not a selector: the reader is mid-type.
+		{name: "dangling token", raw: "api -l", wantName: "api"},
+		// -l glued to the selector is not a token, so it stays part of the name
+		// rather than being reinterpreted (a name that simply won't match).
+		{name: "glued token is not a token", raw: "api -lapp=web", wantName: "api -lapp=web"},
+		{name: "invalid selector", raw: "-l app=!!", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseSearchQuery(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ParseSearchQuery(%q) = %+v, want error", tt.raw, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseSearchQuery(%q): %v", tt.raw, err)
+			}
+			if got.Name != tt.wantName || got.LabelSelector != tt.wantSel {
+				t.Fatalf("ParseSearchQuery(%q) = {Name:%q Selector:%q}, want {Name:%q Selector:%q}",
+					tt.raw, got.Name, got.LabelSelector, tt.wantName, tt.wantSel)
+			}
+			if wantEmpty := tt.wantName == "" && tt.wantSel == ""; got.Empty() != wantEmpty {
+				t.Fatalf("ParseSearchQuery(%q).Empty() = %v, want %v", tt.raw, got.Empty(), wantEmpty)
+			}
+		})
+	}
+}
+
+func TestSearchSendsLabelSelectorToEveryKind(t *testing.T) {
+	lister := &fakeLister{tables: map[string]*Table{
+		"pods":        tbl("web", "api-server", "redis"),
+		"deployments": tbl("web", "api"),
+	}}
+	resources := []Resource{
+		res("", "v1", "Pod", "pods", true),
+		res("apps", "v1", "Deployment", "deployments", true),
+	}
+
+	q := SearchQuery{Name: "api", LabelSelector: "app=web"}
+	got := collect(searchRows(context.Background(), lister, resources, "web", q, 0))
+	if want := []string{"Deployment/api", "Pod/api-server"}; !equal(got, want) {
+		t.Fatalf("hits = %v, want %v", got, want)
+	}
+	// The selector is the server's job, so every kind must be listed with it —
+	// a kind listed without it would silently return rows the query excluded.
+	for _, plural := range []string{"pods", "deployments"} {
+		if sel := lister.selSeen[plural]; sel != "app=web" {
+			t.Fatalf("%s listed with LabelSelector %q, want %q", plural, sel, "app=web")
+		}
+	}
+}
+
+func TestSearchSelectorOnlyQueryMatchesEveryReturnedRow(t *testing.T) {
+	// With no name term the server's selector is the whole filter: every row it
+	// returns is a hit, so the client-side matcher must not narrow it further.
+	lister := &fakeLister{tables: map[string]*Table{"pods": tbl("web", "api", "redis")}}
+	q := SearchQuery{LabelSelector: "app=web"}
+	got := collect(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", q, 0))
+	if want := []string{"Pod/api", "Pod/redis"}; !equal(got, want) {
 		t.Fatalf("hits = %v, want %v", got, want)
 	}
 }
@@ -156,7 +245,7 @@ func TestSearchIsolatesPerKindFailure(t *testing.T) {
 		res("apps", "v1", "Deployment", "deployments", true),
 	}
 	// The failing deployments list must not abort the search — pods still match.
-	got := collect(searchRows(context.Background(), lister, resources, "web", "api", 0))
+	got := collect(searchRows(context.Background(), lister, resources, "web", nameQ("api"), 0))
 	if want := []string{"Pod/api-1"}; !equal(got, want) {
 		t.Fatalf("hits = %v, want %v (per-kind failure should degrade to nothing)", got, want)
 	}
@@ -166,7 +255,7 @@ func TestSearchCapsTotalHits(t *testing.T) {
 	lister := &fakeLister{tables: map[string]*Table{
 		"pods": tbl("web", "api-1", "api-2", "api-3", "api-4"),
 	}}
-	events := drainSearch(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", "api", 2))
+	events := drainSearch(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", nameQ("api"), 2))
 	n := 0
 	for _, ev := range events {
 		if ev.Type == SearchMatch {
@@ -197,7 +286,7 @@ func TestSearchReportsKindCompletion(t *testing.T) {
 		res("", "v1", "Service", "services", true),
 		res("apps", "v1", "Deployment", "deployments", true),
 	}
-	events := drainSearch(searchRows(context.Background(), lister, resources, "web", "api", 0))
+	events := drainSearch(searchRows(context.Background(), lister, resources, "web", nameQ("api"), 0))
 
 	done, failed := kindsDone(events)
 	if want := []string{"Deployment", "Pod", "Service"}; !equal(done, want) {
@@ -216,7 +305,7 @@ func TestSearchReportsKindCompletion(t *testing.T) {
 // so a search whose matches exactly fill the cap is still exhaustive.
 func TestSearchDoneNotCappedWhenHitsExactlyFitLimit(t *testing.T) {
 	lister := &fakeLister{tables: map[string]*Table{"pods": tbl("web", "api-1", "api-2")}}
-	events := drainSearch(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", "api", 2))
+	events := drainSearch(searchRows(context.Background(), lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", nameQ("api"), 2))
 	if terminal(t, events).Capped {
 		t.Error("matches exactly filling the cap truncated nothing, so Capped must be false")
 	}
@@ -226,7 +315,7 @@ func TestSearchClusterScopedIgnoresNamespace(t *testing.T) {
 	lister := &fakeLister{tables: map[string]*Table{
 		"nodes": tbl("", "node-a", "node-b"),
 	}}
-	got := collect(searchRows(context.Background(), lister, []Resource{res("", "v1", "Node", "nodes", false)}, "web", "node", 0))
+	got := collect(searchRows(context.Background(), lister, []Resource{res("", "v1", "Node", "nodes", false)}, "web", nameQ("node"), 0))
 	if want := []string{"Node/node-a", "Node/node-b"}; !equal(got, want) {
 		t.Fatalf("hits = %v, want %v", got, want)
 	}
@@ -242,7 +331,7 @@ func TestSearchCancellationClosesChannelWithoutTerminalEvent(t *testing.T) {
 	// The channel must still close (not hang) even when ctx is already done, and an
 	// abandoned search reports nothing: a consumer that cancelled is gone, so no
 	// SearchDone is worth blocking on.
-	for _, ev := range drainSearch(searchRows(ctx, lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", "api", 0)) {
+	for _, ev := range drainSearch(searchRows(ctx, lister, []Resource{res("", "v1", "Pod", "pods", true)}, "web", nameQ("api"), 0)) {
 		if ev.Type == SearchDone {
 			t.Error("a cancelled search must not emit a terminal SearchDone")
 		}
@@ -302,7 +391,7 @@ func TestSearchBoundsConcurrentLists(t *testing.T) {
 	g := &gateLister{arrived: make(chan string, kinds), proceed: make(chan struct{})}
 	resources := manyResources(kinds)
 
-	ch := searchRows(context.Background(), g, resources, "web", "api", 0)
+	ch := searchRows(context.Background(), g, resources, "web", nameQ("api"), 0)
 
 	// The bound's worth of lists must arrive; nothing beyond it may, while they are
 	// all still parked. The negative half needs a real window — an unbounded fan-out
@@ -340,7 +429,7 @@ func TestSearchCappedStillReportsQueuedKinds(t *testing.T) {
 	const kinds = searchConcurrency * 3
 	g := &gateLister{arrived: make(chan string, kinds), proceed: make(chan struct{})}
 
-	ch := searchRows(context.Background(), g, manyResources(kinds), "web", "api", 1)
+	ch := searchRows(context.Background(), g, manyResources(kinds), "web", nameQ("api"), 1)
 	for range searchConcurrency {
 		<-g.arrived
 	}

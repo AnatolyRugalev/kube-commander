@@ -33,11 +33,11 @@ type fakeSearcher struct {
 	ctxs     []context.Context
 	gotRes   []kube.Resource
 	gotNS    string
-	gotQuery string
+	gotQuery kube.SearchQuery
 	gotLimit int
 }
 
-func (f *fakeSearcher) Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchEvent {
+func (f *fakeSearcher) Search(ctx context.Context, resources []kube.Resource, namespace string, query kube.SearchQuery, limit int) <-chan kube.SearchEvent {
 	f.calls++
 	f.ctxs = append(f.ctxs, ctx)
 	f.gotRes = resources
@@ -182,16 +182,16 @@ func TestSearchTypingLaunchesOneDebouncedFanOut(t *testing.T) {
 	if !ok {
 		t.Fatalf("the query change should arm a searchDebouncedMsg, got %T", tick())
 	}
-	if debounced.query != "api" {
-		t.Fatalf("the debounce should carry the whole typed query, got %q", debounced.query)
+	if debounced.query != (kube.SearchQuery{Name: "api"}) {
+		t.Fatalf("the debounce should carry the whole typed query, got %+v", debounced.query)
 	}
 	next, _ := m.Update(debounced)
 	m = next.(Model)
 	if s.calls != 1 {
 		t.Fatalf("the debounced query should launch exactly one fan-out, got %d", s.calls)
 	}
-	if s.gotQuery != "api" || s.gotNS != "web" || s.gotLimit != searchHitLimit {
-		t.Fatalf("the fan-out should search %q in %q capped at %d, got %q/%q/%d",
+	if s.gotQuery != (kube.SearchQuery{Name: "api"}) || s.gotNS != "web" || s.gotLimit != searchHitLimit {
+		t.Fatalf("the fan-out should search %q in %q capped at %d, got %+v/%q/%d",
 			"api", "web", searchHitLimit, s.gotQuery, s.gotNS, s.gotLimit)
 	}
 }
@@ -294,8 +294,8 @@ func TestSearchAllKindsWidensTheFanOut(t *testing.T) {
 	if !ok {
 		t.Fatalf("the widen should arm a searchDebouncedMsg, got %T", widened())
 	}
-	if debounced.query != "api" {
-		t.Fatalf("the re-run should carry the query already typed, got %q", debounced.query)
+	if debounced.query != (kube.SearchQuery{Name: "api"}) {
+		t.Fatalf("the re-run should carry the query already typed, got %+v", debounced.query)
 	}
 	next, _ = m.Update(debounced)
 	m = next.(Model)
@@ -312,8 +312,8 @@ func TestSearchAllKindsWidensTheFanOut(t *testing.T) {
 			t.Errorf("the widened fan-out should include %s", want)
 		}
 	}
-	if s.gotQuery != "api" || s.gotNS != "web" {
-		t.Errorf("the widen changes the kinds only: got query %q in %q, want %q in %q",
+	if s.gotQuery != (kube.SearchQuery{Name: "api"}) || s.gotNS != "web" {
+		t.Errorf("the widen changes the kinds only: got query %+v in %q, want %q in %q",
 			s.gotQuery, s.gotNS, "api", "web")
 	}
 }
@@ -438,8 +438,8 @@ func TestSearchAllNamespacesWidensTheFanOut(t *testing.T) {
 	if !ok {
 		t.Fatalf("the widen should arm a searchDebouncedMsg, got %T", widened())
 	}
-	if debounced.query != "api" {
-		t.Fatalf("the re-run should carry the query already typed, got %q", debounced.query)
+	if debounced.query != (kube.SearchQuery{Name: "api"}) {
+		t.Fatalf("the re-run should carry the query already typed, got %+v", debounced.query)
 	}
 	next, _ = m.Update(debounced)
 	m = next.(Model)
@@ -450,8 +450,8 @@ func TestSearchAllNamespacesWidensTheFanOut(t *testing.T) {
 	if s.gotNS != "" {
 		t.Errorf("the widened fan-out should search every namespace (\"\"), got %q", s.gotNS)
 	}
-	if s.gotQuery != "api" {
-		t.Errorf("the widen changes the namespace only, got query %q", s.gotQuery)
+	if s.gotQuery != (kube.SearchQuery{Name: "api"}) {
+		t.Errorf("the widen changes the namespace only, got query %+v", s.gotQuery)
 	}
 	kinds := map[string]bool{}
 	for _, r := range s.gotRes {
@@ -1041,5 +1041,82 @@ func TestSearchNavigatesResults(t *testing.T) {
 	}
 	if sel.Hit.Ref.Name != "api-2" {
 		t.Fatalf("nav.drillIn should open the highlighted hit, got %q", sel.Hit.Ref.Name)
+	}
+}
+
+// TestSearchLabelSelectorGoesToTheServer proves the `-l` half of the query line is
+// parsed out and handed to the fan-out as a selector (which kube passes to every List)
+// while the name half stays a name — the two are matched in different places, so the
+// split has to survive the wiring intact.
+func TestSearchLabelSelectorGoesToTheServer(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api -l app=web")
+	if tick == nil {
+		t.Fatal("a query with a selector should arm the debounce like any other")
+	}
+	debounced, ok := tick().(searchDebouncedMsg)
+	if !ok {
+		t.Fatalf("expected a searchDebouncedMsg, got %T", tick())
+	}
+	next, _ := m.Update(debounced)
+	m = next.(Model)
+	want := kube.SearchQuery{Name: "api", LabelSelector: "app=web"}
+	if s.gotQuery != want {
+		t.Fatalf("the fan-out should search %+v, got %+v", want, s.gotQuery)
+	}
+	if err := m.searchView.QueryError(); err != "" {
+		t.Fatalf("a valid selector should leave no query error, got %q", err)
+	}
+}
+
+// TestSearchSelectorOnlyQueryIsSearched proves a query that is *only* a selector is a
+// real query: the name half being empty is not the empty query that means "search
+// nothing", it is "every name with these labels".
+func TestSearchSelectorOnlyQueryIsSearched(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "-l app=web")
+	if tick == nil {
+		t.Fatal("a selector-only query should still arm the debounce")
+	}
+	debounced, ok := tick().(searchDebouncedMsg)
+	if !ok {
+		t.Fatalf("expected a searchDebouncedMsg, got %T", tick())
+	}
+	m.Update(debounced)
+	if want := (kube.SearchQuery{LabelSelector: "app=web"}); s.gotQuery != want {
+		t.Fatalf("the fan-out should search %+v, got %+v", want, s.gotQuery)
+	}
+}
+
+// TestSearchInvalidSelectorIsReportedNotSent proves an unparseable selector never
+// reaches the cluster: sending it would fail every kind's List, and per-kind failures
+// are silent by design (D131 pt 3), so the reader would see a healthy-looking empty
+// result instead of their own typo. It is reported on the query line instead, and the
+// in-flight indicator comes down rather than spinning on a search that never launched.
+func TestSearchInvalidSelectorIsReportedNotSent(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "-l app=!!")
+	if tick != nil {
+		if _, armed := tick().(searchDebouncedMsg); armed {
+			t.Fatal("an unparseable selector must not arm a search")
+		}
+	}
+	if s.calls != 0 {
+		t.Fatalf("an unparseable selector must not reach the cluster, got %d searches", s.calls)
+	}
+	if m.searchView.QueryError() == "" {
+		t.Fatal("an unparseable selector should be reported on the query line")
+	}
+	if m.searchView.Searching() {
+		t.Fatal("a query that never launched must not leave the in-flight indicator up")
+	}
+	// Checked by its leading fragment, not the whole string: the message is longer
+	// than the test's terminal, and the body wraps it (unlike the header, which
+	// clips) so the reader keeps the part that says what to fix.
+	if view := m.View().Content; !strings.Contains(view, "invalid label selector") {
+		t.Fatalf("the query error should be on screen: %q", view)
 	}
 }

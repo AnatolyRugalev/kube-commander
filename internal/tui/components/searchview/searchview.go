@@ -17,7 +17,10 @@
 // SEARCH-04b added the namespace-scope widen on the same pattern: an independent
 // all-namespaces flag that *replaces* the scope name in the header (a header carries
 // one namespace scope, never two) and rides the same ScopeChangedMsg, with the
-// namespace itself still resolved by the wiring.
+// namespace itself still resolved by the wiring. SEARCH-04c-1 added the only state the
+// query line itself can be in besides "text": SetQueryError, shown in place of the empty
+// hint when the wiring cannot turn what is typed into a search — the view still does not
+// parse, match, or know what a label selector is.
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -165,6 +168,15 @@ type Model struct {
 
 	searching bool // a search is in flight (header indicator; the wiring sets it)
 
+	// queryErr is why the query line on screen cannot be searched — today only an
+	// unparseable label selector (SEARCH-04c-1). It is shown in place of the empty
+	// hint rather than in the header, because it belongs to the text one line above
+	// it and because the header is clipped from the right, where a message that
+	// says what to fix would be the first thing lost. Push-only, like every other
+	// state here: the view does not know what a selector is, only that the wiring
+	// could not use one.
+	queryErr string
+
 	// kindsDone / kindsTotal are the fan-out's progress: how many of the kinds the
 	// current query was launched over have reported done (kube's SearchKindDone,
 	// SEARCH-03a) against how many were requested. kindsTotal is 0 until the wiring
@@ -245,6 +257,7 @@ func (m *Model) Reset() {
 	m.searching = false
 	m.allKinds = false
 	m.allNamespaces = false
+	m.queryErr = ""
 }
 
 // Query is the current query text.
@@ -257,6 +270,15 @@ func (m Model) AllKinds() bool { return m.allKinds }
 // AllNamespaces reports whether the namespace scope is widened to every namespace. The
 // wiring reads it when it picks the namespace for a query.
 func (m Model) AllNamespaces() bool { return m.allNamespaces }
+
+// SetQueryError records why the current query line cannot be searched (""  clears it).
+// The wiring sets it on every query change — so it is refreshed or dropped in step with
+// the text — and a view holding one shows it instead of the empty hint. The view never
+// produces one itself: what makes a query usable is the wiring's business.
+func (m *Model) SetQueryError(s string) { m.queryErr = s }
+
+// QueryError reports why the current query cannot be searched, or "" when it can.
+func (m Model) QueryError() string { return m.queryErr }
 
 // SetSearching records whether a search is in flight (shown in the header). The wiring
 // sets it when it launches a query and clears it when the fan-out completes.
@@ -499,20 +521,35 @@ func (m Model) View() string {
 		m.styles.App.Width(m.width).MaxWidth(m.width).Render(m.query.View()),
 	}
 	if len(m.hits) == 0 {
-		parts = append(parts, m.styles.Subtle.Width(m.width).MaxWidth(m.width).Render(m.emptyHint()))
+		// A hint is subtle; a query that cannot run is not — it is the one state
+		// here the reader has to fix before anything else can happen.
+		style := m.styles.Subtle
+		if m.queryErr != "" {
+			style = m.styles.Error
+		}
+		parts = append(parts, style.Width(m.width).MaxWidth(m.width).Render(m.emptyHint()))
 	} else {
 		parts = append(parts, m.list.View())
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-// emptyHint is the line shown in place of an empty result list: what to do on a blank
-// query, the in-flight state while the fan-out runs, and an explicit no-match otherwise
-// (an empty list must never read as a hung search).
+// emptyHint is the line shown in place of an empty result list: a query that cannot be
+// searched at all, what to do on a blank query, the in-flight state while the fan-out
+// runs, and an explicit no-match otherwise (an empty list must never read as a hung
+// search).
+//
+// The error wins over everything because it is the only one of the four the reader must
+// act on, and because the alternative — "no matches" for a query that was never run — is
+// an outright lie about the cluster. The blank-query line advertises the label-selector
+// syntax (SEARCH-04c-1): it is the one piece of this view that a reader cannot discover
+// by pressing keys, and this line is already the moment they are looking for what to type.
 func (m Model) emptyHint() string {
 	switch {
+	case m.queryErr != "":
+		return m.queryErr
 	case m.query.Value() == "":
-		return "type to search this cluster"
+		return "type to search this cluster · -l app=web to match labels"
 	case m.searching:
 		return "searching…"
 	default:

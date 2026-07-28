@@ -40,7 +40,7 @@ const searchDebounce = 250 * time.Millisecond
 // injected with WithSearcher — nil leaves the model search-inert (the search.cluster
 // action never opens the view), exactly as a nil watcher leaves it watch-inert.
 type Searcher interface {
-	Search(ctx context.Context, resources []kube.Resource, namespace, query string, limit int) <-chan kube.SearchEvent
+	Search(ctx context.Context, resources []kube.Resource, namespace string, query kube.SearchQuery, limit int) <-chan kube.SearchEvent
 }
 
 // WithSearcher wires the cluster-search client (nil → search-inert).
@@ -53,7 +53,7 @@ func WithSearcher(s Searcher) Option {
 // moved on while the timer ran and the tick is stale (the seqTimeoutMsg guard).
 type searchDebouncedMsg struct {
 	gen   int
-	query string
+	query kube.SearchQuery
 }
 
 // searchMsg wraps one message from the search pump with the generation of the query
@@ -187,15 +187,29 @@ func (m Model) handleSearchScopeChanged(searchview.ScopeChangedMsg) (tea.Model, 
 }
 
 // restartSearch cancels whatever fan-out was in flight, makes its remaining hits stale
-// (the searchGen bump), and arms the debounce timer for query. An empty query — or a
-// search-inert model — cancels and searches nothing. The view has already dropped the
-// previous results, so the screen never shows hits from a query or a scope that is no
-// longer in force (D140 pt 3). The in-flight indicator goes up now rather than when the
-// lists actually start, so a keystroke is never followed by a silent, blank pause.
-func (m Model) restartSearch(query string) (tea.Model, tea.Cmd) {
+// (the searchGen bump), and arms the debounce timer for the raw query line. An empty
+// query — or a search-inert model — cancels and searches nothing. The view has already
+// dropped the previous results, so the screen never shows hits from a query or a scope
+// that is no longer in force (D140 pt 3). The in-flight indicator goes up now rather than
+// when the lists actually start, so a keystroke is never followed by a silent, blank pause.
+//
+// The raw line is parsed here (SEARCH-04c-1) rather than at launch, because a query that
+// does not parse must say so *while it is being typed*, not a debounce later: half of
+// `-l app=` is always invalid, so an unparseable selector is the normal state of a
+// selector mid-typing. It is reported (SetQueryError) and searched not at all — sending
+// it would fail every kind's List and read, under per-kind failure isolation, as an empty
+// cluster.
+func (m Model) restartSearch(raw string) (tea.Model, tea.Cmd) {
 	m.stopSearch()
 	m.searchGen++
-	if query == "" || m.searcher == nil {
+	query, err := kube.ParseSearchQuery(raw)
+	if err != nil {
+		m.searchView.SetQueryError(err.Error())
+		m.searchView.SetSearching(false)
+		return m, nil
+	}
+	m.searchView.SetQueryError("")
+	if query.Empty() || m.searcher == nil {
 		m.searchView.SetSearching(false)
 		return m, nil
 	}

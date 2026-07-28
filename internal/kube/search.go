@@ -2,10 +2,12 @@ package kube
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -19,6 +21,95 @@ type SearchHit struct {
 	Resource Resource
 	Ref      ObjectRef
 }
+
+// SearchQuery is what one cluster search matches on. The two terms are ANDed and
+// each is optional, but a query with neither matches nothing worth streaming —
+// callers should treat Empty as "do not search" rather than "match everything",
+// which over a whole cluster is the enumeration D8/principle 4 avoids.
+//
+// The two halves are evaluated in different places on purpose, and that is the
+// point of separating them: LabelSelector is handed to the apiserver in the List
+// call, so a selector costs the client nothing and narrows the traffic on the wire,
+// while Name is a client-side substring over the rows that come back (the server
+// has no "name contains" filter — a field selector can only match a name exactly).
+type SearchQuery struct {
+	// Name is a case-insensitive substring matched against each object's name.
+	// Empty matches every name.
+	Name string
+
+	// LabelSelector is a Kubernetes label selector in its standard string form
+	// (`app=web`, `tier in (a,b)`, `!legacy`, comma-separated), passed straight
+	// through to every List. Empty selects everything. Validate it with
+	// ParseSearchQuery rather than building it by hand: an invalid selector is
+	// rejected by the server per kind, which under per-kind failure isolation
+	// (principle 3, D131 pt 3) would look exactly like an empty cluster.
+	LabelSelector string
+}
+
+// Empty reports a query with nothing to match on.
+func (q SearchQuery) Empty() bool { return q.Name == "" && q.LabelSelector == "" }
+
+// searchSelectorToken introduces the label-selector half of a raw query. It is
+// kubectl's own flag, so the syntax a reader already knows (`-l app=web`) is the
+// syntax that works here.
+const searchSelectorToken = "-l"
+
+// ParseSearchQuery splits one raw query line into a SearchQuery. Everything before
+// a whitespace-delimited `-l` is the name substring; everything after it is a label
+// selector, parsed (and normalised) with the standard apimachinery parser, so an
+// unusable selector is reported here — to the reader who typed it — instead of
+// being sent to the server and coming back as a silent, empty search.
+//
+// The remainder after `-l` is taken whole rather than tokenised so a selector may
+// contain spaces (`tier in (a, b)`), which is also why the name half is the *prefix*
+// and not "every non-selector word": an object name can never contain a space, so
+// there is nothing to gain from letting the name half be several terms and a real
+// grammar to lose.
+//
+// A raw query with no `-l` is a pure name substring, exactly as before this existed.
+func ParseSearchQuery(raw string) (SearchQuery, error) {
+	name, selector := splitSelector(raw)
+	q := SearchQuery{Name: strings.TrimSpace(name)}
+	if selector == "" {
+		return q, nil
+	}
+	sel, err := labels.Parse(selector)
+	if err != nil {
+		// Wrapped here rather than at the call site: apimachinery's message says
+		// what is wrong with the requirement ("found '!', expected: identifier")
+		// but never what a requirement is, and the reader typed this into a box
+		// that mostly takes names.
+		return SearchQuery{}, fmt.Errorf("invalid label selector: %w", err)
+	}
+	q.LabelSelector = sel.String()
+	return q, nil
+}
+
+// splitSelector finds the whitespace-delimited `-l` token and returns the text
+// before it and the (trimmed) remainder after it. A `-l` embedded in a word — the
+// `-l` of `my-lb`, or a `-lapp=web` typed without the space — is not a token, so a
+// name is never silently cut in half by its own hyphen.
+func splitSelector(raw string) (name, selector string) {
+	rest := raw
+	offset := 0
+	for {
+		i := strings.Index(rest, searchSelectorToken)
+		if i < 0 {
+			return raw, ""
+		}
+		start, end := offset+i, offset+i+len(searchSelectorToken)
+		beforeOK := start == 0 || isSpace(raw[start-1])
+		afterOK := end == len(raw) || isSpace(raw[end])
+		if beforeOK && afterOK {
+			return raw[:start], strings.TrimSpace(raw[end:])
+		}
+		rest = rest[i+len(searchSelectorToken):]
+		offset = end
+	}
+}
+
+// isSpace reports the ASCII whitespace splitSelector treats as a token boundary.
+func isSpace(b byte) bool { return b == ' ' || b == '\t' }
 
 // SearchEventType discriminates the messages a search streams. A consumer
 // switches on it; every other SearchEvent field is only meaningful for the type
@@ -100,11 +191,12 @@ type rowLister interface {
 	List(ctx context.Context, r Resource, namespace string, opts metav1.ListOptions) (*Table, error)
 }
 
-// Search fans out a one-shot, cancellable name search across resources in
-// namespace and streams SearchEvents onto the returned channel. Each kind is
-// listed concurrently (reusing the server-side Table List, M1-05a); a row whose
-// object name contains query (case-insensitive substring) is emitted as a
-// SearchMatch. A cluster-scoped kind ignores namespace (listed cluster-wide).
+// Search fans out a one-shot, cancellable search across resources in namespace and
+// streams SearchEvents onto the returned channel. Each kind is listed concurrently
+// (reusing the server-side Table List, M1-05a) under query.LabelSelector, and a
+// returned row whose object name contains query.Name (case-insensitive substring)
+// is emitted as a SearchMatch. A cluster-scoped kind ignores namespace (listed
+// cluster-wide).
 //
 // This is a one-shot query, NOT a watch: it lists each kind exactly once and
 // never re-lists. Cross-type enumeration is the expensive work the fast-cold-
@@ -128,14 +220,18 @@ type rowLister interface {
 //     wide scope arrives as a steady stream of lists rather than all at once
 //     (D131 pt 2). Ordering is therefore not guaranteed and never was — hits
 //     stream in whatever order the kinds return.
-func (c *Clients) Search(ctx context.Context, resources []Resource, namespace, query string, limit int) <-chan SearchEvent {
+//   - Selector faults are not special: a kind that rejects the label selector
+//     fails its List like any other broken kind (SearchKindDone{Failed}) and the
+//     rest of the search proceeds. Validating the selector before it is sent
+//     (ParseSearchQuery) is what keeps that from being the normal case.
+func (c *Clients) Search(ctx context.Context, resources []Resource, namespace string, query SearchQuery, limit int) <-chan SearchEvent {
 	return searchRows(ctx, c, resources, namespace, query, limit)
 }
 
 // searchRows is the injectable core of Search: it takes a rowLister (real or
 // fake) so the concurrent fan-out, matching, cap, and per-kind fault isolation
 // are testable without a live apiserver (D18), mirroring the getTable/List split.
-func searchRows(ctx context.Context, lister rowLister, resources []Resource, namespace, query string, limit int) <-chan SearchEvent {
+func searchRows(ctx context.Context, lister rowLister, resources []Resource, namespace string, query SearchQuery, limit int) <-chan SearchEvent {
 	out := make(chan SearchEvent, searchChanBuffer)
 	go func() {
 		defer close(out)
@@ -149,7 +245,11 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		needle := strings.ToLower(query)
+		needle := strings.ToLower(query.Name)
+		// One ListOptions for the whole fan-out: the selector is the same for
+		// every kind, and it is the server that applies it, so a selector narrows
+		// the rows on the wire instead of being filtered out after arriving.
+		opts := metav1.ListOptions{LabelSelector: query.LabelSelector}
 		var (
 			wg     sync.WaitGroup
 			mu     sync.Mutex
@@ -185,7 +285,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 				if !r.Namespaced {
 					ns = "" // cluster-scoped: namespace does not apply
 				}
-				tbl, err := lister.List(ctx, r, ns, metav1.ListOptions{})
+				tbl, err := lister.List(ctx, r, ns, opts)
 				if err != nil || tbl == nil {
 					// A List aborted because the cap (or the caller) cancelled
 					// the context is not a failing kind — only a genuine List

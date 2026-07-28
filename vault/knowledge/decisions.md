@@ -3763,3 +3763,38 @@ debounced, hinted) and adds three constraints of its own.
    closing the search returns the reader where they left off. A search is a question
    asked of the cluster, not a navigation gesture; only `ns.switch` re-scopes the app.
    Any future "search everywhere" affordance stays one-directional the same way.
+
+## D151 — A query line may carry a server-side term; it is parsed as it is typed, and an unusable query is reported, never sent (2026-07-28, SEARCH-04c-1)
+
+Cluster search grew a second matching term: `-l <selector>` in the same query line hands
+a label selector to `metav1.ListOptions` on every kind's List, alongside (or instead of)
+the client-side name substring. `kube.Search`'s query parameter is now a `SearchQuery`
+(`Name` + `LabelSelector`) rather than a string. Four constraints.
+
+1. **A search term goes to the server whenever the server can evaluate it.** A label
+   selector filters rows before they cross the wire, so it makes a search *cheaper*, not
+   dearer — the opposite of a scope widen. That is why it is not gated, hidden behind a
+   mode, or debounced any differently: it is the one way to widen the *scope* and narrow
+   the *result* at the same time. Client-side matching stays for what the server cannot
+   do (a name **substring**; the server can only match a name exactly).
+2. **Server-side matching is why field selectors are excluded, not an argument for
+   them.** A field selector looks equally free but is not: supported fields vary per
+   kind (`spec.nodeName` is a Pod thing), a kind that does not support one rejects the
+   List, and a rejected List is a silent failed kind under per-kind fault isolation
+   (D131 pt 3). Across a cross-kind fan-out that turns one unsupported field into most
+   of the scope disappearing without a word. A cross-kind surface may only carry terms
+   **every** kind can answer.
+3. **A query that cannot be searched is reported where it was typed, and never sent.**
+   An invalid selector is caught at parse time in the wiring, surfaced through the
+   view's `SetQueryError` in place of the empty hint (in the error style, outranking
+   `no matches`), and no fan-out launches. Sending it would fail every kind's List and,
+   by constraint 2's mechanism, render as a healthy empty cluster — a typo must never be
+   indistinguishable from an answer. Parsing happens on every keystroke rather than at
+   launch because a half-typed selector is invalid most of the time it is being written.
+4. **A grammar in a text field discriminates by an explicit token, never by shape.** The
+   selector half is introduced by a whitespace-delimited `-l` (kubectl's own flag); a
+   `-l` inside a word is not a token, so `my-lb` stays a name. Sniffing — "it parses as
+   a selector, so it is one" — is unavailable and would be wrong anyway: a bare `nginx`
+   is a valid selector meaning *has label `nginx`*, so shape-detection would silently
+   reinterpret the most common query in the app. Any further query term takes its own
+   token on the same rule.
