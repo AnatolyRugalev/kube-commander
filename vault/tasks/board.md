@@ -7,7 +7,8 @@ _Last updated: 2026-07-28 — SEARCH-04c-1 done: a `-l app=web` term in the sear
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-04c-2a** Rank the search results (match score + ordered result list)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 (SEARCH-04c-2 split) | claimed: 2026-07-28
 
 ## Blocked
 
@@ -116,16 +117,25 @@ deliberately left out: per-kind field support varies (`spec.nodeName` is a Pod t
 selector the kind does not support fails its List, and a failed kind is silent by design
 (D131 pt 3) — so a field selector would quietly drop most of the scope. Raise it as its
 own item if it is ever wanted. **SEARCH-04c-1 is done** — `-l app=web` in the query line is
-a server-side label selector (D151) — so **SEARCH-04c-2 (fuzzy matching) is all that is
-left in the SEARCH line**.
+a server-side label selector (D151).
 
-- [ ] **SEARCH-04c-2** Fuzzy name matching beyond the case-insensitive substring
-      status: todo | owner: — | added: 2026-07-28 (SEARCH-04c split)
-      notes: Client-side, in `kube.Search`'s matcher. The hard half is not the score but the
-      order: hits currently stream in arrival order across a concurrent fan-out (explicitly
-      "not guaranteed and never was"), so ranking means either buffering until the sweep ends
-      — losing the streaming feel — or re-sorting the list under the reader's cursor. Decide
-      that first; the scorer is the easy part.
+SEARCH-04c-2 was split on pickup into **SEARCH-04c-2a** (rank the results) and
+**SEARCH-04c-2b** (fuzzy matching), in that order, because doing them the other way round
+is a regression: a fuzzy matcher over an arrival-ordered list buries the exact match the
+reader wanted under scattered ones. Ranking first also settles the ordering question the
+old note flagged — see D152: `kube.Search` keeps streaming in arrival order and the *view*
+does the ranking, as a stable ordered insert with the cursor pinned to its row.
+
+- [ ] **SEARCH-04c-2b** Fuzzy (subsequence) name matching, on top of the ranked list
+      status: todo | owner: — | added: 2026-07-28 (SEARCH-04c-2 split)
+      notes: Widen `kube.Search`'s name matcher from "contiguous substring" to "characters in
+      order" and let the score (SEARCH-04c-2a) sort the scattered matches below the tight
+      ones — the scoring bands already keep every substring match above every subsequence one,
+      so the noise fuzzy admits lands at the bottom of the list rather than in the middle of it.
+      **Watch the cap**: it is applied at emit time in `kube`, in arrival order, so a fuzzy
+      matcher can burn all 200 slots on junk before a good kind returns. Ranking does not fix
+      that — the cap runs before the ranking does. Either only fall back to subsequence when a
+      kind's substring pass found nothing, or make the cap score-aware; decide on pickup.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
