@@ -7,7 +7,12 @@ _Last updated: 2026-07-28 — LOGS-04 split into 04a/04b/04c and LOGS-04a done: 
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-04c** Jump-to-latest in the logs view
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (LOGS-04 split) | claimed: 2026-07-28
+      notes: Third slice of the split LOGS-04. Today `logs.follow` resumes-and-jumps but
+      `nav.bottom` (`G`) jumps without resuming, so a reader who scrolled back has no single
+      "catch up and keep tailing" gesture. Small — decide whether `G` re-arms follow in this
+      view or whether a distinct action does. Depends on LOGS-01/02.
 
 ## Blocked
 
@@ -127,12 +132,6 @@ scroll sideways on `nav.left`/`nav.right` (D146).
       this is a kube-layer field plus a view toggle; decide whether the toggle re-requests the
       stream or whether timestamps are always requested and only their *display* toggles
       (the latter avoids a restream but changes every line's bytes). Depends on LOGS-01/02.
-- [ ] **LOGS-04c** Jump-to-latest in the logs view
-      status: todo | owner: — | added: 2026-07-25 (LOGS-04 split)
-      notes: Third slice of the split LOGS-04. Today `logs.follow` resumes-and-jumps but
-      `nav.bottom` (`G`) jumps without resuming, so a reader who scrolled back has no single
-      "catch up and keep tailing" gesture. Small — decide whether `G` re-arms follow in this
-      view or whether a distinct action does. Depends on LOGS-01/02.
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
