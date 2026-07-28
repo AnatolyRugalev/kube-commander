@@ -7,7 +7,8 @@ _Last updated: 2026-07-28 — SEARCH-04c-2a done: cluster-search results are ran
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-04c-2b** Fuzzy (subsequence) name matching, on top of the ranked list
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 (SEARCH-04c-2 split) | claimed: 2026-07-28
 
 ## Blocked
 
@@ -125,16 +126,7 @@ reader wanted under scattered ones. Ranking first also settles the ordering ques
 old note flagged — see D152: `kube.Search` keeps streaming in arrival order and the *view*
 does the ranking, as a stable ordered insert with the cursor pinned to its row.
 
-- [ ] **SEARCH-04c-2b** Fuzzy (subsequence) name matching, on top of the ranked list
-      status: todo | owner: — | added: 2026-07-28 (SEARCH-04c-2 split)
-      notes: Widen `kube.Search`'s name matcher from "contiguous substring" to "characters in
-      order" and let the score (SEARCH-04c-2a) sort the scattered matches below the tight
-      ones — the scoring bands already keep every substring match above every subsequence one,
-      so the noise fuzzy admits lands at the bottom of the list rather than in the middle of it.
-      **Watch the cap**: it is applied at emit time in `kube`, in arrival order, so a fuzzy
-      matcher can burn all 200 slots on junk before a good kind returns. Ranking does not fix
-      that — the cap runs before the ranking does. Either only fall back to subsequence when a
-      kind's substring pass found nothing, or make the cap score-aware; decide on pickup.
+_(SEARCH-04c-2b is in progress — see In Progress.)_
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
