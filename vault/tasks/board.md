@@ -7,7 +7,11 @@ _Last updated: 2026-07-28 — LOGS-04b done: `t` shows each log line's server ti
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-04a** All-kinds scope widen for cluster search (+ bounded fan-out)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 | claimed: 2026-07-28
+      notes: The widen the feedback asked for, plus the concurrency bound that makes it
+      safe (D131 pt 2 "rate-limit-aware"). Namespace widen is SEARCH-04b, richer matching
+      SEARCH-04c.
 
 ## Blocked
 
@@ -98,11 +102,25 @@ SEARCH-03 was split D52-style into the kube-layer signal (**SEARCH-03a**) and th
 surfacing (**SEARCH-03b**); both are done, so progress and the cap are on screen and only
 the scope widen (SEARCH-04) is left in this line.
 
-- [ ] **SEARCH-04** Scope widen + richer matching: opt-in **all discovered kinds** and/or
-      **all namespaces** toggle (the expensive widen, off by default per D131 pt 2), plus
-      fuzzy / label / field matching beyond name substring.
-      status: todo | owner: — | added: 2026-07-24 (SEARCH triage, D131)
-      notes: Keep the widen explicit + rate-limit-aware on big clusters. Depends on SEARCH-02.
+SEARCH-04 was three unrelated surfaces behind one line item, so it was split on pickup
+into **SEARCH-04a** (widen the *kind* scope), **SEARCH-04b** (widen the *namespace*
+scope) and **SEARCH-04c** (richer matching). The two widens share nothing but the header
+segment they write to, and the matching work touches the kube layer's matcher rather than
+the scope at all.
+
+- [ ] **SEARCH-04b** Namespace widen: a toggle that searches **all namespaces** even while
+      the app is scoped to one (`kube.Search` already accepts `""`; the work is the toggle,
+      the header segment, and the re-run).
+      status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
+      notes: Off by default (D131 pt 2). Cheaper than the kind widen — one namespace scan
+      per kind either way — but it is the other half of "scope". Depends on SEARCH-04a for
+      the scope-toggle plumbing (ScopeChangedMsg, the re-run path).
+- [ ] **SEARCH-04c** Richer matching: fuzzy / label / field selectors beyond the current
+      case-insensitive name substring.
+      status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
+      notes: Lives in `kube.Search`'s matcher, not the scope. A label/field selector can go
+      to the server (`metav1.ListOptions`) and is therefore cheaper than fuzzy, which has to
+      score client-side — likely its own split again on pickup.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
