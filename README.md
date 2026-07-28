@@ -135,7 +135,10 @@ while you are typing, so a substring you started can become a pattern without re
 it — a pattern that does not compile yet keeps the last working one and the header says
 `invalid regex`. Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward
 gesture pauses it so the next line does not yank you back); `f` again resumes and jumps
-to the newest line. A line wider than the screen is clipped, so one log line stays one
+to the newest line, and so does `G` (`nav.bottom`) — in a live stream "go to the end"
+means catch up *and keep up*, so the jump rejoins the tail. Scrolling down by hand does
+not: a view you paused stays paused wherever you park it. A line wider than the screen is
+clipped, so one log line stays one
 row: press `w` (`logs.wrap`) to fold long lines onto continuation rows instead (the
 header shows `[wrap]`), or leave it off and use `h`/`l` (or the arrow keys) to scroll
 sideways to the tail — the header then shows how many columns are hidden to the left, as

@@ -114,6 +114,60 @@ func TestFollowToggleResumesAtBottom(t *testing.T) {
 	}
 }
 
+// TestJumpToBottomResumesFollowing is the headline of LOGS-04c: `G` is the one gesture
+// that catches a scrolled-back reader up *and* keeps them tailing. Landing on the newest
+// line is only half of it — the assertion that matters is that the line arriving after
+// the jump is still on screen.
+func TestJumpToBottomResumesFollowing(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+	m, _ = m.Update(keymap.ActionTop) // pause at the top
+	if m.Following() {
+		t.Fatal("precondition: scrolling to the top should pause following")
+	}
+	m, _ = m.Update(keymap.ActionBottom)
+	if !m.Following() {
+		t.Fatal("nav.bottom should re-arm following")
+	}
+	if v := plain(m.View()); !strings.Contains(v, "line-50") {
+		t.Errorf("nav.bottom should show the newest line; got:\n%s", v)
+	}
+	m.Append("line-51")
+	v := plain(m.View())
+	if !strings.Contains(v, "line-51") {
+		t.Errorf("after nav.bottom the view should keep tailing; got:\n%s", v)
+	}
+	if !strings.Contains(v, "[following]") {
+		t.Errorf("header should show [following] after nav.bottom; got:\n%s", v)
+	}
+}
+
+// TestDownwardScrollDoesNotResumeFollowing draws the other half of the line: only the
+// *explicit* jump to the end rejoins the stream. Stepping or paging down — even all the
+// way onto the last line — is browsing, and a reader parked at the end of a paused view
+// must be able to stay there.
+func TestDownwardScrollDoesNotResumeFollowing(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+	m, _ = m.Update(keymap.ActionTop) // pause at the top
+	for _, a := range []keymap.Action{keymap.ActionDown, keymap.ActionHalfPageDown, keymap.ActionPageDown} {
+		m, _ = m.Update(a)
+		if m.Following() {
+			t.Fatalf("%v should not resume following; only nav.bottom does", a)
+		}
+	}
+	// Reach the last line the slow way: still paused.
+	for i := 0; i < 60; i++ {
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	if m.Following() {
+		t.Fatal("scrolling onto the last line should not resume following")
+	}
+	if v := plain(m.View()); !strings.Contains(v, "[paused]") {
+		t.Errorf("header should still show [paused]; got:\n%s", v)
+	}
+}
+
 func TestLiveFilterNarrowsShownLines(t *testing.T) {
 	m := newLogs()
 	m.Append("alpha error one")

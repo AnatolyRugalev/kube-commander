@@ -3653,3 +3653,26 @@ and while clipping, `nav.left`/`nav.right` scroll the view horizontally.
 4. **Display state the reader can lose sight of is named in the header.** `[wrap]` for the
    mode, `[+N]` for the columns hidden to the left — without the latter, a view scrolled
    past the start of every line is indistinguishable from a view of blank lines.
+
+### D147 — In a streaming view, an explicit jump to the end rejoins the stream
+**2026-07-28** (LOGS-04c). `nav.bottom` (`G`) in the logs view now sets following as well
+as scrolling, making it the single "catch up and keep tailing" gesture.
+
+1. **The end of a live buffer is a state, not a position.** The newest line keeps moving,
+   so a jump to the bottom that did not resume following would be true for one frame and
+   then drift upward as lines arrived — the reader would be looking at "the newest line"
+   from a minute ago. Any future streaming pane binds jump-to-end the same way.
+2. **It is the inverse of the pause rule, and the pair is the whole model.** Any *upward*
+   movement leaves the stream; the *explicit* jump to the end rejoins it. Incremental
+   downward movement (`nav.down`, page down) does neither — stepping onto the last line is
+   browsing, and a reader parked at the end of a paused view must be able to stay there.
+   A view resumes following only by asking (`logs.follow`, `nav.bottom`), never by
+   arriving somewhere.
+3. **Prefer overloading the existing nav key over adding a view-specific one** — and let
+   the *view* announce the difference, not the registry. A second "jump to latest" binding
+   would compete with `G` for the same intent and cost a hint slot; the header flipping to
+   `[following]` makes the extra effect self-announcing. A registry **description is
+   global**, so it must not carry per-view behaviour: it is one column of the `?` overlay,
+   and lengthening it widens that column until the next one no longer fits (measured — the
+   nav column's longest description sets the width). View-specific behaviour on a shared
+   key is documented in the README and `knowledge/keybindings.md` instead.

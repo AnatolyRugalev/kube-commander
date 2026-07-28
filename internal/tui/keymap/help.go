@@ -100,6 +100,13 @@ const (
 // on nav.left/nav.right, is deliberately *not* hinted in either: it only acts while the
 // view is not wrapping, and a hint that is right half the time is the kind of promise
 // D143 pt 1 forbids. It stays discoverable through `?` and the generated keybindings doc.
+//
+// Jump-to-latest (LOGS-04c) is not hinted either, for the plainer reason that the hint
+// line is full: `G` is the ordinary nav.bottom key and it self-announces — the header
+// flips to `[following]` the moment it is pressed. Follow, already hinted, remains the
+// advertised way back to the tail. Its registry description stays the plain "Jump to
+// bottom" too: a description is *global*, and lengthening it widens that column in the
+// `?` overlay until the next column no longer fits (D147 pt 3).
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},

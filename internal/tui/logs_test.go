@@ -28,6 +28,10 @@ var regexKey = tea.Key{Code: 'r', Mod: tea.ModCtrl}
 // the regex chord it is an ordinary letter, so the open grep types it.
 var wrapKey = tea.Key{Code: 'w', Text: "w"}
 
+// endKey is the default nav.bottom key (`G`) — jump to the newest line, which in this
+// view also re-arms following (LOGS-04c). An ordinary letter, so the open grep types it.
+var endKey = tea.Key{Code: 'G', Text: "G"}
+
 // frame is the rendered screen with styling removed. LOGS-03 highlights matched spans,
 // so a matching line is no longer a contiguous run of bytes in the frame — content
 // assertions have to strip first.
@@ -187,6 +191,37 @@ func TestLogsWrapTogglesFromTheShell(t *testing.T) {
 	}
 	if q := m.logsView.Query(); q != "w" {
 		t.Fatalf("`w` should be typed into the grep; query = %q", q)
+	}
+}
+
+// TestLogsJumpToLatestFromTheShell proves the LOGS-04c gesture survives the routing:
+// `G` resolved by the sequencer reaches the logs view and rejoins the stream there
+// (rather than moving a table cursor underneath), and — being a plain letter — types
+// into the grep field while that is open instead of firing.
+func TestLogsJumpToLatestFromTheShell(t *testing.T) {
+	m := openLogsWithLines(t, "one", "two")
+
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	if m.logsView.Following() {
+		t.Fatal("precondition: an upward scroll should pause following")
+	}
+	m, _ = press(t, m, endKey)
+	if !m.logsView.Following() {
+		t.Fatal("`G` should catch the reader up and keep tailing")
+	}
+	if !m.logsView.Active() {
+		t.Fatal("`G` should not close the logs view")
+	}
+
+	// With the grep open the same key is text.
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"}) // pause again
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "G")
+	if m.logsView.Following() {
+		t.Fatal("`G` typed into the open grep must not resume following")
+	}
+	if q := m.logsView.Query(); q != "G" {
+		t.Fatalf("`G` should be typed into the grep; query = %q", q)
 	}
 }
 

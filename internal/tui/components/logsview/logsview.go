@@ -13,8 +13,9 @@
 // case-insensitive substring and case-insensitive regex, and whichever mode is active,
 // the matched spans are highlighted in the shown lines (D145). LOGS-04a gave long lines
 // two ways to be read — `logs.wrap` soft-wraps them, and while it is off nav.left/right
-// scroll the clipped view horizontally — leaving timestamps (LOGS-04b) and jump-to-latest
-// (LOGS-04c) as later slices.
+// scroll the clipped view horizontally. LOGS-04c made `nav.bottom` mean "the newest line,
+// and keep it newest": jumping to the end re-arms following (D147), leaving timestamps
+// (LOGS-04b) as the last slice.
 //
 // Like the shared viewer and the picker it wraps a bubbles component (viewport +
 // textinput) but drives it entirely through keymap.Actions — it never matches a raw
@@ -214,6 +215,8 @@ func (m *Model) SetSize(w, h int) {
 // the viewport (vim nav + gg/G + half/full page, D10); any *upward* scroll pauses
 // following so the reader can look back without the stream yanking them to the bottom
 // (mirrors the shared viewer's M3-06 follow semantics, now inside the component).
+// nav.bottom is the inverse gesture: an explicit jump to the end *resumes* following, so
+// a reader who scrolled back has one key that catches up and keeps tailing (LOGS-04c).
 // app.filter opens the live grep; logs.regex switches that grep between substring and
 // regex matching (LOGS-03); logs.wrap switches long lines between soft-wrapped and
 // clipped, and while clipped nav.left/nav.right scroll horizontally to the tail of a
@@ -244,6 +247,15 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	case keymap.ActionPageDown:
 		m.viewport.PageDown()
 	case keymap.ActionBottom:
+		// The one "catch up and keep tailing" gesture (LOGS-04c, D147). In a streaming
+		// pager the bottom is not a position: the newest line keeps moving, so a jump to
+		// the end that did not rejoin the stream would be true for exactly one frame and
+		// then drift upward as lines arrived. This is the exact inverse of the rule above
+		// — any *upward* movement pauses following, an explicit jump to the end resumes
+		// it. Incremental downward movement (nav.down, page down) deliberately does not:
+		// stepping onto the last line is browsing, not a statement about the tail, and a
+		// reader parked at the end of a paused view must be able to stay there.
+		m.following = true
 		m.viewport.GotoBottom()
 	case keymap.ActionLeft:
 		// Horizontal movement says nothing about whether the reader still wants the
