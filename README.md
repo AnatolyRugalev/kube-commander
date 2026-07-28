@@ -130,6 +130,14 @@ work for the API server, so kubecom lists at most eight kinds at a time — a wi
 takes longer and the progress line shows it, rather than hammering the cluster in one
 burst.
 
+The namespace is the other half of the scope, and it widens the same way: `Ctrl+w`
+(`search.allNamespaces`, rebindable) searches **every namespace** without changing the
+namespace the table itself is watching — when you close the search you are exactly where
+you left off. The header swaps the namespace it names for `all namespaces` while the
+widen is on. The two widens are independent, so you can search the curated kinds
+everywhere, every kind in one namespace, or — pressing both — everything, everywhere.
+Like the kind widen, each is off again the next time you open the search.
+
 Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
 StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
 — to open the **dedicated full-screen logs view**. It tails the container live (a

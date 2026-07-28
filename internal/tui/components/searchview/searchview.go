@@ -14,6 +14,10 @@
 // they describe are dropped. SEARCH-04a added the kind-scope widen: the view holds the
 // all-kinds flag, names it in the header while it is on, and emits ScopeChangedMsg so
 // the wiring re-runs the query over the wider set — it still resolves no kinds itself.
+// SEARCH-04b added the namespace-scope widen on the same pattern: an independent
+// all-namespaces flag that *replaces* the scope name in the header (a header carries
+// one namespace scope, never two) and rides the same ScopeChangedMsg, with the
+// namespace itself still resolved by the wiring.
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -50,6 +54,12 @@ const (
 	queryHeight  = 1
 )
 
+// allNamespacesLabel is what the header calls a namespace-widened search (SEARCH-04b).
+// It deliberately matches the wording of the app's own all-namespaces sentinel so the
+// two read as one scope, not two features; the app owns its constant and this package
+// owns this one, because a component never imports the root (D56).
+const allNamespacesLabel = "all namespaces"
+
 // SelectedMsg is emitted when the user drills into the highlighted hit (nav.drillIn).
 // Hit carries the kind and object identity the wiring needs to switch the browse view
 // to that resource and select the row. Owned by this package — the emitter — so the
@@ -66,17 +76,20 @@ type ClosedMsg struct {
 }
 
 // ScopeChangedMsg is emitted when the user changes *what* a query covers rather than
-// the query itself (SEARCH-04a): today the all-kinds widen. It carries the new scope
-// state so the wiring can pick the kind set and re-run the current query — the view
-// has already dropped the hits belonging to the narrower scope, exactly as a query
-// change does, because those results no longer describe what the header says.
+// the query itself: the all-kinds widen (SEARCH-04a) or the all-namespaces widen
+// (SEARCH-04b). It carries the whole new scope state — both flags, always — so the
+// wiring can pick the kind set and the namespace and re-run the current query without
+// reading anything back off the view. The view has already dropped the hits belonging
+// to the narrower scope, exactly as a query change does, because those results no
+// longer describe what the header says.
 //
 // It is a separate message from QueryChangedMsg because the two mean different things
 // to a consumer that cares: the query is still whatever the reader typed, so the field
 // must not be re-read or reset, only re-run.
 type ScopeChangedMsg struct {
-	Kind     string
-	AllKinds bool
+	Kind          string
+	AllKinds      bool
+	AllNamespaces bool
 }
 
 // QueryChangedMsg is emitted whenever the query text actually changes — including the
@@ -138,6 +151,14 @@ type Model struct {
 	// is the side that knows what discovery found.
 	allKinds bool
 
+	// allNamespaces is the namespace-scope widen (SEARCH-04b), the independent other
+	// half of scope: false searches whatever namespace the wiring named through
+	// SetScope, true every namespace. Held here for the same reason allKinds is — the
+	// view announces the scope, the wiring resolves it — and independent of allKinds
+	// on purpose, so "curated kinds everywhere" and "every kind here" are both
+	// reachable rather than being two stops on one cycle.
+	allNamespaces bool
+
 	// hits is the authoritative result set in arrival order; the list is rebuilt from
 	// it on every append so labels stay column-aligned as new kinds stream in.
 	hits []kube.SearchHit
@@ -188,8 +209,10 @@ func New(s styles.Styles) Model {
 // Kind returns the view's kind id (always "search").
 func (m Model) Kind() string { return kind }
 
-// SetScope sets the header label describing what the search covers (e.g. the current
-// namespace). Purely informational; the view never searches anything itself.
+// SetScope sets the header label describing which namespace the search covers. Purely
+// informational; the view never searches anything itself. It is overridden while the
+// namespace widen is on (the header then says "all namespaces"), so the wiring can set
+// it once on open and never revisit it.
 func (m *Model) SetScope(s string) { m.scope = s }
 
 // Show reveals the view and focuses the query field (it then captures input until
@@ -208,16 +231,20 @@ func (m *Model) Hide() {
 // Active reports whether the view is shown and capturing input.
 func (m Model) Active() bool { return m.active }
 
-// Reset clears the query, the results, the in-flight indicator and the all-kinds widen
-// so the next open starts clean. The widen is deliberately *not* sticky across opens: it
-// is the expensive scope, and a mode left on from a search two minutes ago would make the
+// Reset clears the query, the results, the in-flight indicator and both scope widens so
+// the next open starts clean. A widen is deliberately *not* sticky across opens: it is
+// the expensive scope, and a mode left on from a search two minutes ago would make the
 // next `ctrl+s` quietly sweep the whole cluster. It survives within one open — a reader
-// refining a query under it keeps it — which is the span it belongs to.
+// refining a query under it keeps it — which is the span it belongs to. The namespace
+// widen resets for the same reason and for one more: the app's namespace can change
+// while the view is closed, so a stale "everywhere" would silently outlive the scope it
+// was chosen against.
 func (m *Model) Reset() {
 	m.query.Reset()
 	m.clearHits()
 	m.searching = false
 	m.allKinds = false
+	m.allNamespaces = false
 }
 
 // Query is the current query text.
@@ -226,6 +253,10 @@ func (m Model) Query() string { return m.query.Value() }
 // AllKinds reports whether the kind scope is widened to every discovered kind. The
 // wiring reads it when it picks the kind set for a query.
 func (m Model) AllKinds() bool { return m.allKinds }
+
+// AllNamespaces reports whether the namespace scope is widened to every namespace. The
+// wiring reads it when it picks the namespace for a query.
+func (m Model) AllNamespaces() bool { return m.allNamespaces }
 
 // SetSearching records whether a search is in flight (shown in the header). The wiring
 // sets it when it launches a query and clears it when the fan-out completes.
@@ -293,8 +324,8 @@ func (m Model) Selected() (kube.SearchHit, bool) {
 
 // Update handles a resolved keymap action while the view is active. Navigation moves
 // the result cursor (bubbles/list manages pagination); nav.drillIn emits SelectedMsg
-// for the highlighted hit; search.allKinds flips the kind-scope widen and emits
-// ScopeChangedMsg; nav.back clears a non-empty query first (dropping its
+// for the highlighted hit; search.allKinds and search.allNamespaces flip their scope
+// widen and emit ScopeChangedMsg; nav.back clears a non-empty query first (dropping its
 // results and emitting QueryChangedMsg{""} so the wiring cancels the in-flight search)
 // and only closes the view (ClosedMsg) on a second press — one esc must never lose both
 // the query and the view. The view consumes actions, never raw keys (D11); an inactive
@@ -330,7 +361,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		// header says so immediately.
 		m.allKinds = !m.allKinds
 		m.clearHits()
-		return m, scopeChanged(m.allKinds)
+		return m, m.scopeChanged()
+	case keymap.ActionSearchAllNamespaces:
+		// Same contract as the kind widen above, on the other axis (SEARCH-04b): the
+		// results belonged to the narrower namespace scope, so they go with it, and
+		// the wiring re-runs the untouched query over the wider one.
+		m.allNamespaces = !m.allNamespaces
+		m.clearHits()
+		return m, m.scopeChanged()
 	case keymap.ActionBack:
 		if m.query.Value() != "" {
 			m.query.Reset()
@@ -370,17 +408,20 @@ func queryChanged(q string) tea.Cmd {
 	return func() tea.Msg { return QueryChangedMsg{Kind: kind, Query: q} }
 }
 
-// scopeChanged builds the ScopeChangedMsg command for the new widen state.
-func scopeChanged(allKinds bool) tea.Cmd {
-	return func() tea.Msg { return ScopeChangedMsg{Kind: kind, AllKinds: allKinds} }
+// scopeChanged builds the ScopeChangedMsg command for the current scope. It always
+// carries both flags, whichever one moved, so a consumer reads one message rather than
+// merging it with remembered state.
+func (m Model) scopeChanged() tea.Cmd {
+	msg := ScopeChangedMsg{Kind: kind, AllKinds: m.allKinds, AllNamespaces: m.allNamespaces}
+	return func() tea.Msg { return msg }
 }
 
 // clearHits drops every result and rewinds the cursor. It also drops the progress
 // counters and the cap flag: they describe the fan-out that produced those results, so
 // they go stale at exactly the same moment (a query change, a scope change, nav.back's
 // clear, Reset) — keeping the reset in one place is why a caller never has to re-zero
-// them itself. It leaves the widen alone: the scope outlives the results it produced,
-// and only Reset (a fresh open) turns it back off.
+// them itself. It leaves both widens alone: a scope outlives the results it produced,
+// and only Reset (a fresh open) turns one back off.
 func (m *Model) clearHits() {
 	m.hits = m.hits[:0]
 	m.rebuild()
@@ -482,15 +523,23 @@ func (m Model) emptyHint() string {
 // header builds the one-line status bar: "search · <scope> · N results" plus the
 // progress/cap segment, clipped to the screen width.
 //
-// The widen gets a segment only when it is *on* (`all kinds`), the same asymmetry
-// LOGS-04a's `[wrap]` uses (D146): the curated scope is the default a reader already
-// has in mind, while the widen is the expensive, exceptional state, and the header is
-// clipped from the right so a segment spent naming the normal case costs the progress
-// line. What the curated scope contains is not guessable from the header either way —
-// the progress segment's "searching 3/11 kinds…" is where the size of the scope shows.
+// The two widens are named differently because the two defaults are. The kind widen
+// gets a segment only when it is *on* (`all kinds`), the same asymmetry LOGS-04a's
+// `[wrap]` uses (D146): the curated kind scope is the default a reader already has in
+// mind, the widen is the expensive exceptional state, and the header is clipped from
+// the right so a segment spent naming the normal case costs the progress line. The
+// namespace scope, by contrast, is *already* named in every header — that is what the
+// scope segment is — so widening it **replaces** that name rather than adding to it. A
+// header must never carry two namespace scopes at once; "web · all namespaces" would
+// be a contradiction, not extra information. (On an app that is already unscoped, the
+// wiring's own label is the same "all namespaces", so the toggle correctly changes
+// nothing on screen and nothing on the wire.)
 func (m Model) header() string {
 	seg := kind
-	if m.scope != "" {
+	switch {
+	case m.allNamespaces:
+		seg += " · " + allNamespacesLabel
+	case m.scope != "":
 		seg += " · " + m.scope
 	}
 	if m.allKinds {

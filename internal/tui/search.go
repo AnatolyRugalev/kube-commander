@@ -84,13 +84,28 @@ func (m Model) openSearch() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// searchScope is the human label for what a search covers: the watched namespace, or
-// the all-namespaces sentinel when the app is unscoped. It describes the *namespace*
-// scope only — the kind scope is the view's own all-kinds flag, which the view renders
-// itself (SEARCH-04a). Widening the namespace scope independently is SEARCH-04b.
+// searchScope is the human label for what a search covers by default: the watched
+// namespace, or the all-namespaces sentinel when the app is unscoped. It is the
+// *starting* namespace label only — both widens are the view's own flags and the view
+// renders them itself (SEARCH-04a/04b), overriding this label while the namespace widen
+// is on.
 func (m Model) searchScope() string {
 	if m.namespace == "" {
 		return namespaceAllItem
+	}
+	return m.namespace
+}
+
+// searchNamespace is the namespace one query fans out over: the app's own namespace, or
+// every namespace while the view's widen is on (kube.Search takes "" for all, SEARCH-04b).
+//
+// The widen is per-search and one-directional: it never touches m.namespace, so the
+// browse table keeps watching exactly what it was watching and closing the search leaves
+// the app's scope where the reader put it. An app that is already unscoped is unaffected
+// by the toggle — "" either way — which is why the header does not change there either.
+func (m Model) searchNamespace() string {
+	if m.searchView.AllNamespaces() {
+		return ""
 	}
 	return m.namespace
 }
@@ -151,8 +166,13 @@ func (m Model) handleSearchQueryChanged(msg searchview.QueryChangedMsg) (tea.Mod
 	return m.restartSearch(msg.Query)
 }
 
-// handleSearchScopeChanged reacts to the view's ScopeChangedMsg — the all-kinds widen was
-// toggled (SEARCH-04a). The scope is half of what a result set means, so changing it
+// handleSearchScopeChanged reacts to the view's ScopeChangedMsg — one of the two scope
+// widens was toggled: kinds (SEARCH-04a) or namespaces (SEARCH-04b). Both take the same
+// path, because both change the same thing: what the query on screen covers. The message
+// carries the new scope but nothing here needs to read it — searchResources and
+// searchNamespace resolve it off the view at launch, one source per axis.
+//
+// The scope is half of what a result set means, so changing it
 // invalidates the in-flight fan-out exactly as retyping the query would, and the answer is
 // the same: cancel, supersede, re-run whatever is currently typed. The query itself is
 // untouched, so it is read back off the view rather than carried in the message.
@@ -210,7 +230,7 @@ func (m Model) handleSearchDebounced(msg searchDebouncedMsg) (tea.Model, tea.Cmd
 	m.searchView.StartProgress(len(resources))
 	ctx, cancel := context.WithCancel(context.Background())
 	m.searchCancel = cancel
-	m.searchCh = m.searcher.Search(ctx, resources, m.namespace, msg.query, searchHitLimit)
+	m.searchCh = m.searcher.Search(ctx, resources, m.searchNamespace(), msg.query, searchHitLimit)
 	return m, m.pumpSearch(msg.gen)
 }
 

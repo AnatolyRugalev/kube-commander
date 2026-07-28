@@ -91,6 +91,9 @@ func TestInactiveViewIgnoresInput(t *testing.T) {
 	if m2, cmd := m.Update(keymap.ActionSearchAllKinds); cmd != nil || m2.AllKinds() {
 		t.Error("an inactive view should not toggle the all-kinds widen")
 	}
+	if m2, cmd := m.Update(keymap.ActionSearchAllNamespaces); cmd != nil || m2.AllNamespaces() {
+		t.Error("an inactive view should not toggle the all-namespaces widen")
+	}
 	m2, cmd := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: 'a', Text: "a"}))
 	if cmd != nil || m2.Query() != "" {
 		t.Error("an inactive view should not capture typing")
@@ -395,6 +398,17 @@ func scopeChanges(msgs []tea.Msg) []bool {
 	return out
 }
 
+// nsScopeChanges returns the AllNamespaces flag of every ScopeChangedMsg in msgs.
+func nsScopeChanges(msgs []tea.Msg) []bool {
+	var out []bool
+	for _, msg := range msgs {
+		if sc, ok := msg.(ScopeChangedMsg); ok {
+			out = append(out, sc.AllNamespaces)
+		}
+	}
+	return out
+}
+
 // TestAllKindsTogglesAndAnnouncesItself is SEARCH-04a's core: the widen flips the flag,
 // tells the wiring (so it can re-run the query over the wider kind set), and names itself
 // in the header — the widened scope is the exceptional, expensive one, so unlike the
@@ -493,6 +507,134 @@ func TestAllKindsSurvivesTypingButNotReset(t *testing.T) {
 		t.Error("Reset (a fresh open) must start from the curated scope — the widen is not sticky")
 	}
 	if strings.Contains(m.View(), "all kinds") {
+		t.Errorf("a reset view must not still advertise the widen; got:\n%s", m.View())
+	}
+}
+
+// TestAllNamespacesReplacesTheScopeName is SEARCH-04b's core, and the half that differs
+// from the kind widen: the namespace scope is *already* named in every header, so
+// widening it replaces that name rather than adding a segment beside it. A header that
+// said "web · all namespaces" would be claiming two scopes at once.
+func TestAllNamespacesReplacesTheScopeName(t *testing.T) {
+	m := newSearch()
+	m.SetScope("web")
+	m, _ = typeQuery(m, "api")
+	if !strings.Contains(m.View(), "web") {
+		t.Fatalf("the default header should name the namespace it searches; got:\n%s", m.View())
+	}
+
+	m, cmd := m.Update(keymap.ActionSearchAllNamespaces)
+	if !m.AllNamespaces() {
+		t.Fatal("search.allNamespaces should widen the namespace scope")
+	}
+	if got := nsScopeChanges(drain(cmd)); len(got) != 1 || !got[0] {
+		t.Fatalf("scope changes = %v, want one ScopeChangedMsg{AllNamespaces: true} so the wiring re-runs", got)
+	}
+	view := m.View()
+	if !strings.Contains(view, "all namespaces") {
+		t.Errorf("a namespace-widened search must say so in the header; got:\n%s", view)
+	}
+	if strings.Contains(view, "web") {
+		t.Errorf("the widened header must not still name the narrower namespace; got:\n%s", view)
+	}
+	if m.Query() != "api" {
+		t.Errorf("query = %q, want the widen to leave what the reader typed alone", m.Query())
+	}
+
+	m, cmd = m.Update(keymap.ActionSearchAllNamespaces)
+	if m.AllNamespaces() {
+		t.Error("a second press should narrow back to the app's namespace")
+	}
+	if got := nsScopeChanges(drain(cmd)); len(got) != 1 || got[0] {
+		t.Fatalf("scope changes = %v, want one ScopeChangedMsg{AllNamespaces: false}", got)
+	}
+	if !strings.Contains(m.View(), "web") {
+		t.Errorf("narrowing back must restore the scope name; got:\n%s", m.View())
+	}
+}
+
+// TestAllNamespacesDropsResultsOfTheNarrowerScope is the kind widen's contract on the
+// other axis: hits found in one namespace do not describe a search of every namespace,
+// so they go, along with the progress and cap state that described that fan-out.
+func TestAllNamespacesDropsResultsOfTheNarrowerScope(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "web", "api-0"))
+	m.StartProgress(11)
+	m.MarkKindDone()
+	m.SetCapped(true)
+
+	m, _ = m.Update(keymap.ActionSearchAllNamespaces)
+	if m.Len() != 0 {
+		t.Errorf("hits = %d, want the narrower scope's results dropped", m.Len())
+	}
+	if done, total := m.Progress(); done != 0 || total != 0 {
+		t.Errorf("progress = %d/%d, want it reset with the results it described", done, total)
+	}
+	if m.Capped() {
+		t.Error("the cap belonged to the old scope's fan-out and must not survive it")
+	}
+	if m.Query() != "api" {
+		t.Errorf("query = %q, want it preserved — only the results are stale", m.Query())
+	}
+}
+
+// TestScopeWidensAreIndependent pins the shape of scope: two axes, not one cycle. Each
+// toggle moves only its own flag, all four combinations are reachable, and every message
+// carries the whole scope so the wiring never has to merge it with remembered state.
+func TestScopeWidensAreIndependent(t *testing.T) {
+	m := newSearch()
+	m.SetScope("web")
+
+	m, cmd := m.Update(keymap.ActionSearchAllNamespaces)
+	if m.AllKinds() {
+		t.Error("widening namespaces must not widen kinds — they are independent axes")
+	}
+	msgs := drain(cmd)
+	if got := scopeChanges(msgs); len(got) != 1 || got[0] {
+		t.Fatalf("AllKinds in the message = %v, want the untouched false carried along", got)
+	}
+	if got := nsScopeChanges(msgs); len(got) != 1 || !got[0] {
+		t.Fatalf("AllNamespaces in the message = %v, want true", got)
+	}
+
+	m, cmd = m.Update(keymap.ActionSearchAllKinds)
+	if !m.AllKinds() || !m.AllNamespaces() {
+		t.Fatalf("both widens should be on together: kinds=%v namespaces=%v", m.AllKinds(), m.AllNamespaces())
+	}
+	msgs = drain(cmd)
+	if got := nsScopeChanges(msgs); len(got) != 1 || !got[0] {
+		t.Fatalf("AllNamespaces in the message = %v, want the still-on true carried along", got)
+	}
+	view := m.View()
+	if !strings.Contains(view, "all namespaces") || !strings.Contains(view, "all kinds") {
+		t.Errorf("both widened scopes should be named; got:\n%s", view)
+	}
+
+	// Narrowing kinds again leaves the namespace widen alone — the fourth combination.
+	m, _ = m.Update(keymap.ActionSearchAllKinds)
+	if m.AllKinds() || !m.AllNamespaces() {
+		t.Errorf("narrowing kinds must not narrow namespaces: kinds=%v namespaces=%v", m.AllKinds(), m.AllNamespaces())
+	}
+}
+
+// TestAllNamespacesSurvivesTypingButNotReset draws the namespace widen's lifetime, which
+// matches the kind widen's and has one extra reason behind it: the app's own namespace
+// can change while the view is closed, so a widen carried across opens would outlive the
+// scope it was chosen against.
+func TestAllNamespacesSurvivesTypingButNotReset(t *testing.T) {
+	m := newSearch()
+	m.SetScope("web")
+	m, _ = m.Update(keymap.ActionSearchAllNamespaces)
+	m, _ = typeQuery(m, "api")
+	if !m.AllNamespaces() {
+		t.Error("typing must not silently narrow the scope the reader chose")
+	}
+	m.Reset()
+	if m.AllNamespaces() {
+		t.Error("Reset (a fresh open) must start from the app's own namespace")
+	}
+	if strings.Contains(m.View(), "all namespaces") {
 		t.Errorf("a reset view must not still advertise the widen; got:\n%s", m.View())
 	}
 }

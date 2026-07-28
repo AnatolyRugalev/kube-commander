@@ -136,6 +136,12 @@ func TestShortHelpContext(t *testing.T) {
 	if !search[ActionSearchAllKinds.Describe()] {
 		t.Error("search context should offer the all-kinds widen — it is a no-text chord the view honours")
 	}
+	// The namespace widen (SEARCH-04b) is hinted for the same reason and as its pair:
+	// the header names a scope but never says it can be widened, and advertising only
+	// one axis would imply the other is fixed.
+	if !search[ActionSearchAllNamespaces.Describe()] {
+		t.Error("search context should offer the all-namespaces widen alongside the all-kinds widen")
+	}
 	for _, a := range []Action{ActionFilter, ActionSort, ActionActions, ActionNamespace, ActionHelp, ActionQuit} {
 		if search[a.Describe()] {
 			t.Errorf("%q is typed into the search query field, not honoured — it must not be hinted", a)

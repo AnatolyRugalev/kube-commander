@@ -52,18 +52,32 @@ warnings from that merge. Disabled actions are shown as "(disabled)".`,
 
 // printKeys renders the resolved keymap in registry order, warnings first (to
 // errOut). Kept separate from the command so it is testable without cobra.
+//
+// The two left columns are sized from the widest value actually printed rather than
+// from a fixed constant: registering one long action id (search.allNamespaces was the
+// first to pass 18 columns) must not silently push every following row's description
+// out of alignment.
 func printKeys(out, errOut io.Writer, km *keymap.Keymap, warnings []string) error {
 	for _, warn := range warnings {
 		if _, err := fmt.Fprintln(errOut, "warning:", warn); err != nil {
 			return err
 		}
 	}
-	for _, a := range keymap.Actions() {
+	actions := keymap.Actions()
+	rows := make([][2]string, 0, len(actions))
+	idWidth, keyWidth := 0, 0
+	for _, a := range actions {
 		keys := strings.Join(km.Keys(a), ", ")
 		if keys == "" {
 			keys = "(disabled)"
 		}
-		if _, err := fmt.Fprintf(out, "%-18s %-18s %s\n", a, keys, a.Describe()); err != nil {
+		rows = append(rows, [2]string{string(a), keys})
+		idWidth = max(idWidth, len(string(a)))
+		keyWidth = max(keyWidth, len(keys))
+	}
+	for i, a := range actions {
+		if _, err := fmt.Fprintf(out, "%-*s %-*s %s\n",
+			idWidth, rows[i][0], keyWidth, rows[i][1], a.Describe()); err != nil {
 			return err
 		}
 	}

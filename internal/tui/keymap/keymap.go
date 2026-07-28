@@ -132,6 +132,14 @@ const (
 	// the logs view. Off on every open: the widen is the expensive scope, so it is
 	// something a reader asks for per search rather than a mode they can leave on.
 	ActionSearchAllKinds Action = "search.allKinds"
+	// ActionSearchAllNamespaces widens a cluster search from the app's current
+	// namespace to **every namespace** (SEARCH-04b/D131 pt 2). It is the other half
+	// of "scope" beside search.allKinds and is an independent toggle, not a step in a
+	// cycle: curated kinds across every namespace, and every kind inside one, are both
+	// reachable. Like the kind widen it is meaningful only while the search view is up,
+	// off on every open, and it never touches the app's own namespace scope — the
+	// browse table keeps watching what it was watching.
+	ActionSearchAllNamespaces Action = "search.allNamespaces"
 	// ActionConfirmAccept / ActionConfirmDecline resolve the confirm modal's yes/no
 	// question (default `y`/`n`, plus `enter`/`esc`). They live in the dedicated
 	// **confirm key context** (contextOf), not the browse context: `n`/`enter`/`esc`
@@ -221,6 +229,7 @@ var actionMeta = []struct {
 	{ActionFreeLocalPort, "Forward the highlighted port on a free local port (port picker)"},
 	{ActionSearch, "Search the cluster across kinds"},
 	{ActionSearchAllKinds, "Toggle searching all kinds (cluster search)"},
+	{ActionSearchAllNamespaces, "Toggle searching all namespaces (cluster search)"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
 }
@@ -325,6 +334,14 @@ var defaultBindings = map[Action][]string{
 	// It costs the query field its readline start-of-line binding, which the field
 	// had already lost to nav.top's `home`; a search query is one short line.
 	ActionSearchAllKinds: {"ctrl+a"},
+	// The namespace widen is a no-text chord for the same reason the kind widen beside
+	// it is: it acts inside the always-open query field. `ctrl+a` was the mnemonic
+	// ("all") and is spent, and `ctrl+n` — the obvious second choice — is ns.switch in
+	// the flat browse context, so `ctrl+w` takes the *cluster-**w**ide* reading, which
+	// is how Kubernetes itself names "not scoped to a namespace". It costs the query
+	// field readline's delete-previous-word, the same kind of price ctrl+a paid for
+	// start-of-line: a search query is one short line, and backspace still works.
+	ActionSearchAllNamespaces: {"ctrl+w"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
 	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
 	// in the browse context (app.searchNext/nav.drillIn/nav.back); `y` is browse-free

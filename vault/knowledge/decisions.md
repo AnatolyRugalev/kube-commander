@@ -3739,3 +3739,27 @@ discovered kind — the opt-in widen D131 pt 2 held back. Four constraints come 
    the search primitive, where every caller gets it, not in the TUI toggle that happens
    to make it matter. Queued kinds still report `SearchKindDone`, including when the cap
    cancels them before they get a slot, so the progress line always reaches `M/M`.
+
+## D150 — Scope is independent axes; a widened scope replaces its default's name, and never mutates the app's own scope (2026-07-28, SEARCH-04b)
+
+`search.allNamespaces` (`ctrl+w`) widens a cluster search to every namespace, completing
+the scope D131 pt 2 asked for. It inherits D149 whole (per-visit, invalidates results,
+debounced, hinted) and adds three constraints of its own.
+
+1. **Scope is independent flags, never a cycle.** Kinds and namespaces are two axes, so
+   all four combinations — curated here, curated everywhere, everything here, everything
+   everywhere — are reachable, and each toggle moves only its own flag. A single
+   "widen" key cycling through scope steps would make the middle combinations
+   unreachable and couple two costs that are paid separately. Any further scope axis
+   joins as a flag on the same footing.
+2. **A widened scope replaces the name of the default it widens; it never adds a second
+   name for the same thing.** D149 pt 3 said name the widened state only — that holds
+   where the default is *unnamed* (the kind scope). The namespace scope is named in
+   every header, so widening it swaps that name for `all namespaces`: a header showing
+   `web · all namespaces` would be claiming two namespace scopes at once. The rule is
+   one name per axis, and the widened state wins it.
+3. **A per-search scope widen never mutates the app's own scope.** Widening the search
+   leaves `m.namespace` — and so the browse table's watch — exactly as it was, so
+   closing the search returns the reader where they left off. A search is a question
+   asked of the cluster, not a navigation gesture; only `ns.switch` re-scopes the app.
+   Any future "search everywhere" affordance stays one-directional the same way.

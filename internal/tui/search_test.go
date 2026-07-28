@@ -375,14 +375,15 @@ func TestSearchAllKindsLetterTypesIntoTheQuery(t *testing.T) {
 	}
 }
 
-// TestSearchWidenDoesNotSurviveReopen proves the widen belongs to one visit to the view:
-// a fresh search.cluster starts curated, so an expensive scope chosen minutes ago can
-// never quietly make the next search sweep the cluster.
+// TestSearchWidenDoesNotSurviveReopen proves a widen belongs to one visit to the view:
+// a fresh search.cluster starts curated and namespace-scoped, so an expensive scope
+// chosen minutes ago can never quietly make the next search sweep the cluster.
 func TestSearchWidenDoesNotSurviveReopen(t *testing.T) {
-	m := openSearchView(t, &fakeSearcher{})
+	m := openSearchView(t, &fakeSearcher{}, WithNamespace("web"))
 	m, _ = pressAllKinds(t, m)
-	if !m.searchView.AllKinds() {
-		t.Fatal("the widen should be on before the view is closed")
+	m, _ = pressAllNamespaces(t, m)
+	if !m.searchView.AllKinds() || !m.searchView.AllNamespaces() {
+		t.Fatal("both widens should be on before the view is closed")
 	}
 	m.closeSearch()
 	m, _ = press(t, m, searchKey)
@@ -390,7 +391,142 @@ func TestSearchWidenDoesNotSurviveReopen(t *testing.T) {
 		t.Fatal("search.cluster should reopen the view")
 	}
 	if m.searchView.AllKinds() {
-		t.Error("reopening the search view must start from the curated scope")
+		t.Error("reopening the search view must start from the curated kind scope")
+	}
+	if m.searchView.AllNamespaces() {
+		t.Error("reopening the search view must start from the app's own namespace")
+	}
+}
+
+// allNamespacesKey is the default search.allNamespaces key (ctrl+w). Like the kind widen
+// beside it, it is a ctrl chord carrying no text, so the always-open query field cannot
+// swallow it (D140 pt 1).
+var allNamespacesKey = tea.Key{Code: 'w', Mod: tea.ModCtrl}
+
+// pressAllNamespaces toggles the namespace widen through the sequencer and delivers the
+// resulting ScopeChangedMsg, mirroring pressAllKinds.
+func pressAllNamespaces(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	m, keyCmd := press(t, m, allNamespacesKey)
+	next, cmd := m.Update(scopeChangedFrom(t, keyCmd))
+	return next.(Model), cmd
+}
+
+// TestSearchAllNamespacesWidensTheFanOut is SEARCH-04b end to end: the same query, re-run
+// after the widen, goes out with the all-namespaces "" instead of the app's namespace —
+// and nothing else moves. The kind scope stays curated (the two axes are independent) and,
+// the part that matters beyond this view, the *app's* namespace is untouched: widening a
+// search must never re-scope the browse table the reader will return to.
+func TestSearchAllNamespacesWidensTheFanOut(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+	next, _ := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+	if s.gotNS != "web" {
+		t.Fatalf("the default fan-out should search the app's namespace, got %q", s.gotNS)
+	}
+
+	m, widened := pressAllNamespaces(t, m)
+	if !m.searchView.AllNamespaces() {
+		t.Fatal("search.allNamespaces should widen the namespace scope through the sequencer")
+	}
+	if widened == nil {
+		t.Fatal("widening should re-run the current query, not wait for another keystroke")
+	}
+	debounced, ok := widened().(searchDebouncedMsg)
+	if !ok {
+		t.Fatalf("the widen should arm a searchDebouncedMsg, got %T", widened())
+	}
+	if debounced.query != "api" {
+		t.Fatalf("the re-run should carry the query already typed, got %q", debounced.query)
+	}
+	next, _ = m.Update(debounced)
+	m = next.(Model)
+
+	if s.calls != 2 {
+		t.Fatalf("the widen should launch exactly one further fan-out, got %d total", s.calls)
+	}
+	if s.gotNS != "" {
+		t.Errorf("the widened fan-out should search every namespace (\"\"), got %q", s.gotNS)
+	}
+	if s.gotQuery != "api" {
+		t.Errorf("the widen changes the namespace only, got query %q", s.gotQuery)
+	}
+	kinds := map[string]bool{}
+	for _, r := range s.gotRes {
+		kinds[r.GVK.Kind] = true
+	}
+	if kinds["Node"] || kinds["Event"] {
+		t.Errorf("widening namespaces must leave the kind scope curated, got kinds %v", s.gotRes)
+	}
+	if m.namespace != "web" {
+		t.Errorf("the app's own namespace = %q, want it untouched by a search widen", m.namespace)
+	}
+}
+
+// TestSearchBothWidensCompose proves the two axes stack: with both on, one query goes out
+// over every discovered kind in every namespace — the widest search the app can do, and
+// only ever by asking for it twice.
+func TestSearchBothWidensCompose(t *testing.T) {
+	s := &fakeSearcher{}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, _ = typeQuery(t, m, "api")
+	m, _ = pressAllKinds(t, m)
+	m, widened := pressAllNamespaces(t, m)
+	next, _ := m.Update(widened().(searchDebouncedMsg))
+	m = next.(Model)
+
+	if s.gotNS != "" {
+		t.Errorf("namespace = %q, want every namespace", s.gotNS)
+	}
+	kinds := map[string]bool{}
+	for _, r := range s.gotRes {
+		kinds[r.GVK.Kind] = true
+	}
+	for _, want := range []string{"Pod", "Node", "Event"} {
+		if !kinds[want] {
+			t.Errorf("the doubly-widened fan-out should include %s", want)
+		}
+	}
+	if !strings.Contains(m.View().Content, "all namespaces") || !strings.Contains(m.View().Content, "all kinds") {
+		t.Errorf("both widened scopes should be named in the frame; got:\n%s", m.View().Content)
+	}
+}
+
+// TestSearchAllNamespacesCancelsTheNarrowerFanOut is the kind widen's supersede contract
+// on the namespace axis: the in-flight search of one namespace is torn down rather than
+// left streaming into a result list that now claims to cover every namespace.
+func TestSearchAllNamespacesCancelsTheNarrowerFanOut(t *testing.T) {
+	s := &fakeSearcher{keepOpen: true}
+	m := openSearchView(t, s, WithNamespace("web"))
+	m, tick := typeQuery(t, m, "api")
+	next, _ := m.Update(tick().(searchDebouncedMsg))
+	m = next.(Model)
+	if s.calls != 1 {
+		t.Fatalf("expected one in-flight fan-out, got %d", s.calls)
+	}
+
+	m, _ = pressAllNamespaces(t, m)
+	if err := s.ctxs[0].Err(); err == nil {
+		t.Fatal("widening the namespace should cancel the fan-out running under the narrower one")
+	}
+	if !m.searchView.Searching() {
+		t.Error("the in-flight indicator should stay up across the re-run, not blink off")
+	}
+}
+
+// TestSearchAllNamespacesLetterTypesIntoTheQuery is the D140 pt 1 half for the namespace
+// widen: a plain `w` is text (it is logs.wrap in the browse context), so only the chord
+// widens.
+func TestSearchAllNamespacesLetterTypesIntoTheQuery(t *testing.T) {
+	m := openSearchView(t, &fakeSearcher{}, WithNamespace("web"))
+	m, _ = typeQuery(t, m, "w")
+	if m.searchView.AllNamespaces() {
+		t.Error("a plain `w` must type into the query, not widen the namespace scope")
+	}
+	if m.searchView.Query() != "w" {
+		t.Errorf("query = %q, want the typed %q", m.searchView.Query(), "w")
 	}
 }
 

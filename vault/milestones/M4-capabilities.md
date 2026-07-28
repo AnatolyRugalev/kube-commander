@@ -25,7 +25,7 @@ The capabilities the original lacked, now natural on the new architecture.
 - [ ] Drill-down navigates from an owner to its pods and back.
 - [ ] Metrics columns appear only when metrics-server is present; absence is silent.
 - [ ] At least two themes selectable and persisted.
-- [ ] Cluster search returns matching objects across kinds and drills into the selected hit.
+- [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Only richer matching, SEARCH-04c, is left in the line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
 
 ## Depends on
 M2 browse shell + M1 discovery (context switch = rebuild client + discovery).

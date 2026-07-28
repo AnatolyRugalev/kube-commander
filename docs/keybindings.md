@@ -112,6 +112,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `search.cluster` | `ctrl+s` | Search the cluster across kinds |
 | `search.allKinds` | `ctrl+a` | Toggle searching all kinds (cluster search) |
+| `search.allNamespaces` | `ctrl+w` | Toggle searching all namespaces (cluster search) |
 
 ## confirm
 
