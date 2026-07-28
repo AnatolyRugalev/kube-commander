@@ -7,7 +7,14 @@ _Last updated: 2026-07-25 — LOGS-03 done: the logs grep now reads as substring
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-04a** Long lines: wrap toggle + horizontal scroll in the logs view
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (LOGS-04 split) | claimed: 2026-07-28
+      notes: First slice of the split LOGS-04. A registered, rebindable `logs.wrap` toggle
+      switches the view between soft-wrapping long lines and clipping them, and while it is
+      clipping, `nav.left`/`nav.right` scroll horizontally so the tail of a long line is
+      reachable (the viewport supports both natively; they are mutually exclusive). Header
+      says which mode is on. Keep the unfiltered render path free of new per-line work (the
+      throughput human-task). Depends on LOGS-01/02.
 
 ## Blocked
 
@@ -116,11 +123,22 @@ nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
 LOGS-01 (component), LOGS-02 (wiring) and LOGS-03 (regex + highlighting) are done, so the
 dedicated logs view is live on `res.logs`, the shared viewer no longer has a logs mode
 (D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
-the LOGS-04 nice-to-haves are left in this line.
+the nice-to-haves are left, split D52-style into **LOGS-04a** (wrap toggle + horizontal
+scroll), **LOGS-04b** (timestamps) and **LOGS-04c** (jump-to-latest) — three unrelated
+surfaces that were one line item.
 
-- [ ] **LOGS-04** Long-line + throughput nice-to-haves: wrap toggle / horizontal scroll, timestamps toggle, jump-to-latest
-      status: todo | owner: — | added: 2026-07-24 (LOGS triage, D134)
-      notes: The feedback's explicit "later, don't block" list. Depends on LOGS-01.
+- [ ] **LOGS-04b** Timestamps toggle in the logs view
+      status: todo | owner: — | added: 2026-07-25 (LOGS-04 split)
+      notes: Second slice of the split LOGS-04. `kube.LogOptions` has no `Timestamps` yet, so
+      this is a kube-layer field plus a view toggle; decide whether the toggle re-requests the
+      stream or whether timestamps are always requested and only their *display* toggles
+      (the latter avoids a restream but changes every line's bytes). Depends on LOGS-01/02.
+- [ ] **LOGS-04c** Jump-to-latest in the logs view
+      status: todo | owner: — | added: 2026-07-25 (LOGS-04 split)
+      notes: Third slice of the split LOGS-04. Today `logs.follow` resumes-and-jumps but
+      `nav.bottom` (`G`) jumps without resuming, so a reader who scrolled back has no single
+      "catch up and keep tailing" gesture. Small — decide whether `G` re-arms follow in this
+      view or whether a distinct action does. Depends on LOGS-01/02.
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
