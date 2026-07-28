@@ -3,11 +3,16 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — SEARCH-04b done: `ctrl+w` widens a cluster search to every namespace as an independent second scope axis (D150), leaving only SEARCH-04c (richer matching) in the SEARCH line. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — SEARCH-04c split on pickup into 04c-1 (label selector, claimed) and 04c-2 (fuzzy matching); field selectors deliberately dropped. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-04c-1** Label-selector matching for cluster search (server-side, `metav1.ListOptions`)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 | claimed: 2026-07-28
+      notes: First slice of the SEARCH-04c split. The query field gains a `-l <selector>`
+      segment parsed into a `kube.SearchQuery{Name, LabelSelector}`; the selector goes to the
+      server on every kind's List, so it costs no client-side work. Name substring stays as
+      it is. Fuzzy matching (client-side scoring + a ranking decision) is SEARCH-04c-2.
 
 ## Blocked
 
@@ -107,12 +112,23 @@ over a fan-out `kube.Search` bounds to eight concurrent lists (D149), and
 namespace scope (D150). They are independent flags, not a cycle, so all four scope
 combinations are reachable. Only **SEARCH-04c** is left in this line.
 
-- [ ] **SEARCH-04c** Richer matching: fuzzy / label / field selectors beyond the current
-      case-insensitive name substring.
-      status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
-      notes: Lives in `kube.Search`'s matcher, not the scope. A label/field selector can go
-      to the server (`metav1.ListOptions`) and is therefore cheaper than fuzzy, which has to
-      score client-side — likely its own split again on pickup.
+SEARCH-04c was split on pickup, as its own notes predicted, into **SEARCH-04c-1** (label
+selector) and **SEARCH-04c-2** (fuzzy matching): the selector is a `metav1.ListOptions`
+field the server evaluates and needs no matcher at all, while fuzzy needs client-side
+scoring *and* a ranking decision that the current arrival-ordered, streamed result list
+does not have a place for. A **field** selector was considered with the label one and
+deliberately left out: per-kind field support varies (`spec.nodeName` is a Pod thing), a
+selector the kind does not support fails its List, and a failed kind is silent by design
+(D131 pt 3) — so a field selector would quietly drop most of the scope. Raise it as its
+own item if it is ever wanted.
+
+- [ ] **SEARCH-04c-2** Fuzzy name matching beyond the case-insensitive substring
+      status: todo | owner: — | added: 2026-07-28 (SEARCH-04c split)
+      notes: Client-side, in `kube.Search`'s matcher. The hard half is not the score but the
+      order: hits currently stream in arrival order across a concurrent fan-out (explicitly
+      "not guaranteed and never was"), so ranking means either buffering until the sweep ends
+      — losing the streaming feel — or re-sorting the list under the reader's cursor. Decide
+      that first; the scorer is the easy part.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
