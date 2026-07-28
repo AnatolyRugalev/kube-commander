@@ -3798,3 +3798,33 @@ the client-side name substring. `kube.Search`'s query parameter is now a `Search
    is a valid selector meaning *has label `nginx`*, so shape-detection would silently
    reinterpret the most common query in the app. Any further query term takes its own
    token on the same rule.
+
+## D152 — The stream stays in arrival order and the view does the ranking; a re-ranking list carries the cursor with its row (2026-07-28, SEARCH-04c-2a)
+
+`kube.Search` scores every match (`SearchHit.Score`) but still emits hits in whatever
+order the kinds return; the *consumer* keeps them sorted. Four constraints.
+
+1. **Ranking never buys itself by buffering.** The obvious way to emit ranked hits is to
+   hold them until the last kind returns and sort — and that deletes the streaming result
+   list, which is the feature SEARCH-02/03 exist to provide (first hits on screen while a
+   wide sweep is still running, progress visible against a kind count). A cross-kind
+   fan-out over a hundred kinds has no "last hit" for seconds. So the split is fixed:
+   **kube ranks, the view orders.** A future consumer that wants a ranked *batch* sorts
+   what it collected; it must not ask the producer to withhold.
+2. **A score is an ordering, not a measurement.** `SearchHit.Score` is comparable only
+   against other hits of the same search. Nothing may persist it, threshold it ("hide
+   matches under N"), or show it — the numbers and their scale are free to change with
+   every matcher change, and the next one is already scheduled (SEARCH-04c-2b).
+3. **Match bands are ordered by match *kind* first, quality second.** A contiguous
+   substring match sits in a band (`scoreSubstringBand`) that no positional or length
+   bonus can lift a scattered match into, and every within-band adjustment is clamped so
+   it cannot cross. A matcher added later must claim a band strictly below the ones above
+   it rather than competing on bonuses: the reason fuzzy matching is tolerable at all is
+   that the noise it admits can only ever land *below* every exact match, never
+   interleaved with them.
+4. **A list that reorders under the reader moves rows, never the selection.** The cursor
+   is carried with its hit on every insert. This is what makes ranking compatible with a
+   live stream: rows above the cursor may reshuffle for as long as the sweep runs, but
+   the object highlighted when the reader stopped moving is the object that drills in.
+   Any future surface that re-sorts a list under a live cursor owes the same guarantee —
+   an insert that shifts the selection is a wrong-object action waiting to happen.

@@ -113,7 +113,12 @@ one table: type a query and matching objects stream in **across kinds** (Pods,
 Deployments, StatefulSets, DaemonSets, Services, ConfigMaps, Secrets, PVCs, Jobs,
 CronJobs, Ingresses) in the current namespace, shown as `Kind  namespace/name`. Press
 Enter on a hit to jump straight to it — the table switches to that kind with the object
-selected. `Esc` clears the query, and `Esc` again closes the search. The header tracks
+selected. Results are **ranked**, best match first — a query that matches the start of a
+name beats one that matches after a `-`, which beats one buried mid-word — and hits slot
+into place as they stream in, so the best answer rises to the top without waiting for the
+sweep to finish. The highlighted row is carried along, so a hit landing above your cursor
+never changes what `Enter` opens. `Esc` clears the query, and `Esc` again closes the
+search. The header tracks
 the sweep (`searching 4/11 kinds…`) so a slow kind reads as progress rather than a hang,
 and says so explicitly when there were more matches than it shows (`first 200 matches —
 narrow the query`). This is a deliberate, one-shot query (it lists those kinds once per

@@ -20,6 +20,18 @@ import (
 type SearchHit struct {
 	Resource Resource
 	Ref      ObjectRef
+
+	// Score ranks this hit against the others of the same search: higher is a
+	// better match for SearchQuery.Name. It is a relative number with no meaning
+	// on its own and no stable scale between releases — only the comparison
+	// between two hits of one search is defined. Every hit of a query with no
+	// Name half (a pure label-selector search) scores 0, so a consumer sorting
+	// on it keeps arrival order there.
+	//
+	// The hits are NOT emitted in score order — the fan-out streams them as the
+	// kinds return (see Search) and ranking is the consumer's job, deliberately
+	// (D152).
+	Score int
 }
 
 // SearchQuery is what one cluster search matches on. The two terms are ANDed and
@@ -110,6 +122,120 @@ func splitSelector(raw string) (name, selector string) {
 
 // isSpace reports the ASCII whitespace splitSelector treats as a token boundary.
 func isSpace(b byte) bool { return b == ' ' || b == '\t' }
+
+// Match scores. They exist to order hits, not to measure anything, so only their
+// relative sizes matter — and the sizes encode one claim: *where* a query matches
+// inside a name is what separates a good hit from a poor one. A generated pod name
+// carries the workload's name at the front and entropy at the back, so `api`
+// matching at the head of `api-7f9c-x2` is the object the reader meant, while the
+// same three letters landing mid-suffix are a coincidence.
+//
+// scoreSubstringBand is a floor reserved for contiguous matches. It is far larger
+// than every bonus below it because SEARCH-04c-2b adds scattered (subsequence)
+// matching underneath, and no scattered match may ever outrank a contiguous one
+// however well positioned it is (D152) — that band is what keeps fuzzy from
+// pushing noise into the middle of a good list. The two penalties are clamped for
+// the same reason: an unbounded length penalty on a long name would eventually
+// eat the band.
+const (
+	scoreSubstringBand = 1000 // contiguous match: the band every substring hit sits in
+	scoreAtStart       = 400  // the name begins with the query
+	scoreAtBoundary    = 200  // the match begins right after a `-`/`.`/`_` separator
+	maxStartPenalty    = 50   // clamp on "how far into the name the match begins"
+	maxLenPenalty      = 50   // clamp on "how much name there is around the match"
+)
+
+// nameMatcher matches and scores object names against the Name half of one
+// SearchQuery. It is built once per search and used from every kind's goroutine —
+// it holds only the prepared needle and never mutates, so sharing it is safe.
+//
+// It is a type rather than a function because the needle wants preparing exactly
+// once (lower-casing it per row, over every object in a wide cluster sweep, is the
+// kind of waste a search feels), and because SEARCH-04c-2b's fuzzy fallback gets a
+// natural home here instead of another argument to thread through.
+type nameMatcher struct {
+	needle string // already lower-cased; "" matches everything
+}
+
+// newNameMatcher prepares a matcher for the (raw, any-case) query name.
+func newNameMatcher(name string) nameMatcher {
+	return nameMatcher{needle: strings.ToLower(name)}
+}
+
+// match reports whether name matches the query and how well. An empty needle
+// matches every named object with score 0 (a label-only query ranks nothing); an
+// empty name never matches at all, not even the empty needle, because an object
+// without a name is not a result.
+//
+// Matching is a case-insensitive contiguous substring — unchanged from before the
+// score existed, so this leg re-ranks the same result set rather than widening it.
+// Of the possible occurrences the best-scoring one wins, and ties go to the
+// earliest, so the score describes the reading of the name a human would give it.
+func (m nameMatcher) match(name string) (int, bool) {
+	// The name check comes first, and stays first: an unnamed row is not a result
+	// even for the empty needle that otherwise matches everything.
+	if name == "" {
+		return 0, false
+	}
+	if m.needle == "" {
+		return 0, true
+	}
+	hay := strings.ToLower(name)
+	best, found := 0, false
+	for off := 0; off <= len(hay)-len(m.needle); {
+		i := strings.Index(hay[off:], m.needle)
+		if i < 0 {
+			break
+		}
+		at := off + i
+		if s := m.substringScore(hay, at); !found || s > best {
+			best, found = s, true
+		}
+		off = at + 1
+	}
+	return best, found
+}
+
+// substringScore scores the occurrence of the needle at index at in hay (both
+// lower-cased). Position dominates: matching at the head of the name is worth far
+// more than matching after a separator, which is worth far more than matching in
+// the middle of a word. The remaining two terms are tie-breakers — an earlier
+// match and a tighter name win — clamped so they can never cross a band.
+func (m nameMatcher) substringScore(hay string, at int) int {
+	s := scoreSubstringBand
+	switch {
+	case at == 0:
+		s += scoreAtStart
+	case isNameSeparator(hay[at-1]):
+		s += scoreAtBoundary
+	}
+	s -= clamp(at, maxStartPenalty)
+	s -= clamp(len(hay)-len(m.needle), maxLenPenalty)
+	return s
+}
+
+// isNameSeparator reports the characters that start a new word inside a
+// Kubernetes object name. RFC 1123 names only really admit `-` and `.`, but names
+// reach kubecom from CRDs and generated resources too, so `_`, `/` and `:` are
+// treated the same way rather than being silently scored as ordinary letters.
+func isNameSeparator(b byte) bool {
+	switch b {
+	case '-', '.', '_', '/', ':':
+		return true
+	}
+	return false
+}
+
+// clamp caps a non-negative penalty term at max.
+func clamp(n, max int) int {
+	if n > max {
+		return max
+	}
+	if n < 0 {
+		return 0
+	}
+	return n
+}
 
 // SearchEventType discriminates the messages a search streams. A consumer
 // switches on it; every other SearchEvent field is only meaningful for the type
@@ -220,6 +346,11 @@ type rowLister interface {
 //     wide scope arrives as a steady stream of lists rather than all at once
 //     (D131 pt 2). Ordering is therefore not guaranteed and never was — hits
 //     stream in whatever order the kinds return.
+//   - Ranking, but not ordering: every SearchMatch carries a SearchHit.Score
+//     saying how well the name matched, and the consumer sorts on it. The stream
+//     stays in arrival order on purpose — emitting in rank order would mean
+//     holding every hit until the last kind returned, which is the streaming
+//     result list itself (D152).
 //   - Selector faults are not special: a kind that rejects the label selector
 //     fails its List like any other broken kind (SearchKindDone{Failed}) and the
 //     rest of the search proceeds. Validating the selector before it is sent
@@ -245,7 +376,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		needle := strings.ToLower(query.Name)
+		matcher := newNameMatcher(query.Name)
 		// One ListOptions for the whole fan-out: the selector is the same for
 		// every kind, and it is the server that applies it, so a selector narrows
 		// the rows on the wire instead of being filtered out after arriving.
@@ -294,11 +425,8 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					return
 				}
 				for _, row := range tbl.Rows {
-					name := row.Object.Name
-					if name == "" {
-						continue
-					}
-					if needle != "" && !strings.Contains(strings.ToLower(name), needle) {
+					score, ok := matcher.match(row.Object.Name)
+					if !ok {
 						continue
 					}
 					// Reserve a slot under the lock so the cap is exact across
@@ -313,7 +441,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					sent++
 					mu.Unlock()
 
-					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{Resource: r, Ref: row.Object}}
+					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{Resource: r, Ref: row.Object, Score: score}}
 					if !sendEvent(outer, out, hit) {
 						return
 					}

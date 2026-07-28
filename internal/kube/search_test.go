@@ -489,3 +489,120 @@ func equal(a, b []string) bool {
 	}
 	return true
 }
+
+// --- name matching / scoring (SEARCH-04c-2a) ---
+
+func TestNameMatcherMatchesSameSetAsSubstring(t *testing.T) {
+	m := newNameMatcher("API")
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"api-0", true},         // case-insensitive, as before
+		{"my-api-server", true}, // mid-name substring still matches
+		{"API", true},
+		{"a-p-i", false}, // scattered: not a match until SEARCH-04c-2b
+		{"nginx", false},
+		{"", false}, // an unnamed object is not a result
+	} {
+		if _, ok := m.match(tc.name); ok != tc.want {
+			t.Errorf("match(%q) = %v, want %v", tc.name, ok, tc.want)
+		}
+	}
+}
+
+func TestNameMatcherEmptyNeedleMatchesEverythingUnranked(t *testing.T) {
+	m := newNameMatcher("")
+	for _, n := range []string{"api-0", "nginx", "zzz"} {
+		score, ok := m.match(n)
+		if !ok {
+			t.Fatalf("empty needle should match %q", n)
+		}
+		if score != 0 {
+			t.Fatalf("empty needle score for %q = %d, want 0 (label-only query ranks nothing)", n, score)
+		}
+	}
+	// The one thing the empty needle must still reject.
+	if _, ok := m.match(""); ok {
+		t.Error("an unnamed object must not match even the empty needle")
+	}
+}
+
+// The ordering this leg exists for: a prefix beats a separator-boundary match,
+// which beats a match buried inside a word.
+func TestNameMatcherRanksByMatchPosition(t *testing.T) {
+	m := newNameMatcher("api")
+	names := []string{"legacyapi", "my-api", "api-server"}
+	scores := make([]int, len(names))
+	for i, n := range names {
+		s, ok := m.match(n)
+		if !ok {
+			t.Fatalf("expected %q to match", n)
+		}
+		scores[i] = s
+	}
+	if scores[2] <= scores[1] || scores[1] <= scores[0] {
+		t.Fatalf("want api-server > my-api > legacyapi, got %v for %v", scores, names)
+	}
+}
+
+// Two names that match in the same position are separated by how much name there
+// is around the match — the tighter one wins.
+func TestNameMatcherPrefersTighterName(t *testing.T) {
+	m := newNameMatcher("api")
+	short, _ := m.match("api-0")
+	long, _ := m.match("api-0-abcdefghijklmnop")
+	if short <= long {
+		t.Fatalf("api-0 (%d) should outrank api-0-abcdefghijklmnop (%d)", short, long)
+	}
+}
+
+// The best occurrence wins, not the first: a name that matches badly early and
+// well later scores as the good match.
+func TestNameMatcherTakesBestOccurrence(t *testing.T) {
+	m := newNameMatcher("api")
+	best, ok := m.match("xapiy-api-0")
+	if !ok {
+		t.Fatal("expected a match")
+	}
+	buried, _ := m.match("xapiy-zzz-0")
+	if best <= buried {
+		t.Fatalf("best occurrence = %d, want > the buried-only score %d", best, buried)
+	}
+}
+
+// The band is the constraint SEARCH-04c-2b must not break: the worst possible
+// substring score still has to leave room for a whole scattered band beneath it.
+func TestSubstringScoresStayInTheirBand(t *testing.T) {
+	m := newNameMatcher("api")
+	floor := scoreSubstringBand - maxStartPenalty - maxLenPenalty
+	worst, ok := m.match("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzapizzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
+	if !ok {
+		t.Fatal("expected a match")
+	}
+	if worst < floor {
+		t.Fatalf("worst substring score %d fell below the band floor %d", worst, floor)
+	}
+}
+
+// Search puts the score on the wire: the hit for the better-matching name carries
+// the higher Score, without the stream being reordered.
+func TestSearchScoresHits(t *testing.T) {
+	pods := res("", "v1", "Pod", "pods", true)
+	f := &fakeLister{tables: map[string]*Table{
+		"pods": tbl("web", "zzz-api-legacy", "api-0"),
+	}}
+
+	scores := map[string]int{}
+	for ev := range searchRows(context.Background(), f, []Resource{pods}, "web", nameQ("api"), 0) {
+		if ev.Type == SearchMatch {
+			scores[ev.Hit.Ref.Name] = ev.Hit.Score
+		}
+	}
+	if len(scores) != 2 {
+		t.Fatalf("scores = %v, want both pods", scores)
+	}
+	if scores["api-0"] <= scores["zzz-api-legacy"] {
+		t.Fatalf("api-0 (%d) should outrank zzz-api-legacy (%d)", scores["api-0"], scores["zzz-api-legacy"])
+	}
+}

@@ -723,3 +723,106 @@ func TestSearchViewEmptyHintAdvertisesTheSelector(t *testing.T) {
 		t.Fatalf("the blank-query hint should show the label-selector syntax: %q", got)
 	}
 }
+
+// --- ranked result list (SEARCH-04c-2a) ---
+
+// scored builds a hit with an explicit kube match score.
+func scored(name string, score int) kube.SearchHit {
+	h := hit("Pod", "default", name)
+	h.Score = score
+	return h
+}
+
+// hitNames reads the result list in the order it is held (and therefore rendered).
+func hitNames(m Model) []string {
+	out := make([]string, 0, len(m.hits))
+	for _, h := range m.hits {
+		out = append(out, h.Ref.Name)
+	}
+	return out
+}
+
+func sameNames(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// The point of the leg: a late hit that matches better goes to the top rather than
+// to the bottom, so the best match is visible before the sweep finishes.
+func TestHitsAreHeldInRankOrder(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(scored("mid", 20))
+	m.AppendHit(scored("worst", 10))
+	m.AppendHit(scored("best", 30))
+
+	if got := hitNames(m); !sameNames(got, []string{"best", "mid", "worst"}) {
+		t.Errorf("hits = %v; want best, mid, worst", got)
+	}
+	if v := m.View(); strings.Index(v, "best") > strings.Index(v, "worst") {
+		t.Errorf("the best hit should render above the worst; got:\n%s", v)
+	}
+}
+
+// Equal scores are the common case (a label-only query scores every hit 0), and
+// there the list must behave exactly like the plain append it replaced.
+func TestEqualScoresKeepArrivalOrder(t *testing.T) {
+	m := newSearch()
+	for _, n := range []string{"a", "b", "c", "d"} {
+		m.AppendHit(scored(n, 0))
+	}
+	if got := hitNames(m); !sameNames(got, []string{"a", "b", "c", "d"}) {
+		t.Errorf("hits = %v; want arrival order a, b, c, d", got)
+	}
+}
+
+// The guarantee that makes a re-ranking list usable: a better hit inserted above
+// the cursor moves the rows, not the selection.
+func TestBetterHitInsertedAboveKeepsSelection(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(scored("first", 20))
+	m.AppendHit(scored("second", 20))
+	m, _ = m.Update(keymap.ActionDown) // cursor on "second"
+
+	m.AppendHit(scored("best", 99))
+
+	if got := hitNames(m); !sameNames(got, []string{"best", "first", "second"}) {
+		t.Fatalf("hits = %v; want best, first, second", got)
+	}
+	sel, ok := m.Selected()
+	if !ok || sel.Ref.Name != "second" {
+		t.Errorf("Selected() = %+v (ok=%v); want the cursor carried to \"second\"", sel, ok)
+	}
+}
+
+// The mirror case: a hit ranking below the cursor must not disturb it either.
+func TestWorseHitInsertedBelowKeepsSelection(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(scored("best", 99))
+	m.AppendHit(scored("mid", 50))
+	m, _ = m.Update(keymap.ActionDown) // cursor on "mid"
+
+	m.AppendHit(scored("worst", 1))
+
+	sel, ok := m.Selected()
+	if !ok || sel.Ref.Name != "mid" {
+		t.Errorf("Selected() = %+v (ok=%v); want \"mid\" still selected", sel, ok)
+	}
+}
+
+// The first hit must land under the cursor — index 0 stays index 0, or an
+// untouched search view would open with nothing selectable.
+func TestFirstHitIsSelected(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(scored("only", 7))
+	sel, ok := m.Selected()
+	if !ok || sel.Ref.Name != "only" {
+		t.Errorf("Selected() = %+v (ok=%v); want the single hit selected", sel, ok)
+	}
+}

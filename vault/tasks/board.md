@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — SEARCH-04c-1 done: a `-l app=web` term in the search query goes to the apiserver as a label selector (D151), leaving only SEARCH-04c-2 (fuzzy matching) in the SEARCH line. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — SEARCH-04c-2a done: cluster-search results are ranked by match score, ordered in the view rather than buffered in `kube.Search` (D152), leaving SEARCH-04c-2b (fuzzy matching) as the last item in the SEARCH line. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-04c-2a** Rank the search results (match score + ordered result list)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 (SEARCH-04c-2 split) | claimed: 2026-07-28
+_(none)_
 
 ## Blocked
 
@@ -163,6 +162,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **SEARCH-04c-2a** Ranked cluster-search results — `kube.Search` scores every match by where the query lands in the name (`SearchHit.Score`, contiguous matches in a band no scattered match can reach) and still streams in arrival order, while `searchview` holds its hits in score order and inserts each streamed hit at its rank with the cursor carried along with its row, so the best answer rises to the top without buffering the sweep; matching itself is unchanged — done 2026-07-28 (D152)
 - [x] **SEARCH-04c-1** Label-selector matching for cluster search — a `-l <selector>` term in the query line is parsed into `kube.SearchQuery{Name, LabelSelector}` and evaluated by the apiserver on every kind's List (so it narrows the wire instead of costing client work), while the name substring stays client-side; an unparseable selector is reported under the query line and never sent — done 2026-07-28 (D151)
 - [x] **SEARCH-04b** All-namespaces scope widen for cluster search — `search.allNamespaces` (`ctrl+w`) searches every namespace and re-runs the query, replacing the namespace the header names rather than adding a segment, independent of the kind widen and leaving the app's own namespace scope untouched; `kubecom keys` now sizes its columns from the widest id — done 2026-07-28 (D150)
 - [x] **SEARCH-04a** All-kinds scope widen for cluster search — `search.allKinds` (`ctrl+a`) swaps the curated kind set for every discovered kind and re-runs the query; the header names the widened scope only while it is on, the widen resets on every fresh open, and `kube.Search` now lists at most 8 kinds at a time so the widen cannot flood the apiserver (D149) — done 2026-07-28 (D149)

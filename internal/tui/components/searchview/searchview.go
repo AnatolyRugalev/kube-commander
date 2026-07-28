@@ -20,7 +20,10 @@
 // namespace itself still resolved by the wiring. SEARCH-04c-1 added the only state the
 // query line itself can be in besides "text": SetQueryError, shown in place of the empty
 // hint when the wiring cannot turn what is typed into a search — the view still does not
-// parse, match, or know what a label selector is.
+// parse, match, or know what a label selector is. SEARCH-04c-2a made the result list
+// *ranked*: hits are kept in kube's match-score order instead of arrival order, inserted
+// at their rank as they stream in, with the cursor carried along with its row (D152). The
+// view still does no matching — it sorts on the score kube already put on every hit.
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -35,6 +38,8 @@ package searchview
 
 import (
 	"io"
+	"slices"
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
@@ -162,8 +167,11 @@ type Model struct {
 	// reachable rather than being two stops on one cycle.
 	allNamespaces bool
 
-	// hits is the authoritative result set in arrival order; the list is rebuilt from
-	// it on every append so labels stay column-aligned as new kinds stream in.
+	// hits is the authoritative result set in **rank** order: descending
+	// kube.SearchHit.Score, arrival order among equal scores (SEARCH-04c-2a). The list
+	// is rebuilt from it on every insert so labels stay column-aligned as new kinds
+	// stream in. Ranking lives here rather than in kube because kube streams — it has
+	// no last hit to sort against until the whole fan-out is over (D152).
 	hits []kube.SearchHit
 
 	searching bool // a search is in flight (header indicator; the wiring sets it)
@@ -322,13 +330,35 @@ func (m *Model) SetCapped(b bool) { m.capped = b }
 // Capped reports whether the current query's matches were truncated by the cap.
 func (m Model) Capped() bool { return m.capped }
 
-// AppendHit adds one streamed result and re-renders the list. The cursor stays on the
-// row it was on, so results arriving under the reader never move their selection.
+// AppendHit adds one streamed result and re-renders the list. The hit is inserted at
+// its rank (by kube.SearchHit.Score, best first) rather than at the end, so the best
+// match is at the top from the first moment it arrives instead of after the sweep
+// finishes — which is the whole reason ranking is done here and not in kube (D152).
+//
+// The cursor still never changes row: it is carried with its hit, shifting down by one
+// when the new result ranks above it. That is the guarantee that makes a re-ranking
+// list usable at all — rows above the cursor may reshuffle while the fan-out runs, but
+// what is highlighted when the reader presses enter is what was highlighted when they
+// stopped moving.
 func (m *Model) AppendHit(h kube.SearchHit) {
-	m.hits = append(m.hits, h)
+	at := rankIndex(m.hits, h.Score)
 	idx := m.list.Index()
+	// Only an existing row can be pushed down; on the first hit there is nothing under
+	// the cursor to carry, and index 0 must stay index 0.
+	if len(m.hits) > 0 && at <= idx {
+		idx++
+	}
+	m.hits = slices.Insert(m.hits, at, h)
 	m.rebuild()
 	m.list.Select(idx)
+}
+
+// rankIndex is where a hit scoring score belongs in the rank-ordered hits: after every
+// hit that scores at least as well. Equal scores therefore keep arrival order, which
+// makes the common case — a label-only query, where kube scores every hit 0 — behave
+// exactly like the plain append this replaced.
+func rankIndex(hits []kube.SearchHit, score int) int {
+	return sort.Search(len(hits), func(i int) bool { return hits[i].Score < score })
 }
 
 // Len is the number of results currently held.
@@ -452,7 +482,7 @@ func (m *Model) clearHits() {
 	m.capped = false
 }
 
-// rebuild regenerates the list items from the hits, keeping arrival order.
+// rebuild regenerates the list items from the hits, keeping their rank order.
 func (m *Model) rebuild() {
 	rows := hitItems(m.hits)
 	items := make([]list.Item, 0, len(rows))
@@ -462,7 +492,7 @@ func (m *Model) rebuild() {
 	m.list.SetItems(items)
 }
 
-// hitItems renders the hits into aligned rows: the kind column padded to the widest
+// hitItems renders the hits (already rank-ordered) into aligned rows: the kind column padded to the widest
 // kind present, then the object path (namespace/name, or a bare name for a
 // cluster-scoped object, whose Ref.Namespace is empty). Pure, so the exact row text is
 // testable without a rendered View.
