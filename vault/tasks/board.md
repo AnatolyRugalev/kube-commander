@@ -7,7 +7,8 @@ _Last updated: 2026-07-28 — LOGS-04c done: `G` in the logs view now catches up
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-04b** Timestamps toggle in the logs view
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (LOGS-04 split) | claimed: 2026-07-28
 
 ## Blocked
 
@@ -122,12 +123,7 @@ surfaces that were one line item. LOGS-04a is done: long lines wrap on `logs.wra
 scroll sideways on `nav.left`/`nav.right` (D146); LOGS-04c is done: `nav.bottom` rejoins
 the stream rather than just scrolling to it (D147). Only the timestamps slice is left.
 
-- [ ] **LOGS-04b** Timestamps toggle in the logs view
-      status: todo | owner: — | added: 2026-07-25 (LOGS-04 split)
-      notes: Second slice of the split LOGS-04. `kube.LogOptions` has no `Timestamps` yet, so
-      this is a kube-layer field plus a view toggle; decide whether the toggle re-requests the
-      stream or whether timestamps are always requested and only their *display* toggles
-      (the latter avoids a restream but changes every line's bytes). Depends on LOGS-01/02.
+_(LOGS-04b is In Progress — see the top of this board.)_
 
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
