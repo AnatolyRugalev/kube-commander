@@ -7,7 +7,15 @@ _Last updated: 2026-07-28 — SEARCH-04a done: `ctrl+a` widens a cluster search 
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-04b** Namespace widen: a toggle that searches **all namespaces** even while
+      the app is scoped to one (`kube.Search` already accepts `""`; the work is the toggle,
+      the header segment, and the re-run).
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-28 (SEARCH-04 split) | claimed: 2026-07-28
+      notes: Off by default (D131 pt 2). Cheaper than the kind widen — one namespace scan
+      per kind either way — but it is the other half of "scope". The plumbing SEARCH-04a
+      built is ready for it: add a flag beside the view's `allKinds`, extend
+      `ScopeChangedMsg`, and pass `""` for the namespace; the re-run path, the header
+      segment rule (name it only when on) and the debounce are already there.
 
 ## Blocked
 
@@ -106,15 +114,6 @@ the scope at all. **SEARCH-04a is done**: `search.allKinds` (`ctrl+a`) swaps the
 set for every discovered kind and re-runs the query, and `kube.Search` now lists a bounded
 number of kinds at a time so the widen cannot flood the apiserver (D149).
 
-- [ ] **SEARCH-04b** Namespace widen: a toggle that searches **all namespaces** even while
-      the app is scoped to one (`kube.Search` already accepts `""`; the work is the toggle,
-      the header segment, and the re-run).
-      status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
-      notes: Off by default (D131 pt 2). Cheaper than the kind widen — one namespace scan
-      per kind either way — but it is the other half of "scope". The plumbing SEARCH-04a
-      built is ready for it: add a flag beside the view's `allKinds`, extend
-      `ScopeChangedMsg`, and pass `""` for the namespace; the re-run path, the header
-      segment rule (name it only when on) and the debounce are already there.
 - [ ] **SEARCH-04c** Richer matching: fuzzy / label / field selectors beyond the current
       case-insensitive name substring.
       status: todo | owner: — | added: 2026-07-28 (SEARCH-04 split)
