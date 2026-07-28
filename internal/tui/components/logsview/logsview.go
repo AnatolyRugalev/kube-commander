@@ -11,8 +11,10 @@
 // no longer stamps with a logs kind (D144). The wiring lives in `internal/tui/logs.go`.
 // LOGS-03 added the second grep mode: `logs.regex` switches the same field between
 // case-insensitive substring and case-insensitive regex, and whichever mode is active,
-// the matched spans are highlighted in the shown lines (D145). The long-line / timestamp
-// nice-to-haves (LOGS-04) are a later slice.
+// the matched spans are highlighted in the shown lines (D145). LOGS-04a gave long lines
+// two ways to be read — `logs.wrap` soft-wraps them, and while it is off nav.left/right
+// scroll the clipped view horizontally — leaving timestamps (LOGS-04b) and jump-to-latest
+// (LOGS-04c) as later slices.
 //
 // Like the shared viewer and the picker it wraps a bubbles component (viewport +
 // textinput) but drives it entirely through keymap.Actions — it never matches a raw
@@ -55,6 +57,12 @@ const (
 	promptRegex     = "re/ "
 )
 
+// hStep is how many columns one nav.left/nav.right shifts the view while it is
+// clipping long lines (LOGS-04a). A single column would make reaching the tail of a
+// stack trace a chore and a full page would lose the reader's place; eight is the
+// usual pager compromise and lands on tab stops.
+const hStep = 8
+
 // ClosedMsg is emitted when the user dismisses the logs view (nav.back with the filter
 // already closed). Owned by this package — the emitter — so the root model handles the
 // concrete type without this package importing it (D56). Kind mirrors the shared
@@ -90,6 +98,14 @@ type Model struct {
 	re    *regexp.Regexp
 	reBad bool
 
+	// wrap switches long lines between soft-wrapped continuation rows and clipping
+	// at the right edge (logs.wrap, LOGS-04a). It is the viewport's own SoftWrap;
+	// the field mirrors it so View/header can read it off the value model without
+	// reaching into the viewport. While clipping, nav.left/nav.right move the
+	// viewport's horizontal offset; wrapping makes that offset meaningless (the
+	// viewport ignores it), which is why one toggle covers both modes.
+	wrap bool
+
 	// matched is the number of lines the current query kept, computed by render (the
 	// one place the buffer is scanned) so View never re-runs the match to label it.
 	matched int
@@ -100,7 +116,9 @@ type Model struct {
 }
 
 // New builds a logs view rendered through the shared styles. It starts hidden, empty,
-// and following (a fresh logs open tails the stream), with the filter closed. The
+// following (a fresh logs open tails the stream), with the filter closed and long lines
+// clipped rather than wrapped — one log line stays one screen row until asked otherwise,
+// which is what keeps a fast stream readable (logs.wrap opts in). The
 // viewport's mouse-wheel scroll is disabled so all input flows through keymap actions
 // (D11) — the root model never forwards a raw KeyMsg to it.
 func New(s styles.Styles) Model {
@@ -125,14 +143,15 @@ func (m *Model) SetTitle(t string) { m.title = t }
 
 // Reset clears the buffer and filter and re-arms following, so opening the view over a
 // new object always starts clean and tailing regardless of a prior session. The grep
-// mode resets with it: a new object's logs open on the plain substring grep, the mode
-// a reader who never touched logs.regex expects (the toggle is per-session, not sticky
-// across objects).
+// mode and the wrap mode reset with it: a new object's logs open on the plain substring
+// grep, unwrapped and unscrolled — the state a reader who never touched logs.regex or
+// logs.wrap expects (both toggles are per-session, not sticky across objects).
 func (m *Model) Reset() {
 	m.lines = m.lines[:0]
 	m.following = true
 	m.closeFilter()
 	m.setRegex(false)
+	m.setWrap(false)
 	m.render()
 }
 
@@ -163,6 +182,12 @@ func (m Model) Query() string { return m.filter.Value() }
 // Regex reports whether the grep is in regex mode (logs.regex, LOGS-03).
 func (m Model) Regex() bool { return m.regex }
 
+// Wrap reports whether long lines are soft-wrapped rather than clipped (logs.wrap,
+// LOGS-04a). HOffset is the current horizontal scroll position in columns, always 0
+// while wrapping.
+func (m Model) Wrap() bool   { return m.wrap }
+func (m Model) HOffset() int { return m.viewport.XOffset() }
+
 // Show reveals the view (it then captures input until Hide). Hide dismisses it and
 // closes any open filter so it reopens clean next time.
 func (m *Model) Show() { m.active = true }
@@ -190,7 +215,9 @@ func (m *Model) SetSize(w, h int) {
 // following so the reader can look back without the stream yanking them to the bottom
 // (mirrors the shared viewer's M3-06 follow semantics, now inside the component).
 // app.filter opens the live grep; logs.regex switches that grep between substring and
-// regex matching (LOGS-03); logs.follow toggles follow (re-enabling jumps to the newest
+// regex matching (LOGS-03); logs.wrap switches long lines between soft-wrapped and
+// clipped, and while clipped nav.left/nav.right scroll horizontally to the tail of a
+// long line (LOGS-04a); logs.follow toggles follow (re-enabling jumps to the newest
 // line); nav.back closes the filter if open, else closes the view (ClosedMsg).
 // The view consumes actions, never raw keys (D11); an inactive view ignores everything.
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
@@ -218,6 +245,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.viewport.PageDown()
 	case keymap.ActionBottom:
 		m.viewport.GotoBottom()
+	case keymap.ActionLeft:
+		// Horizontal movement says nothing about whether the reader still wants the
+		// tail, so unlike an upward scroll it leaves following alone. Inert while
+		// wrapping — there is nothing off-screen to scroll to (the viewport ignores
+		// the offset), which is exactly why the wrap toggle covers both modes.
+		m.viewport.ScrollLeft(hStep)
+	case keymap.ActionRight:
+		m.viewport.ScrollRight(hStep)
 	case keymap.ActionFilter:
 		if m.filtering {
 			return m, nil
@@ -237,6 +272,11 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		// under the reader's cursor — deliberately: it is how you promote a substring
 		// grep you are mid-way through into a pattern without retyping it.
 		m.setRegex(!m.regex)
+		m.render()
+	case keymap.ActionLogsWrap:
+		// Wrapping changes how many display rows the buffer occupies, so a followed
+		// view has to be re-pinned to the newest line — render does that.
+		m.setWrap(!m.wrap)
 		m.render()
 	case keymap.ActionBack:
 		// One esc clears an open filter (restoring the full stream); a second closes
@@ -292,6 +332,29 @@ func (m *Model) setRegex(on bool) {
 		m.filter.Prompt = promptSubstring
 	}
 	m.compile()
+}
+
+// setWrap switches long-line handling between soft wrap and clip-and-scroll. Enabling
+// wrap zeroes the horizontal offset *first*: the viewport ignores SetXOffset once
+// SoftWrap is on, so an offset left behind would silently reappear the moment wrapping
+// was switched back off, scrolling a view the reader never scrolled.
+func (m *Model) setWrap(on bool) {
+	if on {
+		m.viewport.SetXOffset(0)
+	}
+	m.wrap = on
+	m.viewport.SoftWrap = on
+}
+
+// clampHOffset keeps the horizontal offset inside the content after the content or the
+// width changed — a filter that hides the one very long line, or a wider terminal, both
+// shrink how far right there is to go. SetXOffset does the clamping; re-setting the
+// current value is how you ask for it. A no-op while wrapping (no offset to clamp).
+func (m *Model) clampHOffset() {
+	if m.wrap {
+		return
+	}
+	m.viewport.SetXOffset(m.viewport.XOffset())
 }
 
 // compile re-derives the regex-mode pattern from the current query. A query that does
@@ -414,6 +477,7 @@ func (m *Model) render() {
 	content, matched := m.shown()
 	m.matched = matched
 	m.viewport.SetContent(content)
+	m.clampHOffset()
 	if m.following {
 		m.viewport.GotoBottom()
 	}
@@ -461,7 +525,10 @@ func (m Model) View() string {
 }
 
 // header builds the one-line status bar: "<title>  [following]/[paused]  <matched/total>"
-// plus the active query, clipped to the screen width. Regex mode adds a `[re]` marker
+// plus the active query, clipped to the screen width. Wrapping adds a `[wrap]` marker and
+// a horizontally scrolled clip adds `[+N]` (columns hidden to the left, LOGS-04a) —
+// without it a view scrolled past the start of every line looks like a view of blank
+// lines. Regex mode adds a `[re]` marker
 // (the field's own `re/` prompt is only visible while it is open), and a query that
 // does not compile is called out rather than left to look like a query that simply
 // matched nothing — the counts beside it are the last good pattern's (D145).
@@ -471,6 +538,14 @@ func (m Model) header() string {
 		state = "[following]"
 	}
 	seg := m.title + "  " + state
+	// Long-line state (LOGS-04a): wrapping is a mode the reader turned on, so it is
+	// always named; clipping is the default and only worth a marker once it is actually
+	// hiding something to the left — the column offset doubles as "you are scrolled".
+	if m.wrap {
+		seg += "  [wrap]"
+	} else if x := m.viewport.XOffset(); x > 0 {
+		seg += "  [+" + itoa(x) + "]"
+	}
 	if m.regex {
 		seg += "  [re]"
 	}

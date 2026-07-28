@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-25 — LOGS-03 done: the logs grep now reads as substring or regex (`ctrl+r`) with matched spans highlighted and an uncompilable pattern degrading to the last good one (D145), leaving LOGS-04 (long-line/throughput nice-to-haves) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-28 — LOGS-04 split into 04a/04b/04c and LOGS-04a done: long lines now wrap on `w` or scroll sideways on `h`/`l`, with the mode named in the header (D146), leaving LOGS-04c (jump-to-latest), LOGS-04b (timestamps) and SEARCH-04 (scope widen) as the top items. Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-04a** Long lines: wrap toggle + horizontal scroll in the logs view
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-25 (LOGS-04 split) | claimed: 2026-07-28
-      notes: First slice of the split LOGS-04. A registered, rebindable `logs.wrap` toggle
-      switches the view between soft-wrapping long lines and clipping them, and while it is
-      clipping, `nav.left`/`nav.right` scroll horizontally so the tail of a long line is
-      reachable (the viewport supports both natively; they are mutually exclusive). Header
-      says which mode is on. Keep the unfiltered render path free of new per-line work (the
-      throughput human-task). Depends on LOGS-01/02.
+_(none)_
 
 ## Blocked
 
@@ -125,7 +118,8 @@ dedicated logs view is live on `res.logs`, the shared viewer no longer has a log
 (D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
 the nice-to-haves are left, split D52-style into **LOGS-04a** (wrap toggle + horizontal
 scroll), **LOGS-04b** (timestamps) and **LOGS-04c** (jump-to-latest) — three unrelated
-surfaces that were one line item.
+surfaces that were one line item. LOGS-04a is done: long lines wrap on `logs.wrap` or
+scroll sideways on `nav.left`/`nav.right` (D146).
 
 - [ ] **LOGS-04b** Timestamps toggle in the logs view
       status: todo | owner: — | added: 2026-07-25 (LOGS-04 split)
@@ -145,6 +139,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 ## Done
 
 
+- [x] **LOGS-04a** Wrap toggle + horizontal scroll for long lines in the logs view — done 2026-07-28 (D146)
 - [x] **LOGS-03** Regex grep mode + match highlighting in the logs view — `logs.regex` (`ctrl+r`, a no-text chord so it still fires while the grep field is open) re-reads the query as a case-insensitive regex, matched spans are painted with a new shared `styles.Match` role in either mode, an uncompilable pattern keeps narrowing by the last good one and the header says `invalid regex`, and the unfiltered render path stays match-work-free (plus one pre-existing double scan removed) — done 2026-07-25 (D145)
 - [x] **LOGS-02** Wire `res.logs` to the dedicated logs view — retired the shared-viewer logs path (`streamLogsInto`/`syncLogViewerTitle`/`logFollow`/`logTitle`/`viewerKindLogs`/`isScrollUp`) for `internal/tui/logs.go`: logs stream full-screen into the LOGS-01 component with its live grep (`/` narrows while following), follow/pause and the grep live in the view not the shell, the container picker (M3-07a) + pod-owning resolution (M3-07b) still feed it on the same `viewerGen`, plus `HelpLogs`/`HelpLogsFilter` hint contexts; logs-throughput dogfood raised — done 2026-07-25 (D144)
 - [x] **SEARCH-03b** Search progress + cap surfacing: the searchview header reports `searching N/M kinds…` (fed from `SearchKindDone`, silent on a failed kind) and `first 200 matches — narrow the query` (from `SearchDone{Capped}`), reset with the results they describe; plus a `keymap.HelpSearch` hint context so the bottom hint stops advertising the six text keys the always-open query field swallows — done 2026-07-25 (D143)

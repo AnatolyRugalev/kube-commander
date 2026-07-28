@@ -93,6 +93,8 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Describe | `D` (`res.describe`) | any kind; read-only. Relocated off `d` (D133) so delete can take `d` |
 | Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
 | Toggle log follow | `f` (`logs.follow`) | logs viewer only; auto-scroll on/off, manual up-scroll pauses (M3-06) |
+| Toggle logs grep regex | `Ctrl+r` (`logs.regex`) | logs view only; re-reads the live grep as a case-insensitive regex. A no-text chord by necessity — it must fire while the grep field is open, and that field swallows every text key (LOGS-03/D145) |
+| Toggle log line wrap | `w` (`logs.wrap`) | logs view only; soft-wrap long lines vs clip them. While clipping, `h`/`l` (`nav.left`/`nav.right`) scroll the view horizontally — the two are mutually exclusive, so one toggle covers both (LOGS-04a) |
 | View / Edit YAML | `e` (`res.edit`) | any gettable kind; opens the object's YAML in `$EDITOR` — the single view+edit surface. Save applies (needs `update`/`patch`; a read-only save degrades to a toast). The standalone read-only YAML viewer + its `y` key were retired here (D135/M3-15c); `y` is now unbound |
 | Delete | `d` (`res.delete`) | any kind with `delete` (confirm); vim `dd` muscle memory (D133) |
 | Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |

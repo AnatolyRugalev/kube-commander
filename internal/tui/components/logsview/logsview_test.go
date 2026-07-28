@@ -348,9 +348,16 @@ func TestResetClearsBufferAndRearmsFollow(t *testing.T) {
 	m, _ = m.Update(keymap.ActionTop) // pause
 	m = typeFilter(m, "line-1")
 	m, _ = m.Update(keymap.ActionLogsRegex)
+	m, _ = m.Update(keymap.ActionLogsWrap)
 	m.Reset()
 	if m.Regex() {
 		t.Errorf("Reset should drop regex mode so a new object opens on the plain grep")
+	}
+	if m.Wrap() {
+		t.Errorf("Reset should drop wrap mode so a new object opens unwrapped")
+	}
+	if m.HOffset() != 0 {
+		t.Errorf("Reset should leave the view unscrolled; HOffset = %d", m.HOffset())
 	}
 	if !m.Empty() {
 		t.Errorf("Reset should clear the buffer")
@@ -366,12 +373,149 @@ func TestResetClearsBufferAndRearmsFollow(t *testing.T) {
 	}
 }
 
+// The LOGS-04a fixtures: one line wider than the 40-column test view, with a marker at
+// each end so "which part is on screen" is a content assertion rather than an offset one.
+const (
+	longHead = "HEAD"
+	longTail = "TAIL"
+)
+
+func longLine() string { return longHead + strings.Repeat("-", 60) + longTail }
+
+// TestWrapTogglesLongLineHandling is the headline of LOGS-04a: a line wider than the
+// screen is clipped by default (one log line, one row) and logs.wrap folds it onto
+// continuation rows so its tail is readable without scrolling.
+func TestWrapTogglesLongLineHandling(t *testing.T) {
+	m := newLogs()
+	m.Append(longLine())
+
+	if v := plain(m.View()); strings.Contains(v, longTail) {
+		t.Fatalf("a long line should be clipped by default: %q", v)
+	}
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	if !m.Wrap() {
+		t.Fatal("logs.wrap should turn wrapping on")
+	}
+	v := plain(m.View())
+	if !strings.Contains(v, longTail) {
+		t.Errorf("wrapping should bring the line's tail on screen: %q", v)
+	}
+	if !strings.Contains(v, "[wrap]") {
+		t.Errorf("the header should name the mode the reader turned on: %q", v)
+	}
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	if m.Wrap() {
+		t.Fatal("a second logs.wrap should turn wrapping back off")
+	}
+	if v := plain(m.View()); strings.Contains(v, longTail) || strings.Contains(v, "[wrap]") {
+		t.Errorf("unwrapping should clip again and drop the marker: %q", v)
+	}
+}
+
+// TestHorizontalScrollReachesLineTail proves the other half of LOGS-04a: while the view
+// is clipping, nav.left/nav.right walk it sideways to the tail of a long line, the header
+// says how far, and the offset clamps at both ends.
+func TestHorizontalScrollReachesLineTail(t *testing.T) {
+	m := newLogs()
+	m.Append(longLine())
+
+	m, _ = m.Update(keymap.ActionRight)
+	if m.HOffset() != hStep {
+		t.Fatalf("one nav.right = %d columns; got %d", hStep, m.HOffset())
+	}
+	v := plain(m.View())
+	if strings.Contains(v, longHead) {
+		t.Errorf("scrolling right should move the line's head off screen: %q", v)
+	}
+	if !strings.Contains(v, "[+8]") {
+		t.Errorf("the header should report the hidden columns: %q", v)
+	}
+
+	for range 5 { // past the end: the offset clamps at the last reachable column.
+		m, _ = m.Update(keymap.ActionRight)
+	}
+	if v := plain(m.View()); !strings.Contains(v, longTail) {
+		t.Errorf("scrolling right should reach the line's tail: %q", v)
+	}
+
+	for range 10 { // and back past the start.
+		m, _ = m.Update(keymap.ActionLeft)
+	}
+	if m.HOffset() != 0 {
+		t.Fatalf("nav.left should clamp at column 0; got %d", m.HOffset())
+	}
+	v = plain(m.View())
+	if !strings.Contains(v, longHead) {
+		t.Errorf("back at column 0 the head should be on screen again: %q", v)
+	}
+	if strings.Contains(v, "[+") {
+		t.Errorf("an unscrolled view should carry no offset marker: %q", v)
+	}
+}
+
+// TestWrapZeroesTheHorizontalOffset guards the one way the two modes can interfere: the
+// viewport ignores the horizontal offset while soft-wrapping, so an offset carried into
+// wrap mode would silently scroll the view when wrapping was switched back off.
+func TestWrapZeroesTheHorizontalOffset(t *testing.T) {
+	m := newLogs()
+	m.Append(longLine())
+	m, _ = m.Update(keymap.ActionRight)
+
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	if m.HOffset() != 0 {
+		t.Fatalf("turning wrap on should drop the horizontal offset; got %d", m.HOffset())
+	}
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	if m.HOffset() != 0 {
+		t.Fatalf("the offset must not reappear when wrapping is turned off; got %d", m.HOffset())
+	}
+	if v := plain(m.View()); !strings.Contains(v, longHead) {
+		t.Errorf("an unscrolled clipped view should start at the line's head: %q", v)
+	}
+}
+
+// TestHorizontalScrollDoesNotPauseFollow: moving sideways says nothing about whether the
+// reader still wants the newest line, unlike an upward scroll (which does pause).
+func TestHorizontalScrollDoesNotPauseFollow(t *testing.T) {
+	m := newLogs()
+	m.Append(longLine())
+	for _, a := range []keymap.Action{keymap.ActionRight, keymap.ActionLeft} {
+		m, _ = m.Update(a)
+		if !m.Following() {
+			t.Fatalf("%v should leave following alone", a)
+		}
+	}
+}
+
+// TestHorizontalOffsetClampsWhenContentNarrows: the grep can hide the very line that made
+// the buffer wide, so an offset the reader chose can become unreachable — it clamps back
+// rather than leaving them staring at blank rows.
+func TestHorizontalOffsetClampsWhenContentNarrows(t *testing.T) {
+	m := newLogs()
+	m.Append(longLine())
+	m.Append("short")
+	for range 4 {
+		m, _ = m.Update(keymap.ActionRight)
+	}
+	if m.HOffset() == 0 {
+		t.Fatal("precondition: the view should be scrolled right")
+	}
+
+	m = typeFilter(m, "short")
+	if m.HOffset() != 0 {
+		t.Fatalf("narrowing to a short line should clamp the offset; got %d", m.HOffset())
+	}
+	if v := plain(m.View()); !strings.Contains(v, "short") {
+		t.Errorf("the matching line should be on screen: %q", v)
+	}
+}
+
 func TestInactiveIgnoresActions(t *testing.T) {
 	m := New(styles.Default())
 	m.SetSize(40, 12)
 	appendLines(&m, 10) // not shown
 	var cmd tea.Cmd
-	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsRegex} {
+	for _, a := range []keymap.Action{keymap.ActionBottom, keymap.ActionBack, keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsRegex, keymap.ActionLogsWrap, keymap.ActionRight} {
 		m, cmd = m.Update(a)
 		if cmd != nil {
 			t.Errorf("inactive view emitted a cmd for %v; want nil", a)

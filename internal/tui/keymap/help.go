@@ -94,11 +94,17 @@ const (
 // esc to clear the grep, and the regex toggle (LOGS-03), which is bound to a no-text
 // chord precisely so it survives the open field and so is hinted in *both* logs
 // contexts. Neither context offers help: the view swallows it.
+//
+// The wrap toggle (LOGS-04a) is hinted with the grep closed only — it is a plain letter,
+// so the open field eats it exactly as it eats `f`. Its companion, horizontal scrolling
+// on nav.left/nav.right, is deliberately *not* hinted in either: it only acts while the
+// view is not wrapping, and a hint that is right half the time is the kind of promise
+// D143 pt 1 forbids. It stays discoverable through `?` and the generated keybindings doc.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionBack},
-	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionBack, ActionQuit},
+	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
 	HelpLogsFilter: {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
 }
 

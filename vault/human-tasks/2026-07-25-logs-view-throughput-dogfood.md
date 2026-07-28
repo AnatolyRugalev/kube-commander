@@ -26,8 +26,12 @@ ingress controller, a busy API server, or `kubectl run spam --image=busybox -- s
    where you put it rather than being yanked to the bottom by the next line. `f` resumes
    and jumps to the newest line.
 4. **Full-screen legibility.** The view replaces the browse panes, keeping only the status
-   bar and the hint line. Do long log lines read acceptably (they are not wrapped yet —
-   that is LOGS-04), and does the header stay readable at your terminal width?
+   bar and the hint line. Do long log lines read acceptably, and does the header stay
+   readable at your terminal width? Long lines are clipped by default (one log line, one
+   row): press `w` (`logs.wrap`) to fold them onto continuation rows instead, or leave it
+   off and use `h`/`l` to scroll sideways — the header shows `[wrap]` or `[+N]` columns
+   hidden (LOGS-04a). Both were added after this task was raised and are hermetically
+   tested, but whether *wrapping a fast stream* stays readable is an eyes-on question.
 5. **Exit is clean.** `Esc` (with no filter open) or `q` closes it and the browse table is
    exactly as you left it; the stream is torn down (no goroutine left tailing — the pod's
    log request should stop).

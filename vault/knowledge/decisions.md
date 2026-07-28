@@ -3628,3 +3628,28 @@ the matched spans are highlighted in the shown lines.
    shows *where* a query matched renders through it. Because it wraps a span in ANSI, a
    test asserting on rendered *content* must strip styling first — a matching line is no
    longer one contiguous run of bytes in the frame.
+
+### D146 — A pager clips long lines by default; wrapping is an opt-in mode that owns the horizontal offset
+**2026-07-28** (LOGS-04a). The logs view learned what to do with a line wider than the
+screen: `logs.wrap` (`w`) switches between soft-wrapped continuation rows and clipping,
+and while clipping, `nav.left`/`nav.right` scroll the view horizontally.
+
+1. **Clipping is the default in a streaming view.** One log line stays one screen row, so
+   the rows on screen count lines rather than terminal columns and a burst of long lines
+   cannot push the rest of the stream off the display. Wrapping is a deliberate gesture
+   for reading one long line, not the resting state. Any future streaming pane inherits
+   this default; a one-shot pager (the shared viewer) is free to choose differently.
+2. **Wrap and horizontal scroll are one toggle, not two settings.** A wrapped view has no
+   horizontal offset — nothing is off-screen — so the two modes are mutually exclusive by
+   construction. Enabling wrap zeroes the offset *before* the mode flips, since the
+   viewport ignores offset changes while wrapping and a stale one would silently reappear
+   on the way back out.
+3. **A mode-dependent binding is not hinted.** Horizontal scroll rides the shared
+   `nav.left`/`nav.right` and acts only while the view is not wrapping, so it appears in
+   neither logs hint context — D143 pt 1's "a hint is a promise" rules out a promise that
+   holds half the time. It stays discoverable via `?` and the generated keybindings doc.
+   By the same rule the wrap toggle, a plain letter the open grep swallows, is hinted only
+   in the grep-closed context.
+4. **Display state the reader can lose sight of is named in the header.** `[wrap]` for the
+   mode, `[+N]` for the columns hidden to the left — without the latter, a view scrolled
+   past the start of every line is indistinguishable from a view of blank lines.

@@ -14,8 +14,8 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `nav.up` | `k` / `up` | Move up |
 | `nav.down` | `j` / `down` | Move down |
-| `nav.left` | `h` / `left` | Focus left pane / collapse |
-| `nav.right` | `l` / `right` | Focus right pane / expand |
+| `nav.left` | `h` / `left` | Focus left pane / scroll left |
+| `nav.right` | `l` / `right` | Focus right pane / scroll right |
 | `nav.drillIn` | `enter` | Open / drill into selection |
 | `nav.back` | `esc` | Go back / up a level |
 | `nav.top` | `gg` / `home` | Jump to top |
@@ -87,6 +87,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `logs.follow` | `f` | Toggle log follow (auto-scroll) in the logs viewer |
 | `logs.regex` | `ctrl+r` | Toggle regex matching for the logs filter |
+| `logs.wrap` | `w` | Toggle line wrapping in the logs viewer |
 
 ## secret
 

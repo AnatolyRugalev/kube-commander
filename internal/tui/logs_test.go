@@ -24,6 +24,10 @@ var filterKey = tea.Key{Code: '/', Text: "/"}
 // carries no text on purpose, which is what lets it act while the grep field is open.
 var regexKey = tea.Key{Code: 'r', Mod: tea.ModCtrl}
 
+// wrapKey is the default logs.wrap key (`w`) — the long-line toggle (LOGS-04a). Unlike
+// the regex chord it is an ordinary letter, so the open grep types it.
+var wrapKey = tea.Key{Code: 'w', Text: "w"}
+
 // frame is the rendered screen with styling removed. LOGS-03 highlights matched spans,
 // so a matching line is no longer a contiguous run of bytes in the frame — content
 // assertions have to strip first.
@@ -152,6 +156,40 @@ func TestLogsRegexToggleSurvivesOpenGrep(t *testing.T) {
 	}
 }
 
+// TestLogsWrapTogglesFromTheShell proves LOGS-04a's routing: `w` reaches the view
+// through the ordinary sequencer path with the grep closed, and — being a plain letter,
+// unlike the regex chord beside it — types into the grep field while that is open,
+// leaving the wrap mode alone. It also proves the horizontal-scroll gesture reaches the
+// view rather than moving the panes underneath.
+func TestLogsWrapTogglesFromTheShell(t *testing.T) {
+	m := openLogsWithLines(t, "GET /healthz 200")
+
+	m, _ = press(t, m, wrapKey)
+	if !m.logsView.Wrap() {
+		t.Fatal("logs.wrap with the grep closed should turn wrapping on")
+	}
+	m, _ = press(t, m, wrapKey)
+	if m.logsView.Wrap() {
+		t.Fatal("a second logs.wrap should turn wrapping back off")
+	}
+
+	// nav.right is honoured by the view (it scrolls the clipped body), not by the
+	// browse panes it is covering.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	if !m.logsView.Active() {
+		t.Fatal("nav.right should not close the logs view")
+	}
+
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "w")
+	if m.logsView.Wrap() {
+		t.Fatal("`w` typed into the open grep must not toggle wrapping")
+	}
+	if q := m.logsView.Query(); q != "w" {
+		t.Fatalf("`w` should be typed into the grep; query = %q", q)
+	}
+}
+
 // TestLogsQuitClosesViewNotApp proves `q` with the grep *closed* closes the logs view
 // rather than exiting kubecom — a full-screen pager owns the quit key while it is up,
 // as the help modal, the shared viewer and the search view all do — and that it tears
@@ -193,7 +231,7 @@ func TestLogsHintBarTracksGrepState(t *testing.T) {
 	// bindings the context offers, not how they are truncated.
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
 	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "hello"}}}
-	wide, _ := New(WithWatcher(fw), WithLogStreamer(s)).Update(tea.WindowSizeMsg{Width: 220, Height: 24})
+	wide, _ := New(WithWatcher(fw), WithLogStreamer(s)).Update(tea.WindowSizeMsg{Width: 300, Height: 24})
 	m := wide.(Model)
 	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
 	m = next.(Model)
@@ -205,7 +243,7 @@ func TestLogsHintBarTracksGrepState(t *testing.T) {
 	m = openLogsViewHelper(t, m)
 
 	hint := m.hintbar.View()
-	for _, want := range []keymap.Action{keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionBack, keymap.ActionQuit} {
+	for _, want := range []keymap.Action{keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsWrap, keymap.ActionBack, keymap.ActionQuit} {
 		if !strings.Contains(hint, want.Describe()) {
 			t.Errorf("the logs hint should offer %q with the grep closed: %q", want, hint)
 		}
@@ -216,7 +254,7 @@ func TestLogsHintBarTracksGrepState(t *testing.T) {
 
 	m, _ = press(t, m, filterKey)
 	grepHint := m.hintbar.View()
-	for _, unreachable := range []keymap.Action{keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionQuit} {
+	for _, unreachable := range []keymap.Action{keymap.ActionFilter, keymap.ActionLogsFollow, keymap.ActionLogsWrap, keymap.ActionQuit} {
 		if strings.Contains(grepHint, unreachable.Describe()) {
 			t.Errorf("%q types into the open grep; the hint must not offer it: %q", unreachable, grepHint)
 		}

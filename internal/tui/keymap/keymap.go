@@ -77,6 +77,13 @@ const (
 	// only toggle the mode *before* typing — where the mode matters least. It is
 	// meaningful only while the logs view is up; elsewhere it is inert.
 	ActionLogsRegex Action = "logs.regex"
+	// ActionLogsWrap toggles how the logs view treats a line wider than the screen
+	// (LOGS-04a): soft-wrapped onto continuation rows, or clipped at the right edge
+	// with nav.left/nav.right scrolling horizontally to reach the tail. The two are
+	// mutually exclusive by construction — a wrapped view has no horizontal offset —
+	// so one toggle covers both. It is meaningful only while the logs view is up;
+	// elsewhere it is inert.
+	ActionLogsWrap Action = "logs.wrap"
 	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
 	// open secret viewer (M3-08a). Values start masked; this is the deliberate
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
@@ -162,8 +169,8 @@ var actionMeta = []struct {
 }{
 	{ActionUp, "Move up"},
 	{ActionDown, "Move down"},
-	{ActionLeft, "Focus left pane / collapse"},
-	{ActionRight, "Focus right pane / expand"},
+	{ActionLeft, "Focus left pane / scroll left"},
+	{ActionRight, "Focus right pane / scroll right"},
 	{ActionDrillIn, "Open / drill into selection"},
 	{ActionBack, "Go back / up a level"},
 	{ActionTop, "Jump to top"},
@@ -190,6 +197,7 @@ var actionMeta = []struct {
 	{ActionDelete, "Delete the selected row"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
+	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
@@ -261,13 +269,18 @@ var defaultBindings = map[Action][]string{
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
-	ActionEdit:   {"e"},
-	ActionDelete: {"d"},
+	ActionEdit:       {"e"},
+	ActionDelete:     {"d"},
 	ActionLogsFollow: {"f"},
 	// The regex toggle joins the ctrl+<letter> family for the reason given at its
 	// declaration: it has to keep working with the grep field open, and only a key
 	// carrying no text survives that field. ctrl+r is free in the browse context.
-	ActionLogsRegex:    {"ctrl+r"},
+	ActionLogsRegex: {"ctrl+r"},
+	// The wrap toggle is an ordinary letter, unlike the regex toggle beside it: it
+	// changes how lines are *laid out*, not how the grep field is read, so there is no
+	// reason to reach for it mid-query — and with the grep open `w` types a `w` like
+	// every other letter (D140 pt 1). `w` is free in the browse context.
+	ActionLogsWrap:     {"w"},
 	ActionRevealSecret: {"r"},
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},

@@ -140,7 +140,7 @@ func TestShortHelpContext(t *testing.T) {
 	// view like any pager. Grep open, the field swallows text keys, so `/` `f` and `q`
 	// drop out and only the no-text keys remain. Neither context offers help (swallowed).
 	logs := descs(hm.ShortHelpContext(HelpLogs))
-	for _, a := range []Action{ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionBack, ActionQuit} {
+	for _, a := range []Action{ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit} {
 		if !logs[a.Describe()] {
 			t.Errorf("logs context should offer %q — the view honours it with the grep closed", a)
 		}
@@ -152,9 +152,17 @@ func TestShortHelpContext(t *testing.T) {
 	if !logsFilter[ActionBack.Describe()] || !logsFilter[ActionDown.Describe()] {
 		t.Error("logs-filter context should offer back (clear the grep) and scrolling")
 	}
-	for _, a := range []Action{ActionFilter, ActionLogsFollow, ActionQuit, ActionHelp} {
+	for _, a := range []Action{ActionFilter, ActionLogsFollow, ActionLogsWrap, ActionQuit, ActionHelp} {
 		if logsFilter[a.Describe()] {
 			t.Errorf("%q is typed into the open logs grep, not honoured — it must not be hinted", a)
+		}
+	}
+	// Horizontal scrolling (LOGS-04a) rides the shared nav.left/nav.right and only acts
+	// while the view is *not* wrapping, so it is hinted in neither logs context — a hint
+	// is a promise, and this one would hold only half the time (D143 pt 1).
+	for _, a := range []Action{ActionLeft, ActionRight} {
+		if logs[a.Describe()] || logsFilter[a.Describe()] {
+			t.Errorf("%q is mode-dependent in the logs view and must not be hinted", a)
 		}
 	}
 	// The regex toggle carries no text, so unlike follow/quit it survives the open grep
