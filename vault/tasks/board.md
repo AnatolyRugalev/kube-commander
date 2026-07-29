@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — LOGS-05a bounded the logs open to the last 1000 li
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-06** Init (and ephemeral) containers are selectable in the logs view
+      status: in-progress | owner: claude-opus | added: 2026-07-29
+      notes: Feedback `2026-07-29-logs-init-containers` (normal): the logs container picker only offers `spec.containers`, so an init container's logs — the ones you want when init is what is failing — are unreachable. `kube.PodContainers` returns the init and ephemeral sets too, classified, and the picker labels them.
 
 ## Blocked
 
