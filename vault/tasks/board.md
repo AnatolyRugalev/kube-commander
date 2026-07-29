@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-05 landed, so the context switcher line (M4-01…05) is complete: a switch now rebinds the new context's menu extras, remembered namespace and state file (D163); M4-06 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-06 landed, so the browse table now colors its status-carrying cells off the server-side column name (D164); the owner→children line (M4-07/08) is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -228,9 +228,6 @@ the cluster's client *and* everything keyed by the context (menu extras, remembe
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-06** Column-aware cell coloring in the table
-      status: todo | owner: — | added: 2026-07-29
-      notes: Top unblocked M4 item now that the switcher line (M4-01…05) is complete. Columns come from the server-side Table API and are kubectl-identical (D33), so the classifier keys off the **column name** (`STATUS`, `READY`, `RESTARTS`, node `STATUS`) and the cell text, not the kind — one rule set covers Pods, Nodes and any CRD whose printer uses those names. `styles.Theme` already carries `Error`/`Warn`/`Success`, so no new palette work. Pure function + render; hermetic. Selection styling must still win over the cell color on the cursor row.
 - [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
       status: todo | owner: — | added: 2026-07-29
       notes: Returns the child `Resource` **plus a `metav1.ListOptions` scope**, not a fetched list — `kube.Watch`/`List` already take `ListOptions`, so a scope hands the TUI a *live* child table for free instead of a second, snapshot-only data path (D155 pt 3). Workload owners resolve through `spec.selector` to a label selector (the `PodForOwner` path, M3-07b, generalized); Node→Pods is the `spec.nodeName` field selector — safe here precisely because the child kind is known to be Pod, which is what made a general field selector wrong for search (SEARCH-04c note).
@@ -253,6 +250,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-06** Column-aware cell coloring in the table — a pure classifier keyed off the server-side column name (`STATUS`/`STATE`/`PHASE`, `READY`, `RESTARTS`) paints status cells with the theme's Success/Warn/Error roles; selection still wins on the cursor row — done 2026-07-29 (D164)
 
 - [x] **M4-05** Per-context state follows the context switch — a `ContextStateLoader` seam re-resolves the new context's menu extras, last-used namespace and state-file persister, loaded alongside the connect and applied around the reset — done 2026-07-29 (D163)
 

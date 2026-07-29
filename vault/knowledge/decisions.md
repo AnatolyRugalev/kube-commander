@@ -4148,3 +4148,39 @@ client (M4-05, completing D155/D156/D157).
 5. **`-n` names the launch context's scope, not every context's.** The flag wins for
    the run it was passed for (D91); a context switched to afterwards always lands on
    its own recorded namespace.
+
+### D164 — Table cell coloring is keyed off the column *name*, per cell, purely
+**2026-07-29.** The browse table paints status-carrying cells with the theme's
+`Success`/`Warn`/`Error` roles (M4-06). The classifier is a pure function of the
+column name and the cell text — nothing else — and everything it does not
+recognise stays ordinary body text.
+
+1. **The column name is the key, not the resource kind.** Columns come from the
+   server-side Table API and are kubectl-identical (D33), so one rule set
+   (`STATUS`/`STATE`/`PHASE`, `READY`, `RESTARTS`) covers Pods, Nodes and any CRD
+   whose printer happens to use those names, and a kind kubecom has never heard of
+   is colored for free. Adding a rule means adding a column name, never a kind
+   switch.
+2. **The classifier stays per-cell and pure.** It may not read the row's other
+   cells: cross-column rules would re-introduce kind knowledge through the back
+   door and are untestable as data. The accepted cost is that a completed Job pod's
+   `0/1` READY reads as a warning while its STATUS reads as success — literally
+   true, and cheaper than the coupling.
+3. **An unrecognised value is uncolored, never guessed at.** Container reasons are
+   an open set, so beyond the named values only *name-shape* heuristics fire
+   (`…BackOff`, `…Error`, `…Failed`, `Err…` → error). Colour is an accent on top of
+   text that must remain readable on its own.
+4. **Severity is an ordering, and the most severe part wins.** `cellRole` is
+   ordered `none < success < warn < error`, so a comma-joined value (a Node's
+   `Ready,SchedulingDisabled`) merges with a plain `>`. A shortfall is a *warning*,
+   never an error — a rollout in progress is not a fault — and there is no
+   "many restarts is an error" tier, which would need an arbitrary threshold.
+5. **Selection wins outright over cell color.** The cursor row renders its
+   full-width `Selection` bar with no cell coloring: the cursor's one job is to say
+   "you are here", and a repainted cell mid-bar reads as a broken highlight.
+6. **A styled line is built from complete segments, never nested.** lipgloss ends
+   an inner style with a full reset, so text *after* an inner span rendered inside
+   an outer `Style.Render` loses the outer style. A row with colored spans is
+   therefore concatenated from independently-rendered segments and padded by hand,
+   rather than wrapped in the base style. This applies to any future surface that
+   paints spans inside a width-constrained line.

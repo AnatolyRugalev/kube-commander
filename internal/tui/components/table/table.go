@@ -780,6 +780,10 @@ func (m Model) View() string {
 	lines := make([]string, 0, inner)
 	lines = append(lines, m.renderHeader(innerW))
 
+	// One column layout for every row in this frame; renderRow needs it to place
+	// its colored cell spans (M4-06).
+	starts := m.columnStarts()
+
 	dataRows := inner - 1
 	for row := 0; row < dataRows; row++ {
 		i := m.offset + row
@@ -787,7 +791,7 @@ func (m Model) View() string {
 			lines = append(lines, m.styles.App.Width(innerW).Render(""))
 			continue
 		}
-		lines = append(lines, m.renderRow(m.table.Rows[i], i == m.cursor, innerW))
+		lines = append(lines, m.renderRow(m.table.Rows[i], i == m.cursor, innerW, starts))
 	}
 
 	return frame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
@@ -822,18 +826,27 @@ func (m Model) sortMark() string {
 
 // renderRow lays out one row's cells padded to the computed widths, windowed to
 // innerW at the current horizontal offset; the highlighted row takes the Selection
-// style (full-width bar), a normal row the base style.
-func (m Model) renderRow(r kube.Row, selected bool, innerW int) string {
+// style (full-width bar), a normal row the base style with its status-carrying
+// cells colored (M4-06).
+//
+// Selection wins outright over cell coloring: the cursor row's one job is to say
+// "you are here", and a row whose STATUS is repainted mid-bar reads as a broken
+// highlight rather than as information. The color is still one keystroke away —
+// move off the row and it is there.
+func (m Model) renderRow(r kube.Row, selected bool, innerW int, starts []int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
 		cells[i] = padRight(formatCell(cellAt(r.Cells, ci)), m.colWidths[i])
 	}
 	line := m.hclip(strings.Join(cells, colGap), innerW)
-	style := m.styles.App
 	if selected {
-		style = m.styles.Selection
+		return m.styles.Selection.Width(innerW).Render(line)
 	}
-	return style.Width(innerW).Render(line)
+	spans := m.roleSpans(r, starts)
+	if len(spans) == 0 {
+		return m.styles.App.Width(innerW).Render(line)
+	}
+	return m.paintRow(line, spans, innerW)
 }
 
 // cellAt returns the cell at index i, or nil when the row has fewer cells than
