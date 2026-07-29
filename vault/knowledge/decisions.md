@@ -3856,3 +3856,29 @@ degrading the result it widens.
    telling a reader to narrow for). The asymmetry is the rule: a stricter match kind may
    starve a looser one entirely, never the reverse. Any future stream that caps at emit
    time and ranks downstream owes the same per-quality budget.
+
+## D154 — A milestone closes on evidence named in the criterion, read against the decisions that narrowed it (2026-07-29, M2-EXIT)
+
+**M2 is feature-complete.** Its five remaining exit criteria were audited against the
+code and all five hold; each now carries the tests and code paths that prove it, inline
+in [`../milestones/M2-core-tui.md`](../milestones/M2-core-tui.md). Three constraints
+follow, and they apply to M3/M4/M5 too.
+
+1. **No criterion is ticked on prose.** A tick names a test or a code path a reader can
+   open. "Landed in leg X" is not evidence — it is a pointer to a journal entry that
+   asserts the same thing without proof. This is the same rule as D79 (raise a human task
+   rather than claim a green you cannot earn), applied at milestone granularity: where
+   the honest evidence is hermetic, say so and say what remains unobserved.
+2. **A criterion is read against the decisions that narrowed it, not its original
+   wording.** M2's "menu customization persists across restarts" was written when
+   customization meant in-TUI add/remove/reorder written into `config.yaml`; D83 moved it
+   to a hand-authored per-context `menus/<context>.yaml` and D89 narrowed M2-11 to match.
+   The criterion is met by the narrowed scope, and **no future leg should build an in-TUI
+   menu editor to satisfy the old wording** — that is the thing this pins. When a decision
+   narrows a criterion, the tick cites the decision.
+3. **A milestone does not stay open for an enhancement its criteria never asked for.**
+   The menu lacks the half-page/page nav the table has; both key families are equally
+   inert there, so the vim/fallback parity criterion holds and the gap is a board item
+   (M2-15), not an open milestone. Leftovers go to the board — the `Status:` line reports
+   the criteria, and `feature-complete` (M1's precedent) is the honest state when every
+   criterion holds and small work remains.

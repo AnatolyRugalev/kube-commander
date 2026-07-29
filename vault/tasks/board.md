@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-28 — SEARCH-04c-2b done and the SEARCH line is closed: cluster search now falls back to subsequence matching in a band strictly below every substring hit, with the emit-time cap budgeting scattered hits so fuzzy can never starve exact (D153). Feedback inbox empty; the board rules. Edit and logs-throughput dogfood human-tasks still open (both advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M2-EXIT audited M2's five unticked exit criteria against the code, ticked all five with the tests and code paths named inline, and closed M2 as feature-complete with one enhancement (M2-15) left behind (D154). Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-EXIT** Audit M2's five unticked exit criteria against the code: tick what is genuinely met (with evidence), file board items for whatever is not, and set the milestone `Status:` accordingly
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
-      notes: M2's board section is empty while the milestone is still `in-progress` with five unticked criteria — under milestone order M0→M5 that gap outranks opening M4. Claim-then-verify: no criterion gets ticked without a named test or code path.
+_(none)_
 
 ## Blocked
 
@@ -28,6 +26,17 @@ deferred envtest item remains — not a blocker._
       notes: D66 — fake-client coverage is the autonomous-loop bar; these need control-plane binaries (fragile in cloud, D18), so a human runs them locally or a dedicated CI job with `setup-envtest` does. Not an M1 blocker.
 
 ### M2 — Core TUI
+**M2 is feature-complete (2026-07-29, M2-EXIT/D154):** every exit criterion in
+[`../milestones/M2-core-tui.md`](../milestones/M2-core-tui.md) is ticked against named
+evidence. Only the enhancement below remains, and it gates nothing.
+- [ ] **M2-15** Give the resource menu the half-page/page nav actions the table already has
+      status: todo | owner: — | added: 2026-07-29
+      notes: M2-EXIT — the menu handles `nav.up/down/top/bottom` only, so `ctrl+d`/`pgdn`
+      and `ctrl+u`/`pgup` are inert in the left pane. Harmless on the seed menu; the menu
+      scrolls (it has an offset + scrollbar) and discovery reconcile can grow it past a
+      screen, so paging is worth having. Vim/fallback parity is unaffected — both families
+      are equally inert — so this is an enhancement, not an exit criterion.
+
 M2-01 (action registry + configurable keymap, D10/D11) is **complete** (01a keymap
 core / 01b sequences / 01c config wiring / 01d help overlay / 01e generated doc).
 The rest of M2 is the **app shell** — expanded here into ordered, leg-sized slices
@@ -37,11 +46,9 @@ The rest of M2 is the **app shell** — expanded here into ordered, leg-sized sl
 slice keeps **zero shared mutable UI state** (principle 1); goroutines only send
 messages.
 
-> **NEXT PICK — M2-RUN** must land before the remaining component legs: today the
-> binary never launches the TUI or touches a cluster (no `tea.NewProgram`, no real
-> client construction), so nothing has been exercised end-to-end against a real
-> apiserver. Once it lands, every subsequent leg is verified against the running
-> binary and must **incrementally improve the real-cluster experience** (D68).
+> **M2-RUN landed 2026-07-20** — the binary launches the TUI against a real cluster,
+> so every leg since is verified against the running binary and must **incrementally
+> improve the real-cluster experience** (D68).
 
 - [x] **M2-07** Root app model / shell (`internal/tui/app.go`, replaces the M0
       `internal/tui/tui.go` placeholder)
@@ -156,6 +163,7 @@ _Remaining M4–M5 items to be expanded when those milestones open. See mileston
 
 ## Done
 
+- [x] **M2-EXIT** Audit and close M2's exit criteria — all five unticked criteria ticked against named tests/code paths, M2 set feature-complete, M2-15 filed as the one remaining enhancement — done 2026-07-29 (D154)
 
 - [x] **SEARCH-04c-2b** Fuzzy (subsequence) cluster-search matching — `kube.Search`'s name matcher falls back to a subsequence match when the contiguous pass finds nothing (`apisrv` finds `api-server`), scored in a band strictly below every substring hit and by tightness rather than position, so the noise lands at the bottom of the ranked list; the emit-time hit cap now budgets scattered hits to a fraction of itself, without cancelling the sweep or reporting `Capped`, so a fuzzy near-miss can never spend a slot an exact match in a slower kind still needs — done 2026-07-28 (D153)
 - [x] **SEARCH-04c-2a** Ranked cluster-search results — `kube.Search` scores every match by where the query lands in the name (`SearchHit.Score`, contiguous matches in a band no scattered match can reach) and still streams in arrival order, while `searchview` holds its hits in score order and inserts each streamed hit at its rank with the cursor carried along with its row, so the best answer rises to the top without buffering the sweep; matching itself is unchanged — done 2026-07-28 (D152)
