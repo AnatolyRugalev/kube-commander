@@ -4258,3 +4258,37 @@ qualified by.
    menu. A scoped table must also *say* it is scoped — the status bar names the
    owner and `ChildScope.Selector()`, so a filtered pod list is never mistakable for
    the namespace's.
+
+## D167 — Metrics are an optional, join-by-name overlay: availability is a discovery fact and absence is silent (2026-07-29, M4-09)
+
+`internal/kube/metrics.go` reads `metrics.k8s.io/v1beta1` through the ordinary
+dynamic client. The constraints a future leg must not contradict:
+
+1. **Availability is answered by discovery, not by a probe request.**
+   `MetricsFor(kind, kinds)`/`HasMetrics` look the metrics kind up in the caller's
+   already-discovered resource set and return the *discovered* `Resource` (real
+   version, real verbs, `list` verb required). Nothing anywhere may decide metrics
+   are available by making a request and seeing whether it works: metrics-server
+   absent and metrics-server present-but-down are the same answer here, because
+   `ServerPreferredResources` isolates a failing aggregated group into
+   `DiscoveryResult.Failed` rather than `Resources` (#87). That equivalence is the
+   feature — the common failure mode degrades exactly like the uninstalled one.
+2. **The join key is namespace/name, never UID.** A `PodMetrics` is a *different
+   object* from the Pod it measures; its own `metadata.uid` is unrelated. Usage is
+   therefore keyed by `UsageKey{Namespace, Name}` and callers project a row's
+   `ObjectRef` through `UsageKeyOf`. A join on `ObjectRef` would compile and never
+   match.
+3. **One-shot List, never a watch.** The metrics API serves point-in-time samples
+   and exposes no watch verb, so a consumer refreshes on a slow ticker and joins
+   the result onto rows it already watches (D155 pt 3). Metrics must never become a
+   second watch or a second table.
+4. **A sample is whole or absent.** An item whose usage cannot be read in full — an
+   unparseable quantity, a missing `memory`, one bad container in a pod's sum — is
+   dropped from the map; the rest of the list is still returned. A partial sum
+   presented as a total is a wrong number wearing a right number's clothes.
+   Staleness metadata (`Window`, `Timestamp`) is the exception: it is decoration, so
+   a malformed one zeroes that field and keeps the sample.
+5. **A failed request is the caller's to log, not to surface.** `Metrics` returns a
+   wrapped error, and the consumer degrades to "no columns" and writes it to the log
+   file (D159) rather than toasting the reader. An aggregated API is the flakiest
+   thing in a cluster and this is a decoration on someone else's table.

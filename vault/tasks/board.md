@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-08 landed, so `P` drills from an owner row to its pods under a live server-side scope and `esc` comes back (D166), closing the drill-down line; metrics (M4-09) and themes (M4-11) are what remain of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-09 landed the metrics primitive (`kube.MetricsFor`/`HasMetrics`/`Metrics`, D167), so the metrics line needs only its TUI half (M4-10); themes (M4-11/12) are the rest of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
-      notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
+_(none)_
 
 ## Blocked
 
@@ -236,7 +234,7 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 
 - [ ] **M4-10** TUI: metrics columns when available
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-09. CPU/mem columns appended to the Pod/Node table, refreshed on a **slow ticker** — metrics are point-in-time samples and are not watchable, so this is an overlay joined onto the watched rows by object ref, never a second watch (D155 pt 3). No metrics group → the columns simply never appear and nothing is said. Ticks the metrics exit criterion.
+      notes: Depends on M4-09 (landed — gate on `kube.HasMetrics(kind, availableResources())`, poll `Clients.Metrics`, join by `kube.UsageKeyOf(row.Object)`; formatting is the TUI's, D167). CPU/mem columns appended to the Pod/Node table, refreshed on a **slow ticker** — metrics are point-in-time samples and are not watchable, so this is an overlay joined onto the watched rows by object ref, never a second watch (D155 pt 3). No metrics group → the columns simply never appear and nothing is said. Ticks the metrics exit criterion.
 - [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
       status: todo | owner: — | added: 2026-07-29
       notes: Pure data. Two more `Theme` constructors (ported monokai + solarized, D6) beside `DefaultTheme`, plus a lookup/list (`Themes()`/`ByName`) for the picker and the config field. Nothing selects them yet.
@@ -247,6 +245,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-09** Kube layer metrics primitive over `metrics.k8s.io` — `MetricsFor`/`HasMetrics` answer availability from the discovery result (no probe request), `Clients.Metrics` lists samples through the dynamic client into a `map[UsageKey]Usage` keyed by namespace/name — done 2026-07-29 (D167)
 
 - [x] **M4-08** TUI owner → children drill-down (`res.children`, `P`) — done 2026-07-29 (D166)
 

@@ -9,8 +9,9 @@ already closed before M4 opened — cluster search (pulled forward by feedback a
 SEARCH line) and sort by column (landed in M2) — so the slices cover the context
 switcher (M4-01…05, the hard part: a switch is a teardown, not a pointer swap),
 column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
-(M4-09/10) and themes (M4-11/12). The switcher, coloring and drill-down lines are done;
-the metrics and theme lines remain. Per-leg history: `vault/journal/`._
+(M4-09/10) and themes (M4-11/12). The switcher, coloring and drill-down lines are done,
+and metrics has its kube-layer half (M4-09/D167); the metrics columns (M4-10) and the
+theme line remain. Per-leg history: `vault/journal/`._
 
 ## Goal
 
@@ -62,6 +63,12 @@ The capabilities the original lacked, now natural on the new architecture.
       client-go's contract rather than kubecom's, and the kube half is fake-client
       covered (D66).)
 - [ ] Metrics columns appear only when metrics-server is present; absence is silent.
+      (Half met since M4-09/D167: the kube layer answers availability from the discovery
+      result with no probe request — `MetricsFor`/`HasMetrics`, so metrics-server absent
+      and metrics-server present-but-down are the same silent answer (#87) — and
+      `Clients.Metrics` returns samples keyed for a join onto watched rows. Stays
+      unticked until M4-10 puts the columns on the table, which is what the criterion
+      is about.)
 - [ ] At least two themes selectable and persisted.
 - [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Matching gained a server-side label selector (`-l app=web`, SEARCH-04c-1/D151), score ranking (SEARCH-04c-2a/D152) and a subsequence fallback ranked below it (SEARCH-04c-2b/D153), which closes the SEARCH line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
 

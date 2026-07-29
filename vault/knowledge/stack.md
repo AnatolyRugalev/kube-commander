@@ -114,6 +114,22 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   discovery arrives later as a message.
 - **Fault isolation:** wrap per-group discovery so a failing/denied group returns
   a partial result, never an error that aborts the whole load.
+- **`metrics.k8s.io/v1beta1` on the wire** (M4-09, `metrics.go` — read through the
+  dynamic client; kubecom takes no `k8s.io/metrics` dependency):
+  - The two kinds sit at **counter-intuitive resource names**: `PodMetrics` is
+    served at `pods` (namespaced) and `NodeMetrics` at `nodes` (cluster-scoped),
+    within the `metrics.k8s.io` group. Never guess the plural from the kind.
+  - **Two different shapes.** A `NodeMetrics` carries one flat top-level
+    `usage: {cpu, memory}`; a `PodMetrics` carries `containers: [{name, usage}]`
+    and the pod total is the **sum** of them (what `kubectl top pod` reports).
+  - Quantities are always JSON **strings** (`"250m"`, `"64Mi"`) — `Quantity`
+    marshals as one even for whole numbers — so `unstructured.NestedString` +
+    `resource.ParseQuantity` is the right read; `MilliValue()` for CPU,
+    `Value()` for memory.
+  - `timestamp` (RFC3339) and `window` (a Go-parseable `"30s"`) are the **only
+    staleness signal**: metrics-server keeps serving its last scrape, so a
+    successful request says nothing about freshness.
+  - There is **no watch verb** — samples are point-in-time and must be polled.
 - **`labels.Parse` quirks** (`k8s.io/apimachinery/pkg/labels`, used by the search
   query parser, SEARCH-04c-1):
   - It accepts a **bare identifier** — `labels.Parse("nginx")` is the valid
@@ -149,6 +165,15 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
     the wire format in a pure helper (`scalePatch`/`restartPatch`) so key + format
     are testable without a client; the subresource itself is asserted off the
     captured `PatchAction.GetSubresource()`.
+  - **Seeding an object whose resource name is not guessable (M4-09):** objects
+    passed to `NewSimpleDynamicClient*` are filed under a GVR the fake *infers from
+    the kind* (`meta.UnsafeGuessKindToResource`), which is right for
+    `Deployment`→`deployments` and wrong wherever the API disagrees — a
+    `PodMetrics` is served at `pods` and a `NodeMetrics` at `nodes`, so seeded
+    metrics items land in a resource nothing lists and every List comes back empty
+    **with no error**. Construct the fake *empty* and add such objects through
+    `f.Tracker().Create(gvr, obj, ns)` with the explicit GVR; the custom
+    GVR→listKind map is still needed, separately, for List to decode.
 - **envtest** (real kube-apiserver via `setup-envtest`) is opt-in behind
   `KUBECOM_TEST_ENVTEST=1`. **Harness landed in M1-00** (D28):
   `internal/kube/envtest_test.go` — `requireEnvtest(t)` skips unless the gate is
