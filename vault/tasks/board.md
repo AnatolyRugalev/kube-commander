@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-01 landed the kubeconfig context-list primitive
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-02** One indirection for the cluster-bound seams — see the M4 Backlog entry below
+      status: in-progress | owner: claude-opus-5 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -171,7 +172,7 @@ async in flight (watch, discovery, log stream, search sweep, drain, port-forward
 to the cluster being left.
 
 - [ ] **M4-02** One indirection for the cluster-bound seams (`cmd/kubecom/run.go`, `internal/tui`) — **no behavior change**
-      status: todo | owner: — | added: 2026-07-29
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-07-29
       notes: The enabler, and the reason the switch is not one leg. Today 21 `With*` options each close over the same `clients` value, so nothing can repoint them. Route them through a single cluster bundle built by one constructor and held behind one pointer, so a switch swaps one value instead of 21 closures. Pure refactor: same seams, same tests, green on its own. **Any seam added after this goes through the bundle** (D155 pt 2).
 - [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
       status: todo | owner: — | added: 2026-07-29
