@@ -187,6 +187,13 @@ namespace's. `Esc` returns to the owner, with the row you came from still select
 Service with no selector, or an owner that has just been deleted, leaves you where you
 are with a message rather than showing you every pod in the namespace.
 
+When your cluster runs **metrics-server**, the Pod and Node tables grow **CPU** and
+**MEMORY** columns — millicores and mebibytes, the units `kubectl top` prints — refreshed
+every ten seconds and sortable like any other column (sorting uses the measured value, so
+`100m` ranks above `20m`). An object that has not been scraped yet shows blank rather than
+a zero. If your cluster has no metrics API, or it is installed but down, the columns
+simply never appear: there is nothing to enable, and nothing to dismiss.
+
 Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
 StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
 — to open the **dedicated full-screen logs view**. It opens on the **last 1000 lines**

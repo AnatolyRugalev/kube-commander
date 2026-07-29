@@ -9,9 +9,8 @@ already closed before M4 opened — cluster search (pulled forward by feedback a
 SEARCH line) and sort by column (landed in M2) — so the slices cover the context
 switcher (M4-01…05, the hard part: a switch is a teardown, not a pointer swap),
 column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
-(M4-09/10) and themes (M4-11/12). The switcher, coloring and drill-down lines are done,
-and metrics has its kube-layer half (M4-09/D167); the metrics columns (M4-10) and the
-theme line remain. Per-leg history: `vault/journal/`._
+(M4-09/10) and themes (M4-11/12). The switcher, coloring, drill-down and metrics lines
+are done; only the theme line (M4-11/12) remains. Per-leg history: `vault/journal/`._
 
 ## Goal
 
@@ -26,7 +25,9 @@ The capabilities the original lacked, now natural on the new architecture.
 - **Owner → children drill-down** (Deployment → Pods, Node → Pods, etc.) — **done**:
   the scope primitive (M4-07/D165) and the `res.children` gesture that consumes it
   (M4-08/D166) both landed, so this bullet is closed.
-- **Metrics** (CPU/mem) via `metrics.k8s.io` when the API is available; hidden otherwise.
+- **Metrics** (CPU/mem) via `metrics.k8s.io` when the API is available; hidden otherwise
+  — **done**: the primitive (M4-09/D167) and the polled table overlay that consumes it
+  (M4-10/D168) both landed, so this bullet is closed.
 - **Theme selection**; ship a couple of solid built-ins (port monokai/solarized).
 - **Cluster search** — cross-object query across kinds (Kind · ns · name), one-shot +
   curated-scope by default, drill into a hit (feedback-driven, D131; kube primitive
@@ -62,13 +63,26 @@ The capabilities the original lacked, now natural on the new architecture.
       show here is only a real apiserver honouring a label/field selector, which is
       client-go's contract rather than kubecom's, and the kube half is fake-client
       covered (D66).)
-- [ ] Metrics columns appear only when metrics-server is present; absence is silent.
-      (Half met since M4-09/D167: the kube layer answers availability from the discovery
-      result with no probe request — `MetricsFor`/`HasMetrics`, so metrics-server absent
-      and metrics-server present-but-down are the same silent answer (#87) — and
-      `Clients.Metrics` returns samples keyed for a join onto watched rows. Stays
-      unticked until M4-10 puts the columns on the table, which is what the criterion
-      is about.)
+- [x] Metrics columns appear only when metrics-server is present; absence is silent.
+      (met since M4-10/D168, on M4-09/D167's primitive: browsing a measured kind arms a
+      10 s poll of `Clients.Metrics`, scoped to the same kind and namespace as the browse
+      watch, and the table grows CPU/MEMORY columns joined onto the watched rows by
+      namespace/name — millicores and mebibytes, sorted on the raw sample rather than the
+      formatted cell. Availability is the discovery lookup `kube.MetricsFor` makes with no
+      probe request, so metrics-server absent and metrics-server present-but-down are the
+      same silent answer (#87). Evidence: `internal/tui/metrics_test.go` —
+      `TestMetricsColumnsAppearForMeasuredKind` (the columns and the joined samples),
+      `TestMetricsSilentWithoutMetricsServer` / `TestMetricsSilentForUnmeasuredKind` (no
+      request, no columns, nothing said — the "absence is silent" half),
+      `TestMetricsPollScopedToWatchNamespace` / `…ToChildScopeNamespace`,
+      `TestMetricsRefreshErrorKeepsPreviousSamples` (a 503 does not blank the columns and
+      is never toasted), `TestMetricsStaleResultDropped` / `…StoppedOnKindChange` /
+      `…StoppedByClusterTeardown`; and `internal/tui/components/table/usage_test.go` for
+      the overlay itself — `TestUsageSurvivesWatchDelta` (samples outlive a RESET),
+      `TestUsageBlankWithoutSample` (never `0m`), `TestUsageEmptyMapKeepsColumns`,
+      `TestUsageSortsNumerically`. Ticked on hermetic evidence: what no fake shows is a
+      real metrics-server's numbers, and reading those is a taste question the next
+      dogfood pass answers for free.)
 - [ ] At least two themes selectable and persisted.
 - [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Matching gained a server-side label selector (`-l app=web`, SEARCH-04c-1/D151), score ranking (SEARCH-04c-2a/D152) and a subsequence fallback ranked below it (SEARCH-04c-2b/D153), which closes the SEARCH line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
 

@@ -658,6 +658,19 @@ type Model struct {
 	childOwnerRef kube.ObjectRef
 	childGen      int
 
+	// The metrics overlay (M4-10). metricsRes is the metrics kind measuring the
+	// browsed one (zero when this cluster does not measure it — the whole "no
+	// columns" state, since metrics.go guards on it) and metricsNS the namespace the
+	// poll is scoped to: the browse watch's, so a children drill-down polls the
+	// scope's namespace rather than the app's. metricsCancel aborts the request in
+	// flight and metricsGen tags each refresh and each tick, so a sample set for a
+	// kind, namespace or cluster the reader has left is dropped instead of painted
+	// onto the table now showing something else.
+	metricsRes    kube.Resource
+	metricsNS     string
+	metricsCancel context.CancelFunc
+	metricsGen    int
+
 	// nsPersister records a picked namespace to the per-context state file so the next
 	// launch restores it (nil → persistence-inert, M2-11b-2). It is bound to one
 	// context's state path, not to the cluster client, so it is not part of the
@@ -1159,6 +1172,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case childScopeMsg:
 		return m.handleChildScope(msg)
 
+	case metricsMsg:
+		return m.handleMetricsMsg(msg)
+
+	case metricsTickMsg:
+		return m.handleMetricsTick(msg)
+
 	case modal.ConfirmedMsg:
 		return m.handleModalConfirmed(msg)
 
@@ -1345,7 +1364,12 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.menu.Blur()
 	m.table.Focus()
 	m.syncHints() // focus is now the table → table-context hints
-	return m, m.pumpWatch()
+
+	// The metrics overlay follows the watch: same kind, same namespace, re-evaluated
+	// on every restart (M4-10). Off — and silent — for a kind this cluster does not
+	// measure.
+	metrics := m.startMetrics(r, ns)
+	return m, tea.Batch(m.pumpWatch(), metrics)
 }
 
 // surfaceError shows a classified error as a transient message in the status bar
@@ -1519,6 +1543,7 @@ func (m *Model) stopClusterAsync() {
 	m.viewerGen++    // in-flight describe/secret/YAML fetches and log lines are now stale.
 	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
 	m.childGen++     // an in-flight child-scope resolve names an object on this cluster.
+	m.stopMetrics()  // the metrics poll lists this cluster's samples on a ticker.
 	m.stopDrain()
 	m.drainGen++ // in-flight drain steps are now stale.
 	m.stopForwards()

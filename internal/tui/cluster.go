@@ -79,6 +79,10 @@ type Cluster struct {
 	// childResolver turns a selected owner row into the scope its pods are listed
 	// under (M4-08). Nil → the children drill-down is inert.
 	childResolver ChildResolver
+
+	// metricsLister polls metrics.k8s.io for the CPU/memory samples the browse
+	// table overlays on a measured kind (M4-10). Nil → no metrics columns, silently.
+	metricsLister MetricsLister
 }
 
 // ClusterClient is one cluster's client as the shell sees it: the union of every
@@ -112,6 +116,7 @@ type ClusterClient interface {
 	Searcher
 	Execer
 	ChildResolver
+	MetricsLister
 }
 
 // NewCluster bundles one cluster's client into the seams the shell drives. It is the
@@ -142,6 +147,7 @@ func NewCluster(c ClusterClient, pf PortForwarder) Cluster {
 		searcher:        c,
 		execer:          c,
 		childResolver:   c,
+		metricsLister:   c,
 	}
 }
 

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-09 landed the metrics primitive (`kube.MetricsFor`/`HasMetrics`/`Metrics`, D167), so the metrics line needs only its TUI half (M4-10); themes (M4-11/12) are the rest of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-10 put the metrics columns on the browse table (D168), closing the metrics line; themes (M4-11/12) are all that is left of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-10** TUI: metrics columns when available
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -233,9 +232,10 @@ the cluster's client *and* everything keyed by the context (menu extras, remembe
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-10** TUI: metrics columns when available
-      status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-09 (landed — gate on `kube.HasMetrics(kind, availableResources())`, poll `Clients.Metrics`, join by `kube.UsageKeyOf(row.Object)`; formatting is the TUI's, D167). CPU/mem columns appended to the Pod/Node table, refreshed on a **slow ticker** — metrics are point-in-time samples and are not watchable, so this is an overlay joined onto the watched rows by object ref, never a second watch (D155 pt 3). No metrics group → the columns simply never appear and nothing is said. Ticks the metrics exit criterion.
+**The metrics line (M4-09/10) is closed** as of M4-10/D168: a browse table on a measured
+kind grows CPU/MEMORY columns fed by a 10 s poll and joined onto the watched rows by
+namespace/name; a cluster with no metrics API shows nothing and says nothing.
+
 - [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
       status: todo | owner: — | added: 2026-07-29
       notes: Pure data. Two more `Theme` constructors (ported monokai + solarized, D6) beside `DefaultTheme`, plus a lookup/list (`Themes()`/`ByName`) for the picker and the config field. Nothing selects them yet.
@@ -246,6 +246,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-10** TUI metrics columns when available — CPU/MEMORY overlay on the Pod/Node table, 10 s poll joined onto the watched rows, absent and silent without metrics-server — done 2026-07-29 (D168)
 
 - [x] **M4-09** Kube layer metrics primitive over `metrics.k8s.io` — `MetricsFor`/`HasMetrics` answer availability from the discovery result (no probe request), `Clients.Metrics` lists samples through the dynamic client into a `map[UsageKey]Usage` keyed by namespace/name — done 2026-07-29 (D167)
 

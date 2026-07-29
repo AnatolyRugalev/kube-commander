@@ -4292,3 +4292,37 @@ dynamic client. The constraints a future leg must not contradict:
    wrapped error, and the consumer degrades to "no columns" and writes it to the log
    file (D159) rather than toasting the reader. An aggregated API is the flakiest
    thing in a cluster and this is a decoration on someone else's table.
+
+## D168 — The metrics overlay is displayed-view state, joined per derivation and never written into watched rows (2026-07-29, M4-10)
+
+The TUI half of the metrics line (`internal/tui/metrics.go`, the poll;
+`internal/tui/components/table/usage.go`, the columns). What a future leg must not
+contradict:
+
+1. **Samples live beside the rows, never in them.** The table component holds the
+   usage map as its own field and derives the two display columns in `applyFilter`
+   — the one place the displayed view is re-derived from the authoritative set.
+   Writing a usage number into `kube.Row.Cells` is forbidden: rows are the watch's
+   and every RESET (a reconnect, a re-list) replaces them wholesale, so a sample
+   folded into a row is both destroyed by the next delta and a mutation of the
+   authoritative set two other derivations read.
+2. **Deriving them there, rather than at render time, is what keeps them
+   ordinary.** The overlay's columns are real visible columns: measured, filtered,
+   horizontally scrolled and colored by the existing code with no special case.
+   The single exception is sorting, which reads the raw sample (`usageSortKey`)
+   because the cells are formatted strings — a future column of formatted values
+   owes the same.
+3. **`SetUsage(nil)` means "this cluster does not measure this kind" and a non-nil
+   empty map means "measured, nothing scraped yet".** The columns follow the first
+   distinction, not the second: availability decides whether they exist, samples
+   decide what is in them. A measured object with no sample renders **blank**, never
+   `0m` — a number nobody measured.
+4. **The poll is armed from `watchResource`, the single browse-watch start**, and is
+   scoped to the same kind *and namespace* that watch uses (a children drill-down's
+   scope namespace, not the app's). So every restart — kind change, namespace
+   re-scope, drill-down — re-evaluates availability and re-scopes the poll, and there
+   is no second place that could disagree with the table about what it is showing.
+   It joins the per-cluster async inventory (`stopClusterAsync`, D155 pt 1).
+5. **A failed refresh keeps the previous samples and is logged, never toasted**
+   (D167 pt 5). Columns that blink empty whenever metrics-server restarts are worse
+   than numbers a few seconds stale, and the reader did not ask for the overlay.

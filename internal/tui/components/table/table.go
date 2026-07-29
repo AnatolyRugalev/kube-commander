@@ -85,6 +85,14 @@ type Model struct {
 	visible   []int
 	colWidths []int
 
+	// usage is the metrics overlay (M4-10): point-in-time CPU/memory samples for
+	// the browsed kind, keyed by namespace/name, or nil when the cluster does not
+	// measure this kind. It is deliberately *not* folded into full.Rows — those
+	// are the watch's and are replaced by every RESET — so the two displayed
+	// columns it adds are derived alongside the filter and the sort in
+	// applyFilter. See usage.go.
+	usage map[kube.UsageKey]kube.Usage
+
 	cursor  int // index of the highlighted row
 	offset  int // index of the first visible row (vertical scroll)
 	hoffset int // first visible display column (horizontal scroll)
@@ -111,6 +119,11 @@ func (m *Model) SetTable(t kube.Table) {
 	m.filter = ""
 	m.sortCol = -1
 	m.sortDesc = false
+	// Samples measure the objects of the resource being left, and the overlay's
+	// availability is that kind's answer — both are wrong for the new snapshot, so
+	// the overlay is dropped here exactly as the filter and the sort are. The shell
+	// re-installs it for the new kind if the cluster measures it (M4-10).
+	m.usage = nil
 	m.applyFilter()
 	m.cursor = 0
 	m.offset = 0
@@ -208,16 +221,18 @@ func (m Model) VisibleColumnCount() int { return len(m.visible) }
 // is re-applied on every derivation so it survives watch deltas. Callers restore
 // the selection and re-clamp the scroll afterwards.
 func (m *Model) applyFilter() {
-	m.table.Columns = m.full.Columns
+	m.table.Columns = m.columnsWithUsage()
 	m.selectVisible()
+	// The candidate rows carry the metrics overlay's cells when it is on (usage.go),
+	// so everything below — the filter's match scope, the sort, the measured widths —
+	// sees the same columns the reader does.
+	candidates := m.rowsWithUsage()
 	if m.filter == "" {
-		// Copy so the sort below reorders the displayed view, never the
-		// authoritative full.Rows slice (which it aliases when unfiltered).
-		m.table.Rows = append(m.table.Rows[:0], m.full.Rows...)
+		m.table.Rows = candidates
 	} else {
 		needle := strings.ToLower(m.filter)
-		rows := make([]kube.Row, 0, len(m.full.Rows))
-		for _, r := range m.full.Rows {
+		rows := make([]kube.Row, 0, len(candidates))
+		for _, r := range candidates {
 			if m.rowMatches(r, needle) {
 				rows = append(rows, r)
 			}
@@ -239,6 +254,21 @@ func (m *Model) sortRows() {
 		return
 	}
 	ci := m.visible[m.sortCol]
+	// A metrics overlay column sorts on the raw sample, not on its formatted cell
+	// ("128Mi" as text orders 100m below 20m). usage.go owns that key.
+	if key, ok := m.usageSortKey(ci); ok {
+		sort.SliceStable(m.table.Rows, func(i, j int) bool {
+			a, b := key(m.table.Rows[i]), key(m.table.Rows[j])
+			if a == b {
+				return false
+			}
+			if m.sortDesc {
+				return a > b
+			}
+			return a < b
+		})
+		return
+	}
 	numeric := isNumericColumn(m.table.Columns[ci].Type)
 	sort.SliceStable(m.table.Rows, func(i, j int) bool {
 		c := compareCells(
@@ -460,17 +490,29 @@ func (m Model) SelectedRow() (kube.Row, bool) {
 // (degrade, don't blank — principle 3). The choice depends only on the columns,
 // not the rows, so applyFilter can select the visible set before narrowing and
 // reuse it as the filter's match scope.
+// The metrics overlay's columns (usage.go) are excluded from the priority scan and
+// appended afterwards: they are always shown when the overlay is on, and counting
+// them as priority-0 columns would defeat the "server sent none" fallback above —
+// a server table whose columns are all -o-wide extras would then show *only* the
+// two usage columns.
 func (m *Model) selectVisible() {
 	m.visible = m.visible[:0]
-	for i, c := range m.table.Columns {
+	server := m.table.Columns
+	if m.hasUsage() {
+		server = server[:len(server)-usageColumnCount]
+	}
+	for i, c := range server {
 		if c.Priority == 0 {
 			m.visible = append(m.visible, i)
 		}
 	}
 	if len(m.visible) == 0 {
-		for i := range m.table.Columns {
+		for i := range server {
 			m.visible = append(m.visible, i)
 		}
+	}
+	for i := len(server); i < len(m.table.Columns); i++ {
+		m.visible = append(m.visible, i)
 	}
 }
 

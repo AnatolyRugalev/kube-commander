@@ -73,6 +73,9 @@ func (fakeClusterClient) Exec(context.Context, kube.ObjectRef, kube.ExecOptions)
 func (fakeClusterClient) Children(context.Context, kube.Resource, kube.ObjectRef, []kube.Resource) (kube.ChildScope, error) {
 	return kube.ChildScope{}, nil
 }
+func (fakeClusterClient) Metrics(context.Context, kube.Resource, string) (map[kube.UsageKey]kube.Usage, error) {
+	return nil, nil
+}
 
 // noopForwarder is the PortForwarder half of the bundle, which cannot ride
 // ClusterClient (kube.Clients.PortForward returns the concrete *kube.PortForward).
