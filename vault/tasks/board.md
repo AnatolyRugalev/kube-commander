@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M2-15 gave the resource menu the half-page/page na
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-PLAN** Expand M4 (new capabilities) into ordered, leg-sized Backlog slices (D52 rhythm)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
 
 ## Blocked
 
