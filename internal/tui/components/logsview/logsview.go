@@ -30,6 +30,7 @@ package logsview
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -124,9 +125,18 @@ type Model struct {
 	// keeps their scroll position, their grep and every line already streamed.
 	timestamps bool
 
-	// matched is the number of lines the current query kept, computed by render (the
-	// one place the buffer is scanned) so View never re-runs the match to label it.
-	matched int
+	// shownLines is the rendered body: the subset of lines the current query keeps,
+	// each already timestamp-prefixed and highlight-painted, in stream order. It is
+	// the cache that makes appending a line cost a line (LOGS-05b): before it, every
+	// Append re-scanned the whole buffer and re-joined it, so streaming n lines cost
+	// O(n²) and a fast pod made the view — and the keys — progressively slower.
+	//
+	// The invariant is that shownLines always equals what a full rebuild would
+	// produce: rebuildShown recomputes it whenever the query, the grep mode or the
+	// timestamps toggle changes what a line looks like, and appendLine only ever
+	// extends it, through the same renderLine both use. Its length is the match
+	// count the header reports, so View still never re-runs the match to label it.
+	shownLines []string
 
 	active bool // whether the view is shown (captures input) — "" View when false
 	width  int  // full screen width
@@ -168,6 +178,7 @@ func (m *Model) SetTitle(t string) { m.title = t }
 func (m *Model) Reset() {
 	m.lines = m.lines[:0]
 	m.stamps = m.stamps[:0]
+	m.shownLines = m.shownLines[:0]
 	m.following = true
 	m.timestamps = false
 	m.closeFilter()
@@ -176,16 +187,52 @@ func (m *Model) Reset() {
 	m.render()
 }
 
-// Append adds one streamed log line to the buffer and re-renders the filtered view.
-// stamp is the line's server timestamp ("" when the server sent none); it is stored
-// beside the message and shown only while logs.timestamps is on — the grep never sees
-// it. If following, the viewport is pinned to the newest line so the stream tails; if
-// paused (the reader scrolled up), the scroll position is left undisturbed. This is the
-// streaming entry point the log pump (D53) feeds line by line.
+// Line is one streamed log line as the view holds it: the Message the grep matches and
+// always draws, and the server Stamp ("" when the server sent none) shown only while
+// logs.timestamps is on. Keeping the two apart is what makes that toggle a redraw rather
+// than a restream (LOGS-04b/D148) and stops a query being satisfied by the clock.
+type Line struct {
+	Stamp   string
+	Message string
+}
+
+// Append adds one streamed log line to the buffer and re-renders the filtered view. If
+// following, the viewport is pinned to the newest line so the stream tails; if paused
+// (the reader scrolled up), the scroll position is left undisturbed.
 func (m *Model) Append(stamp, line string) {
+	match, filtered := m.shownFilter()
+	m.appendLine(match, filtered, stamp, line)
+	m.syncContent()
+}
+
+// AppendBatch adds a run of streamed log lines in one go — the streaming entry point the
+// log pump (D53) feeds. Batching is half of what keeps a fast stream cheap (LOGS-05b):
+// the per-line work is O(1) either way now, but handing the body to the viewport is not
+// (it re-measures every line to find the longest), so a burst of a thousand lines costs
+// one such pass instead of a thousand. The batch is applied atomically — nothing is shown
+// until all of it is — which is also what the reader wants: a frame is a frame.
+func (m *Model) AppendBatch(batch []Line) {
+	if len(batch) == 0 {
+		return
+	}
+	// The matcher is built once for the whole batch rather than per line: in substring
+	// mode building it lowercases the query, which is per-query work, not per-line work.
+	match, filtered := m.shownFilter()
+	for _, l := range batch {
+		m.appendLine(match, filtered, l.Stamp, l.Message)
+	}
+	m.syncContent()
+}
+
+// appendLine buffers one line and extends the rendered body if the current query keeps
+// it. It does no scanning of the lines already held — that is the whole point — so a
+// filtered stream where most lines miss costs nothing but the match itself.
+func (m *Model) appendLine(match matcher, filtered bool, stamp, line string) {
 	m.lines = append(m.lines, line)
 	m.stamps = append(m.stamps, stamp)
-	m.render()
+	if s, ok := m.renderLine(len(m.lines)-1, match, filtered); ok {
+		m.shownLines = append(m.shownLines, s)
+	}
 }
 
 // Empty reports whether no lines have streamed yet — the wiring (LOGS-02) uses it to
@@ -505,54 +552,77 @@ func (m Model) stamp(i int) string {
 	return m.styles.Subtle.Render(m.stamps[i]) + " "
 }
 
-// shown returns the body to render — the matching lines in stream order, with their
-// matched spans highlighted and, while logs.timestamps is on, their server timestamp
-// ahead of them — and how many matched. An empty query with timestamps off matches
-// everything and takes the untouched fast path: the whole buffer joined, no matcher
-// built, no highlighting and no per-line prefixing, so the unfiltered stream (the
-// high-throughput default) costs exactly what it did before LOGS-03/04b.
-//
-// The matcher only ever sees the message: a timestamp is not something the reader typed
-// a query about, and letting it match would mean the same query narrowed differently
-// depending on whether the clock happened to be on screen.
-func (m Model) shown() (string, int) {
+// shownFilter returns the matcher for the current query and whether a query is narrowing
+// the stream at all. The two are separate because a nil matcher is meaningful: with no
+// query nothing is filtered and every line is kept without a matcher being built (the
+// high-throughput default costs no match work), whereas a query in regex mode that has
+// never compiled yields a nil matcher that keeps *nothing* — the header labels it.
+func (m Model) shownFilter() (matcher, bool) {
 	if m.filter.Value() == "" {
-		if !m.timestamps {
-			return strings.Join(m.lines, "\n"), len(m.lines)
-		}
-		kept := make([]string, len(m.lines))
-		for i, l := range m.lines {
-			kept[i] = m.stamp(i) + l
-		}
-		return strings.Join(kept, "\n"), len(kept)
+		return nil, false
 	}
-	match := m.matcher()
-	if match == nil {
-		return "", 0
-	}
-	kept := make([]string, 0, len(m.lines))
-	for i, l := range m.lines {
-		spans, ok := match(l)
-		if !ok {
-			continue
-		}
-		kept = append(kept, m.stamp(i)+m.highlight(l, spans))
-	}
-	return strings.Join(kept, "\n"), len(kept)
+	return m.matcher(), true
 }
 
-// render rebuilds the viewport content from the filtered buffer, keeping the newest
-// line pinned while following. Called on every append, filter/mode change, and resize.
-// It is the only place the buffer is scanned: the match count it records is what the
-// header reports, so View costs nothing beyond drawing.
-func (m *Model) render() {
-	content, matched := m.shown()
-	m.matched = matched
-	m.viewport.SetContent(content)
+// renderLine renders buffer line i as it appears in the body — its matched spans
+// highlighted and, while logs.timestamps is on, its server timestamp ahead of it — and
+// reports whether the current query keeps it. It is the single definition of what a shown
+// line looks like: both the full rebuild and the incremental append go through it, so the
+// cached body cannot drift from a rebuilt one. With no query and no timestamps it returns
+// the streamed line untouched.
+//
+// The matcher only ever sees the message: a timestamp is not something the reader typed a
+// query about, and letting it match would mean the same query narrowed differently
+// depending on whether the clock happened to be on screen.
+func (m Model) renderLine(i int, match matcher, filtered bool) (string, bool) {
+	line := m.lines[i]
+	if !filtered {
+		return m.stamp(i) + line, true
+	}
+	if match == nil {
+		return "", false
+	}
+	spans, ok := match(line)
+	if !ok {
+		return "", false
+	}
+	return m.stamp(i) + m.highlight(line, spans), true
+}
+
+// rebuildShown recomputes the whole rendered body from the buffer. It is the O(n) path,
+// and the only one: it runs when the query, the grep mode or the timestamps toggle
+// changes what every line looks like — reader gestures, not stream events — never on
+// append.
+func (m *Model) rebuildShown() {
+	match, filtered := m.shownFilter()
+	kept := m.shownLines[:0]
+	for i := range m.lines {
+		if s, ok := m.renderLine(i, match, filtered); ok {
+			kept = append(kept, s)
+		}
+	}
+	m.shownLines = kept
+}
+
+// syncContent hands the rendered body to the viewport and keeps the newest line pinned
+// while following. The body is cloned because the viewport takes ownership of the slice
+// it is given (it normalizes embedded line endings in place and splits them out), and
+// this one is the cache every later append extends. Cloning copies string headers, not
+// the log text — far cheaper than the join-and-re-split SetContent would do.
+func (m *Model) syncContent() {
+	m.viewport.SetContentLines(slices.Clone(m.shownLines))
 	m.clampHOffset()
 	if m.following {
 		m.viewport.GotoBottom()
 	}
+}
+
+// render rebuilds the body from the buffer and shows it. Called whenever something other
+// than an appended line changed what the view should show (filter/mode change, resize,
+// reset); appends take the incremental path instead.
+func (m *Model) render() {
+	m.rebuildShown()
+	m.syncContent()
 }
 
 // resizeViewport re-applies the inner content height, which shrinks by one row while
@@ -633,7 +703,7 @@ func (m Model) header() string {
 		if m.reBad {
 			seg += "  invalid regex"
 		}
-		seg += "  " + itoa(m.matched) + "/" + itoa(len(m.lines))
+		seg += "  " + itoa(len(m.shownLines)) + "/" + itoa(len(m.lines))
 	}
 	return m.styles.Header.Width(m.width).MaxWidth(m.width).Render(clip(seg, m.width))
 }

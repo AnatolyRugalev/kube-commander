@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -419,11 +420,60 @@ func TestLogsClosedMsgBumpsGeneration(t *testing.T) {
 	if m.viewerGen == gen {
 		t.Fatal("closing the logs view should bump the generation so draining lines go stale")
 	}
-	next, cmd := m.Update(logMsg{gen: gen, msg: LogLineMsg{Line: "late line"}})
+	next, cmd := m.Update(logMsg{gen: gen, msg: LogLineMsg{Lines: []string{"late line"}}})
 	if cmd != nil {
 		t.Fatal("a stale line should not re-issue the pump")
 	}
 	if strings.Contains(next.(Model).View().Content, "late line") {
 		t.Fatal("a line from a closed view's stream should be dropped")
+	}
+}
+
+// TestLogBatchAppliesItsLinesBeforeTheStreamEnd: the pump can hand the model a batch of
+// lines *and* the terminal event that ended the stream (LOGS-05b), because the drain that
+// collected them consumed it. Order matters — the lines have to land first, or a
+// mid-stream drop would be treated as an open failure and close a view that has output to
+// show (D74's degrade, not a blank screen).
+func TestLogBatchAppliesItsLinesBeforeTheStreamEnd(t *testing.T) {
+	m := openLogsWithLines(t, "hello")
+	end := NewErrorMsg("logs", errors.New("stream dropped"))
+
+	next, cmd := m.Update(logMsg{gen: m.viewerGen, msg: LogLineMsg{
+		Lines: []string{"one", "two"},
+		End:   end,
+	}})
+	m = next.(Model)
+
+	if !m.logsView.Active() {
+		t.Fatal("a mid-stream error after lines showed should keep the view open")
+	}
+	if f := frame(m); !strings.Contains(f, "one") || !strings.Contains(f, "two") {
+		t.Errorf("the batch's lines should be on screen before the error; got:\n%s", f)
+	}
+	if cmd == nil {
+		t.Error("the terminal error should still surface (a toast cmd), not be swallowed")
+	}
+}
+
+// TestLogBatchStreamEndClosesAnEmptyView is the other side of that order: when the batch
+// itself is what the view has and the stream immediately EOFs, the lines stay put and the
+// pump chain stops rather than re-receiving from a closed channel.
+func TestLogBatchStreamEndClosesAnEmptyView(t *testing.T) {
+	m := openLogsWithLines(t, "hello")
+
+	next, cmd := m.Update(logMsg{gen: m.viewerGen, msg: LogLineMsg{
+		Lines: []string{"tail line"},
+		End:   LogClosedMsg{},
+	}})
+	m = next.(Model)
+
+	if cmd != nil {
+		t.Error("a closed stream must not re-issue the pump")
+	}
+	if !m.logsView.Active() {
+		t.Error("EOF should leave the lines on screen, not dismiss the view")
+	}
+	if f := frame(m); !strings.Contains(f, "tail line") {
+		t.Errorf("the batch's line should survive the EOF; got:\n%s", f)
 	}
 }

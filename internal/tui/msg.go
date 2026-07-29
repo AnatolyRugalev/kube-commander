@@ -120,14 +120,31 @@ func watchPump(ch <-chan kube.WatchEvent) tea.Cmd {
 	}
 }
 
-// LogLineMsg is one log line from a pod's log stream (M3-05), carried into the
-// update loop verbatim from a kube.LogEvent's Line (the trailing newline stripped —
-// the viewer joins lines itself). A stream error is *not* delivered as a LogLineMsg —
-// the log pump bridges it to a classified ErrorMsg — so a consumer of LogLineMsg only
-// ever sees a data line.
+// LogLineMsg is a run of log lines from a pod's log stream (M3-05), carried into the
+// update loop verbatim from kube.LogEvent Lines (the trailing newline stripped — the
+// view joins lines itself). Lines always holds at least one line. A stream error is
+// *not* delivered as a line — the log pump bridges it to a classified ErrorMsg — so a
+// consumer of Lines only ever sees data lines.
+//
+// It is a batch rather than a single line because showing a line costs a pass over the
+// whole body (LOGS-05b): one message per line made a fast pod quadratic. End carries the
+// stream's terminal message (LogClosedMsg or an ErrorMsg) when the same drain that
+// collected Lines also consumed the end of the stream — the batch cannot simply drop it,
+// since a channel receive is destructive and there is no way to put it back. It is nil
+// in the common case, and the model applies the lines first and then that message, so a
+// mid-stream error still lands after the lines it followed.
 type LogLineMsg struct {
-	Line string
+	Lines []string
+	End   tea.Msg
 }
+
+// logBatchMax bounds how many lines one pump Cmd delivers. The drain is non-blocking, so
+// it stops on its own the moment the stream is not ahead of the UI — this cap is only for
+// a producer that is *always* ahead (a pod flooding faster than the terminal can draw),
+// where an unbounded drain would keep collecting instead of ever yielding a frame. A few
+// thousand lines is far more than any terminal shows and still one render, so the cap
+// costs nothing in the case it does not fire.
+const logBatchMax = 2048
 
 // LogClosedMsg tells the model a Logs channel has closed and the pump has stopped —
 // for a non-following stream (M3-05) this is the normal end of the log (EOF). Like
@@ -135,14 +152,20 @@ type LogLineMsg struct {
 // pump after receiving it, or it would busy-loop receiving from a closed channel.
 type LogClosedMsg struct{}
 
-// logPump reads one event from a kube.Logs channel and returns it as a message: a
-// line becomes a LogLineMsg, a terminal error event (Err set) becomes a classified
-// ErrorMsg, and a closed channel becomes a LogClosedMsg. The model re-issues logPump
-// after each LogLineMsg to pull the next line (one receive per Cmd — Update never
-// blocks on more than one, M2-02/D53), and stops re-issuing on LogClosedMsg or the
-// bridged ErrorMsg (a LogEvent with Err set is always the stream's last event, so the
-// channel closes right after; the model does not re-pump past an error). The whole
-// receive happens inside the returned tea.Cmd, off the update goroutine.
+// logPump reads from a kube.Logs channel and returns what it read as a message: lines
+// become a LogLineMsg, a terminal error event (Err set) becomes a classified ErrorMsg,
+// and a closed channel becomes a LogClosedMsg. The model re-issues logPump after each
+// LogLineMsg to pull the next batch, and stops re-issuing on LogClosedMsg or the bridged
+// ErrorMsg (a LogEvent with Err set is always the stream's last event, so the channel
+// closes right after; the model does not re-pump past an error). The whole receive
+// happens inside the returned tea.Cmd, off the update goroutine.
+//
+// It blocks for the first event and then drains whatever is *already* buffered in the
+// channel, up to logBatchMax, into one message (LOGS-05b). The blocking receive is what
+// keeps Update from ever spinning (M2-02/D53) and the non-blocking drain is what keeps a
+// fast stream from costing one render per line: when the producer is not ahead the drain
+// takes nothing and this is exactly the old one-line-per-Cmd pump. A terminal event met
+// mid-drain rides along in End rather than being dropped.
 func logPump(ch <-chan kube.LogEvent) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
@@ -152,7 +175,25 @@ func logPump(ch <-chan kube.LogEvent) tea.Cmd {
 		if ev.Err != nil {
 			return NewErrorMsg("logs", ev.Err)
 		}
-		return LogLineMsg{Line: ev.Line}
+		batch := LogLineMsg{Lines: []string{ev.Line}}
+		for len(batch.Lines) < logBatchMax {
+			select {
+			case ev, ok := <-ch:
+				switch {
+				case !ok:
+					batch.End = LogClosedMsg{}
+					return batch
+				case ev.Err != nil:
+					batch.End = NewErrorMsg("logs", ev.Err)
+					return batch
+				default:
+					batch.Lines = append(batch.Lines, ev.Line)
+				}
+			default:
+				return batch
+			}
+		}
+		return batch
 	}
 }
 

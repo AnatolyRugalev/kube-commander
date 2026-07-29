@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — LOGS-06 made init and ephemeral containers selectable in the logs picker (D161), draining the feedback inbox; LOGS-05b (the per-line render cost) is next, then M4-05. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — LOGS-05b killed the logs view's per-line render cost (cached body + a batching pump, D162), closing the LOGS line; M4-05 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
-      status: in-progress | owner: claude-opus | added: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -166,8 +165,14 @@ followed stream keeps growing the buffer long after the initial tail.
 
 LOGS-05a is done: every logs open asks for the last 1000 lines and tails from there, and
 the reconnect path is pinned not to re-tail on top of what the reader already has (D160).
-LOGS-05b is the remaining half and is unblocked — and it is the half the standing
-throughput dogfood human-task is really about.
+**LOGS-05b is done too, so the LOGS line is closed again** — on cost this time. Both halves
+landed: the rendered body is a cache an append extends rather than a buffer every append
+re-joins, and the pump drains the log channel so a burst is one render instead of hundreds
+(D162). The measured cost of the 1000-line open LOGS-05a introduced went from ~131 ms to
+~2 ms (`BenchmarkStreamLines*`). The residual cost is the viewport's own re-measure of
+every line it holds, which has no append API — hence the batching, and hence D162 pt 2 for
+whoever builds the next streaming surface. The standing throughput dogfood human-task is
+still the eyes-on half of this and is worth re-running now.
 
 **LOGS-06** (feedback `2026-07-29-logs-init-containers`, normal) is done and separate: the
 container picker only ever offered `spec.containers`, so an init container's logs — the
@@ -175,10 +180,6 @@ only thing there is to read when a pod is stuck in `Init:` — could not be reac
 `kube.PodContainers` now returns the init and ephemeral containers too, classified, each
 consumer narrows the set by what it can act on (exec still skips init containers), and a
 non-regular row is marked `name (init)` (D161).
-
-- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
-      status: todo | owner: — | added: 2026-07-29
-      notes: Second slice of feedback `2026-07-29-logs-tail-and-perf`. `Append` re-runs `shown()` (a full-buffer scan + join) and `viewport.SetContent` for **every** line, so appending n lines is O(n²) — the 1000-line burst LOGS-05a now opens with joins ~500k lines before the first frame settles. The pump (`internal/tui/logs.go`) delivers exactly one line per Cmd, so the fix has two halves and either alone helps: **batch** (drain what is already buffered in the channel per pump Cmd and append the batch, one render per batch) and/or **cache** the rendered body so an append with no filter is an append, not a re-join. Keep the filter/highlight semantics identical — the grep still narrows live while following, and `shown()`'s no-filter fast path must stay the fast path.
 
 ### Diagnostics (DIAG — feedback-driven)
 Raised by feedback `2026-07-29-external-secrets-crd-error` ("Need to find the actual
@@ -250,6 +251,8 @@ tested before any gesture can reach it, exactly as M4-03's reset did.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **LOGS-05b** Logs view no longer pays per line for every line already held — a cached rendered body an append extends, plus a pump that drains the log channel into one batch — done 2026-07-29 (D162)
 
 - [x] **LOGS-06** Init and ephemeral containers are offered by the logs container picker, marked by kind — `kube.PodContainers` returns the whole classified set and each purpose narrows it (exec still skips init) — done 2026-07-29 (D161)
 

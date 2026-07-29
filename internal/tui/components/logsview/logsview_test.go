@@ -663,13 +663,13 @@ func TestTimestampsSurviveTheToggleWithoutRefetch(t *testing.T) {
 	m := newLogs()
 	appendStamped(&m)
 	m = typeFilter(m, "error")
-	before := m.matched
+	before := len(m.shownLines)
 
 	m, _ = m.Update(keymap.ActionLogsTimestamps)
 	m, _ = m.Update(keymap.ActionLogsTimestamps)
 
-	if m.matched != before || m.matched != 1 {
-		t.Errorf("toggling timestamps changed the match set: %d, was %d", m.matched, before)
+	if len(m.shownLines) != before || len(m.shownLines) != 1 {
+		t.Errorf("toggling timestamps changed the match set: %d, was %d", len(m.shownLines), before)
 	}
 	if q := m.Query(); q != "error" {
 		t.Errorf("toggling timestamps should not disturb the grep; query = %q", q)
@@ -691,8 +691,8 @@ func TestGrepNeverMatchesTheTimestamp(t *testing.T) {
 			m, _ = m.Update(keymap.ActionLogsTimestamps)
 		}
 		m = typeFilter(m, "2026-07-28")
-		if m.matched != 0 {
-			t.Errorf("timestamps shown=%v: a timestamp query matched %d lines; want 0", shown, m.matched)
+		if len(m.shownLines) != 0 {
+			t.Errorf("timestamps shown=%v: a timestamp query matched %d lines; want 0", shown, len(m.shownLines))
 		}
 		if v := plain(m.View()); strings.Contains(v, "alpha error one") {
 			t.Errorf("timestamps shown=%v: no line should survive a timestamp-only query; got:\n%s", shown, v)
@@ -757,5 +757,96 @@ func TestTimestampsGetNoHeaderMarker(t *testing.T) {
 	}
 	if !strings.Contains(header, "[following]") {
 		t.Errorf("the header should still report the follow state; header = %q", header)
+	}
+}
+
+// TestIncrementalAppendMatchesAFullRebuild is the invariant LOGS-05b rests on. Appending
+// no longer re-scans the buffer — it extends a cached body — so the only thing that can
+// go wrong is drift: the cache saying something a full rebuild would not. Stream lines
+// with a grep and timestamps in every combination and assert the cache equals what
+// render() (the O(n) path) computes from the same buffer.
+func TestIncrementalAppendMatchesAFullRebuild(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		query      string
+		regex      bool
+		timestamps bool
+	}{
+		{name: "no filter"},
+		{name: "timestamps", timestamps: true},
+		{name: "substring grep", query: "err"},
+		{name: "substring grep with timestamps", query: "err", timestamps: true},
+		{name: "regex grep", query: "e(rr|xit)", regex: true},
+		{name: "regex grep that never compiled", query: "err(", regex: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newLogs()
+			if tc.regex {
+				m, _ = m.Update(keymap.ActionLogsRegex)
+			}
+			if tc.timestamps {
+				m, _ = m.Update(keymap.ActionLogsTimestamps)
+			}
+			if tc.query != "" {
+				m = typeFilter(m, tc.query)
+			}
+			// Stream after the modes are set, so every line takes the incremental path.
+			for i, msg := range []string{"boot ok", "err disk", "steady", "exit 1", "err net"} {
+				m.Append("2026-07-29T10:0"+itoa(i)+":00Z", msg)
+			}
+			incremental := append([]string(nil), m.shownLines...)
+
+			m.render() // the full rebuild
+
+			if len(incremental) != len(m.shownLines) {
+				t.Fatalf("cached body has %d lines, a rebuild has %d", len(incremental), len(m.shownLines))
+			}
+			for i := range incremental {
+				if incremental[i] != m.shownLines[i] {
+					t.Errorf("line %d drifted:\n cached = %q\nrebuilt = %q", i, incremental[i], m.shownLines[i])
+				}
+			}
+		})
+	}
+}
+
+// TestAppendBatchEqualsLineByLineAppend: batching is a cost change, not a behaviour
+// change (LOGS-05b). A batch of lines must leave exactly the view that appending them one
+// at a time leaves — same body, same match count, same frame.
+func TestAppendBatchEqualsLineByLineAppend(t *testing.T) {
+	lines := []Line{
+		{Stamp: "2026-07-29T10:00:00Z", Message: "boot ok"},
+		{Stamp: "2026-07-29T10:00:01Z", Message: "err disk"},
+		{Stamp: "2026-07-29T10:00:02Z", Message: "steady"},
+	}
+
+	one := typeFilter(newLogs(), "err")
+	for _, l := range lines {
+		one.Append(l.Stamp, l.Message)
+	}
+
+	batched := typeFilter(newLogs(), "err")
+	batched.AppendBatch(lines)
+
+	if len(one.shownLines) != len(batched.shownLines) {
+		t.Fatalf("batched kept %d lines, one-by-one kept %d", len(batched.shownLines), len(one.shownLines))
+	}
+	if one.View() != batched.View() {
+		t.Errorf("batched frame differs:\none-by-one:\n%s\nbatched:\n%s", plain(one.View()), plain(batched.View()))
+	}
+	if len(batched.lines) != len(lines) {
+		t.Errorf("batched buffer holds %d lines; want %d", len(batched.lines), len(lines))
+	}
+}
+
+// TestAppendBatchOfNothingIsANoOp guards the pump's degenerate call: an empty batch must
+// not touch the buffer, the body or the scroll position.
+func TestAppendBatchOfNothingIsANoOp(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 3)
+	before := m.View()
+	m.AppendBatch(nil)
+	if len(m.lines) != 3 || m.View() != before {
+		t.Errorf("an empty batch changed the view: %d lines\n%s", len(m.lines), plain(m.View()))
 	}
 }

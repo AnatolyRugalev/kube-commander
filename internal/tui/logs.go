@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/logsview"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
@@ -118,14 +119,25 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 	}
 	switch inner := l.msg.(type) {
 	case LogLineMsg:
-		// The stream is timestamped (see openLogs), so the line arrives as
+		// The stream is timestamped (see openLogs), so each line arrives as
 		// "<RFC3339Nano> <message>". Split it once here, at the boundary, and hand the
 		// two parts to the view separately: the message is what the grep matches and
 		// what is always drawn, the stamp only appears while logs.timestamps is on
 		// (LOGS-04b/D148). A line the server did not stamp splits to an empty stamp and
 		// itself, so it still shows verbatim.
-		stamp, line := kube.SplitLogTimestamp(inner.Line)
-		m.logsView.Append(stamp, line)
+		//
+		// The whole batch goes in with one call so the view renders it once (LOGS-05b).
+		batch := make([]logsview.Line, len(inner.Lines))
+		for i, raw := range inner.Lines {
+			stamp, line := kube.SplitLogTimestamp(raw)
+			batch[i] = logsview.Line{Stamp: stamp, Message: line}
+		}
+		m.logsView.AppendBatch(batch)
+		// A drain that reached the end of the stream carries it in End: apply it now,
+		// after its lines, instead of re-pumping a channel that has nothing left.
+		if inner.End != nil {
+			return m.handleLogMsg(logMsg{gen: l.gen, msg: inner.End})
+		}
 		return m, m.pumpLogs(l.gen)
 	case LogClosedMsg:
 		m.stopLogStream() // stream ended (EOF); release the context, keep the lines shown.

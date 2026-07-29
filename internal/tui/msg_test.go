@@ -133,3 +133,103 @@ func TestDiscoveryPumpClosed(t *testing.T) {
 		t.Fatalf("msg = %v, want nil", msg)
 	}
 }
+
+// TestLogPumpBatchesBufferedLines: the drain half of LOGS-05b. Lines already sitting in
+// the channel when the pump runs come back as one message, so a fast stream costs one
+// render per frame rather than one per line.
+func TestLogPumpBatchesBufferedLines(t *testing.T) {
+	ch := make(chan kube.LogEvent, 8)
+	for _, l := range []string{"a", "b", "c"} {
+		ch <- kube.LogEvent{Line: l}
+	}
+
+	msg := logPump(ch)()
+	got, ok := msg.(LogLineMsg)
+	if !ok {
+		t.Fatalf("msg type = %T, want LogLineMsg", msg)
+	}
+	if len(got.Lines) != 3 || got.Lines[0] != "a" || got.Lines[2] != "c" {
+		t.Errorf("Lines = %q; want the three buffered lines in order", got.Lines)
+	}
+	if got.End != nil {
+		t.Errorf("End = %v; want nil on a stream that is still open", got.End)
+	}
+}
+
+// TestLogPumpStopsAtAnEmptyChannel: the drain is non-blocking, so a producer that is not
+// ahead of the UI yields exactly the old one-line-per-Cmd behaviour — the pump must not
+// wait for a second line that may never come.
+func TestLogPumpStopsAtAnEmptyChannel(t *testing.T) {
+	ch := make(chan kube.LogEvent, 4)
+	ch <- kube.LogEvent{Line: "only"}
+
+	got, ok := logPump(ch)().(LogLineMsg)
+	if !ok {
+		t.Fatalf("want LogLineMsg")
+	}
+	if len(got.Lines) != 1 || got.Lines[0] != "only" {
+		t.Errorf("Lines = %q; want just the one available line", got.Lines)
+	}
+}
+
+// TestLogPumpCarriesTheStreamEndWithItsLines: a channel receive is destructive, so a
+// terminal event met *during* the drain cannot be put back — it rides along in End and
+// the model applies it after the lines it followed. Dropping it would strand the stream
+// (an EOF nobody ever sees) or lose an error.
+func TestLogPumpCarriesTheStreamEndWithItsLines(t *testing.T) {
+	ch := make(chan kube.LogEvent, 4)
+	ch <- kube.LogEvent{Line: "a"}
+	ch <- kube.LogEvent{Line: "b"}
+	close(ch)
+
+	got, ok := logPump(ch)().(LogLineMsg)
+	if !ok {
+		t.Fatalf("want LogLineMsg")
+	}
+	if len(got.Lines) != 2 {
+		t.Errorf("Lines = %q; want both lines before the close", got.Lines)
+	}
+	if _, isClosed := got.End.(LogClosedMsg); !isClosed {
+		t.Errorf("End = %#v; want LogClosedMsg", got.End)
+	}
+}
+
+// TestLogPumpCarriesAMidDrainError is the same rule for the error edge: the lines that
+// arrived before the failure still show, and the classified error follows them.
+func TestLogPumpCarriesAMidDrainError(t *testing.T) {
+	ch := make(chan kube.LogEvent, 4)
+	ch <- kube.LogEvent{Line: "a"}
+	ch <- kube.LogEvent{Err: errors.New("stream dropped")}
+
+	got, ok := logPump(ch)().(LogLineMsg)
+	if !ok {
+		t.Fatalf("want LogLineMsg")
+	}
+	if len(got.Lines) != 1 || got.Lines[0] != "a" {
+		t.Errorf("Lines = %q; want the line that preceded the error", got.Lines)
+	}
+	end, isErr := got.End.(ErrorMsg)
+	if !isErr {
+		t.Fatalf("End = %#v; want ErrorMsg", got.End)
+	}
+	if end.Context != "logs" || end.Err == nil {
+		t.Errorf("End not classified as a logs error: %+v", end)
+	}
+}
+
+// TestLogPumpFirstEventStillTerminates: an empty stream and an open failure are still
+// delivered as the bare terminal messages, never as an empty batch — the model's
+// "nothing was shown yet" open-failure path depends on it.
+func TestLogPumpFirstEventStillTerminates(t *testing.T) {
+	closed := make(chan kube.LogEvent)
+	close(closed)
+	if _, ok := logPump(closed)().(LogClosedMsg); !ok {
+		t.Errorf("a closed channel should pump a bare LogClosedMsg")
+	}
+
+	failed := make(chan kube.LogEvent, 1)
+	failed <- kube.LogEvent{Err: errors.New("boom")}
+	if _, ok := logPump(failed)().(ErrorMsg); !ok {
+		t.Errorf("a first-event error should pump a bare ErrorMsg")
+	}
+}

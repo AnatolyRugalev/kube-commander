@@ -4081,3 +4081,40 @@ its regular containers (feedback `2026-07-29-logs-init-containers`). From here o
    than an error. Because the row label is therefore not the container name, a picked row
    resolves through a `byLabel` map (the D65 pattern) — no surface may pass a picker label
    to the kube layer as a container name.
+
+## D162 — A streamed view's cost is the number of viewport syncs, so pumps that feed one batch (2026-07-29, LOGS-05b)
+
+The logs view got slower the longer it ran: `Append` re-scanned and re-joined the entire
+buffer for every line, so streaming n lines cost O(n²) (feedback
+`2026-07-29-logs-tail-and-perf`). Removing our own rescan turned out to be the smaller
+half. The binding rule for any view fed by a stream:
+
+1. **The rendered body is a cache, extended by an append and rebuilt only by a reader
+   gesture.** `logsview.shownLines` holds the shown lines already prefixed and
+   highlighted. A streamed line runs the matcher once, against itself, and appends;
+   nothing already held is touched. The full O(n) rebuild is reserved for the things that
+   change what *every* line looks like — the query, the grep mode, the timestamps toggle,
+   a resize. The invariant the cache lives or dies by is that both paths render a line
+   through the *same* function (`renderLine`), so the cache cannot drift from a rebuild;
+   a test asserts it across every filter/mode combination.
+2. **Handing content to the viewport is O(n) and there is no append API.**
+   `viewport.SetContentLines` re-measures every line it is given (`ansi.StringWidth` per
+   line) to find the longest. So the residual cost of a stream is *how many times the
+   viewport is synced*, not how many lines arrive — measured, one-sync-per-line is ~110ms
+   for 1000 lines against ~2ms for the same lines in batches of 256
+   (`BenchmarkStreamLines*`). A future streaming surface must assume this: sync once per
+   batch, never once per item.
+3. **Therefore the pump batches.** `logPump` blocks for the first event and then drains
+   whatever is *already* buffered in the channel (cap `logBatchMax`), delivering one
+   `LogLineMsg` with many lines. The blocking first receive is what still keeps `Update`
+   from spinning (D53) and the non-blocking drain is what makes the batch free: when the
+   producer is not ahead, the drain takes nothing and this is the old one-line pump.
+4. **A batching pump must carry the stream's end, not drop it.** A channel receive is
+   destructive, so a terminal event met mid-drain cannot be put back: `LogLineMsg.End`
+   carries it, and the model applies the lines *first* and that message second. Order is
+   load-bearing — a mid-stream error applied before its lines would look like an open
+   failure and dismiss a view that has output to show (D74).
+5. **The viewport owns any slice handed to `SetContentLines`** (it normalizes embedded
+   line endings in place and splits them out), so a cached body is cloned on the way in.
+   Cloning copies string headers, not log text — cheaper than the join-and-re-split
+   `SetContent` did.
