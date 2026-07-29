@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — M4-07 landed, so `kube.Children` hands the TUI a l
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+      notes: See the M4 Backlog entry for the full note. Consumes `kube.Children`/`HasChildren` (M4-07/D165).
 
 ## Blocked
 
@@ -229,7 +231,7 @@ namespace, state file). The M4 exit criterion stays unticked on purpose — it c
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
 - [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
-      status: todo | owner: — | added: 2026-07-29
+      status: in-progress | owner: claude-opus | added: 2026-07-29
       notes: Depends on M4-07 (**done** — `kube.Children` returns `ChildScope{Resource, Namespace, Options}`, `HasChildren` is the gate, D165). A registered action on an owner row switches the browse table to the child kind under that scope, with `ChildScope.Selector()` named in the status bar so it is obvious the table is filtered; `nav.back` returns to the owner. The browse model must carry **both** scope fields alongside the resource — a Node's children are cluster-wide (`Namespace: ""`), so reusing the app's own namespace would silently show one namespace's pods — and re-apply them on every watch restart (namespace change, reconnect). Ticks the drill-down exit criterion.
 - [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
       status: todo | owner: — | added: 2026-07-29
