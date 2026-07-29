@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — M4-11 shipped the two built-in theme ports and the
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-12a** Theme applied at launch (`theme:` config field)
+      status: in-progress | owner: claude-opus | added: 2026-07-29
+      notes: First half of the M4-12 split (taken on pickup, as its notes allowed): the `config.yaml` `theme:` field resolved through `styles.ByName` and applied to the shell at construction, unknown name → default + startup toast (principle 3, D169 pt 2). The picker, the write-back and the live restyle are M4-12b.
 
 ## Blocked
 
@@ -236,9 +238,15 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 kind grows CPU/MEMORY columns fed by a 10 s poll and joined onto the watched rows by
 namespace/name; a cluster with no metrics API shows nothing and says nothing.
 
-- [ ] **M4-12** Theme selection + persistence
+**M4-12 was split on pickup**, as its own notes allowed, into **M4-12a** (the config
+field applied at launch — no live restyle needed, the shell is built with the resolved
+theme) and **M4-12b** (the picker, the write-back and therefore the live restyle: a
+`SetStyles` on every component that caches a `styles.Styles` at construction). The
+criterion claims selection *and* persistence, so it stays unticked until 12b.
+
+- [ ] **M4-12b** Theme picker + persistence (live restyle)
       status: todo | owner: — | added: 2026-07-29
-      notes: M4-11 landed the palettes and the registry (`styles.Themes`/`ThemeNames`/`ByName`, D169), so this is the selection half only. A `theme:` field in `config.yaml` applied at launch (unknown name → default + a startup toast, principle 3 — `ByName` reports not-found rather than guessing, D169 pt 2) and a picker action that writes the choice back through `Config.Save` (M2-11a/D89). **Split on pickup if needed:** a live restyle needs a `SetStyles` on every component that caches a `styles.Styles` at construction — if that half is large, land the config field first and the picker second. Ticks the themes exit criterion and closes M4.
+      notes: Depends on M4-12a. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), applying the pick **live** — which needs a `SetStyles` on every component that caches a `styles.Styles` at construction (table, menu, statusbar, hintbar, picker, viewer, modal, welcome, searchview, logsview, help) — and writing the name back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. Note the write-back must not clobber a hand-edited config: load, set `Theme`, save. Ticks the themes exit criterion and closes M4.
 
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
