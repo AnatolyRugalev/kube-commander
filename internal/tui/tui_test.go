@@ -2822,22 +2822,32 @@ func TestLogsFollowInertOnDescribeViewer(t *testing.T) {
 }
 
 // fakeContainerLister is a hermetic ContainerLister: it returns a preset set of
-// container names (or an error) and records the object it was asked for, so a test
-// can drive the M3-07a container-resolution flow without a cluster.
+// containers (or an error) and records the object it was asked for, so a test can
+// drive the M3-07a container-resolution flow without a cluster. names is the common
+// case — regular containers, named — while containers spells out the kinds when the
+// test is about init/ephemeral ones (LOGS-06); set one or the other.
 type fakeContainerLister struct {
-	names  []string
-	err    error
-	calls  int
-	gotRef kube.ObjectRef
+	names      []string
+	containers []kube.Container
+	err        error
+	calls      int
+	gotRef     kube.ObjectRef
 }
 
-func (f *fakeContainerLister) PodContainers(_ context.Context, ref kube.ObjectRef) ([]string, error) {
+func (f *fakeContainerLister) PodContainers(_ context.Context, ref kube.ObjectRef) ([]kube.Container, error) {
 	f.calls++
 	f.gotRef = ref
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.names, nil
+	if f.containers != nil {
+		return f.containers, nil
+	}
+	cs := make([]kube.Container, 0, len(f.names))
+	for _, n := range f.names {
+		cs = append(cs, kube.Container{Name: n, Kind: kube.ContainerRegular})
+	}
+	return cs, nil
 }
 
 // logsModelWithContainers drills into a pods table with both a log streamer and a
@@ -2981,6 +2991,83 @@ func TestLogsContainerPickerCancel(t *testing.T) {
 	}
 	if s.calls != 0 {
 		t.Fatal("cancelling should not start a stream")
+	}
+}
+
+// TestLogsInitContainerOfferedAndStreamable is the LOGS-06 contract on the logs path:
+// a pod whose only regular container is joined by an init container prompts (there is
+// now more than one container with logs), the init row is *marked* as one, and picking
+// it streams that container — the pod-stuck-in-init case the feedback named, which the
+// regular-containers-only set made unreachable.
+func TestLogsInitContainerOfferedAndStreamable(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "waiting for db"}}}
+	l := &fakeContainerLister{containers: []kube.Container{
+		{Name: "app", Kind: kube.ContainerRegular},
+		{Name: "wait-for-db", Kind: kube.ContainerInit},
+	}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	if !m.ctrPicker.Active() {
+		t.Fatal("a pod with an init container should offer the choice, not stream the regular one blindly")
+	}
+	if m.ctrPicker.Len() != 2 {
+		t.Fatalf("the picker should list both containers, got %d", m.ctrPicker.Len())
+	}
+	const initRow = "wait-for-db (init)"
+	if got, ok := m.ctrByLabel[initRow]; !ok || got != "wait-for-db" {
+		t.Fatalf("the init container's row %q should map to wait-for-db, got %q (rows: %v)", initRow, got, m.ctrByLabel)
+	}
+	if _, ok := m.ctrByLabel["app"]; !ok {
+		t.Fatalf("a regular container's row should be its bare name (rows: %v)", m.ctrByLabel)
+	}
+
+	next, pumpCmd := m.Update(picker.SelectedMsg{Kind: containerPickerKind, Value: initRow})
+	m = next.(Model)
+	if !m.logsView.Active() {
+		t.Fatal("picking the init container should open the logs view")
+	}
+	if s.gotOpts.Container != "wait-for-db" {
+		t.Fatalf("stream container = %q, want wait-for-db (the name, not the row label)", s.gotOpts.Container)
+	}
+	m = drainLogPump(t, m, pumpCmd)
+	if !strings.Contains(m.View().Content, "waiting for db") {
+		t.Fatalf("the init container's log should show: %q", m.View().Content)
+	}
+}
+
+// TestLogsSoleInitContainerStreamsDirectly proves the single-container fast path counts
+// the whole offered set, not just the regular containers: a pod whose one loggable
+// container is an init container streams it without a pointless one-row picker.
+func TestLogsSoleInitContainerStreamsDirectly(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "migrating"}}}
+	l := &fakeContainerLister{containers: []kube.Container{
+		{Name: "migrate", Kind: kube.ContainerInit},
+	}}
+	m := logsModelWithContainers(t, s, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	if m.ctrPicker.Active() {
+		t.Fatal("one loggable container should not open the picker")
+	}
+	if s.gotOpts.Container != "migrate" {
+		t.Fatalf("stream container = %q, want migrate", s.gotOpts.Container)
+	}
+}
+
+// TestLogsContainerPickerCancelClearsRows proves dismissing the picker drops the row→name
+// mapping with it, so a later pick can never resolve against a stale container set.
+func TestLogsContainerPickerCancelClearsRows(t *testing.T) {
+	l := &fakeContainerLister{names: []string{"app", "sidecar"}}
+	m := logsModelWithContainers(t, &fakeLogStreamer{}, l)
+
+	m, fetchCmd := openLogsFetch(t, m)
+	m, _ = resolveContainers(t, m, fetchCmd)
+	next, _ := m.Update(picker.CancelledMsg{Kind: containerPickerKind})
+	if m = next.(Model); m.ctrByLabel != nil {
+		t.Fatalf("cancelling should clear the picker's rows: %v", m.ctrByLabel)
 	}
 }
 

@@ -127,12 +127,14 @@ type LogStreamer interface {
 // pod's containers before streaming its logs (M3-07a): a multi-container pod must
 // prompt which container to read (`kubectl logs` requires -c to disambiguate), while
 // a single-container pod streams directly. *kube.Clients satisfies it via
-// PodContainers. Without it wired the shell falls back to streaming the pod's
-// default/sole container (the M3-05/06 behaviour, empty LogOptions.Container) — the
-// container picker is simply not offered, which keeps the pre-wiring app and the
-// non-picker hermetic tests inert without needing the extra seam.
+// PodContainers, which returns the init and ephemeral containers alongside the
+// regular ones (LOGS-06) — the shell narrows the set by purpose. Without it wired the
+// shell falls back to streaming the pod's default/sole container (the M3-05/06
+// behaviour, empty LogOptions.Container) — the container picker is simply not
+// offered, which keeps the pre-wiring app and the non-picker hermetic tests inert
+// without needing the extra seam.
 type ContainerLister interface {
-	PodContainers(ctx context.Context, ref kube.ObjectRef) ([]string, error)
+	PodContainers(ctx context.Context, ref kube.ObjectRef) ([]kube.Container, error)
 }
 
 // SecretGetter is the narrow slice of the kube layer the shell needs to open the
@@ -668,6 +670,11 @@ type Model struct {
 	ctrStreamRes kube.Resource
 	ctrStreamRef kube.ObjectRef
 	ctrPurpose   ctrPurpose
+	// ctrByLabel maps each open container-picker row back to its container name, the
+	// ctxByLabel/resByLabel pattern (D65): a row for a non-regular container is
+	// labelled `name (init)`, so the label the pick carries is not the name to stream
+	// (LOGS-06). Cleared with the picker.
+	ctrByLabel map[string]string
 
 	// secretData holds the fetched entries of the Secret in the shared viewer (M3-08a)
 	// so the reveal toggle can re-render them without re-fetching, and secretRevealed
@@ -1114,6 +1121,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.actPicker.Hide()
 		case containerPickerKind:
 			m.ctrPicker.Hide()
+			m.ctrByLabel = nil
 		case portPickerKind:
 			m.portPicker.Hide()
 		case contextPickerKind:
@@ -1517,7 +1525,7 @@ func (m *Model) resetCluster() {
 	// would resolve against the wrong cluster.
 	m.deleteRes, m.deleteRef = kube.Resource{}, kube.ObjectRef{}
 	m.mutateRes, m.mutateRef = kube.Resource{}, kube.ObjectRef{}
-	m.ctrStreamRes, m.ctrStreamRef = kube.Resource{}, kube.ObjectRef{}
+	m.ctrStreamRes, m.ctrStreamRef, m.ctrByLabel = kube.Resource{}, kube.ObjectRef{}, nil
 	m.drainRes, m.drainRef, m.drainLabel = kube.Resource{}, kube.ObjectRef{}, ""
 	m.pfPorts, m.pfPort = nil, kube.Port{}
 	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
@@ -2935,6 +2943,57 @@ func (p ctrPurpose) pickerTitle() string {
 	return "Logs container"
 }
 
+// offer narrows a pod's full container set (kube.PodContainers returns regular, init
+// and ephemeral — LOGS-06) to the ones this purpose can act on, preserving order:
+//
+//   - Logs offers everything. All three kinds have logs, and an init container's are
+//     the *only* diagnosis of a pod stuck in Init:CrashLoopBackOff — the case the
+//     feedback named.
+//   - Exec drops the init containers. An init container has normally terminated by
+//     the time anyone reaches for a shell, so exec'ing into one fails; a debug
+//     (ephemeral) container is the opposite — being exec'd into is its whole purpose.
+//
+// The result aliases cs when nothing is dropped; callers only read it.
+func (p ctrPurpose) offer(cs []kube.Container) []kube.Container {
+	if p != ctrPurposeExec {
+		return cs
+	}
+	out := make([]kube.Container, 0, len(cs))
+	for _, c := range cs {
+		if c.Kind != kube.ContainerInit {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// containerPickerItems renders one picker row per container and the map resolving a
+// row back to its container name (the picker's SelectedMsg carries only the label,
+// D65 — the ctxByLabel/resByLabel pattern). A regular container is its bare name; an
+// init or ephemeral one is qualified — `setup (init)` — because a name alone gives
+// the reader no way to tell which is which, and picking the wrong one is a confusing
+// empty log rather than an error. Ordering is the lister's (regular containers
+// first), so the picker's default highlight stays the pod's main container.
+//
+// A qualified label can in principle collide with a regular container literally named
+// `setup (init)`; the map keeps the first row of a colliding pair, so a pick is always
+// resolvable to *some* listed container rather than to nothing.
+func containerPickerItems(cs []kube.Container) ([]string, map[string]string) {
+	labels := make([]string, 0, len(cs))
+	byLabel := make(map[string]string, len(cs))
+	for _, c := range cs {
+		label := c.Name
+		if q := c.Kind.String(); q != "" {
+			label = c.Name + " (" + q + ")"
+		}
+		labels = append(labels, label)
+		if _, dup := byLabel[label]; !dup {
+			byLabel[label] = c.Name
+		}
+	}
+	return labels, byLabel
+}
+
 // containersLoadedMsg carries the outcome of the async PodContainers fetch issued
 // when logs are opened over a pod with a container lister wired (M3-07a). gen ties it
 // to the viewerGen bumped when the fetch was requested, so a result that lands after
@@ -2945,7 +3004,7 @@ type containersLoadedMsg struct {
 	gen        int
 	res        kube.Resource
 	ref        kube.ObjectRef
-	containers []string
+	containers []kube.Container
 	err        error
 	// purpose routes the resolved container to its terminal (M3-14b-2): the logs
 	// viewer or an exec session. Threaded through the async fetch so the result knows
@@ -3057,11 +3116,13 @@ func (m Model) handlePodResolved(msg podResolvedMsg) (tea.Model, tea.Cmd) {
 
 // handleContainersLoaded acts on a resolved container set (M3-07a/M3-14b-2). A result
 // whose gen no longer matches (a newer viewer/exec superseded it) is dropped. A fetch
-// error, or a pod that reports no containers, degrades to a status-bar toast (D74)
-// without opening the viewer/session. A single container is used directly for the
-// requested purpose (reusing the fetch's gen so a logs stream is still guarded by the
-// same generation); multiple open the container picker, stashing the pod + purpose so
-// the pick knows what to do with the chosen container.
+// error, or a pod that reports no containers this purpose can act on, degrades to a
+// status-bar toast (D74) without opening the viewer/session. The set is first narrowed
+// to what the purpose can act on (ctrPurpose.offer — logs read init containers too,
+// exec does not, LOGS-06). A single container is used directly for the requested
+// purpose (reusing the fetch's gen so a logs stream is still guarded by the same
+// generation); multiple open the container picker, stashing the pod + purpose so the
+// pick knows what to do with the chosen container.
 func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.viewerGen {
 		return m, nil // superseded by a newer viewer/stream/exec open; drop.
@@ -3069,18 +3130,21 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.C
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg(msg.purpose.label(), msg.err))
 	}
-	switch len(msg.containers) {
+	cs := msg.purpose.offer(msg.containers)
+	switch len(cs) {
 	case 0:
 		label := msg.purpose.label() + " for " + msg.ref.Name
 		return m, m.surfaceError(ErrorMsg{Context: label + ": no containers"})
 	case 1:
-		return m.streamOrExec(msg.res, msg.ref, msg.containers[0], msg.purpose, msg.gen)
+		return m.streamOrExec(msg.res, msg.ref, cs[0].Name, msg.purpose, msg.gen)
 	default:
+		labels, byLabel := containerPickerItems(cs)
 		m.ctrStreamRes = msg.res
 		m.ctrStreamRef = msg.ref
 		m.ctrPurpose = msg.purpose
+		m.ctrByLabel = byLabel
 		m.ctrPicker.SetTitle(msg.purpose.pickerTitle())
-		m.ctrPicker.SetItems(msg.containers)
+		m.ctrPicker.SetItems(labels)
 		m.ctrPicker.Show()
 		return m, nil
 	}
@@ -3090,11 +3154,20 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.C
 // picker (M3-07a/M3-14b-2): it closes the picker and routes the chosen container to the
 // stashed purpose's terminal (streamOrExec — logs stream or exec session) over the
 // stashed pod, on a fresh viewerGen (the pick is a new open). The picked value applies
-// to the pod + purpose recorded when the picker opened (ctrStreamRes/Ref/ctrPurpose).
+// to the pod + purpose recorded when the picker opened (ctrStreamRes/Ref/ctrPurpose),
+// and is a *row label*, resolved back to the container name through ctrByLabel — an
+// init or ephemeral container's row is qualified (LOGS-06). A label with no mapping
+// (the picker can only list labels it mapped, so this is defensive) closes the picker
+// without opening anything.
 func (m Model) handleContainerSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	m.ctrPicker.Hide()
+	name, ok := m.ctrByLabel[msg.Value]
+	m.ctrByLabel = nil
+	if !ok {
+		return m, nil
+	}
 	m.viewerGen++
-	return m.streamOrExec(m.ctrStreamRes, m.ctrStreamRef, msg.Value, m.ctrPurpose, m.viewerGen)
+	return m.streamOrExec(m.ctrStreamRes, m.ctrStreamRef, name, m.ctrPurpose, m.viewerGen)
 }
 
 // viewerTitle labels the viewer with the browsed kind and the object's name

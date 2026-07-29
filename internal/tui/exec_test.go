@@ -231,6 +231,41 @@ func TestExecContainerPickSuspendsIntoSession(t *testing.T) {
 	}
 }
 
+// TestExecSkipsInitContainers proves the LOGS-06 set is narrowed by purpose: exec drops
+// a pod's init containers (they have normally terminated, so there is no shell to open),
+// so a pod with one regular container beside an init one still execs straight in — while
+// an ephemeral debug container, whose whole point is being exec'd into, is offered.
+func TestExecSkipsInitContainers(t *testing.T) {
+	l := &fakeContainerLister{containers: []kube.Container{
+		{Name: "app", Kind: kube.ContainerRegular},
+		{Name: "wait-for-db", Kind: kube.ContainerInit},
+	}}
+	m := podExecModel(t, WithExecer(&fakeExecer{}), WithContainerLister(l))
+
+	m, fetchCmd := execFetch(t, m)
+	m, execCmd := resolveExecContainers(t, m, fetchCmd)
+	if m.ctrPicker.Active() {
+		t.Fatal("an init container should not make exec prompt: it is not exec'able")
+	}
+	if execCmd == nil {
+		t.Fatal("the pod's one exec'able container should suspend directly into a session")
+	}
+
+	l2 := &fakeContainerLister{containers: []kube.Container{
+		{Name: "app", Kind: kube.ContainerRegular},
+		{Name: "debugger", Kind: kube.ContainerEphemeral},
+	}}
+	m2 := podExecModel(t, WithExecer(&fakeExecer{}), WithContainerLister(l2))
+	m2, fetchCmd2 := execFetch(t, m2)
+	m2, _ = resolveExecContainers(t, m2, fetchCmd2)
+	if !m2.ctrPicker.Active() {
+		t.Fatal("an ephemeral debug container should be offered to exec into")
+	}
+	if got, ok := m2.ctrByLabel["debugger (ephemeral)"]; !ok || got != "debugger" {
+		t.Fatalf("the ephemeral container's row should map to debugger, got %q (rows: %v)", got, m2.ctrByLabel)
+	}
+}
+
 // TestExecContainerResolveErrorDegrades proves a PodContainers failure on the exec path
 // degrades to a status-bar error toast (labelled "exec"), opening no picker or session.
 func TestExecContainerResolveErrorDegrades(t *testing.T) {

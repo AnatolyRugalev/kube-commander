@@ -124,15 +124,59 @@ func (c *Clients) Logs(ctx context.Context, ref ObjectRef, opts LogOptions) (<-c
 	return out, nil
 }
 
-// PodContainers returns the names of a pod's regular containers, in spec order —
-// the set the logs container picker offers when a pod has more than one container
-// (`kubectl logs` requires -c to disambiguate a multi-container pod). It is the
-// same set kubectl's default-container logic counts, so a pod with a single
-// regular container needs no picker (the TUI streams it directly), while a
-// multi-container pod prompts which to stream. Only spec.containers are returned;
-// init- and ephemeral-container logs are a later refinement. An empty pod name is
-// rejected; a get error is wrapped, never panicked (#86).
-func (c *Clients) PodContainers(ctx context.Context, ref ObjectRef) ([]string, error) {
+// ContainerKind classifies which of a pod's three container lists a container was
+// declared in. It exists because the lists are not interchangeable to a consumer:
+// every one of them has logs to read, but only a regular (or ephemeral debug)
+// container is normally running to exec into, and an init container's name means
+// nothing to the user unless it is marked as one.
+type ContainerKind int
+
+const (
+	// ContainerRegular is a spec.containers entry — the pod's actual workload.
+	ContainerRegular ContainerKind = iota
+	// ContainerInit is a spec.initContainers entry: it runs (and usually completes)
+	// before the regular containers start. A native sidecar — an init container with
+	// restartPolicy: Always — is one of these too, and runs for the pod's whole life.
+	ContainerInit
+	// ContainerEphemeral is a spec.ephemeralContainers entry, injected into a running
+	// pod for debugging (`kubectl debug`).
+	ContainerEphemeral
+)
+
+// String names the kind for display ("init"/"ephemeral"); a regular container has no
+// qualifier, since it is what "the pod's containers" already means.
+func (k ContainerKind) String() string {
+	switch k {
+	case ContainerInit:
+		return "init"
+	case ContainerEphemeral:
+		return "ephemeral"
+	default:
+		return ""
+	}
+}
+
+// Container is one of a pod's containers as the logs/exec container picker sees it:
+// the name to pass as LogOptions.Container (or to exec into), plus which of the pod's
+// container lists it came from.
+type Container struct {
+	Name string
+	Kind ContainerKind
+}
+
+// PodContainers returns every container of a pod — regular, then init, then ephemeral,
+// each list in spec order — classified by ContainerKind. It is the set the logs
+// container picker offers when a pod has more than one (`kubectl logs` requires -c to
+// disambiguate), and the caller narrows it by what it is for: all three kinds have
+// readable logs, so the logs picker offers the lot, while exec drops the init
+// containers (they have normally terminated by the time anyone looks).
+//
+// Init containers are included because they are exactly what a user wants when init is
+// what is failing: a pod stuck in Init:CrashLoopBackOff has no regular-container logs
+// at all, and its only diagnosis is the init container's. Ordering is
+// regular-containers-first so the picker's default highlight is still the pod's main
+// container. An empty pod name is rejected; a get error is wrapped, never panicked (#86).
+func (c *Clients) PodContainers(ctx context.Context, ref ObjectRef) ([]Container, error) {
 	if ref.Name == "" {
 		return nil, fmt.Errorf("kube: pod containers: empty pod name")
 	}
@@ -140,11 +184,18 @@ func (c *Clients) PodContainers(ctx context.Context, ref ObjectRef) ([]string, e
 	if err != nil {
 		return nil, fmt.Errorf("kube: getting containers for pod %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
-	names := make([]string, 0, len(pod.Spec.Containers))
-	for i := range pod.Spec.Containers {
-		names = append(names, pod.Spec.Containers[i].Name)
+	spec := &pod.Spec
+	out := make([]Container, 0, len(spec.Containers)+len(spec.InitContainers)+len(spec.EphemeralContainers))
+	for i := range spec.Containers {
+		out = append(out, Container{Name: spec.Containers[i].Name, Kind: ContainerRegular})
 	}
-	return names, nil
+	for i := range spec.InitContainers {
+		out = append(out, Container{Name: spec.InitContainers[i].Name, Kind: ContainerInit})
+	}
+	for i := range spec.EphemeralContainers {
+		out = append(out, Container{Name: spec.EphemeralContainers[i].Name, Kind: ContainerEphemeral})
+	}
+	return out, nil
 }
 
 // logOpenOptions derives the options for one open of a log stream: the caller's own for

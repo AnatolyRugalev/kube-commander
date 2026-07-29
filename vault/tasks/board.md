@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — LOGS-05a bounded the logs open to the last 1000 lines (D160), the first slice of the logs tail+perf feedback; LOGS-05b (the per-line render cost) and the init-containers feedback are next and both preempt the board, with M4-05 after that. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — LOGS-06 made init and ephemeral containers selectable in the logs picker (D161), draining the feedback inbox; LOGS-05b (the per-line render cost) is next, then M4-05. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-06** Init (and ephemeral) containers are selectable in the logs view
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: Feedback `2026-07-29-logs-init-containers` (normal): the logs container picker only offers `spec.containers`, so an init container's logs — the ones you want when init is what is failing — are unreachable. `kube.PodContainers` returns the init and ephemeral sets too, classified, and the picker labels them.
+_(none)_
 
 ## Blocked
 
@@ -170,6 +168,13 @@ the reconnect path is pinned not to re-tail on top of what the reader already ha
 LOGS-05b is the remaining half and is unblocked — and it is the half the standing
 throughput dogfood human-task is really about.
 
+**LOGS-06** (feedback `2026-07-29-logs-init-containers`, normal) is done and separate: the
+container picker only ever offered `spec.containers`, so an init container's logs — the
+only thing there is to read when a pod is stuck in `Init:` — could not be reached at all.
+`kube.PodContainers` now returns the init and ephemeral containers too, classified, each
+consumer narrows the set by what it can act on (exec still skips init containers), and a
+non-regular row is marked `name (init)` (D161).
+
 - [ ] **LOGS-05b** Kill the per-line render cost in the logs view
       status: todo | owner: — | added: 2026-07-29
       notes: Second slice of feedback `2026-07-29-logs-tail-and-perf`. `Append` re-runs `shown()` (a full-buffer scan + join) and `viewport.SetContent` for **every** line, so appending n lines is O(n²) — the 1000-line burst LOGS-05a now opens with joins ~500k lines before the first frame settles. The pump (`internal/tui/logs.go`) delivers exactly one line per Cmd, so the fix has two halves and either alone helps: **batch** (drain what is already buffered in the channel per pump Cmd and append the batch, one render per batch) and/or **cache** the rendered body so an append with no filter is an append, not a re-join. Keep the filter/highlight semantics identical — the grep still narrows live while following, and `shown()`'s no-filter fast path must stay the fast path.
@@ -244,6 +249,8 @@ tested before any gesture can reach it, exactly as M4-03's reset did.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **LOGS-06** Init and ephemeral containers are offered by the logs container picker, marked by kind — `kube.PodContainers` returns the whole classified set and each purpose narrows it (exec still skips init) — done 2026-07-29 (D161)
 
 - [x] **LOGS-05a** Logs open on the last 1000 lines instead of replaying from container boot — `defaultLogTail` on every `openLogs`, and a reconnect still resumes rather than re-tailing — done 2026-07-29 (D160)
 

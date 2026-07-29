@@ -29,7 +29,7 @@ func (fakeClusterClient) Describe(kube.Resource, kube.ObjectRef) (string, error)
 func (fakeClusterClient) Logs(context.Context, kube.ObjectRef, kube.LogOptions) (<-chan kube.LogEvent, error) {
 	return nil, nil
 }
-func (fakeClusterClient) PodContainers(context.Context, kube.ObjectRef) ([]string, error) {
+func (fakeClusterClient) PodContainers(context.Context, kube.ObjectRef) ([]kube.Container, error) {
 	return nil, nil
 }
 func (fakeClusterClient) SecretData(context.Context, kube.ObjectRef) (kube.SecretData, error) {

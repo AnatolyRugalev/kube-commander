@@ -176,7 +176,9 @@ Like the kind widen, each is off again the next time you open the search.
 Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
 StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
 — to open the **dedicated full-screen logs view**. It opens on the **last 1000 lines**
-and tails the container live from there (a multi-container pod asks which one first) —
+and tails the container live from there (a pod with more than one container asks which
+one first — **init** and ephemeral containers are offered too, marked as such, since an
+init container's logs are the only thing to read when a pod is stuck in `Init:`) —
 the equivalent of `kubectl logs -f --tail=1000`, so opening the logs of a pod that has
 been up for a week does not replay a week of output before it reaches *now*. It gives
 logs the whole screen rather than a centered box, because throughput is the point. The

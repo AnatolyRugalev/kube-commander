@@ -4052,3 +4052,32 @@ the present (feedback `2026-07-29-logs-tail-and-perf`). From here on:
    would re-serve the last 1000 lines on top of output the reader already had. This rule
    predates the decision but was untested and unreachable until pt 1 made every stream
    carry a tail; it is now pinned by name.
+
+## D161 — A pod's containers are all of them, classified; the picker offers what the purpose can act on (2026-07-29, LOGS-06)
+
+`kube.PodContainers` returned only `spec.containers`, so an init container's logs were
+unreachable from the TUI — precisely the logs you need when the pod never got as far as
+its regular containers (feedback `2026-07-29-logs-init-containers`). From here on:
+
+1. **The kube layer returns the whole set, classified.** `PodContainers` returns
+   `[]kube.Container` — regular, then init, then ephemeral, each list in spec order,
+   tagged with a `ContainerKind`. It is a listing primitive: it does not decide who may
+   act on what, and a future consumer (a container column, a picker of its own) gets the
+   kinds for free rather than re-fetching the pod.
+2. **The consumer narrows by purpose, and the narrowing is a claim about the container,
+   not about the feature.** Logs offers every kind (all three have logs). Exec drops the
+   init containers, because an init container has normally terminated and there is no
+   process to attach to — while an ephemeral container is *the* thing to exec into. A new
+   purpose states its own rule in `ctrPurpose.offer`; it does not get the logs set by
+   default.
+3. **The single-container fast path counts the offered set, not the regular containers.**
+   A pod with one regular container beside an init one now *prompts* for logs. That is the
+   cost of the feature and it is accepted: without a prompt the init container cannot be
+   reached at all. Regular containers sort first so the default highlight — and therefore
+   `L`+`enter` — is still the pod's main container.
+4. **A non-regular container is always marked in the UI.** Rows read `name (init)` /
+   `name (ephemeral)`; a bare name means a regular container. A name alone leaves the
+   reader no way to tell, and picking the wrong one yields a confusing empty log rather
+   than an error. Because the row label is therefore not the container name, a picked row
+   resolves through a `byLabel` map (the D65 pattern) — no surface may pass a picker label
+   to the kube layer as a container name.

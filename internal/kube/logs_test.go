@@ -39,15 +39,12 @@ func TestPodContainersReturnsSpecOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PodContainers: %v", err)
 	}
-	want := []string{"app", "sidecar", "proxy"}
-	if len(got) != len(want) {
-		t.Fatalf("PodContainers() = %v, want %v", got, want)
+	want := []Container{
+		{Name: "app", Kind: ContainerRegular},
+		{Name: "sidecar", Kind: ContainerRegular},
+		{Name: "proxy", Kind: ContainerRegular},
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("PodContainers() = %v, want %v", got, want)
-		}
-	}
+	assertContainers(t, got, want)
 }
 
 // TestPodContainersSingle returns the sole container of a single-container pod (the
@@ -60,8 +57,43 @@ func TestPodContainersSingle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PodContainers: %v", err)
 	}
-	if len(got) != 1 || got[0] != "coredns" {
-		t.Fatalf("PodContainers() = %v, want [coredns]", got)
+	assertContainers(t, got, []Container{{Name: "coredns", Kind: ContainerRegular}})
+}
+
+// TestPodContainersIncludesInitAndEphemeral is the LOGS-06 contract: a pod's init and
+// ephemeral containers are returned alongside its regular ones — an init container's
+// logs are the only diagnosis of a pod stuck in init — classified by kind and ordered
+// regular-first, so the picker's default highlight is still the pod's main container.
+func TestPodContainersIncludesInitAndEphemeral(t *testing.T) {
+	pod := podWith("default", "web", "app")
+	pod.Spec.InitContainers = []corev1.Container{{Name: "wait-for-db"}, {Name: "migrate"}}
+	pod.Spec.EphemeralContainers = []corev1.EphemeralContainer{
+		{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debugger"}},
+	}
+	c := &Clients{Clientset: k8sfake.NewSimpleClientset(pod)}
+
+	got, err := c.PodContainers(context.Background(), ObjectRef{Namespace: "default", Name: "web"})
+	if err != nil {
+		t.Fatalf("PodContainers: %v", err)
+	}
+	assertContainers(t, got, []Container{
+		{Name: "app", Kind: ContainerRegular},
+		{Name: "wait-for-db", Kind: ContainerInit},
+		{Name: "migrate", Kind: ContainerInit},
+		{Name: "debugger", Kind: ContainerEphemeral},
+	})
+}
+
+// assertContainers fails unless got is exactly want, in order.
+func assertContainers(t *testing.T, got, want []Container) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("PodContainers() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("PodContainers() = %v, want %v", got, want)
+		}
 	}
 }
 
