@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — M4-08 landed, so `P` drills from an owner row to i
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+      notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
 
 ## Blocked
 
@@ -232,9 +234,6 @@ the cluster's client *and* everything keyed by the context (menu extras, remembe
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
-      status: todo | owner: — | added: 2026-07-29
-      notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
 - [ ] **M4-10** TUI: metrics columns when available
       status: todo | owner: — | added: 2026-07-29
       notes: Depends on M4-09. CPU/mem columns appended to the Pod/Node table, refreshed on a **slow ticker** — metrics are point-in-time samples and are not watchable, so this is an overlay joined onto the watched rows by object ref, never a second watch (D155 pt 3). No metrics group → the columns simply never appear and nothing is said. Ticks the metrics exit criterion.
