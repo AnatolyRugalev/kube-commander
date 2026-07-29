@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-11 shipped the two built-in theme ports and the registry over them (D169), leaving M4-12 (selection + persistence) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-12a wired the `theme:` config field through to the rendered shell (D170), leaving M4-12b (picker + live restyle + write-back) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-12a** Theme applied at launch (`theme:` config field)
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: First half of the M4-12 split (taken on pickup, as its notes allowed): the `config.yaml` `theme:` field resolved through `styles.ByName` and applied to the shell at construction, unknown name → default + startup toast (principle 3, D169 pt 2). The picker, the write-back and the live restyle are M4-12b.
+_(none)_
 
 ## Blocked
 
@@ -251,6 +249,8 @@ criterion claims selection *and* persistence, so it stays unticked until 12b.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-12a** Theme applied at launch — `theme:` config field resolved by the launcher and built into every component; unknown name → default + one startup notice — done 2026-07-29 (D170)
 
 - [x] **M4-11** Built-in themes + registry — ported monokai + solarized-dark palettes beside the default, with `Themes()`/`ThemeNames()`/`ByName()` over one `builtins` list; nothing selects them yet — done 2026-07-29 (D169)
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
 // writeMenuFile points the user config dir at a temp dir and writes body to the
@@ -199,6 +200,55 @@ func TestMaybeMigrateMalformedLegacyDegrades(t *testing.T) {
 	}
 	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
 		t.Fatalf("a malformed legacy file must write no config; stat err = %v", err)
+	}
+}
+
+// TestResolveThemeEmptyIsDefaultAndSilent proves a config with no theme: key runs
+// on the built-in palette without reporting anything — the overwhelmingly common
+// case must be silent (M4-12a).
+func TestResolveThemeEmptyIsDefaultAndSilent(t *testing.T) {
+	for _, name := range []string{"", "   "} {
+		theme, err := resolveTheme(name)
+		if err != nil {
+			t.Fatalf("resolveTheme(%q) errored: %v", name, err)
+		}
+		if theme.Name != styles.DefaultTheme().Name {
+			t.Errorf("resolveTheme(%q) = %q, want the default theme", name, theme.Name)
+		}
+	}
+}
+
+// TestResolveThemeResolvesEveryBuiltin proves the config field reaches every theme
+// the registry ships, through the same lenient lookup (D169): a name a picker could
+// offer is a name the config file accepts.
+func TestResolveThemeResolvesEveryBuiltin(t *testing.T) {
+	for _, want := range styles.ThemeNames() {
+		for _, written := range []string{want, strings.ToUpper(want), "  " + want + " "} {
+			theme, err := resolveTheme(written)
+			if err != nil {
+				t.Fatalf("resolveTheme(%q): %v", written, err)
+			}
+			if theme.Name != want {
+				t.Errorf("resolveTheme(%q) = %q, want %q", written, theme.Name, want)
+			}
+		}
+	}
+}
+
+// TestResolveThemeUnknownDegradesToDefault is the principle-3 half: a typo'd or
+// removed theme name must not keep kubecom from launching. It returns the default
+// palette *and* an error the launcher toasts once, naming the available themes so
+// the message is actionable — never a guess at what was meant (D169 pt 2).
+func TestResolveThemeUnknownDegradesToDefault(t *testing.T) {
+	theme, err := resolveTheme("solarized") // the family name; the built-in is solarized-dark
+	if err == nil {
+		t.Fatal("resolveTheme(unknown): expected an error to report, got nil")
+	}
+	if theme.Name != styles.DefaultTheme().Name {
+		t.Fatalf("resolveTheme(unknown) = %q, want the default theme", theme.Name)
+	}
+	if !strings.Contains(err.Error(), "solarized-dark") {
+		t.Errorf("error should list the available themes, got %q", err)
 	}
 }
 

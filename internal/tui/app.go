@@ -480,6 +480,19 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
+// WithTheme renders the shell through t instead of the built-in default palette
+// (M4-12a) — what the `theme:` config field resolves to. The launcher resolves the
+// name through styles.ByName and passes the Theme, so this package never has to
+// know which names exist; an unknown name degrades to the default upstream.
+//
+// It is applied before the components are constructed (see NewWithKeymap), so
+// every one of them caches this Styles rather than the default. A theme picked at
+// runtime is a different problem — it must restyle already-built components — and
+// belongs to M4-12b.
+func WithTheme(t styles.Theme) Option {
+	return func(m *Model) { m.styles = styles.New(t) }
+}
+
 // WithStartupError seeds a one-shot error the model surfaces as a transient
 // status-bar toast on Init (batched with any discovery start), so a startup-time
 // degradation the launcher chose not to make fatal — chiefly a malformed
@@ -917,36 +930,42 @@ func New(opts ...Option) Model {
 // dependencies (the watch client via WithWatcher); with none the model is
 // watch-inert. The menu starts focused (the user picks a resource before drilling
 // into its table).
+// Options run **before** the components are constructed, because a component
+// caches the Styles it is handed (WithTheme would otherwise have to restyle
+// eleven models after the fact — that is M4-12b's live-restyle problem, and a
+// launch-time theme does not need it).
 func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
-	s := styles.Default()
 	fi := textinput.New()
 	fi.Prompt = "/"
 	m := Model{
 		keymap:      km,
 		seq:         keymap.NewSequencer(km),
-		help:        help.New(s, km),
-		styles:      s,
-		menu:        menu.New(s),
-		table:       table.New(s),
-		status:      statusbar.New(s),
-		hintbar:     hintbar.New(s),
-		nsPicker:    picker.New(s, "namespace"),
-		resPicker:   picker.New(s, "resource"),
-		actPicker:   picker.New(s, actionPickerKind),
-		ctrPicker:   picker.New(s, containerPickerKind),
-		portPicker:  picker.New(s, portPickerKind),
-		ctxPicker:   picker.New(s, contextPickerKind),
-		viewer:      viewer.New(s, viewerKindDescribe),
-		modal:       modal.New(s),
-		welcome:     welcome.New(s),
-		searchView:  searchview.New(s),
-		logsView:    logsview.New(s),
+		styles:      styles.Default(),
 		filterInput: fi,
 		logger:      slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(&m)
 	}
+	// Every component renders through the same resolved Styles — the default set
+	// above unless WithTheme replaced it.
+	s := m.styles
+	m.help = help.New(s, km)
+	m.menu = menu.New(s)
+	m.table = table.New(s)
+	m.status = statusbar.New(s)
+	m.hintbar = hintbar.New(s)
+	m.nsPicker = picker.New(s, "namespace")
+	m.resPicker = picker.New(s, "resource")
+	m.actPicker = picker.New(s, actionPickerKind)
+	m.ctrPicker = picker.New(s, containerPickerKind)
+	m.portPicker = picker.New(s, portPickerKind)
+	m.ctxPicker = picker.New(s, contextPickerKind)
+	m.viewer = viewer.New(s, viewerKindDescribe)
+	m.modal = modal.New(s)
+	m.welcome = welcome.New(s)
+	m.searchView = searchview.New(s)
+	m.logsView = logsview.New(s)
 	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
 	m.ctrPicker.SetTitle("Container")

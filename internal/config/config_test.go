@@ -34,6 +34,64 @@ func TestLoadKeys(t *testing.T) {
 	}
 }
 
+// TestLoadTheme proves the theme: key decodes into the field the launcher resolves
+// against the theme registry (M4-12a). The value is carried verbatim — validation
+// is styles.ByName's job, not the decoder's.
+func TestLoadTheme(t *testing.T) {
+	c, err := Load(strings.NewReader("theme: monokai\n"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Theme != "monokai" {
+		t.Errorf("Theme = %q, want %q", c.Theme, "monokai")
+	}
+}
+
+// TestLoadThemeAbsentIsEmpty proves an absent theme: key decodes to "" — the value
+// the launcher reads as "use the built-in default", silently. A config that names
+// only keys must not imply a theme.
+func TestLoadThemeAbsentIsEmpty(t *testing.T) {
+	c, err := Load(strings.NewReader("keys:\n  app.quit: [q]\n"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Theme != "" {
+		t.Errorf("Theme = %q, want empty for an absent key", c.Theme)
+	}
+}
+
+// TestSaveRoundTripsTheme proves the field survives the write-back path M4-12b's
+// picker will persist through: what Save emits, Load reads back equal.
+func TestSaveRoundTripsTheme(t *testing.T) {
+	orig := &Config{Theme: "solarized-dark", Keys: map[string][]string{"app.quit": {"q"}}}
+	var buf bytes.Buffer
+	if err := orig.Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := Load(&buf)
+	if err != nil {
+		t.Fatalf("Load(saved): %v", err)
+	}
+	if got.Theme != orig.Theme {
+		t.Errorf("round-trip Theme = %q, want %q", got.Theme, orig.Theme)
+	}
+	if !reflect.DeepEqual(got.Keys, orig.Keys) {
+		t.Errorf("round-trip Keys = %v, want %v", got.Keys, orig.Keys)
+	}
+}
+
+// TestSaveOmitsEmptyTheme keeps the omitempty contract: an unset theme must not
+// appear in the file, so a saved config stays as small as what the user wrote.
+func TestSaveOmitsEmptyTheme(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (&Config{Keys: map[string][]string{"app.quit": {"q"}}}).Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if strings.Contains(buf.String(), "theme") {
+		t.Errorf("Save emitted a theme key for an unset theme:\n%s", buf.String())
+	}
+}
+
 func TestLoadRejectsUnknownField(t *testing.T) {
 	_, err := Load(strings.NewReader("bogus: true\n"))
 	if err == nil {

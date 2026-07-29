@@ -4354,3 +4354,29 @@ contradict:
    generated doc all read that one order, so none of them can disagree about what
    exists. `Themes()` rebuilds its slice per call, so the registry stays
    unmutatable by a caller (principle 1).
+
+## D170 — The palette is resolved by the launcher and fixed at construction (2026-07-29, M4-12a)
+
+`config.yaml`'s `theme:` field now reaches the shell: the launcher resolves the
+name through `styles.ByName` and passes the palette in as `tui.WithTheme`, and
+`NewWithKeymap` builds every component from it. What a future leg must not
+contradict:
+
+1. **`config.Config` carries the theme *name*, a plain string — not a `Theme`.**
+   Resolution (and therefore the dependency on `internal/tui/styles`) lives in
+   `cmd/kubecom`, so `internal/config` stays a decoder of what the user wrote and
+   the palette stays in the package that owns rendering. A validating config
+   loader would also have to decide what to do with an unknown name, which is a
+   UI decision (pt 3) rather than a parsing one.
+2. **Options run before the components are constructed.** `NewWithKeymap` now
+   applies every `Option` to a bare `Model`, then builds the components from
+   `m.styles`. An option may therefore feed a component's *constructor* — but no
+   option may assume a component exists when it runs (the post-option seeding
+   block below the constructors is where that belongs). This is what makes a
+   launch-time theme a two-line change instead of a restyle: a component caches
+   the `Styles` it is handed, so a theme picked *at runtime* still needs a
+   `SetStyles` on each of them, and that is M4-12b's problem, not this contract's.
+3. **An unknown theme name never fails the launch.** It degrades to the default
+   palette, logs, and takes the single startup-toast slot only if a migration
+   report and a fallen-back menu file have not (principle 3, D169 pt 2). Empty —
+   an absent key — is the default and is silent: the common case says nothing.

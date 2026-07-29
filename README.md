@@ -252,10 +252,26 @@ for the action list and defaults, and inspect the effective map any time with
 
 ```yaml
 # ~/.config/kubecom/config.yaml
+theme: monokai
 keys:
   nav.down: ["j", "down"]
   nav.up:   ["k", "up"]
 ```
+
+#### Theme
+
+`theme:` picks the palette kubecom renders with. Three are built in:
+
+| Name | |
+|------|--|
+| `default` | dark-friendly, blue accent (used when `theme:` is absent) |
+| `monokai` | the classic warm dark palette, cyan accent |
+| `solarized-dark` | Solarized's dark variant |
+
+The name is matched ignoring case and surrounding space, but it is never guessed
+at: an unknown name launches on the default theme and shows a brief startup notice
+listing the ones that exist. (Choosing a theme from inside the UI is coming; today
+it is this file.)
 
 #### Per-context menu
 

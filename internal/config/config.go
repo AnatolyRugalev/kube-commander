@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Config is kubecom's plain-YAML user configuration. Only the keys: section is
-// wired today (M2-01c); the zero value is a valid config that runs on defaults.
+// Config is kubecom's plain-YAML user configuration. The zero value is a valid
+// config that runs on defaults: no key overrides and the built-in theme.
 type Config struct {
 	// Keys overrides the default keymap: action id -> key tokens (e.g.
 	//   keys:
@@ -21,6 +21,17 @@ type Config struct {
 	// An entry replaces that action's default binding wholesale; an empty list
 	// disables the action. Resolved against the vim-first defaults by Keymap.
 	Keys map[string][]string `json:"keys,omitempty"`
+
+	// Theme names the built-in color theme to render with (e.g.
+	//   theme: monokai
+	// ). Empty — the zero value, and what an absent key decodes to — means the
+	// built-in default. The name is resolved against the theme registry by the
+	// launcher (tui/styles.ByName, lenient about case and surrounding space but
+	// never fuzzy); an unknown name degrades to the default theme with a startup
+	// notice rather than failing the launch (principle 3, D169). It is a plain
+	// string here on purpose: config stays decoded data, and the palette lives in
+	// the styles package.
+	Theme string `json:"theme,omitempty"`
 }
 
 // Path returns the canonical config file location (D20):

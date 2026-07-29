@@ -13,6 +13,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 	"github.com/AnatolyRugalev/kube-commander/internal/version"
 )
 
@@ -106,6 +107,20 @@ func runTUI(opts runOptions) error {
 		}
 	}
 
+	// Resolve the configured theme (M4-12a). An unknown name never fails the launch:
+	// it degrades to the built-in default palette and reports itself, like every
+	// other config fault on this path (principle 3). Last in the startup-toast
+	// precedence chain — a migration report and a fallen-back menu are both larger
+	// events than a mistyped palette name, which is visible on screen anyway.
+	theme, themeErr := resolveTheme(cfg.Theme)
+	if themeErr != nil {
+		slog.Warn("theme", "configured", cfg.Theme, "error", themeErr)
+		if startupErr == nil {
+			e := tui.NewErrorMsg("theme", themeErr)
+			startupErr = &e
+		}
+	}
+
 	// Resolve the initial watch scope and the namespace-persistence seam from the
 	// per-context state store (D90/M2-11b-2). An explicit -n wins for this run and
 	// does not touch the stored state (D91); with no -n, restore the last namespace
@@ -135,6 +150,7 @@ func runTUI(opts runOptions) error {
 		tui.WithKubeconfig(opts.kubeconfig),
 		tui.WithVersion(version.Version),
 		tui.WithMenuExtras(menuExtras),
+		tui.WithTheme(theme),
 		tui.WithStartupError(startupErr),
 		// The same file logger setupLogging installed as the slog default — the shell
 		// records every error it toasts there, so a failure the 5s toast outlived is
@@ -340,6 +356,24 @@ func maybeMigrate(configPath string) *tui.ErrorMsg {
 	}
 	e := tui.NewErrorMsg("migrated ~/.kubecom.yaml", errors.New(strings.Join(notes, " ")))
 	return &e
+}
+
+// resolveTheme turns the config's `theme:` name into the palette the shell renders
+// through (M4-12a). An empty name — the zero value, and what an absent key decodes
+// to — is the built-in default and never an error, so a config with no theme key is
+// silent. An unknown name returns the default *and* an error naming the built-ins:
+// the caller keeps launching on the default and reports it once (principle 3), since
+// styles.ByName deliberately refuses to guess which theme a typo meant (D169 pt 2).
+func resolveTheme(name string) (styles.Theme, error) {
+	if strings.TrimSpace(name) == "" {
+		return styles.DefaultTheme(), nil
+	}
+	t, ok := styles.ByName(name)
+	if !ok {
+		return styles.DefaultTheme(), fmt.Errorf("unknown theme %q, using %q (available: %s)",
+			name, styles.DefaultTheme().Name, strings.Join(styles.ThemeNames(), ", "))
+	}
+	return t, nil
 }
 
 // initialNamespace resolves the initial watch scope from the flags and the stored
