@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-04a landed the context switch itself (connect o
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-04b** Context switch action + picker (`ctx.switch`)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -175,8 +176,8 @@ M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted
 bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
 tested before any gesture can reach it, exactly as M4-03's reset did.
 
-- [ ] **M4-04b** Context switch action + picker (`ctx.switch`)
-      status: todo | owner: — | added: 2026-07-29
+- [ ] **M4-04b** Context switch action + picker (`ctx.switch`) — _claimed, see In Progress_
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
       notes: Depends on M4-04a. A registered `ctx.switch` action opens the reused modal picker (M2-08a) over M4-01's `kube.Contexts` with the current one marked (a `ContextLister` seam — kubeconfig data, not a cluster client, so it goes on the Model beside the connector, not on `Cluster`); the pick calls M4-04a's `switchContext`, and picking the context already live is a no-op. Ticks the first M4 exit criterion.
 - [ ] **M4-05** Per-context state follows the switch
       status: todo | owner: — | added: 2026-07-29
