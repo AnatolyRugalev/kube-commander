@@ -75,6 +75,10 @@ type Cluster struct {
 	// pod's container. Nil → search-inert / exec-inert.
 	searcher Searcher
 	execer   Execer
+
+	// childResolver turns a selected owner row into the scope its pods are listed
+	// under (M4-08). Nil → the children drill-down is inert.
+	childResolver ChildResolver
 }
 
 // ClusterClient is one cluster's client as the shell sees it: the union of every
@@ -107,6 +111,7 @@ type ClusterClient interface {
 	PortLister
 	Searcher
 	Execer
+	ChildResolver
 }
 
 // NewCluster bundles one cluster's client into the seams the shell drives. It is the
@@ -136,6 +141,7 @@ func NewCluster(c ClusterClient, pf PortForwarder) Cluster {
 		portForwarder:   pf,
 		searcher:        c,
 		execer:          c,
+		childResolver:   c,
 	}
 }
 

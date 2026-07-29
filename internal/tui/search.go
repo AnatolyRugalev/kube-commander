@@ -7,7 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/searchview"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
@@ -120,14 +119,7 @@ func (m Model) searchNamespace() string {
 // expensive enumeration the fast-start design avoids (D8/principle 4) — the load it does
 // cost is bounded inside kube.Search, which lists a fixed number of kinds at a time.
 func (m Model) searchResources() []kube.Resource {
-	items := m.menu.Items()
-	all := make([]kube.Resource, 0, len(items))
-	for _, it := range items {
-		if it.Kind != menu.ItemResource || !it.Available {
-			continue
-		}
-		all = append(all, it.Resource)
-	}
+	all := m.availableResources()
 	if m.searchView.AllKinds() {
 		return all
 	}

@@ -46,13 +46,15 @@ type fakeWatcher struct {
 	ctxs    []context.Context
 	res     []kube.Resource
 	ns      []string
-	preload []kube.WatchEvent // if set, buffered into every returned channel at Watch time
+	opts    []metav1.ListOptions // the scope each watch was started under (M4-08)
+	preload []kube.WatchEvent    // if set, buffered into every returned channel at Watch time
 }
 
-func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, _ metav1.ListOptions) (<-chan kube.WatchEvent, error) {
+func (f *fakeWatcher) Watch(ctx context.Context, r kube.Resource, ns string, opts metav1.ListOptions) (<-chan kube.WatchEvent, error) {
 	f.ctxs = append(f.ctxs, ctx)
 	f.res = append(f.res, r)
 	f.ns = append(f.ns, ns)
+	f.opts = append(f.opts, opts)
 	if f.err != nil {
 		return nil, f.err
 	}

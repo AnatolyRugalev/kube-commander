@@ -4223,3 +4223,38 @@ into?" with a `ChildScope` — the child `Resource`, a namespace, and a
    lookup with no network I/O (the role `canGet` plays for row actions), so
    extending the owner set is a one-line map entry — and, for a `spec.selector`
    kind, needs no new parsing at all.
+
+### D166 — A drill-down scope is browse state the *watch start* reads, and it is a nav level
+**2026-07-29.** M4-08 wires `kube.Children` (D165) to the browse table. The scope
+is not a second data path and not a mode; it is one more thing `m.current` is
+qualified by.
+
+1. **The scope is read where the watch is started, never at the call site.** The
+   shell holds one `kube.ChildScope` beside `m.current`, and `watchResource` — the
+   single place a browse watch begins — substitutes its `Namespace`/`Options` for
+   the app's namespace and an empty `ListOptions`. Any restart (a re-selection, a
+   reconnect's re-list) therefore re-applies it by construction, rather than
+   depending on a caller to remember. Nothing else may call `Watch` for the browse
+   table.
+2. **Both halves of the scope are load-bearing, including the namespace.** A
+   Node's children are cluster-wide (`Namespace: ""`), so a drill-down that reused
+   the app's namespace would silently show one namespace's pods. The scope's
+   namespace wins over `m.namespace` for as long as it is open.
+3. **Every direct re-point of the table clears the scope.** `selectResource` — the
+   entry point for a menu drill-in, the resource palette, a search hit and a
+   namespace re-scope — drops it; the drill-down starts its watch through
+   `watchResource` with the scope already installed. A scope belongs to one owner's
+   pods, so it must not narrow the next kind, and a namespace pick is an explicit
+   re-scope a stale selector would fight.
+4. **Resolve before switching, degrade in place.** The scope is resolved off the
+   update loop and the table is only re-pointed when a scope comes back. A refusal
+   (D165 pt 4) leaves the owner's table open and watching, with one toast — the
+   same connect-before-teardown ordering the context switch uses (D157), for the
+   same reason. A resolve that lands after the reader moved on is dropped on a
+   generation guard.
+5. **A drill-down is its own `nav.back` level**, above the focus pop and below the
+   filter: the first `esc` returns to the owner (re-selecting the row it was opened
+   from through the pending-selection mechanism), the second hands focus back to the
+   menu. A scoped table must also *say* it is scoped — the status bar names the
+   owner and `ChildScope.Selector()`, so a filtered pod list is never mistakable for
+   the namespace's.

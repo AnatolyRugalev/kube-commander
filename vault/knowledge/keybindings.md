@@ -99,6 +99,7 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Toggle log timestamps | `t` (`logs.timestamps`) | logs view only; shows each line's server timestamp ahead of its message (`kubectl logs --timestamps`). **Display only** — the stream always requests timestamps, so the toggle redraws the buffer instead of re-fetching, and the grep still matches only the message. Off by default (an RFC3339 stamp is 30 columns). Hinted nowhere — the closed-grep hint line is full, so it lives in `?` and `docs/keybindings.md` (LOGS-04b/D148) |
 | View / Edit YAML | `e` (`res.edit`) | any gettable kind; opens the object's YAML in `$EDITOR` — the single view+edit surface. Save applies (needs `update`/`patch`; a read-only save degrades to a toast). The standalone read-only YAML viewer + its `y` key were retired here (D135/M3-15c); `y` is now unbound |
 | Delete | `d` (`res.delete`) | any kind with `delete` (confirm); vim `dd` muscle memory (D133) |
+| Show the owner's pods | `P` (`res.children`) | the owner kinds `kube.HasChildren` names (Deployment/RS/StatefulSet/DaemonSet/Job/RC, Service, Node); switches the table to that owner's pods under a server-side selector, `esc` returns to the owner. `P` because lowercase `p` is the port picker's local-port prompt (M4-08/D166) |
 | Scale · Rollout restart | via actions menu | Deployment/RS/StatefulSet/… |
 | Cordon · Uncordon · Drain | via actions menu | Node |
 | Suspend · Resume | via actions menu | CronJob (#83) |

@@ -644,6 +644,20 @@ type Model struct {
 	current    kube.Resource
 	hasCurrent bool
 
+	// The owner → children drill-down (M4-08). childScope is the kube.ChildScope the
+	// browse table is narrowed to while a child table is open (hasChildScope guards
+	// it): watchResource passes its Namespace and Options to Watch instead of the
+	// app's own namespace and an empty ListOptions, and re-applies them on every
+	// restart, so the child table is a live watch rather than a snapshot (D165 pt 1).
+	// childOwner/childOwnerRef are the row it was opened from, so nav.back returns to
+	// it with that row selected. childGen tags the async scope resolve so a result
+	// arriving after the reader moved on is dropped rather than yanking their table.
+	childScope    kube.ChildScope
+	hasChildScope bool
+	childOwner    kube.Resource
+	childOwnerRef kube.ObjectRef
+	childGen      int
+
 	// nsPersister records a picked namespace to the per-context state file so the next
 	// launch restores it (nil → persistence-inert, M2-11b-2). It is bound to one
 	// context's state path, not to the cluster client, so it is not part of the
@@ -1142,6 +1156,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case rowActionMsg:
 		return m.handleRowAction(msg)
 
+	case childScopeMsg:
+		return m.handleChildScope(msg)
+
 	case modal.ConfirmedMsg:
 		return m.handleModalConfirmed(msg)
 
@@ -1261,7 +1278,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // its rows, so the table takes over from the menu (nav.left at the table's left
 // edge returns focus to the menu, D60/D62). With no watcher wired the model is
 // watch-inert and this is a no-op.
+// It is the entry point for every path that points the browse table at something
+// the reader chose *directly* — a menu drill-in, the resource palette, a search hit,
+// a namespace re-scope — so it drops any children drill-down scope first (M4-08): a
+// scope belongs to one owner's pods and must not silently narrow the next kind, nor
+// survive an explicit re-scope of the namespace. The drill-down itself starts its
+// watch through watchResource, below, with the scope already installed.
 func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
+	m.clearChildScope()
+	return m.watchResource(r)
+}
+
+// watchResource is selectResource's body: everything above minus the scope reset, so
+// the children drill-down can start the very same watch with a kube.ChildScope in
+// place (M4-08). Every caller goes through one of the two — nothing else starts a
+// browse watch — which is what guarantees the scope is re-applied on a restart
+// (namespace change, a reconnect's re-list) instead of being dropped on the second
+// pass, the failure mode the M4-07 journal flagged.
+func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	if m.watcher == nil {
 		return m, nil
 	}
@@ -1285,8 +1319,18 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.filterInput.Reset()
 	m.syncFilterStatus()
 
+	// A children drill-down watches the owner's pods, not the app's namespace: the
+	// scope carries both halves (a Node's children are cluster-wide, Namespace ""),
+	// and both are read here rather than at the call site so every restart re-applies
+	// them (M4-08/D165 pt 1).
+	ns, opts := m.namespace, metav1.ListOptions{}
+	if m.hasChildScope {
+		ns, opts = m.childScope.Namespace, m.childScope.Options
+	}
+	m.syncScopeStatus()
+
 	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := m.watcher.Watch(ctx, r, m.namespace, metav1.ListOptions{})
+	ch, err := m.watcher.Watch(ctx, r, ns, opts)
 	if err != nil {
 		cancel()
 		return m, func() tea.Msg { return NewErrorMsg("watch "+r.GVR.Resource, err) }
@@ -1474,6 +1518,7 @@ func (m *Model) stopClusterAsync() {
 	m.searchGen++    // in-flight search hits are now stale.
 	m.viewerGen++    // in-flight describe/secret/YAML fetches and log lines are now stale.
 	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
+	m.childGen++     // an in-flight child-scope resolve names an object on this cluster.
 	m.stopDrain()
 	m.drainGen++ // in-flight drain steps are now stale.
 	m.stopForwards()
@@ -1540,6 +1585,7 @@ func (m *Model) resetCluster() {
 	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
 	m.searchTarget, m.hasSearchTarget = kube.ObjectRef{}, false
 	m.resByLabel, m.actByLabel = nil, nil
+	m.clearChildScope() // the scope names an owner on the departing cluster.
 
 	// Back to the pre-drill-in browse panes. The menu is rebuilt rather than
 	// cleared: a fresh menu.New is exactly the seed, and folding the extras back in
@@ -1562,6 +1608,7 @@ func (m *Model) resetCluster() {
 	m.status.StopDiscovery()
 	m.status.SetResourceType("")
 	m.status.SetNamespace("")
+	m.status.SetScope("")
 	m.status.SetFilter("")
 	m.status.ClearError()
 	m.status.ClearNotice()
@@ -1723,6 +1770,24 @@ const resourcePickerKind = "resource"
 // mirroring what a menu drill-in can act on. resByLabel is rebuilt from that snapshot
 // so the picked title resolves back to its resource. With no watcher wired the model
 // is watch-inert and switching a resource is a no-op, so the palette does not open.
+// availableResources is the kind set the shell currently knows about: the menu's own
+// item list narrowed to the available resource rows, so discovered CRDs and
+// per-context extras are included and an unavailable kind is skipped. It is the one
+// place that snapshot is taken — the cluster search fans out over it (SEARCH-04a) and
+// the children drill-down resolves the child kind in it (M4-08/D165 pt 2) — so the
+// two cannot disagree about what this cluster offers.
+func (m Model) availableResources() []kube.Resource {
+	items := m.menu.Items()
+	out := make([]kube.Resource, 0, len(items))
+	for _, it := range items {
+		if it.Kind != menu.ItemResource || !it.Available {
+			continue
+		}
+		out = append(out, it.Resource)
+	}
+	return out
+}
+
 func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
 	if m.watcher == nil {
 		return m, nil
@@ -1874,6 +1939,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openEdit(msg)
 	case rowActionDelete:
 		return m.openDeleteConfirm(msg)
+	case rowActionChildren:
+		return m.openChildren(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
@@ -3783,6 +3850,12 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.clearFilter()
 			return m, nil
 		}
+		// A children drill-down is a level of its own, above the focus pop: esc out
+		// of a child table returns to the owner it was opened from (M4-08), and only
+		// a second esc — now on the owner's own table — hands focus back to the menu.
+		if next, cmd, exited := m.exitChildren(); exited {
+			return next, cmd
+		}
 		if m.table.Focused() {
 			m.table.Blur()
 			m.menu.Focus()
@@ -3820,7 +3893,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionActions:
 		return m.openActionsMenu()
 	case keymap.ActionDescribe, keymap.ActionLogs,
-		keymap.ActionEdit, keymap.ActionDelete:
+		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren:
 		return m.triggerRowActionKey(a)
 	}
 	return m.routeNav(a)

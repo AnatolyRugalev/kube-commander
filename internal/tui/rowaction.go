@@ -51,6 +51,7 @@ const (
 	rowActionExec           rowAction = "exec"
 	rowActionEdit           rowAction = "edit"
 	rowActionDelete         rowAction = "delete"
+	rowActionChildren       rowAction = "children"
 )
 
 // rowActionMeta is one row-action's registry entry: the id, the menu title, the
@@ -66,7 +67,8 @@ type rowActionMeta struct {
 }
 
 // rowActions is the curated M3 action set, in the order the actions menu lists
-// them: the read-only viewers first, then the kind-specific operations, then the
+// them: the read-only viewers and the children drill-down first, then the
+// kind-specific operations, then the
 // two general object actions (View/Edit YAML, delete) last so a destructive or
 // mutating entry never sits under the cursor by default. View/Edit YAML is a viewer
 // that can also mutate on save (D135), so it keeps its place in the mutating group.
@@ -75,6 +77,7 @@ type rowActionMeta struct {
 var rowActions = []rowActionMeta{
 	{rowActionDescribe, "Describe", keymap.ActionDescribe, canGet},
 	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController")},
+	{rowActionChildren, "Show pods", keymap.ActionChildren, kube.HasChildren},
 	{rowActionSecret, "Reveal secret", "", kindIn("Secret")},
 	{rowActionScale, "Scale", "", kindIn("Deployment", "ReplicaSet", "StatefulSet", "ReplicationController")},
 	{rowActionRolloutRestart, "Rollout restart", "", kindIn("Deployment", "DaemonSet", "StatefulSet")},

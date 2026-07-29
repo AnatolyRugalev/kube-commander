@@ -71,6 +71,13 @@ const (
 	// is `:q` (no-change is a neutral no-op); a save applies via the Editor seam.
 	ActionEdit   Action = "res.edit"
 	ActionDelete Action = "res.delete"
+	// ActionChildren drills from the selected owner row to its pods (M4-08): the
+	// browse table switches to the child kind, scoped by the selector kube.Children
+	// resolved for that object, and nav.back returns to the owner. It is meaningful
+	// only on a kind that has children (kube.HasChildren — the workload kinds,
+	// Service and Node); on any other kind it is inert, exactly as the entry is
+	// absent from that kind's actions menu.
+	ActionChildren Action = "res.children"
 	// ActionLogsFollow toggles follow (auto-scroll + live streaming) inside the
 	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
 	// elsewhere it is inert.
@@ -223,6 +230,7 @@ var actionMeta = []struct {
 	{ActionLogs, "View logs for the selected row"},
 	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
+	{ActionChildren, "Show the selected owner's pods"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
 	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
@@ -310,8 +318,14 @@ var defaultBindings = map[Action][]string{
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
-	ActionEdit:       {"e"},
-	ActionDelete:     {"d"},
+	ActionEdit:   {"e"},
+	ActionDelete: {"d"},
+	// The children drill-down takes `P` — the mnemonic **P**ods, since pods are the
+	// one child kind kubecom drills into (D165). Lowercase `p` is the port picker's
+	// local-port prompt, so the capital keeps it with the other capital-letter
+	// gestures (`D` describe, `L` logs, `C` context) and stays clear of the reserved
+	// nav chords (D10).
+	ActionChildren:   {"P"},
 	ActionLogsFollow: {"f"},
 	// The regex toggle joins the ctrl+<letter> family for the reason given at its
 	// declaration: it has to keep working with the grep field open, and only a key

@@ -176,6 +176,17 @@ widen is on. The two widens are independent, so you can search the curated kinds
 everywhere, every kind in one namespace, or — pressing both — everything, everywhere.
 Like the kind widen, each is off again the next time you open the search.
 
+Press `P` (`res.children`, rebindable) on a Deployment, ReplicaSet, StatefulSet,
+DaemonSet, Job, ReplicationController, Service or Node to switch the table to **that
+object's pods**. It is not a snapshot: kubecom reads the owner's selector (or, for a
+Node, `spec.nodeName`) and starts an ordinary live watch narrowed by it server-side, so
+the child table sorts, filters, colors and takes every row action exactly like any other
+— and keeps updating as pods come and go. The status bar names what you are scoped to
+(`↳ Deployment/api · app=web`) so a filtered pod list is never mistakable for the
+namespace's. `Esc` returns to the owner, with the row you came from still selected. A
+Service with no selector, or an owner that has just been deleted, leaves you where you
+are with a message rather than showing you every pod in the namespace.
+
 Press `L` (`res.logs`, rebindable) on a Pod — or on a Deployment, ReplicaSet,
 StatefulSet, DaemonSet, Job or ReplicationController, which resolves to one of its pods
 — to open the **dedicated full-screen logs view**. It opens on the **last 1000 lines**

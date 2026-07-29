@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-07 landed, so `kube.Children` hands the TUI a live child *scope* rather than a fetched list (D165); its consumer M4-08 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-08 landed, so `P` drills from an owner row to its pods under a live server-side scope and `esc` comes back (D166), closing the drill-down line; metrics (M4-09) and themes (M4-11) are what remain of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
-      notes: See the M4 Backlog entry for the full note. Consumes `kube.Children`/`HasChildren` (M4-07/D165).
+_(none)_
 
 ## Blocked
 
@@ -225,14 +223,15 @@ M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted
 bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
 tested before any gesture can reach it, exactly as M4-03's reset did.
 
+**The drill-down line (M4-07/08) is closed** as of M4-08/D166: the scope primitive and
+its consumer both landed, so `P` on an owner row switches the browse table to that
+owner's pods under a live server-side selector and `esc` returns to it.
+
 **The switcher line (M4-01…05) is closed** as of M4-05/D163: what a switch rebinds is now
 the cluster's client *and* everything keyed by the context (menu extras, remembered
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: Depends on M4-07 (**done** — `kube.Children` returns `ChildScope{Resource, Namespace, Options}`, `HasChildren` is the gate, D165). A registered action on an owner row switches the browse table to the child kind under that scope, with `ChildScope.Selector()` named in the status bar so it is obvious the table is filtered; `nav.back` returns to the owner. The browse model must carry **both** scope fields alongside the resource — a Node's children are cluster-wide (`Namespace: ""`), so reusing the app's own namespace would silently show one namespace's pods — and re-apply them on every watch restart (namespace change, reconnect). Ticks the drill-down exit criterion.
 - [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
       status: todo | owner: — | added: 2026-07-29
       notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
@@ -249,6 +248,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-08** TUI owner → children drill-down (`res.children`, `P`) — done 2026-07-29 (D166)
 
 - [x] **M4-07** Kube layer owner → children scope primitive — `kube.Children` returns a `ChildScope` (child `Resource` + namespace + `ListOptions`) instead of rows, so the TUI gets a live child table; `spec.selector` for workloads/Service, `spec.nodeName` for Node, `HasChildren` as the pure gate — done 2026-07-29 (D165)
 

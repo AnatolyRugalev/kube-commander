@@ -40,6 +40,7 @@ type Model struct {
 	context      string
 	namespace    string
 	resourceType string
+	scope        string
 	errText      string
 	noticeText   string
 	filter       string
@@ -67,6 +68,14 @@ func (m *Model) SetNamespace(ns string) { m.namespace = ns }
 // names what the table is listing (feedback 2026-07-22-status-bar-top). Empty
 // renders nothing (before the first drill-in there is no resource yet).
 func (m *Model) SetResourceType(kind string) { m.resourceType = kind }
+
+// SetScope sets the drill-down scope indicator shown in the left segment — the
+// owner and selector the browsed table is narrowed to while a children drill-down
+// is open (M4-08), e.g. "↳ Deployment/api · app=web". Empty renders nothing, which
+// is the ordinary browse case. Like SetFilter the string is used verbatim: the root
+// model composes it, so the bar stays a dumb renderer and does not have to know what
+// a ChildScope is.
+func (m *Model) SetScope(s string) { m.scope = s }
 
 // SetFilter sets the filter indicator shown in the left segment — the live filter
 // prompt while the user is typing, or the committed "/query" indicator once a
@@ -181,7 +190,7 @@ func (m Model) View() string {
 	return m.styles.StatusBar.Width(m.width).MaxWidth(m.width).Render(line)
 }
 
-// leftSegment builds the "context · namespace · resourceType · filter · mouse ·
+// leftSegment builds the "context · namespace · resourceType · scope · filter · mouse ·
 // [spinner] discovering…" run, skipping empty pieces so a missing namespace (or a
 // pre-drill-in empty resource type) doesn't leave a dangling separator.
 func (m Model) leftSegment() string {
@@ -194,6 +203,11 @@ func (m Model) leftSegment() string {
 	}
 	if m.resourceType != "" {
 		parts = append(parts, m.resourceType)
+	}
+	// The scope sits directly after the kind it narrows: "Pod · ↳ Deployment/api ·
+	// app=web" reads as one clause, and a filter typed on top of it follows.
+	if m.scope != "" {
+		parts = append(parts, m.scope)
 	}
 	if m.filter != "" {
 		parts = append(parts, m.filter)

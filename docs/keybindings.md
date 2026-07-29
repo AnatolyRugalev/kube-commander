@@ -86,6 +86,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `res.logs` | `L` | View logs for the selected row |
 | `res.edit` | `e` | View / edit the selected row's YAML in $EDITOR |
 | `res.delete` | `d` | Delete the selected row |
+| `res.children` | `P` | Show the selected owner's pods |
 
 ## logs
 
