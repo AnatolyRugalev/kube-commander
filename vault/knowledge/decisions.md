@@ -4118,3 +4118,33 @@ half. The binding rule for any view fed by a stream:
    line endings in place and splits them out), so a cached body is cloned on the way in.
    Cloning copies string headers, not log text — cheaper than the join-and-re-split
    `SetContent` did.
+
+### D163 — Per-context state is re-resolved on a switch, through one launcher seam
+**2026-07-29.** A context switch rebinds everything keyed by the *kubeconfig
+context* — the `menus/<context>.yaml` extras (D83), the last-used namespace and the
+per-context state file a namespace is persisted to (D90/D91) — not just the cluster
+client (M4-05, completing D155/D156/D157).
+
+1. **The tui package stays context- and storage-agnostic.** It gains a
+   `ContextStateLoader` seam (`LoadContextState(name) ContextState`) that the
+   launcher implements over the same `loadMenuExtras`/`loadState` helpers the launch
+   path uses, so launch and switch can never resolve a context differently. Like
+   `ClusterConnector`/`ContextLister` it is per-app state, **not** a `Cluster` seam
+   (D155 pt 2): it reads config keyed by a context name, not the cluster. Nil → the
+   shell keeps what it launched with, which is every hermetic test.
+2. **The load rides the connect's Cmd.** Both are disk reads keyed by the same name
+   and both are wanted only if the connect succeeded, so one goroutine and one
+   message (`clusterConnectedMsg.state`) carry them, and a failed switch discards
+   them together — the shell's own per-context state is then untouched.
+3. **`LoadContextState` cannot fail.** A missing file is the common case and a
+   malformed one degrades to the default menu / all-namespaces and is logged
+   (D159/principle 3): a config file may not block a switch, and the shell already
+   owns that frame with its "switched to …" notice.
+4. **Order around the reset is load-bearing.** The extras are installed *before*
+   `resetCluster`, because the reset rebuilds the menu from the seed and folds in
+   whatever the model holds; the persister and the restored namespace are applied
+   *after* it, because the reset clears the scope. A switch never persists the
+   namespace it only restored — it came out of the file it would be written to.
+5. **`-n` names the launch context's scope, not every context's.** The flag wins for
+   the run it was passed for (D91); a context switched to afterwards always lands on
+   its own recorded namespace.

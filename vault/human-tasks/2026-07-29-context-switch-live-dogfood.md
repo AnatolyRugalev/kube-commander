@@ -32,9 +32,13 @@ other context:
    server, or pick one whose cluster is down): you should get one transient error toast and
    stay exactly where you were — same context, same rows, still updating. This is the whole
    reason the connect runs before the teardown.
-6. **Namespace.** After a switch the scope is cleared to all-namespaces by design (D156's
-   corollary). Landing in the new context's *last-used* namespace is M4-05 and is not yet
-   implemented — please confirm the cleared scope is at least not confusing in practice.
+6. **Namespace and menu.** _(updated 2026-07-29, after M4-05/D163 — this task was raised
+   when a switch cleared the scope.)_ A switch now lands you in the namespace **that
+   context** was last left in, and builds the menu from **that context's**
+   `menus/<context>.yaml`. So: scope one context into a namespace, switch away, switch
+   back — you should return to it, and picking a namespace on the new context must not
+   change what the first one reopens on. A context kubecom has never recorded starts on
+   all-namespaces, which is the old behaviour and still correct.
 
 ## Why the agent can't do it
 

@@ -100,7 +100,10 @@ in a second terminal while you reproduce, and paste what you see into the bug re
 switch to any other context in the kubeconfig without restarting. The picker marks
 the one you are on; picking it again does nothing, and a context that fails to
 connect leaves you exactly where you were. Switching does not rewrite your
-kubeconfig's `current-context` — it applies to this session only.
+kubeconfig's `current-context` — it applies to this session only. A switch also
+picks up everything else that is per-context: you land in the namespace that
+context was last left in (below), and its own [menu file](#per-context-menu) is
+what the resource menu is built from.
 
 Navigation is keyboard-first (vim keys by default; see
 [`docs/keybindings.md`](docs/keybindings.md)). Mouse capture is **off by default**
@@ -268,6 +271,9 @@ Linux) — a kubecom-managed file, separate from your config and menu files, so
 kubecom rewrites it freely without touching anything you hand-edit. Passing
 `-n`/`--namespace` overrides the remembered scope for that run (use `-n ""` to
 force all namespaces); switching namespace in the UI updates what's remembered.
+Switching context (`C`) lands you in *that* context's remembered namespace, and
+what you pick afterwards is remembered against it — `-n` names the scope for the
+context you launched on, not for every context you visit.
 
 #### Migrating from the 2020 kube-commander
 

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — LOGS-05b killed the logs view's per-line render cost (cached body + a batching pump, D162), closing the LOGS line; M4-05 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-05 landed, so the context switcher line (M4-01…05) is complete: a switch now rebinds the new context's menu extras, remembered namespace and state file (D163); M4-06 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-05** Per-context state follows the switch
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -224,12 +223,14 @@ M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted
 bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
 tested before any gesture can reach it, exactly as M4-03's reset did.
 
-- [ ] **M4-05** Per-context state follows the switch — _claimed, see In Progress_
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: Depends on M4-04. The new context's `menus/<context>.yaml` extras (D83) and its last-namespace state (D90/D91) are per-context and currently resolved once in `run.go` at launch; reload both on switch and rebind the `NamespacePersister` to the new context's state path, so a switch lands on the namespace that context was last left in rather than the previous cluster's.
+**The switcher line (M4-01…05) is closed** as of M4-05/D163: what a switch rebinds is now
+the cluster's client *and* everything keyed by the context (menu extras, remembered
+namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
+rebind against a second real cluster, which is the standing dogfood human-task (D79).
+
 - [ ] **M4-06** Column-aware cell coloring in the table
       status: todo | owner: — | added: 2026-07-29
-      notes: Independent of the switcher — pick it first if a switcher slice stalls. Columns come from the server-side Table API and are kubectl-identical (D33), so the classifier keys off the **column name** (`STATUS`, `READY`, `RESTARTS`, node `STATUS`) and the cell text, not the kind — one rule set covers Pods, Nodes and any CRD whose printer uses those names. `styles.Theme` already carries `Error`/`Warn`/`Success`, so no new palette work. Pure function + render; hermetic. Selection styling must still win over the cell color on the cursor row.
+      notes: Top unblocked M4 item now that the switcher line (M4-01…05) is complete. Columns come from the server-side Table API and are kubectl-identical (D33), so the classifier keys off the **column name** (`STATUS`, `READY`, `RESTARTS`, node `STATUS`) and the cell text, not the kind — one rule set covers Pods, Nodes and any CRD whose printer uses those names. `styles.Theme` already carries `Error`/`Warn`/`Success`, so no new palette work. Pure function + render; hermetic. Selection styling must still win over the cell color on the cursor row.
 - [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
       status: todo | owner: — | added: 2026-07-29
       notes: Returns the child `Resource` **plus a `metav1.ListOptions` scope**, not a fetched list — `kube.Watch`/`List` already take `ListOptions`, so a scope hands the TUI a *live* child table for free instead of a second, snapshot-only data path (D155 pt 3). Workload owners resolve through `spec.selector` to a label selector (the `PodForOwner` path, M3-07b, generalized); Node→Pods is the `spec.nodeName` field selector — safe here precisely because the child kind is known to be Pod, which is what made a general field selector wrong for search (SEARCH-04c note).
@@ -252,6 +253,8 @@ tested before any gesture can reach it, exactly as M4-03's reset did.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-05** Per-context state follows the context switch — a `ContextStateLoader` seam re-resolves the new context's menu extras, last-used namespace and state-file persister, loaded alongside the connect and applied around the reset — done 2026-07-29 (D163)
 
 - [x] **LOGS-05b** Logs view no longer pays per line for every line already held — a cached rendered body an append extends, plus a pump that drains the log channel into one batch — done 2026-07-29 (D162)
 

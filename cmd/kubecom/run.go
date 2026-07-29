@@ -128,6 +128,7 @@ func runTUI(opts runOptions) error {
 		tui.WithCluster(clusterFor(clients)),
 		tui.WithClusterConnector(contextConnector{kubeconfig: opts.kubeconfig}),
 		tui.WithContextLister(contextLister{kubeconfig: opts.kubeconfig}),
+		tui.WithContextStateLoader(contextStateLoader{}),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
@@ -214,6 +215,49 @@ type contextLister struct {
 // classified error the shell toasts (principle 3).
 func (c contextLister) Contexts() ([]kube.ContextInfo, error) {
 	return kube.Contexts(kube.ClientConfig{Kubeconfig: c.kubeconfig})
+}
+
+// contextStateLoader is the launcher's tui.ContextStateLoader seam (M4-05): it
+// re-resolves the state that is keyed by the *kubeconfig context* — the per-context
+// menu file (D83) and the per-context state file (D90) — for the context a switch
+// is landing on. It is what stops a switch from carrying the previous context's
+// menu additions, namespace and state-file path into the new cluster.
+//
+// It holds no state of its own, deliberately: everything it needs is derived from
+// the context name it is handed, through the same loadMenuExtras/loadState helpers
+// the launch path uses, so launch and switch can never resolve a context
+// differently. Unlike contextConnector/contextLister it is not bound to
+// --kubeconfig — neither file is inside the kubeconfig; both are kubecom's own,
+// keyed by context name in kubecom's config/state dirs.
+type contextStateLoader struct{}
+
+// LoadContextState resolves the named context's menu extras, last-used namespace
+// and namespace persister. It never fails (the interface has no error): a missing
+// file is the common case and yields the default menu / all-namespaces scope, while
+// a malformed or unreadable one is logged and degrades the same way rather than
+// blocking the switch (principle 3). The log is the file logger setupLogging
+// installed, so a degraded switch is still diagnosable afterwards (D159) — a toast
+// is not available here, since the shell surfaces its own "switched to <ctx>" notice
+// in the same frame.
+//
+// Unlike the launch path there is no -n flag to honour: the flag names the scope for
+// the run kubecom was started with, not for every context visited afterwards, so a
+// switch always lands on the new context's recorded namespace (D163).
+func (contextStateLoader) LoadContextState(name string) tui.ContextState {
+	extras, err := loadMenuExtras(name)
+	if err != nil {
+		slog.Warn("menu config", "context", name, "error", err)
+		extras = nil // degrade to the built-in default menu, as launch does.
+	}
+	state, statePath := loadState(name)
+	st := tui.ContextState{MenuExtras: extras, Namespace: state.LastNamespace}
+	if statePath != "" {
+		// Guarded so the interface field stays a true nil when the state path is
+		// unresolvable — a typed nil pointer in it would read as "persistence wired"
+		// and panic on the first write.
+		st.Persister = &statePersister{path: statePath, state: state}
+	}
+	return st
 }
 
 // loadMenuExtras resolves the per-context menu file for the active context and

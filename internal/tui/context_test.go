@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
@@ -450,5 +451,166 @@ func TestLateContextListIsDropped(t *testing.T) {
 	}
 	if m.ctxByLabel != nil {
 		t.Errorf("a list landing after dismissal must not seed rows: %v", m.ctxByLabel)
+	}
+}
+
+// fakeStateLoader is a hermetic ContextStateLoader: it records the context names it
+// was asked for and hands back one preset state. The real one (cmd/kubecom's
+// contextStateLoader) reads the per-context menu and state files off disk — the seam
+// exists so a switch's rebind is testable without them (D18).
+type fakeStateLoader struct {
+	names []string
+	state ContextState
+}
+
+func (f *fakeStateLoader) LoadContextState(name string) ContextState {
+	f.names = append(f.names, name)
+	return f.state
+}
+
+// certExtra is a per-context menu entry the seed menu does not know, used to tell
+// one context's menu additions from another's.
+func certExtra(resource string) config.MenuResource {
+	return config.MenuResource{
+		Group: "cert-manager.io", Version: "v1", Resource: resource,
+		Kind: "Certificate", Namespaced: true,
+	}
+}
+
+// menuHasResource reports whether the menu lists an entry for the given plural
+// resource name — how a test tells whose menu extras the rebuilt menu carries.
+func menuHasResource(m Model, resource string) bool {
+	for _, it := range m.menu.Items() {
+		if it.Resource.GVR.Resource == resource {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSwitchRebindsPerContextState is M4-05's headline: the state that is keyed by
+// the *context* — its menu extras, its last-used namespace and the state file a
+// namespace is persisted to — follows the switch. Before this, a switch kept the
+// launch context's menu additions and wrote the new cluster's namespace choices into
+// the old context's state file.
+func TestSwitchRebindsPerContextState(t *testing.T) {
+	newCluster, _, _ := newClusterFake()
+	fc := &fakeConnector{cluster: newCluster}
+	newFP := &fakePersister{}
+	fs := &fakeStateLoader{state: ContextState{
+		MenuExtras: []config.MenuResource{certExtra("certificates")},
+		Namespace:  "team-a",
+		Persister:  newFP,
+	}}
+	oldFP := &fakePersister{}
+	m := browsingModel(t, &fakeWatcher{},
+		WithClusterConnector(fc), WithContextStateLoader(fs), WithContext("dev"),
+		WithMenuExtras([]config.MenuResource{certExtra("issuers")}),
+		WithNamespacePersister(oldFP),
+	)
+
+	next, cmd := m.switchContext("prod")
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if len(fs.names) != 1 || fs.names[0] != "prod" {
+		t.Fatalf("the state loader should be asked for the context being switched to, got %v", fs.names)
+	}
+	if !menuHasResource(m, "certificates") {
+		t.Error("the new context's menu extras should be folded into the rebuilt menu")
+	}
+	if menuHasResource(m, "issuers") {
+		t.Error("the departed context's menu extras must not survive the switch")
+	}
+	if m.namespace != "team-a" {
+		t.Errorf("namespace after switch = %q, want the new context's last-used team-a", m.namespace)
+	}
+	if !strings.Contains(m.menu.View(), "team-a") {
+		t.Errorf("the menu's namespace seam row should show the restored scope:\n%s", m.menu.View())
+	}
+	// The welcome page is the right pane after a reset, and it names the scope. (The
+	// status bar carries it too, but the switch's own "switched to prod" notice owns
+	// that line for the next few seconds.)
+	if !strings.Contains(m.welcome.View(false), "team-a") {
+		t.Errorf("the welcome page should show the restored scope:\n%s", m.welcome.View(false))
+	}
+
+	// The restored scope came out of the new context's state file, so the switch
+	// itself must not write anything back — only a *pick* persists.
+	if newFP.called || oldFP.called {
+		t.Error("a switch must not persist a namespace it only restored")
+	}
+
+	// And the persister is rebound: a namespace picked now goes to the new context's
+	// state file, never the departed one's.
+	_, persist := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	if persist == nil {
+		t.Fatal("picking a namespace should still issue a persist command after a switch")
+	}
+	persist()
+	if !newFP.called || newFP.got != "kube-system" {
+		t.Errorf("persisted through the new context = %q (called=%v), want kube-system", newFP.got, newFP.called)
+	}
+	if oldFP.called {
+		t.Errorf("the departed context's state file must not be written, got %q", oldFP.got)
+	}
+}
+
+// TestContextStateLoadsOffTheUpdateLoopAndOnlyOnSuccess pins where the per-context
+// state is resolved: in the same off-loop Cmd as the connect (it is a disk read, so
+// it may not run in Update), and not at all when the connect failed — a switch that
+// did not happen must leave the shell's own per-context state exactly as it was.
+func TestContextStateLoadsOffTheUpdateLoopAndOnlyOnSuccess(t *testing.T) {
+	fs := &fakeStateLoader{state: ContextState{Namespace: "team-a"}}
+	fc := &fakeConnector{err: errors.New("no such context")}
+	m := browsingModel(t, &fakeWatcher{},
+		WithClusterConnector(fc), WithContextStateLoader(fs), WithContext("dev"),
+		WithMenuExtras([]config.MenuResource{certExtra("issuers")}),
+	)
+
+	next, cmd := m.switchContext("prod")
+	m = next.(Model)
+	if len(fs.names) != 0 {
+		t.Errorf("the state load ran on the update loop: %v", fs.names)
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if len(fs.names) != 0 {
+		t.Errorf("a failed connect must not resolve the new context's state: %v", fs.names)
+	}
+	if m.namespace != "kube-system" || !menuHasResource(m, "issuers") {
+		t.Error("a failed connect must leave the launch context's state untouched")
+	}
+}
+
+// TestSwitchWithoutStateLoaderKeepsLaunchState: with no loader wired the shell has
+// no way to resolve another context's files, so it keeps what it launched with
+// rather than blanking it — the pre-M4-05 behaviour, and what every hermetic test
+// that wires no loader gets. The namespace is still cleared, by the reset.
+func TestSwitchWithoutStateLoaderKeepsLaunchState(t *testing.T) {
+	newCluster, _, _ := newClusterFake()
+	fc := &fakeConnector{cluster: newCluster}
+	fp := &fakePersister{}
+	m := browsingModel(t, &fakeWatcher{},
+		WithClusterConnector(fc), WithContext("dev"),
+		WithMenuExtras([]config.MenuResource{certExtra("issuers")}),
+		WithNamespacePersister(fp),
+	)
+
+	next, cmd := m.switchContext("prod")
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	if !menuHasResource(m, "issuers") {
+		t.Error("with no loader the launch context's menu extras should be kept, not dropped")
+	}
+	if m.nsPersister != fp {
+		t.Error("with no loader the launch persister should be kept")
+	}
+	if m.namespace != "" {
+		t.Errorf("the reset still clears the scope, got %q", m.namespace)
 	}
 }

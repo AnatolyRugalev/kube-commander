@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
@@ -40,14 +41,70 @@ func WithClusterConnector(c ClusterConnector) Option {
 	return func(m *Model) { m.connector = c }
 }
 
+// ContextState is the per-context state a switch must rebind (M4-05): everything
+// keyed by the *kubeconfig context* rather than by the cluster's client. It is the
+// launch path's WithMenuExtras / WithNamespace / WithNamespacePersister trio,
+// re-resolved for the context being switched to.
+//
+// It is a value with no client in it, so it is safe to compute off the update loop
+// and to discard when the connect it rode with failed. Its zero value is the state
+// of a context kubecom has never recorded anything for: the built-in default menu,
+// all namespaces, no persistence.
+type ContextState struct {
+	// MenuExtras are the context's `menus/<context>.yaml` additions (D83), folded
+	// into the rebuilt seed menu exactly as WithMenuExtras folds them in at launch.
+	MenuExtras []config.MenuResource
+	// Namespace is the scope the context was last left in (D90/D91), or "" for all
+	// namespaces — including when the context has no recorded state.
+	Namespace string
+	// Persister writes a namespace picked on the new context back to *its* state
+	// file. Nil disables persistence for the switched-in context (an unresolvable
+	// state path), exactly as a nil WithNamespacePersister does at launch.
+	Persister NamespacePersister
+}
+
+// ContextStateLoader resolves ContextState for a kubeconfig context (M4-05). It is
+// the seam that keeps the tui package context- and storage-agnostic: the launcher
+// alone knows where `menus/<context>.yaml` and the per-context state file live, so
+// it alone can re-resolve them, exactly as it resolves them once at launch.
+//
+// Like ClusterConnector it is per-app state rather than a Cluster seam — it reads
+// *config*, not the cluster, and outlives every switch. Implementations are called
+// off the update loop (they read files) and must be safe to call again while an
+// earlier call is still running. They never fail: a missing or malformed file
+// degrades to the zero-ish state and is logged by the implementation, since a
+// context switch must not be blocked by a config file (principle 3).
+//
+// Nil → the shell keeps whatever per-context state it launched with across a
+// switch, which is the pre-M4-05 behaviour and what every hermetic test that does
+// not wire one gets.
+type ContextStateLoader interface {
+	// LoadContextState returns the per-context state for the named kubeconfig
+	// context — the same name ClusterConnector.ConnectCluster is given.
+	LoadContextState(name string) ContextState
+}
+
+// WithContextStateLoader wires the seam a context switch re-resolves per-context
+// state through (M4-05). Without it a switch carries the launch context's menu
+// extras and namespace persister into the new context.
+func WithContextStateLoader(l ContextStateLoader) Option {
+	return func(m *Model) { m.ctxState = l }
+}
+
 // clusterConnectedMsg carries the outcome of a context switch's connect attempt back
 // onto the update loop. gen is the ctxGen the attempt was issued under: a switch
 // superseded by a later one delivers a message this model must ignore, since
 // applying it would land the shell on a cluster the user has already moved off.
+//
+// state is the new context's per-context state (M4-05), resolved in the same
+// off-loop Cmd as the connect: both are keyed by the context name, both are disk
+// reads, and both are wanted only if the connect succeeded — so one goroutine and
+// one message carry them, and a failed switch discards them together.
 type clusterConnectedMsg struct {
 	gen     int
 	context string
 	cluster Cluster
+	state   ContextState
 	err     error
 }
 
@@ -68,10 +125,17 @@ func (m Model) switchContext(name string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.ctxGen++
-	gen, conn := m.ctxGen, m.connector
+	gen, conn, loader := m.ctxGen, m.connector, m.ctxState
 	return m, func() tea.Msg {
 		cluster, err := conn.ConnectCluster(name)
-		return clusterConnectedMsg{gen: gen, context: name, cluster: cluster, err: err}
+		msg := clusterConnectedMsg{gen: gen, context: name, cluster: cluster, err: err}
+		// The per-context state is resolved in the same Cmd (M4-05): it is a disk
+		// read keyed by the same name, so it belongs off the update loop beside the
+		// connect. Skipped when the connect failed — nothing will be applied.
+		if err == nil && loader != nil {
+			msg.state = loader.LoadContextState(name)
+		}
+		return msg
 	}
 }
 
@@ -89,9 +153,11 @@ func (m Model) switchContext(name string) (tea.Model, tea.Cmd) {
 // available here (a connect is a single call, not a stream), so the generation check
 // is the whole guard.
 //
-// The namespace is deliberately left cleared by the reset rather than carried over:
-// the old cluster's scope does not describe the new one, and landing the new context
-// in its own last-used namespace is M4-05's job (D156's corollary).
+// The old cluster's namespace scope is never carried over — it does not describe the
+// new cluster (D156's corollary). Since M4-05 the new context's *own* last-used
+// namespace is restored over the cleared scope instead, along with its menu extras
+// and the persister that writes its state file, so a switch lands where that context
+// was left rather than at a blank slate (D163).
 func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.ctxGen {
 		return m, nil // superseded by a later switch; this cluster is not wanted.
@@ -101,11 +167,27 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		return m, m.surfaceError(e)
 	}
 
+	// The new context's menu extras are installed *before* the reset, which rebuilds
+	// the menu from the seed and folds in whatever extras the model holds — so the
+	// rebuilt menu is the new context's, not the departing one's (M4-05). With no
+	// loader wired the launch extras stay, which is the pre-M4-05 behaviour.
+	if m.ctxState != nil {
+		m.menuExtras = msg.state.MenuExtras
+	}
 	m.resetCluster()
 	m.Cluster = msg.cluster
 	m.context = msg.context
 	m.status.SetContext(msg.context)
 	m.welcome.SetContext(msg.context)
+	// The rest of the per-context state, after the reset cleared the old context's:
+	// the persister is rebound to the new context's state file *before* the scope is
+	// restored, so a namespace picked next is written to the right file, and the
+	// restored scope is not written back (it came from that file — persisting it
+	// would be a no-op write on every switch).
+	if m.ctxState != nil {
+		m.nsPersister = msg.state.Persister
+		m.setNamespace(msg.state.Namespace)
+	}
 
 	// After the reset, which clears the status bar the old cluster wrote.
 	notice := m.surfaceNotice("switched to " + msg.context)

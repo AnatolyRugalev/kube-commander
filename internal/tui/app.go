@@ -595,6 +595,13 @@ type Model struct {
 	ctxLister  ContextLister
 	ctxByLabel map[string]string
 
+	// ctxState re-resolves the per-context state (menu extras, last namespace, the
+	// state-file persister) for the context a switch lands on (M4-05). Like the two
+	// fields above it is keyed by the kubeconfig, not by a cluster, so it outlives
+	// every switch and is not part of the Cluster bundle. Nil → per-context state is
+	// left as it was wired at launch.
+	ctxState ContextStateLoader
+
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
 	// before discovery so a discovered twin dedupes against them. startupErr is a
@@ -1487,8 +1494,10 @@ func (m *Model) stopClusterAsync() {
 //
 // The context name, the keymap, the help overlay and the mouse/menu-visibility
 // toggles are deliberately left alone: none is cluster data. The per-context
-// namespace persister and menu extras are M4-05's (they need the *new* context to
-// resolve against); this leaves them as they are rather than guessing.
+// namespace persister and menu extras are likewise not reset here — they need the
+// *new* context to resolve against, so the switch installs them around this call
+// (M4-05/D163): the extras before it, because the menu rebuild below folds in
+// whatever the model holds, the persister and restored scope after it.
 //
 // It mutates the receiver, so callers pass the addressable model value they are
 // about to return.
@@ -1534,7 +1543,8 @@ func (m *Model) resetCluster() {
 
 	// Back to the pre-drill-in browse panes. The menu is rebuilt rather than
 	// cleared: a fresh menu.New is exactly the seed, and folding the extras back in
-	// mirrors construction (M4-05 reloads them for the new context).
+	// mirrors construction — and the extras it folds in are already the *new*
+	// context's, installed by the switch before this call (M4-05/D163).
 	m.menu = menu.New(m.styles)
 	m.menu.AddExtras(m.menuExtras)
 	m.menu.SetNamespace("")
@@ -1627,16 +1637,30 @@ func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.C
 	if ns == namespaceAllItem {
 		ns = ""
 	}
-	m.namespace = ns
-	m.status.SetNamespace(ns)
-	m.menu.SetNamespace(ns)    // keep the seam row's scope current
-	m.welcome.SetNamespace(ns) // keep the welcome scope current if shown pre-drill-in
+	m.setNamespace(ns)
 	persist := m.persistNamespace(ns)
 	if m.hasCurrent && m.watcher != nil {
 		model, cmd := m.selectResource(m.current)
 		return model, tea.Batch(persist, cmd)
 	}
 	return m, persist
+}
+
+// setNamespace applies a watch scope to the model and to the three surfaces that
+// show it ("" = all namespaces, which every one of them renders as nothing). It is
+// display state only: it starts no watch and persists nothing, so the two callers
+// pair it with what they each need — the namespace picker with a re-select and a
+// persist (handleNamespaceSelected), a context switch with neither, since the reset
+// left no resource open and the scope it restores came out of the state file it
+// would be written back to (M4-05).
+//
+// It mutates the receiver, so callers pass the addressable model value they are
+// about to return.
+func (m *Model) setNamespace(ns string) {
+	m.namespace = ns
+	m.status.SetNamespace(ns)
+	m.menu.SetNamespace(ns)    // keep the seam row's scope current
+	m.welcome.SetNamespace(ns) // keep the welcome scope current if shown pre-drill-in
 }
 
 // persistNamespace records the picked namespace as this context's last namespace so

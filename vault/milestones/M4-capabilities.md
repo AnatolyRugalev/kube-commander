@@ -31,7 +31,9 @@ The capabilities the original lacked, now natural on the new architecture.
 
 - [ ] Switch context without restarting; watches and menu rebind to the new cluster.
       (Mechanism complete and reachable since M4-04b/D158 — `C` (`ctx.switch`) opens the
-      picker, the pick connects then resets → swaps → rediscovers (M4-03/04a, D156/D157).
+      picker, the pick connects then resets → swaps → rediscovers (M4-03/04a, D156/D157) —
+      and complete on *state* too since M4-05/D163: the switch lands on the new context's
+      remembered namespace, its menu file and its state file, not the previous one's.
       Left **unticked** on purpose: the claim is about a live rebind against a second real
       cluster, which no fake can show, so it waits on the dogfood human-task
       `2026-07-29-context-switch-live-dogfood.md` rather than being ticked against
