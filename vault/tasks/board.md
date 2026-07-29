@@ -7,7 +7,9 @@ _Last updated: 2026-07-28 — SEARCH-04c-2b done and the SEARCH line is closed: 
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-EXIT** Audit M2's five unticked exit criteria against the code: tick what is genuinely met (with evidence), file board items for whatever is not, and set the milestone `Status:` accordingly
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+      notes: M2's board section is empty while the milestone is still `in-progress` with five unticked criteria — under milestone order M0→M5 that gap outranks opening M4. Claim-then-verify: no criterion gets ticked without a named test or code path.
 
 ## Blocked
 
