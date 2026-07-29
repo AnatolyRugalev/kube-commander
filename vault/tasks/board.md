@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — M4-04b put the switcher on a key (`C`), so the con
 
 ## In Progress
 
-_(none)_
+- [ ] **DIAG-01** Every surfaced error is also written to the log file
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-07-29
+      notes: First slice of the CRD feedback triage (see the DIAG line below).
 
 ## Blocked
 
@@ -151,6 +153,19 @@ than just scrolling to it (D147); and `logs.timestamps` shows each line's server
 a pure display toggle over stamps the stream already carries (D148). **The LOGS line is
 closed** — the dedicated logs view is feature-complete for M3, with only the standing
 throughput dogfood human-task outstanding against it.
+
+### Diagnostics (DIAG — feedback-driven)
+Raised by feedback `2026-07-29-external-secrets-crd-error` ("Need to find the actual
+error"): opening the external-secrets `ExternalSecret` CRD errors out. The report carries
+no error text — and it could not, because kubecom **had nowhere to put one**. Every
+runtime failure funnels through `surfaceError` into a 5-second, width-clipped status-bar
+toast and is then gone; the log file (`~/.cache/kubecom/kubecom.log`, documented in the
+README since M2-RUN) held only launcher warnings. So the CRD fix has a prerequisite: make
+the error obtainable. DIAG-01 does that, CRD-01 is the fix itself.
+
+- [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
+      status: blocked | owner: — | added: 2026-07-29
+      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` — the sandbox has no cluster and no external-secrets CRDs, and the plausible causes (a conversion-webhook failure the apiserver reports on LIST, a Table-conversion 406, an RBAC 403 on that group, a decode edge case) call for opposite fixes, one of which is "kubecom is right, degrade more legibly". Guessing between them would be inventing a bug. DIAG-01 makes the real error land in the log file; the human pastes it and this becomes a normal leg. Check the other CRDs in the same group (`SecretStore`, `PushSecret`) at the same time.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
