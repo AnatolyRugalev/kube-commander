@@ -3882,3 +3882,39 @@ follow, and they apply to M3/M4/M5 too.
    (M2-15), not an open milestone. Leftovers go to the board — the `Status:` line reports
    the criteria, and `feature-complete` (M1's precedent) is the honest state when every
    criterion holds and small work remains.
+
+## D155 — M4 decomposed into leg-sized slices; a context switch is a teardown, not a pointer swap (2026-07-29, M4-PLAN)
+
+M4 was a six-bullet prose scope with no board surface, so there was no pickable item for
+the next agent. Decomposed into ordered, dependency-noted slices **M4-01 … M4-12** on the
+[board](../tasks/board.md) (the D52/M2-PLAN, D105/M3-PLAN rhythm) and M4 flipped to
+`in-progress`. Two of the six bullets were already closed before the milestone opened —
+cluster search (pulled forward by feedback, D131…D153) and sort by column (#85, landed in
+M2 as M2-13a/13b, ticked here per D154 pt 1 against named tests) — so the slices cover the
+context switcher, column coloring, owner→children, metrics and themes. Three constraints
+follow, and they bind the legs that implement them.
+
+1. **Switching context is a teardown of the old cluster, not a rebind of a client
+   pointer.** Every per-cluster async in flight — the table watch, the discovery pass, a
+   log stream, a search sweep, a drain, the background port-forwards — belongs to the
+   cluster being left, and each one outliving the swap is a correctness bug, not a leak: a
+   surviving watch streams the old cluster's rows into the new context's table, and a row
+   action taken there operates on the wrong cluster. So the reset lands (M4-03) and is
+   tested *before* anything can trigger it (M4-04). Any future capability that starts a
+   cluster-bound goroutine owes the reset path a cancellation.
+2. **The cluster-bound seams get one indirection, and every future seam goes through
+   it.** `run.go` closes 21 `With*` seams over a single `*kube.Clients` fixed at
+   construction; M4-02 routes them through one bundle so a switch swaps one value. The
+   failure mode this pins is quiet and arrives later: a leg that adds a new seam closed
+   over the old `clients` compiles, passes its own tests, and leaves exactly one feature
+   pointed at the previous cluster after a switch. Adding a seam without adding it to the
+   bundle is a bug in that leg.
+3. **New data rides the existing paths.** Children resolve to a child `Resource` **plus a
+   `ListOptions` scope** (M4-07) handed to the existing `kube.Watch`, so a child table is
+   live for free rather than a second, snapshot-only listing path; metrics are a
+   point-in-time overlay refreshed on a slow ticker and joined onto the watched rows by
+   object ref (M4-10) — they are not watchable and must never become a second watch. The
+   general rule: a new column or a narrower row set is a *view over* the authoritative
+   watched set (the same rule filter and sort already follow, D78/D94), never a parallel
+   source of rows. And metrics absence stays silent (principle 3) — metrics-server missing
+   and metrics-server present-but-down degrade identically.

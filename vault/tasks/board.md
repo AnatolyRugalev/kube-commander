@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M2-15 gave the resource menu the half-page/page nav actions the table already had, emptying M2's board section and closing the milestone, so M4-PLAN is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-PLAN expanded M4 into ordered, leg-sized slices M4-01…M4-12 (D155) and M4 is now `in-progress`, so M4-01 is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-PLAN** Expand M4 (new capabilities) into ordered, leg-sized Backlog slices (D52 rhythm)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -153,9 +152,66 @@ a pure display toggle over stamps the stream already carries (D148). **The LOGS 
 closed** — the dedicated logs view is feature-complete for M3, with only the standing
 throughput dogfood human-task outstanding against it.
 
-_Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
+### M4 — New capabilities
+M4 adds what the original lacked, now natural on the new architecture — expanded here
+into ordered, leg-sized slices (M4-PLAN, D52/D155). Two of M4's six scope bullets are
+already closed: **cluster search** (pulled forward by feedback as the SEARCH line, D131…
+D153) and **sort by column** (#85, landed in M2 as M2-13a/13b), so what remains is the
+context switcher, column coloring, owner→children drill-down, metrics and themes. Built
+bottom-up like M2/M3: the kube-layer primitive first, then the TUI surface. Inherited
+constraints hold — zero shared mutable UI state (principle 1), message pumps not mutexes
+(D53), overlays composite over the browse body (D95), no raw-key matching (D10/D11),
+degrade-don't-crash (principle 3). Ordering is a default, not a contract — re-split any
+slice that proves > ~300 lines.
+
+**The context switcher (#80) is the milestone's hard part** and takes five slices, because
+switching clusters is a teardown, not a pointer swap (D155): `run.go` closes **21**
+cluster-bound seams over one `*kube.Clients` fixed at construction, and every per-cluster
+async in flight (watch, discovery, log stream, search sweep, drain, port-forwards) belongs
+to the cluster being left.
+
+- [ ] **M4-01** Kube layer: kubeconfig **context list** primitive (`internal/kube/context.go`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: `Contexts(ClientConfig) ([]ContextInfo, error)` over `clientcmd` `RawConfig()` — name, cluster, the context's default namespace, and which one is current. No network I/O, never panics on a missing/malformed kubeconfig (principle 3, same shape as the existing `ContextName`, which this sits beside). Hermetic: temp kubeconfig files. Pure data — nothing consumes it until M4-04.
+- [ ] **M4-02** One indirection for the cluster-bound seams (`cmd/kubecom/run.go`, `internal/tui`) — **no behavior change**
+      status: todo | owner: — | added: 2026-07-29
+      notes: The enabler, and the reason the switch is not one leg. Today 21 `With*` options each close over the same `clients` value, so nothing can repoint them. Route them through a single cluster bundle built by one constructor and held behind one pointer, so a switch swaps one value instead of 21 closures. Pure refactor: same seams, same tests, green on its own. **Any seam added after this goes through the bundle** (D155 pt 2).
+- [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-02. One `resetCluster` that cancels every per-cluster async — watch (`m.watchGen`), discovery, log stream, search sweep, drain, and `stopForwards` — and returns the browse panes to their pre-drill-in state (seed menu, empty table, cleared filter/sort/namespace). Reachable from tests only until M4-04; that is deliberate (a compiling, tested stub beats a half-wired switch). This is the leg that makes the switch *safe*: a surviving watch would stream the old cluster's rows into the new context's table (D155 pt 1).
+- [ ] **M4-04** Context switch action + picker (`ctx.switch`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-01/02/03. A registered action opens the reused modal picker (M2-08a) over M4-01's contexts with the current one marked; the pick connects a new `*kube.Clients` **off the update loop** (generation-guarded, a connect error toasts and leaves the old cluster untouched), then M4-03's reset → swap the M4-02 bundle → restart discovery → status bar renames the context. Ticks the first M4 exit criterion.
+- [ ] **M4-05** Per-context state follows the switch
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-04. The new context's `menus/<context>.yaml` extras (D83) and its last-namespace state (D90/D91) are per-context and currently resolved once in `run.go` at launch; reload both on switch and rebind the `NamespacePersister` to the new context's state path, so a switch lands on the namespace that context was last left in rather than the previous cluster's.
+- [ ] **M4-06** Column-aware cell coloring in the table
+      status: todo | owner: — | added: 2026-07-29
+      notes: Independent of the switcher — pick it first if a switcher slice stalls. Columns come from the server-side Table API and are kubectl-identical (D33), so the classifier keys off the **column name** (`STATUS`, `READY`, `RESTARTS`, node `STATUS`) and the cell text, not the kind — one rule set covers Pods, Nodes and any CRD whose printer uses those names. `styles.Theme` already carries `Error`/`Warn`/`Success`, so no new palette work. Pure function + render; hermetic. Selection styling must still win over the cell color on the cursor row.
+- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Returns the child `Resource` **plus a `metav1.ListOptions` scope**, not a fetched list — `kube.Watch`/`List` already take `ListOptions`, so a scope hands the TUI a *live* child table for free instead of a second, snapshot-only data path (D155 pt 3). Workload owners resolve through `spec.selector` to a label selector (the `PodForOwner` path, M3-07b, generalized); Node→Pods is the `spec.nodeName` field selector — safe here precisely because the child kind is known to be Pod, which is what made a general field selector wrong for search (SEARCH-04c note).
+- [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-07. A registered action on an owner row switches the browse table to the child kind under M4-07's scope, with the scope named in the status bar so it is obvious the table is filtered; `nav.back` returns to the owner. The browse model must carry the scope alongside the resource so a watch restart (namespace change, reconnect) re-applies it. Ticks the drill-down exit criterion.
+- [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
+- [ ] **M4-10** TUI: metrics columns when available
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-09. CPU/mem columns appended to the Pod/Node table, refreshed on a **slow ticker** — metrics are point-in-time samples and are not watchable, so this is an overlay joined onto the watched rows by object ref, never a second watch (D155 pt 3). No metrics group → the columns simply never appear and nothing is said. Ticks the metrics exit criterion.
+- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
+      status: todo | owner: — | added: 2026-07-29
+      notes: Pure data. Two more `Theme` constructors (ported monokai + solarized, D6) beside `DefaultTheme`, plus a lookup/list (`Themes()`/`ByName`) for the picker and the config field. Nothing selects them yet.
+- [ ] **M4-12** Theme selection + persistence
+      status: todo | owner: — | added: 2026-07-29
+      notes: Depends on M4-11. A `theme:` field in `config.yaml` applied at launch (unknown name → default + a startup toast, principle 3) and a picker action that writes the choice back through `Config.Save` (M2-11a/D89). **Split on pickup if needed:** a live restyle needs a `SetStyles` on every component that caches a `styles.Styles` at construction — if that half is large, land the config field first and the picker second. Ticks the themes exit criterion.
+
+_Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-PLAN** Expand M4 (new capabilities) into ordered, leg-sized Backlog slices M4-01…M4-12 — sort-by-column ticked as already met by M2-13a/13b, M4 set in-progress — done 2026-07-29 (D155)
 
 - [x] **M2-15** Half-page/page nav in the resource menu — `ctrl+d`/`pgdn`/`ctrl+u`/`pgup` now page the left pane, stepping in display rows (headers counted) and landing on the nearest selectable item; M2's board section is empty and the milestone is done — done 2026-07-29
 
