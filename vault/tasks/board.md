@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-06 landed, so the browse table now colors its s
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -228,8 +229,8 @@ the cluster's client *and* everything keyed by the context (menu extras, remembe
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
-      status: todo | owner: — | added: 2026-07-29
+- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`) — _claimed, see In Progress_
+      status: in-progress | owner: claude-opus | added: 2026-07-29
       notes: Returns the child `Resource` **plus a `metav1.ListOptions` scope**, not a fetched list — `kube.Watch`/`List` already take `ListOptions`, so a scope hands the TUI a *live* child table for free instead of a second, snapshot-only data path (D155 pt 3). Workload owners resolve through `spec.selector` to a label selector (the `PodForOwner` path, M3-07b, generalized); Node→Pods is the `spec.nodeName` field selector — safe here precisely because the child kind is known to be Pod, which is what made a general field selector wrong for search (SEARCH-04c note).
 - [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
       status: todo | owner: — | added: 2026-07-29
