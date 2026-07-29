@@ -383,6 +383,104 @@ func TestNavigationSkipsHeaders(t *testing.T) {
 	}
 }
 
+// pagedMenu is a menu sized so its content overflows the pane, which is the only
+// state in which paging differs from a plain move. It fails the test rather than
+// silently passing if the seed ever shrinks below one screenful.
+func pagedMenu(t *testing.T) Model {
+	t.Helper()
+	m := newTestModel()
+	m.SetSize(20, 12) // 10 visible display rows (border eats 2)
+	if got := m.innerHeight(); got != 10 {
+		t.Fatalf("innerHeight = %d, want 10", got)
+	}
+	if rows := len(m.rows()); rows <= m.innerHeight() {
+		t.Fatalf("seed menu has %d rows, which fits a %d-row pane — paging is untestable", rows, m.innerHeight())
+	}
+	return m
+}
+
+func TestPagingStepsByVisibleRowsAndLandsOnItems(t *testing.T) {
+	m := pagedMenu(t)
+	start := m.cursorRow()
+
+	m, _ = m.Update(keymap.ActionPageDown)
+	full := m.cursor
+	if m.cursorRow() <= start {
+		t.Fatalf("page down: cursor row %d did not advance from %d", m.cursorRow(), start)
+	}
+	// A page never moves past more items than the pane could show — headers only
+	// ever eat into the step, never extend it.
+	if full > m.innerHeight() {
+		t.Fatalf("page down moved %d items, more than the %d visible rows", full, m.innerHeight())
+	}
+	// The cursor indexes items, so it can never come to rest on a header row.
+	if r := m.cursorRow(); m.rows()[r].header {
+		t.Fatalf("page down landed the cursor on header row %d", r)
+	}
+
+	h := pagedMenu(t)
+	h, _ = h.Update(keymap.ActionHalfPageDown)
+	if h.cursor <= 0 || h.cursor >= full {
+		t.Fatalf("half page down: cursor = %d, want strictly between 0 and the full-page %d", h.cursor, full)
+	}
+}
+
+func TestPagingClampsAtBothEnds(t *testing.T) {
+	m := pagedMenu(t)
+	last := len(m.items) - 1
+
+	// Enough page-downs to cross the whole list, then one more that must not move.
+	for i := 0; i < len(m.items)+1; i++ {
+		m, _ = m.Update(keymap.ActionPageDown)
+	}
+	if m.cursor != last {
+		t.Fatalf("page down to the end: cursor = %d, want %d", m.cursor, last)
+	}
+	m, _ = m.Update(keymap.ActionPageDown)
+	if m.cursor != last {
+		t.Fatalf("page down at the end moved to %d, want %d", m.cursor, last)
+	}
+
+	for i := 0; i < len(m.items)+1; i++ {
+		m, _ = m.Update(keymap.ActionPageUp)
+	}
+	if m.cursor != 0 {
+		t.Fatalf("page up to the top: cursor = %d, want 0", m.cursor)
+	}
+	m, _ = m.Update(keymap.ActionHalfPageUp)
+	if m.cursor != 0 {
+		t.Fatalf("half page up at the top moved to %d, want 0", m.cursor)
+	}
+	if m.offset != 0 {
+		t.Fatalf("offset after paging back to the top = %d, want 0", m.offset)
+	}
+}
+
+func TestPagingScrollsTheWindow(t *testing.T) {
+	m := pagedMenu(t)
+	m, _ = m.Update(keymap.ActionPageDown)
+	if m.offset == 0 {
+		t.Fatal("page down did not scroll the window")
+	}
+	if cr := m.cursorRow(); cr < m.offset || cr >= m.offset+m.innerHeight() {
+		t.Fatalf("cursor row %d not visible in window [%d,%d)", cr, m.offset, m.offset+m.innerHeight())
+	}
+}
+
+func TestPagingStillMovesInAnUnsizedPane(t *testing.T) {
+	// Before the first WindowSizeMsg innerHeight is 0; a page must still advance by
+	// a row rather than doing nothing at all.
+	m := newTestModel()
+	m, _ = m.Update(keymap.ActionHalfPageDown)
+	if m.cursor != 1 {
+		t.Fatalf("half page down on an unsized menu: cursor = %d, want 1", m.cursor)
+	}
+	m, _ = m.Update(keymap.ActionPageUp)
+	if m.cursor != 0 {
+		t.Fatalf("page up on an unsized menu: cursor = %d, want 0", m.cursor)
+	}
+}
+
 func TestViewRendersSectionHeaders(t *testing.T) {
 	m := newTestModel()
 	m.SetSize(30, 40) // tall enough for every row

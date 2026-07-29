@@ -300,6 +300,30 @@ func TestFocusSwitch(t *testing.T) {
 	}
 }
 
+// TestMenuPagingKeysReachTheMenu proves the half-page/page keys are live in the
+// left pane (M2-15): with the menu focused, ctrl+d moves its cursor by more than
+// the one row nav.down would, and ctrl+u brings it back. routeNav forwards every
+// non-focus-switching action to the focused pane, so this guards against a future
+// special-case there quietly making the menu inert again — which is exactly the
+// state M2-EXIT found.
+func TestMenuPagingKeysReachTheMenu(t *testing.T) {
+	m := sized(t)
+	if !m.menu.Focused() {
+		t.Fatal("menu should start focused")
+	}
+
+	m, _ = press(t, m, tea.Key{Code: 'd', Mod: tea.ModCtrl})
+	paged := m.menu.Cursor()
+	if paged <= 1 {
+		t.Fatalf("ctrl+d moved the menu cursor to %d, want a multi-row jump", paged)
+	}
+
+	m, _ = press(t, m, tea.Key{Code: 'u', Mod: tea.ModCtrl})
+	if got := m.menu.Cursor(); got != 0 {
+		t.Fatalf("ctrl+u after ctrl+d: menu cursor = %d, want 0", got)
+	}
+}
+
 // TestMenuToggle proves menu.toggle (`m`) hides and shows the left menu pane and
 // moves focus accordingly (FB-nav-menu-toggle, D96's first navigation slice):
 // hiding hands the full width to the table and focuses it (a hidden pane can't hold

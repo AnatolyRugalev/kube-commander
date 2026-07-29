@@ -475,10 +475,10 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 }
 
 // Update handles a resolved keymap action. Navigation actions (up/down/top/
-// bottom) move the highlight and keep it visible; nav.drillIn emits a
-// ResourceSelectedMsg for the highlighted item so the root model can start its
-// watch. Any other action is ignored (the root routes it elsewhere). The menu
-// consumes actions, never raw keys (D11).
+// bottom, and the half-page/page steps) move the highlight and keep it visible;
+// nav.drillIn emits a ResourceSelectedMsg for the highlighted item so the root
+// model can start its watch. Any other action is ignored (the root routes it
+// elsewhere). The menu consumes actions, never raw keys (D11).
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	if len(m.items) == 0 {
 		return m, nil
@@ -492,6 +492,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.moveTo(0)
 	case keymap.ActionBottom:
 		m.moveTo(len(m.items) - 1)
+	case keymap.ActionHalfPageDown:
+		m.moveByRows(m.halfPageStep())
+	case keymap.ActionHalfPageUp:
+		m.moveByRows(-m.halfPageStep())
+	case keymap.ActionPageDown:
+		m.moveByRows(m.pageStep())
+	case keymap.ActionPageUp:
+		m.moveByRows(-m.pageStep())
 	case keymap.ActionDrillIn:
 		item := m.items[m.cursor]
 		if !item.Available {
@@ -504,6 +512,69 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return ResourceSelectedMsg{Resource: res} }
 	}
 	return m, nil
+}
+
+// pageStep is the distance a full page scroll travels, measured in **display
+// rows** rather than items: the menu's window math counts section headers, so a
+// page that stepped by item index would overshoot a section-dense stretch of the
+// list by exactly the headers it skipped. It is the pane's visible height, or 1
+// when the pane is too short to show anything (so a page step still advances) —
+// the same floor the table's pageStep takes.
+func (m Model) pageStep() int {
+	if h := m.innerHeight(); h > 0 {
+		return h
+	}
+	return 1
+}
+
+// halfPageStep is the half-page distance, likewise in display rows, floored at 1
+// so ctrl+d/ctrl+u still move in a one- or two-row pane instead of silently doing
+// nothing (a full page already floors at 1 the same way).
+func (m Model) halfPageStep() int {
+	if s := m.pageStep() / 2; s > 0 {
+		return s
+	}
+	return 1
+}
+
+// moveByRows moves the cursor delta display rows from where it currently renders,
+// then lands it on the nearest **selectable** row — section headers occupy screen
+// lines but the cursor never sits on one (D77), so a paged-to header is resolved to
+// the next item in the direction of travel, or the nearest one back the other way
+// when the clamp lands past the last item. Delegating the final placement to moveTo
+// keeps the clamping and scrollToCursor behaviour identical to every other move.
+func (m *Model) moveByRows(delta int) {
+	rows := m.rows()
+	if len(rows) == 0 {
+		return
+	}
+	cr := m.cursorRow()
+	if cr < 0 {
+		return
+	}
+	target := cr + delta
+	if target < 0 {
+		target = 0
+	}
+	if target > len(rows)-1 {
+		target = len(rows) - 1
+	}
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	for i := target; i >= 0 && i < len(rows); i += step {
+		if !rows[i].header {
+			m.moveTo(rows[i].itemIdx)
+			return
+		}
+	}
+	for i := target; i >= 0 && i < len(rows); i -= step {
+		if !rows[i].header {
+			m.moveTo(rows[i].itemIdx)
+			return
+		}
+	}
 }
 
 // moveTo sets the cursor to i (clamped to the item range) and scrolls so it stays

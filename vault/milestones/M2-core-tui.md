@@ -1,6 +1,6 @@
 # M2 — Core TUI (parity)
 
-**Status:** `feature-complete` (2026-07-29) — every exit criterion is met and evidenced inline (M2-EXIT audit, D154); one small nav-parity enhancement (M2-15) stays on the board and gates nothing.
+**Status:** `done` (2026-07-29) — every exit criterion is met and evidenced inline (M2-EXIT audit, D154), and the one enhancement left behind (M2-15, menu paging) has since landed, so nothing M2 remains on the board.
 **Phase:** REWRITE_PLAN Phase 2
 
 _M2-01 (keymap) + M2-02…M2-07 (shell) + M2-RUN + namespace picker (M2-08) + table filter with n/N search (M2-09) + confirm/prompt modal component (M2-10) + config write-back primitives (M2-11a) + per-context last-namespace persistence (M2-11b, restored on start with `-n` override, D91) have landed. Legacy-config migration has landed end-to-end (M2-12a parse+report primitive, D92; M2-12b launcher wiring, one-shot on `config.yaml` absence, D93). The table column-sort primitive has landed (M2-13a, `SortBy`/`ClearSort` as a stable, type-aware view over the row set, D94). Modal popups (help, namespace picker) now float over the base browse view instead of replacing it (FB-popups-overlay, `overlayCenter`/lipgloss layers, D95). The status bar moved to the top row and names the browsed resource type; the optional/popup-menu + command-palette navigation direction is recorded (D96) and queued as FB-nav-* tasks. Column sort is now wired to the app end-to-end: `sort.column` (`s`) cycles the sorted column/direction and back to unsorted, `sort.clear` (`S`) resets, with a `▲`/`▼` header indicator (M2-13b, D98). The left menu pane is now toggleable — `menu.toggle` (`m`) hides/shows it, a hidden menu going zero-width with the table taking the full width and focus (FB-nav-menu-toggle, D96 slice 1 / D99). A resource command palette (`resources.switch`, `:`) now switches the browsed kind pane-free — reusing the generic picker keyed by a distinct Kind, driving `selectResource`, so it works with the menu hidden (FB-nav-resource-palette, D96 slice 2 / D100). The D96 FB-nav-* line is complete: its third slice (FB-nav-menu-popup, a floating-menu overlay) was retired won't-do-separately — the toggle + palette already deliver the want, so it folds into the palette rather than adding a redundant surface (D101). The teatest modal-confirm coverage that was gated on an M3 action wiring the modal into the shell has landed (M2-14b, full-program accept/decline of the delete confirm, D116). Per-leg history: `vault/journal/` and the [board](../tasks/board.md)._
@@ -71,9 +71,10 @@ pickers, filter, and persisted config — all with zero shared mutable UI state.
       is generated from the resolved keymap and shows *all* of an action's keys
       (`Binding` joins `Keys()` — "j/down"): `TestBindingFromDefaults`,
       `TestBindingsCoversRegistry`, `TestHelpMapFullHelp`, overlay `TestHelpToggle`.
-      The menu handles up/down/top/bottom but not the half-page/page actions — both
-      key families are equally inert there, so parity holds; closing that gap is
-      **M2-15**, an enhancement, not a criterion.)
+      The menu handled up/down/top/bottom but not the half-page/page actions — both
+      key families were equally inert there, so parity held either way; M2-15 has
+      since closed the gap: `TestPagingStepsByVisibleRowsAndLandsOnItems`,
+      `TestMenuPagingKeysReachTheMenu`.)
 - [x] Rebinding an action in config takes effect; invalid keymaps fail load with a clear error; no raw-key matching remains in view code.
       (`Config.Keymap()` = `DefaultKeymap().Merge(overrides)`, resolved in `runTUI`
       *before* the alt-screen — a bad keymap returns the error and never launches —

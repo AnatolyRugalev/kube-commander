@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M2-EXIT audited M2's five unticked exit criteria against the code, ticked all five with the tests and code paths named inline, and closed M2 as feature-complete with one enhancement (M2-15) left behind (D154). Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M2-15 gave the resource menu the half-page/page nav actions the table already had, emptying M2's board section and closing the milestone, so M4-PLAN is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M2-15** Give the resource menu the half-page/page nav actions the table already has
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
-      notes: M2-EXIT filed this as M2's last remaining item. The menu handles `nav.up/down/top/bottom` only, so `ctrl+d`/`pgdn` and `ctrl+u`/`pgup` are inert in the left pane even though it scrolls. Mirror the table's `pageStep`, but in *display rows* — the menu's window math counts section headers, which the cursor cannot land on.
+_(none)_
 
 ## Blocked
 
@@ -28,11 +26,9 @@ deferred envtest item remains — not a blocker._
       notes: D66 — fake-client coverage is the autonomous-loop bar; these need control-plane binaries (fragile in cloud, D18), so a human runs them locally or a dedicated CI job with `setup-envtest` does. Not an M1 blocker.
 
 ### M2 — Core TUI
-**M2 is feature-complete (2026-07-29, M2-EXIT/D154):** every exit criterion in
+_(none — M2 is **done** (2026-07-29): every exit criterion in
 [`../milestones/M2-core-tui.md`](../milestones/M2-core-tui.md) is ticked against named
-evidence. Only the enhancement below remains, and it gates nothing.
-- [ ] **M2-15** Give the resource menu the half-page/page nav actions the table already has
-      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-29
+evidence (M2-EXIT/D154), and M2-15 cleared the one enhancement left behind.)_
 
 M2-01 (action registry + configurable keymap, D10/D11) is **complete** (01a keymap
 core / 01b sequences / 01c config wiring / 01d help overlay / 01e generated doc).
@@ -159,6 +155,8 @@ throughput dogfood human-task outstanding against it.
 _Remaining M4–M5 items to be expanded when those milestones open. See milestone files for scope._
 
 ## Done
+
+- [x] **M2-15** Half-page/page nav in the resource menu — `ctrl+d`/`pgdn`/`ctrl+u`/`pgup` now page the left pane, stepping in display rows (headers counted) and landing on the nearest selectable item; M2's board section is empty and the milestone is done — done 2026-07-29
 
 - [x] **M2-EXIT** Audit and close M2's exit criteria — all five unticked criteria ticked against named tests/code paths, M2 set feature-complete, M2-15 filed as the one remaining enhancement — done 2026-07-29 (D154)
 
