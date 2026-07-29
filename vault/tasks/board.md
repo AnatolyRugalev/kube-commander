@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — LOGS-06 made init and ephemeral containers selecta
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
+      status: in-progress | owner: claude-opus | added: 2026-07-29
 
 ## Blocked
 
