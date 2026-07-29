@@ -93,7 +93,7 @@ func TestDiscoveryPumpReady(t *testing.T) {
 	}
 	ch <- res
 
-	msg := discoveryPump(ch)()
+	msg := discoveryPump(ch, 0)()
 	got, ok := msg.(DiscoveryReadyMsg)
 	if !ok {
 		t.Fatalf("msg type = %T, want DiscoveryReadyMsg", msg)
@@ -113,7 +113,7 @@ func TestDiscoveryPumpTotalFailure(t *testing.T) {
 	ch := make(chan kube.DiscoveryResult, 1)
 	ch <- kube.DiscoveryResult{Err: errors.New("api server unreachable")}
 
-	msg := discoveryPump(ch)()
+	msg := discoveryPump(ch, 0)()
 	got, ok := msg.(DiscoveryReadyMsg)
 	if !ok {
 		t.Fatalf("msg type = %T, want DiscoveryReadyMsg", msg)
@@ -129,7 +129,7 @@ func TestDiscoveryPumpClosed(t *testing.T) {
 	ch := make(chan kube.DiscoveryResult)
 	close(ch)
 
-	if msg := discoveryPump(ch)(); msg != nil {
+	if msg := discoveryPump(ch, 0)(); msg != nil {
 		t.Fatalf("msg = %v, want nil", msg)
 	}
 }

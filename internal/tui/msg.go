@@ -43,8 +43,16 @@ type WatchClosedMsg struct{}
 // than reconcile an empty menu. A total failure is delivered here (not as an
 // ErrorMsg) so the model keeps the reconcile signal and the isolated per-group
 // detail together — it can classify Result.Err with kube.Classify when rendering.
+// gen tags the discovery pass the result belongs to, exactly as watchGen tags the
+// table watch: cancelling a pass does not guarantee its goroutine loses the race to
+// the cap-1 buffer (StartDiscovery selects between the send and ctx.Done), so a
+// pass cancelled by a cluster reset can still deliver — and reconciling the
+// *previous* cluster's resources into the new context's menu is a correctness bug,
+// not a leak (M4-03/D155 pt 1). The zero value is generation 0, the pass the model
+// starts at launch, so a message constructed without one is the launch pass's.
 type DiscoveryReadyMsg struct {
 	Result kube.DiscoveryResult
+	gen    int
 }
 
 // ErrorMsg is a generic, classified error surfaced to the UI so it can degrade a
@@ -224,12 +232,14 @@ func drainPump(ch <-chan kube.DrainEvent) tea.Cmd {
 // model classifies Result.Err itself — so discovery always yields one reconcile
 // signal. A channel closed with no value (should not happen for discovery, but is
 // handled rather than panicked on) yields a nil message, which Bubble Tea ignores.
-func discoveryPump(ch <-chan kube.DiscoveryResult) tea.Cmd {
+// The result is tagged with the generation of the pass that produced it so the
+// model can drop one belonging to a cluster it has since left (M4-03).
+func discoveryPump(ch <-chan kube.DiscoveryResult, gen int) tea.Cmd {
 	return func() tea.Msg {
 		res, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return DiscoveryReadyMsg{Result: res}
+		return DiscoveryReadyMsg{Result: res, gen: gen}
 	}
 }

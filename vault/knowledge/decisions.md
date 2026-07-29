@@ -3918,3 +3918,32 @@ follow, and they bind the legs that implement them.
    watched set (the same rule filter and sort already follow, D78/D94), never a parallel
    source of rows. And metrics absence stays silent (principle 3) — metrics-server missing
    and metrics-server present-but-down degrade identically.
+
+## D156 — Per-cluster async has one teardown inventory, and cancellation alone never proves a message will not arrive (2026-07-29, M4-03)
+
+`resetCluster` (M4-03) is the first half of a context switch, and building it exposed
+two constraints that outlive it.
+
+1. **One inventory, two callers.** `stopClusterAsync` is the single list of everything
+   asynchronous that belongs to the cluster the model is on — the table watch, the
+   discovery pass, the log stream, the search fan-out, a node drain, the background
+   port-forwards. Both `app.quit` and `resetCluster` go through it, and a leg that adds
+   a per-cluster async adds it there. The two lists were previously written out
+   separately, which is exactly how a switch ends up tearing down five of six things:
+   quit-only breakage is invisible (the process is exiting anyway), switch breakage is a
+   live goroutine talking to the cluster the user just left (D155 pt 1).
+2. **Cancel, then guard.** Cancelling a context does not guarantee the work in flight
+   stops delivering: every one of these producers sends on a buffered channel and can
+   win the race against its own `ctx.Done()`. A cancelled discovery pass is the sharpest
+   case — it selects between a cap-1 send and cancellation (D8), so a result from the
+   *previous* cluster can still land and reconcile that cluster's API surface into the
+   new context's menu. So every per-cluster async carries a generation its messages are
+   tagged with, and the teardown bumps it; `watchGen` was the pattern, `discoveryGen`
+   joined it here. A new per-cluster async needs both halves, not just the cancel.
+
+Corollary for the rest of the switcher line: a reset returns the shell to its
+*pre-drill-in* state, which means it clears the namespace scope and drops discovery's
+menu additions rather than carrying them across. The launch `-n` scope and the
+discovered resources describe the cluster being left, so **M4-05 owns landing the new
+context in its own last-used namespace** — after a reset there is no namespace to
+inherit, by design.

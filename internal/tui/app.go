@@ -771,8 +771,13 @@ type Model struct {
 
 	// discoveryCancel tears the in-flight discovery pass down on quit (the cap-1
 	// discovery channel already keeps the goroutine from leaking, D8, but cancelling
-	// drops the result promptly).
+	// drops the result promptly). discoveryGen tags each pass's result so one that
+	// belongs to a cluster the model has since left is dropped rather than
+	// reconciled into the new context's menu — cancelling alone cannot guarantee
+	// that, since the pass may already have won the race to the cap-1 buffer
+	// (M4-03). Touched only from the single-threaded update loop.
 	discoveryCancel context.CancelFunc
+	discoveryGen    int
 
 	// menuHidden gates the left resource-menu pane (FB-nav-menu-toggle, D96's first
 	// navigation slice). It is false by default (the menu shows). menu.toggle
@@ -1313,7 +1318,7 @@ func (m Model) startDiscovery() (tea.Model, tea.Cmd) {
 	m.discoveryCancel = cancel
 	ch := m.discoverer.StartDiscovery(ctx)
 	spin := m.status.StartDiscovery()
-	return m, tea.Batch(spin, discoveryPump(ch))
+	return m, tea.Batch(spin, discoveryPump(ch, m.discoveryGen))
 }
 
 // handleDiscovery folds a completed discovery pass into the menu and stops the
@@ -1323,6 +1328,9 @@ func (m Model) startDiscovery() (tea.Model, tea.Cmd) {
 // blanking (principle 3; visible surfacing of a discovery failure is a later
 // slice). The one-shot context is cancelled now its result is in hand.
 func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.discoveryGen {
+		return m, nil // a pass belonging to a cluster this model has left (M4-03).
+	}
 	m.status.StopDiscovery()
 	if m.discoveryCancel != nil {
 		m.discoveryCancel()
@@ -1330,6 +1338,128 @@ func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.menu.Reconcile(msg.Result)
 	return m, nil
+}
+
+// stopClusterAsync cancels every asynchronous operation bound to the cluster the
+// model is currently on — the table watch, the discovery pass, the log stream, the
+// cluster-search fan-out, a running node drain and every background port-forward —
+// and bumps the generation guarding each, so a message already in flight from the
+// cancelled work is dropped instead of applied. Cancellation alone is not enough:
+// each of these delivers over a buffered channel whose producer can win the race
+// against its own context, so "cancelled" and "will never be heard from again" are
+// different things (the discovery pass is the clearest case, DiscoveryReadyMsg).
+//
+// It is the single inventory of per-cluster async, and both callers need all of it:
+// app.quit calls it before tea.Quit, and resetCluster calls it before a context
+// switch repoints the Cluster bundle (M4-03/D155 pt 1). A future leg that adds a
+// per-cluster async adds it here, or it survives both a quit and a switch — and a
+// watch surviving a switch streams the old cluster's rows into the new context's
+// table, where a row action then hits the wrong cluster.
+//
+// Safe to call with nothing running. It mutates the receiver, so callers pass the
+// addressable model value they are about to return.
+func (m *Model) stopClusterAsync() {
+	if m.watchCancel != nil {
+		m.watchCancel()
+		m.watchCancel = nil
+	}
+	m.watchCh = nil
+	m.watchGen++ // in-flight watch-pump messages are now stale.
+	if m.discoveryCancel != nil {
+		m.discoveryCancel()
+		m.discoveryCancel = nil
+	}
+	m.discoveryGen++ // a result from the cancelled pass is now stale.
+	m.stopLogStream()
+	m.stopSearch()
+	m.searchGen++    // in-flight search hits are now stale.
+	m.viewerGen++    // in-flight describe/secret/YAML fetches and log lines are now stale.
+	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
+	m.stopDrain()
+	m.drainGen++ // in-flight drain steps are now stale.
+	m.stopForwards()
+}
+
+// resetCluster returns the model to the state it launches in, minus the cluster:
+// every per-cluster async torn down (stopClusterAsync), every surface showing the
+// departing cluster's data dismissed, and the browse panes back to their
+// pre-drill-in state — the seed menu (discovery's additions dropped, since they
+// described the old cluster's API surface), an empty unsorted unfiltered table, no
+// namespace scope, focus on the menu, the welcome page in the right pane.
+//
+// It is the *first* half of a context switch (M4-04): reset, then repoint the
+// Cluster bundle, then restart discovery. Landing it before anything can trigger it
+// is deliberate — a switch is a teardown, and a half-torn-down switch is a
+// correctness bug rather than a leak (D155 pt 1). Nothing calls it outside tests
+// until M4-04 wires the picker.
+//
+// The context name, the keymap, the help overlay and the mouse/menu-visibility
+// toggles are deliberately left alone: none is cluster data. The per-context
+// namespace persister and menu extras are M4-05's (they need the *new* context to
+// resolve against); this leaves them as they are rather than guessing.
+//
+// It mutates the receiver, so callers pass the addressable model value they are
+// about to return.
+func (m *Model) resetCluster() {
+	m.stopClusterAsync()
+
+	// Dismiss every surface showing the departing cluster's data. The two
+	// full-screen views are reset as well as hidden so their buffers do not hold the
+	// old cluster's lines/hits until the next open clears them.
+	m.searchView.Hide()
+	m.searchView.Reset()
+	m.logsView.Hide()
+	m.logsView.Reset()
+	m.viewer.Hide()
+	m.modal.Hide() // a pending confirm targets an object on the cluster being left.
+	m.nsPicker.Hide()
+	m.resPicker.Hide()
+	m.actPicker.Hide()
+	m.ctrPicker.Hide()
+	m.portPicker.Hide()
+	m.forwardsPanel = false
+	m.forwardsSel = 0
+
+	// Drop every stash holding an object from the departing cluster. Each is only
+	// read while the surface that set it is up, and all of those are now down, but a
+	// stale ObjectRef surviving a switch is exactly the kind of thing a later leg
+	// would resolve against the wrong cluster.
+	m.deleteRes, m.deleteRef = kube.Resource{}, kube.ObjectRef{}
+	m.mutateRes, m.mutateRef = kube.Resource{}, kube.ObjectRef{}
+	m.ctrStreamRes, m.ctrStreamRef = kube.Resource{}, kube.ObjectRef{}
+	m.drainRes, m.drainRef, m.drainLabel = kube.Resource{}, kube.ObjectRef{}, ""
+	m.pfPorts, m.pfPort = nil, kube.Port{}
+	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
+	m.searchTarget, m.hasSearchTarget = kube.ObjectRef{}, false
+	m.resByLabel, m.actByLabel = nil, nil
+
+	// Back to the pre-drill-in browse panes. The menu is rebuilt rather than
+	// cleared: a fresh menu.New is exactly the seed, and folding the extras back in
+	// mirrors construction (M4-05 reloads them for the new context).
+	m.menu = menu.New(m.styles)
+	m.menu.AddExtras(m.menuExtras)
+	m.menu.SetNamespace("")
+	m.menu.Focus()
+	m.table = table.New(m.styles)
+	m.namespace = ""
+	m.current, m.hasCurrent = kube.Resource{}, false
+	m.filtering = false
+	m.filterInput.Blur()
+	m.filterInput.Reset()
+
+	// The status bar describes the old cluster down to a transient toast about it,
+	// and the spinner would otherwise keep turning for a pass that was just
+	// cancelled.
+	m.status.StopDiscovery()
+	m.status.SetResourceType("")
+	m.status.SetNamespace("")
+	m.status.SetFilter("")
+	m.status.ClearError()
+	m.status.ClearNotice()
+	m.welcome.SetNamespace("")
+
+	m.resize()    // the rebuilt menu/table start unsized.
+	m.syncHints() // focus is back on the menu → menu-context hints.
 }
 
 // namespacesLoadedMsg carries the outcome of the async namespace list issued when
@@ -3428,16 +3558,11 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			m.help.SetVisible(false)
 			return m, nil
 		}
-		if m.watchCancel != nil {
-			m.watchCancel() // tear the watch goroutine down before the program exits.
-		}
-		if m.discoveryCancel != nil {
-			m.discoveryCancel() // and any in-flight discovery pass.
-		}
-		m.stopLogStream() // and any in-flight log stream.
-		m.stopSearch()    // and any in-flight cluster-search fan-out (SEARCH-02b).
-		m.stopDrain()     // and any in-flight node drain (cancel-on-quit, M3-11b).
-		m.stopForwards()  // and every background port-forward (cancel-on-exit, M3-13a).
+		// Tear down every goroutine bound to the cluster before the program exits —
+		// the watch, discovery, a log stream, a search fan-out, a node drain and every
+		// background port-forward. It is the same inventory a context switch tears
+		// down (M4-03), single-sourced in stopClusterAsync so the two cannot drift.
+		m.stopClusterAsync()
 		return m, tea.Quit
 	case keymap.ActionHelp:
 		m.help.Toggle()

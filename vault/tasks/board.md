@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-02 bundled the 21 cluster-bound seams behind one swappable `tui.Cluster`, so M4-03 (the cluster reset path) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-03 landed the cluster reset + the single per-cluster teardown inventory (D156), so M4-04 (the picker that triggers it) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -171,12 +170,9 @@ seams now sit in one swappable `tui.Cluster` (M4-02, and every new seam goes in 
 every per-cluster async in flight (watch, discovery, log stream, search sweep, drain,
 port-forwards) still belongs to the cluster being left and must be cancelled first.
 
-- [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
-      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-29
-      notes: M4-02 is done, so the bundle to swap exists and the Model's struct now lists the per-cluster state on its own. One `resetCluster` that cancels every per-cluster async — watch (`m.watchGen`), discovery, log stream, search sweep, drain, and `stopForwards` — and returns the browse panes to their pre-drill-in state (seed menu, empty table, cleared filter/sort/namespace). Reachable from tests only until M4-04; that is deliberate (a compiling, tested stub beats a half-wired switch). This is the leg that makes the switch *safe*: a surviving watch would stream the old cluster's rows into the new context's table (D155 pt 1).
 - [ ] **M4-04** Context switch action + picker (`ctx.switch`)
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-01/02/03. A registered action opens the reused modal picker (M2-08a) over M4-01's contexts with the current one marked; the pick connects a new `*kube.Clients` **off the update loop** (generation-guarded, a connect error toasts and leaves the old cluster untouched), then M4-03's reset → swap the M4-02 bundle → restart discovery → status bar renames the context. Ticks the first M4 exit criterion.
+      notes: Depends on M4-01/02/03 (all done). A registered action opens the reused modal picker (M2-08a) over M4-01's contexts with the current one marked; the pick connects a new `*kube.Clients` **off the update loop** (generation-guarded, a connect error toasts and leaves the old cluster untouched), then `m.resetCluster()` (M4-03) → swap the M4-02 bundle (`m.Cluster = NewCluster(…)`) → `m.status.SetContext`/`m.welcome.SetContext` → restart discovery. Ticks the first M4 exit criterion.
 - [ ] **M4-05** Per-context state follows the switch
       status: todo | owner: — | added: 2026-07-29
       notes: Depends on M4-04. The new context's `menus/<context>.yaml` extras (D83) and its last-namespace state (D90/D91) are per-context and currently resolved once in `run.go` at launch; reload both on switch and rebind the `NamespacePersister` to the new context's state path, so a switch lands on the namespace that context was last left in rather than the previous cluster's.
@@ -206,6 +202,7 @@ _Remaining M5 items to be expanded when that milestone opens. See the milestone 
 
 ## Done
 
+- [x] **M4-03** Cluster reset path — `resetCluster` + the single `stopClusterAsync` teardown inventory (quit shares it), discovery generation-guarded — done 2026-07-29 (D156)
 - [x] **M4-02** One indirection for the 21 cluster-bound seams — `tui.Cluster` bundle (embedded, built by `NewCluster`/`clusterFor`), no behavior change — done 2026-07-29
 
 - [x] **M4-01** Kubeconfig context-list primitive `kube.Contexts` — name/cluster/namespace/current, sorted, no network I/O — done 2026-07-29
