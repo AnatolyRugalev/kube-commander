@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-PLAN expanded M4 into ordered, leg-sized slices M4-01…M4-12 (D155) and M4 is now `in-progress`, so M4-01 is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-01 landed the kubeconfig context-list primitive, so M4-02 (one indirection for the 21 cluster-bound seams) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-01** Kube layer: kubeconfig **context list** primitive (`internal/kube/context.go`)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | started: 2026-07-29
-      notes: `Contexts(ClientConfig) ([]ContextInfo, error)` over `clientcmd` `RawConfig()` — name, cluster, the context's default namespace, and which one is current. No network I/O, never panics on a missing/malformed kubeconfig (principle 3, same shape as the existing `ContextName`, which this sits beside). Hermetic: temp kubeconfig files. Pure data — nothing consumes it until M4-04.
+_(none)_
 
 ## Blocked
 
@@ -209,6 +207,8 @@ to the cluster being left.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-01** Kubeconfig context-list primitive `kube.Contexts` — name/cluster/namespace/current, sorted, no network I/O — done 2026-07-29
 
 - [x] **M4-PLAN** Expand M4 (new capabilities) into ordered, leg-sized Backlog slices M4-01…M4-12 — sort-by-column ticked as already met by M2-13a/13b, M4 set in-progress — done 2026-07-29 (D155)
 
