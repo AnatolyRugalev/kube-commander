@@ -531,6 +531,11 @@ type Model struct {
 	resPicker picker.Model
 	actPicker picker.Model
 	ctrPicker picker.Model
+	// ctxPicker offers the kubeconfig's contexts as choices (M4-04b); its selection
+	// is resolved back to a context name through ctxByLabel and handed to
+	// switchContext. Unlike every other picker here it is not seeded from the
+	// cluster, so it stays usable when the current cluster is unreachable.
+	ctxPicker picker.Model
 	// portPicker offers a port-forward target's declared ports as choices
 	// (FB-pf-port-picker-b); its selection is stashed against mutateRes/mutateRef.
 	portPicker picker.Model
@@ -564,6 +569,14 @@ type Model struct {
 	// stream to cancel, so the generation is the whole guard).
 	connector ClusterConnector
 	ctxGen    int
+
+	// ctxLister seeds the context picker from the kubeconfig (M4-04b); nil → the
+	// ctx.switch action is inert. ctxByLabel maps each open picker row back to its
+	// context name, the resByLabel/actByLabel pattern (the picker's SelectedMsg
+	// carries only the label, D65). Both are kubeconfig-scoped, not cluster-scoped,
+	// so neither is part of the Cluster bundle or of what a switch tears down.
+	ctxLister  ContextLister
+	ctxByLabel map[string]string
 
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
@@ -860,6 +873,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		actPicker:   picker.New(s, actionPickerKind),
 		ctrPicker:   picker.New(s, containerPickerKind),
 		portPicker:  picker.New(s, portPickerKind),
+		ctxPicker:   picker.New(s, contextPickerKind),
 		viewer:      viewer.New(s, viewerKindDescribe),
 		modal:       modal.New(s),
 		welcome:     welcome.New(s),
@@ -874,6 +888,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.actPicker.SetTitle("Actions")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
+	m.ctxPicker.SetTitle("Switch context")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -1050,6 +1065,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clusterConnectedMsg:
 		return m.handleClusterConnected(msg)
 
+	case contextsLoadedMsg:
+		return m.handleContextsLoaded(msg)
+
 	case picker.SelectedMsg:
 		switch msg.Kind {
 		case resourcePickerKind:
@@ -1060,6 +1078,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleContainerSelected(msg)
 		case portPickerKind:
 			return m.handlePortSelected(msg)
+		case contextPickerKind:
+			return m.handleContextSelected(msg)
 		default:
 			return m.handleNamespaceSelected(msg)
 		}
@@ -1074,6 +1094,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ctrPicker.Hide()
 		case portPickerKind:
 			m.portPicker.Hide()
+		case contextPickerKind:
+			m.ctxPicker.Hide()
+			m.ctxByLabel = nil
 		default:
 			m.nsPicker.Hide()
 		}
@@ -1430,6 +1453,13 @@ func (m *Model) resetCluster() {
 	m.actPicker.Hide()
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
+	// The context picker holds kubeconfig data, not the departing cluster's, so it
+	// is dismissed for a different reason than the rest: its rows mark the context
+	// the shell is on, and a switch is exactly what makes that marker wrong. (In
+	// practice it is already closed — the pick that started the switch closed it —
+	// so this is about the state, not the surface.)
+	m.ctxPicker.Hide()
+	m.ctxByLabel = nil
 	m.forwardsPanel = false
 	m.forwardsSel = 0
 
@@ -1589,6 +1619,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.ctrPicker
 	case m.portPicker.Active():
 		return &m.portPicker
+	case m.ctxPicker.Active():
+		return &m.ctxPicker
 	}
 	return nil
 }
@@ -3308,7 +3340,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3480,6 +3512,7 @@ func (m *Model) resize() {
 	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
+	m.ctxPicker.SetSize(m.width, bodyH)
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
@@ -3618,6 +3651,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionNamespace:
 		return m.openNamespacePicker()
+	case keymap.ActionContext:
+		return m.openContextPicker()
 	case keymap.ActionResources:
 		return m.openResourcePicker()
 	case keymap.ActionForwards:
@@ -3830,6 +3865,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
 	case m.portPicker.Active():
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
+	case m.ctxPicker.Active():
+		body = overlayCenter(body, m.ctxPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	case m.forwardsPanel:

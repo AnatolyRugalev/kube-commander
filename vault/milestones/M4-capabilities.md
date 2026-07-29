@@ -30,6 +30,12 @@ The capabilities the original lacked, now natural on the new architecture.
 ## Exit criteria
 
 - [ ] Switch context without restarting; watches and menu rebind to the new cluster.
+      (Mechanism complete and reachable since M4-04b/D158 — `C` (`ctx.switch`) opens the
+      picker, the pick connects then resets → swaps → rediscovers (M4-03/04a, D156/D157).
+      Left **unticked** on purpose: the claim is about a live rebind against a second real
+      cluster, which no fake can show, so it waits on the dogfood human-task
+      `2026-07-29-context-switch-live-dogfood.md` rather than being ticked against
+      hermetic tests (D79) — the M3 Edit precedent.)
 - [x] Any column sortable; sort indicator visible; stable under live updates. (met since M2-13a/13b/D94/D98 — `table.SortBy`/`ClearSort` sort the *displayed* view over the authoritative watch-ordered set, so deltas keep flowing and re-sort in place: `TestSortSurvivesWatchDelta`, `TestSortPreservesSelectionByUID` (selection follows its object by UID, not its row), `TestClearSortRestoresWatchOrder`, `TestSetTableResetsSort`; the header arrow and its column alignment are `TestHeaderShowsSortIndicator`/`TestSortIndicatorKeepsColumnsAligned`; the `sort.column`/`sort.clear` cycle through the real key path is `TestSortCycleAdvancesColumnsAndClears`/`TestClearSortKeyRestoresOrder`. Ticked here rather than reopening M2: #85 was scheduled in M4 but implemented early, in the milestone that owns the table. **Column-aware coloring, the other half of that scope bullet, is not done** — it is M4-06, and it is not what this criterion asks for.)
 - [ ] Drill-down navigates from an owner to its pods and back.
 - [ ] Metrics columns appear only when metrics-server is present; absence is silent.

@@ -4,6 +4,9 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
 
 // ClusterConnector connects to a kubeconfig context by name and hands back the
@@ -108,4 +111,134 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 	notice := m.surfaceNotice("switched to " + msg.context)
 	next, discover := m.startDiscovery()
 	return next, tea.Batch(notice, discover)
+}
+
+// ContextLister lists the kubeconfig contexts the switcher offers (M4-04b). Like
+// ClusterConnector it is per-app state rather than a Cluster seam, and for a
+// stronger reason: it reads *kubeconfig* data, not the cluster — the same list is
+// correct before, during and after a switch, so tying it to a Cluster would rebuild
+// it for no reason and make the picker unavailable exactly when a connect failed.
+// The launcher implements it bound to the --kubeconfig path kubecom launched with,
+// mirroring contextConnector, so both halves of a switch resolve against one file.
+//
+// Implementations are called off the update loop, so reading the kubeconfig from
+// disk here is fine. Nil → the model is context-picker-inert: ctx.switch never opens
+// a picker, which is every hermetic test that does not wire one.
+type ContextLister interface {
+	// Contexts returns every declared context, sorted (kube.Contexts, M4-01). An
+	// error degrades to a toast; it never takes the app down (principle 3).
+	Contexts() ([]kube.ContextInfo, error)
+}
+
+// WithContextLister wires the seam the context picker is seeded from (M4-04b).
+// Without it the ctx.switch action is inert (the picker never opens).
+func WithContextLister(l ContextLister) Option {
+	return func(m *Model) { m.ctxLister = l }
+}
+
+// contextPickerKind is the Kind stamped on the context picker
+// (picker.New(s, "context")). Every picker emits the same SelectedMsg/CancelledMsg
+// types (D65), so the root branches on this Kind to route a picked context into
+// switchContext rather than the namespace/resource/action/container/port paths.
+const contextPickerKind = "context"
+
+// contextsLoadedMsg carries the outcome of the kubeconfig context listing issued
+// when the picker opens. It carries no generation: the list describes the
+// kubeconfig, not a cluster, so a result that lands late is still correct — the
+// only guard needed is that the picker is still open (a dismissed picker drops it).
+type contextsLoadedMsg struct {
+	contexts []kube.ContextInfo
+	err      error
+}
+
+// openContextPicker shows the context picker and kicks off the listing that seeds
+// it. With no lister wired the model is context-switch-inert and this is a no-op.
+// As with the namespace picker the modal is shown immediately (empty, then
+// populated when the list lands) so the gesture feels instant, and a stale item set
+// from a previous open is cleared first — a context could have been added to the
+// kubeconfig since, and the marked entry is the one kubecom is on *now*.
+func (m Model) openContextPicker() (tea.Model, tea.Cmd) {
+	if m.ctxLister == nil {
+		return m, nil
+	}
+	m.ctxPicker.SetItems(nil)
+	m.ctxByLabel = nil
+	m.ctxPicker.Show()
+	lister := m.ctxLister
+	return m, func() tea.Msg {
+		cs, err := lister.Contexts()
+		return contextsLoadedMsg{contexts: cs, err: err}
+	}
+}
+
+// handleContextsLoaded seeds the open picker with the listed contexts. A listing
+// failure (an unreadable or malformed kubeconfig) surfaces a classified error and
+// closes the picker, and a kubeconfig that declares no contexts closes it with a
+// notice rather than leaving an empty modal the reader can only escape from — both
+// degrade, neither crashes (principle 3). A result that arrives after the picker
+// was dismissed is dropped.
+func (m Model) handleContextsLoaded(msg contextsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.ctxPicker.Hide()
+		return m, func() tea.Msg { return NewErrorMsg("list contexts", msg.err) }
+	}
+	if !m.ctxPicker.Active() {
+		return m, nil // dismissed before the list arrived; ignore.
+	}
+	if len(msg.contexts) == 0 {
+		m.ctxPicker.Hide()
+		notice := m.surfaceNotice("no contexts in kubeconfig")
+		return m, notice
+	}
+	labels, byLabel := contextPickerItems(msg.contexts, m.context)
+	m.ctxByLabel = byLabel
+	m.ctxPicker.SetItems(labels)
+	return m, nil
+}
+
+// contextPickerItems renders one picker row per context and the map resolving a row
+// back to its context name (the picker's SelectedMsg carries only the label, D65 —
+// the resByLabel/actByLabel pattern). Rows are `* name (cluster)`, the marker on the
+// context the shell is **currently on**.
+//
+// That marker comes from the shell's own live context, not ContextInfo.Current
+// (D158): kubecom's switch is session-scoped and never writes `current-context`
+// back to the kubeconfig, so after one switch the kubeconfig's idea of "current" is
+// the context the reader left. The cluster name is shown only when it differs from
+// the context name — for the common one-cluster-per-context kubeconfig it would
+// otherwise repeat every row and cost the width the names need.
+func contextPickerItems(cs []kube.ContextInfo, current string) ([]string, map[string]string) {
+	labels := make([]string, 0, len(cs))
+	byLabel := make(map[string]string, len(cs))
+	for _, c := range cs {
+		label := "  " + c.Name
+		if c.Name == current {
+			label = "* " + c.Name
+		}
+		if c.Cluster != "" && c.Cluster != c.Name {
+			label += " (" + c.Cluster + ")"
+		}
+		if _, dup := byLabel[label]; dup {
+			continue // kubeconfig context names are unique, so this is defensive.
+		}
+		byLabel[label] = c.Name
+		labels = append(labels, label)
+	}
+	return labels, byLabel
+}
+
+// handleContextSelected applies a context picked from the switcher: it closes the
+// picker and hands the resolved name to switchContext, which connects off the update
+// loop and only then tears the old cluster down (M4-04a/D157). Picking the context
+// already live is a no-op there — the marked row is choosable rather than hidden, so
+// it must cost nothing. A label with no mapping (the picker can only list labels it
+// mapped, so this is defensive) closes the picker without switching.
+func (m Model) handleContextSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
+	m.ctxPicker.Hide()
+	name, ok := m.ctxByLabel[msg.Value]
+	m.ctxByLabel = nil
+	if !ok {
+		return m, nil
+	}
+	return m.switchContext(name)
 }

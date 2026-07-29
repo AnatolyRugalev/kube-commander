@@ -47,6 +47,12 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `resources.switch` | `:` | Switch resource (command palette) |
 
+## ctx
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `ctx.switch` | `C` | Switch cluster context |
+
 ## mouse
 
 | Action | Keys | Description |

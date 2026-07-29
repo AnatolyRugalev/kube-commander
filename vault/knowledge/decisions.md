@@ -3975,3 +3975,24 @@ Guard shape: a connect is a single call with no stream to cancel, so `ctxGen` al
 carries D156 pt 2's "cancel, then guard" — two switches in quick succession are ordered by
 generation, and the superseded result is dropped rather than applied on top of the newer
 one.
+
+## D158 — The context picker marks the shell's context, not the kubeconfig's (2026-07-29, M4-04b)
+
+kubecom's context switch is **session-scoped**: it connects a new client and repoints the
+`Cluster` bundle (D157), and it never writes `current-context` back to the kubeconfig.
+That is deliberate — a TUI that mutates the file every other tool reads would change what
+`kubectl` does next, from a gesture the user made inside kubecom to look at another
+cluster. The consequence binds every surface that names "the current context":
+`kube.ContextInfo.Current` answers *what the kubeconfig says*, which is the context the
+reader **launched from**, and after one switch that is the wrong answer. The shell's own
+`m.context` is the truth, so the picker's marker (and any later surface: a status-bar
+segment, a per-context state path, a menu-extras lookup) derives from it. `Current` stays
+on the type — it is the honest name for what kubeconfig data can tell you — and the
+launcher's `contextLister` deliberately passes no `Context` override, since the flag it
+would compute the flag from describes only the launch.
+
+Corollary for the seam's placement: `ContextLister` sits on the Model beside
+`ClusterConnector` (D157) rather than on `Cluster`, and for a stronger reason than the
+connector's — it reads *kubeconfig* data, not the cluster, so the same list is correct
+before, during and after a switch, and binding it to a `Cluster` would make the switcher
+unavailable exactly when a connect has failed and the user most needs to pick again.

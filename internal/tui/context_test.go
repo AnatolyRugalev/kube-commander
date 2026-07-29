@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
 
 // fakeConnector is a hermetic ClusterConnector: it records the context names it was
@@ -203,5 +206,249 @@ func TestStaleConnectResultIsDropped(t *testing.T) {
 	}
 	if len(newFD.ctxs) != 0 {
 		t.Error("a superseded connect result must not start discovery")
+	}
+}
+
+// fakeContextLister is a hermetic ContextLister: it counts how many times it was
+// asked and hands back a preset list or error. The real one (cmd/kubecom's
+// contextLister) reads a kubeconfig off disk — the seam exists so the picker is
+// testable without one (D18).
+type fakeContextLister struct {
+	contexts []kube.ContextInfo
+	err      error
+	calls    int
+}
+
+func (f *fakeContextLister) Contexts() ([]kube.ContextInfo, error) {
+	f.calls++
+	return f.contexts, f.err
+}
+
+// twoContexts is the list the picker tests are seeded with. `dev` is flagged
+// Current on purpose while the tests run a shell that is on `prod`: the kubeconfig's
+// current-context is the one the reader *launched* from, and kubecom never rewrites
+// it, so it is precisely the wrong thing to mark (D158).
+func twoContexts() []kube.ContextInfo {
+	return []kube.ContextInfo{
+		{Name: "dev", Cluster: "dev", Current: true},
+		{Name: "prod", Cluster: "gke_prod_eu"},
+	}
+}
+
+// pickerLabels reads the open picker's rows back out through the label map, which is
+// the only thing a pick can resolve through — the picker's SelectedMsg carries a
+// label, not a context (D65).
+func pickerLabelFor(t *testing.T, m Model, context string) string {
+	t.Helper()
+	for label, name := range m.ctxByLabel {
+		if name == context {
+			return label
+		}
+	}
+	t.Fatalf("no picker row maps to context %q (rows: %v)", context, m.ctxByLabel)
+	return ""
+}
+
+// TestContextKeyOpensThePickerAndListsOffTheUpdateLoop drives the whole gesture
+// through the real key path (D11 — no raw-key matching, the binding is registry
+// resolved): `C` opens the picker immediately and issues the listing as a Cmd, so a
+// kubeconfig read never blocks the update loop, and the rows land when it returns.
+func TestContextKeyOpensThePickerAndListsOffTheUpdateLoop(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
+
+	m, cmd := press(t, m, tea.Key{Code: 'C', Text: "C"})
+	if !m.ctxPicker.Active() {
+		t.Fatal("ctx.switch should open the context picker")
+	}
+	if cmd == nil {
+		t.Fatal("the listing should be issued as a Cmd")
+	}
+	if fl.calls != 0 {
+		t.Errorf("the kubeconfig was read on the update loop (%d calls)", fl.calls)
+	}
+
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	if fl.calls != 1 {
+		t.Errorf("Contexts called %d times, want 1", fl.calls)
+	}
+	if len(m.ctxByLabel) != 2 {
+		t.Errorf("picker rows = %d, want 2 (%v)", len(m.ctxByLabel), m.ctxByLabel)
+	}
+	if !m.ctxPicker.Active() {
+		t.Error("the picker should stay open once the rows land")
+	}
+	if view := m.View().Content; !strings.Contains(view, "Switch context") {
+		t.Errorf("the open picker should be composited over the browse body:\n%s", view)
+	}
+}
+
+// TestContextPickerMarksTheShellsContextNotTheKubeconfigs is the D158 assertion. The
+// list flags `dev` as the kubeconfig's current-context while the shell is on `prod`;
+// the marker must follow the shell. Getting this backwards is invisible at launch
+// (they agree) and wrong after every switch, which is exactly when a reader reaches
+// for the picker to check where they are.
+func TestContextPickerMarksTheShellsContextNotTheKubeconfigs(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
+
+	next, cmd := m.openContextPicker()
+	next, _ = next.(Model).Update(cmd())
+	m = next.(Model)
+
+	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
+		t.Errorf("the shell's own context should be marked, row = %q", got)
+	}
+	if got := pickerLabelFor(t, m, "dev"); strings.HasPrefix(got, "* ") {
+		t.Errorf("the kubeconfig's current-context must not be marked, row = %q", got)
+	}
+	// The cluster name is shown only where it adds something: `prod` points at
+	// `gke_prod_eu`, `dev` at a cluster of its own name.
+	if got := pickerLabelFor(t, m, "prod"); !strings.Contains(got, "(gke_prod_eu)") {
+		t.Errorf("a differing cluster name should be shown, row = %q", got)
+	}
+	if got := pickerLabelFor(t, m, "dev"); strings.Contains(got, "(") {
+		t.Errorf("a cluster name equal to the context name should be elided, row = %q", got)
+	}
+}
+
+// TestContextPickRoutesIntoSwitchContext closes the loop the leg exists to close: a
+// picked row resolves back to its context name and reaches switchContext (M4-04a),
+// which connects. The picker closes and drops its label map either way.
+func TestContextPickRoutesIntoSwitchContext(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	fc := &fakeConnector{}
+	fc.cluster, _, _ = newClusterFake()
+	m := sizedWith(t, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
+
+	next, cmd := m.openContextPicker()
+	next, _ = next.(Model).Update(cmd())
+	m = next.(Model)
+	label := pickerLabelFor(t, m, "dev")
+
+	next, cmd = m.Update(picker.SelectedMsg{Kind: contextPickerKind, Value: label})
+	m = next.(Model)
+	if m.ctxPicker.Active() || m.ctxByLabel != nil {
+		t.Error("the picker should close and drop its label map on a pick")
+	}
+	if cmd == nil {
+		t.Fatal("a pick should issue the connect Cmd")
+	}
+	if _, ok := cmd().(clusterConnectedMsg); !ok {
+		t.Fatalf("a pick should route into switchContext, got %T", cmd())
+	}
+	if len(fc.names) != 1 || fc.names[0] != "dev" {
+		t.Errorf("connected to %v, want [dev] — the label must resolve back to a context name", fc.names)
+	}
+}
+
+// TestPickingTheCurrentContextCostsNothing: the marked row is choosable rather than
+// hidden, so choosing it must be a no-op — not a teardown and rebuild of the working
+// cluster (D157's scope note). The picker still closes, as any pick does.
+func TestPickingTheCurrentContextCostsNothing(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	fc := &fakeConnector{}
+	fw := &fakeWatcher{}
+	m := browsingModel(t, fw, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
+
+	next, cmd := m.openContextPicker()
+	next, _ = next.(Model).Update(cmd())
+	m = next.(Model)
+
+	next, cmd = m.Update(picker.SelectedMsg{Kind: contextPickerKind, Value: pickerLabelFor(t, m, "prod")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Error("picking the live context should issue no work")
+	}
+	if len(fc.names) != 0 {
+		t.Errorf("picking the live context must not reconnect: %v", fc.names)
+	}
+	if m.ctxGen != 0 {
+		t.Errorf("picking the live context must not burn a generation, got %d", m.ctxGen)
+	}
+	if !m.hasCurrent || fw.ctxs[0].Err() != nil {
+		t.Error("picking the live context must not disturb the running cluster")
+	}
+	if m.ctxPicker.Active() {
+		t.Error("the picker should close on a pick, no-op or not")
+	}
+}
+
+// TestContextListingDegradesRatherThanBlocking covers the two ways the list can be
+// unusable. Both close the picker and say something — an empty modal a reader can
+// only escape from is the failure mode this avoids (principle 3).
+func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		lister   *fakeContextLister
+		wantErr  bool
+		wantNote bool
+	}{
+		{"unreadable kubeconfig", &fakeContextLister{err: errors.New("no kubeconfig")}, true, false},
+		{"no contexts declared", &fakeContextLister{}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := sizedWith(t, WithContextLister(tc.lister), WithContext("prod"))
+			next, cmd := m.openContextPicker()
+			next, cmd = next.(Model).Update(cmd())
+			m = next.(Model)
+			if m.ctxPicker.Active() {
+				t.Error("the picker should close rather than sit empty")
+			}
+			if cmd == nil {
+				t.Fatal("the failure should say something rather than close silently")
+			}
+			if tc.wantErr {
+				// An error toast arrives as its own ErrorMsg; a notice is written
+				// straight onto the status bar (its Cmd is only the auto-clear
+				// timer, which would sleep out the display window if run here).
+				next, _ = m.Update(cmd())
+				m = next.(Model)
+			}
+			if got := m.status.HasError(); got != tc.wantErr {
+				t.Errorf("status error = %v, want %v", got, tc.wantErr)
+			}
+			if got := m.status.HasNotice(); got != tc.wantNote {
+				t.Errorf("status notice = %v, want %v", got, tc.wantNote)
+			}
+		})
+	}
+}
+
+// TestContextPickerIsInertWithoutALister: no seam wired (every hermetic test, and
+// any build whose launcher supplies none) means the gesture opens nothing at all
+// rather than an empty modal — the ns.switch precedent.
+func TestContextPickerIsInertWithoutALister(t *testing.T) {
+	m := sizedWith(t, WithContext("prod"))
+	m, cmd := press(t, m, tea.Key{Code: 'C', Text: "C"})
+	if m.ctxPicker.Active() || cmd != nil {
+		t.Error("ctx.switch should be inert with no context lister wired")
+	}
+}
+
+// TestLateContextListIsDropped: the listing is not generation-tagged (it describes
+// the kubeconfig, not a cluster, so it cannot go stale), which leaves exactly one
+// guard to get right — a result that lands after the picker was dismissed must not
+// re-seed a closed picker or resurrect it.
+func TestLateContextListIsDropped(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
+
+	next, cmd := m.openContextPicker()
+	m = next.(Model)
+	next, _ = m.Update(picker.CancelledMsg{Kind: contextPickerKind}) // dismissed first
+	m = next.(Model)
+	if m.ctxPicker.Active() {
+		t.Fatal("nav.back should close the context picker")
+	}
+
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.ctxPicker.Active() {
+		t.Error("a list landing after dismissal must not reopen the picker")
+	}
+	if m.ctxByLabel != nil {
+		t.Errorf("a list landing after dismissal must not seed rows: %v", m.ctxByLabel)
 	}
 }

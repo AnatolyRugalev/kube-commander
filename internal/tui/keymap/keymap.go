@@ -48,10 +48,15 @@ const (
 	ActionQuit         Action = "app.quit"
 	ActionNamespace    Action = "ns.switch"
 	ActionResources    Action = "resources.switch"
-	ActionToggleMouse  Action = "mouse.toggle"
-	ActionSort         Action = "sort.column"
-	ActionClearSort    Action = "sort.clear"
-	ActionToggleMenu   Action = "menu.toggle"
+	// ActionContext opens the kubeconfig context switcher (M4-04b): a modal picker
+	// over the contexts the kubeconfig declares, whose pick tears the current
+	// cluster down and reconnects to the chosen one (M4-04a). It is app-global like
+	// ns.switch and, like it, is inert without the seam that feeds it.
+	ActionContext     Action = "ctx.switch"
+	ActionToggleMouse Action = "mouse.toggle"
+	ActionSort        Action = "sort.column"
+	ActionClearSort   Action = "sort.clear"
+	ActionToggleMenu  Action = "menu.toggle"
 	// M3 row actions (operate on the selected resource row). ActionActions opens
 	// the actions menu (D107); the rest are direct-key shortcuts for the most-used
 	// actions, all off the reserved nav keys (D10). The full curated action set
@@ -208,6 +213,7 @@ var actionMeta = []struct {
 	{ActionQuit, "Quit"},
 	{ActionNamespace, "Switch namespace"},
 	{ActionResources, "Switch resource (command palette)"},
+	{ActionContext, "Switch cluster context"},
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
@@ -284,13 +290,23 @@ var defaultBindings = map[Action][]string{
 	ActionQuit:         {"q", "ctrl+c"},
 	ActionNamespace:    {"ctrl+n"},
 	ActionResources:    {":"},
-	ActionToggleMouse:  {"M"},
-	ActionSort:         {"s"},
-	ActionClearSort:    {"S"},
-	ActionToggleMenu:   {"m"},
-	ActionActions:      {"a"},
-	ActionDescribe:     {"D"},
-	ActionLogs:         {"L"},
+	// The context switcher does *not* join the ctrl+<letter> family its sibling
+	// ns.switch belongs to, and the difference is not cosmetic: that family exists
+	// for gestures that must survive an always-open text field (search.cluster and
+	// both its widens, D140 pt 1). The context picker has no such field — like the
+	// namespace picker its filter is opt-in (`/`) — so a plain key is safe, and the
+	// free ctrl+<letter> keys are better spent on the surfaces that need them.
+	// `C` is the mnemonic **C**ontext, free in the browse context, not a reserved
+	// nav chord (D10), and sits with the other capital-letter app-global gestures
+	// (`M` mouse, `F` forwards, `X` stop-all). Lowercase `c` is secret.copy.
+	ActionContext:     {"C"},
+	ActionToggleMouse: {"M"},
+	ActionSort:        {"s"},
+	ActionClearSort:   {"S"},
+	ActionToggleMenu:  {"m"},
+	ActionActions:     {"a"},
+	ActionDescribe:    {"D"},
+	ActionLogs:        {"L"},
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
@@ -312,9 +328,9 @@ var defaultBindings = map[Action][]string{
 	// `t` like every other letter (D140 pt 1). `t` is free in the browse context.
 	ActionLogsTimestamps: {"t"},
 	ActionRevealSecret:   {"r"},
-	ActionCopySecret:   {"c"},
-	ActionForwards:     {"F"},
-	ActionStopForwards: {"X"},
+	ActionCopySecret:     {"c"},
+	ActionForwards:       {"F"},
+	ActionStopForwards:   {"X"},
 	// Port-picker local-port gestures (FB-pf-local-port): `p` for the local **p**ort
 	// prompt, `0` for "let the OS pick one" — the port-0 convention, though the spec
 	// kubectl/client-go actually accepts is the leading-colon form `:<remote>` (`:0`

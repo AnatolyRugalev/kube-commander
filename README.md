@@ -89,6 +89,12 @@ kubeconfig/context fails with a clear message instead of launching. While the UI
 runs it owns the terminal, so all logs (including client-go warnings) go to a file
 under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
 
+`--context` only picks the context to *start* on: press `C` (`ctx.switch`) to
+switch to any other context in the kubeconfig without restarting. The picker marks
+the one you are on; picking it again does nothing, and a context that fails to
+connect leaves you exactly where you were. Switching does not rewrite your
+kubeconfig's `current-context` — it applies to this session only.
+
 Navigation is keyboard-first (vim keys by default; see
 [`docs/keybindings.md`](docs/keybindings.md)). Mouse capture is **off by default**
 so your terminal's own click-drag **select-to-copy** keeps working (names, values,

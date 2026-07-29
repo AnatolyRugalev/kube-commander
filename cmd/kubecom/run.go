@@ -127,6 +127,7 @@ func runTUI(opts runOptions) error {
 	model := tui.NewWithKeymap(km,
 		tui.WithCluster(clusterFor(clients)),
 		tui.WithClusterConnector(contextConnector{kubeconfig: opts.kubeconfig}),
+		tui.WithContextLister(contextLister{kubeconfig: opts.kubeconfig}),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
@@ -186,6 +187,28 @@ func (c contextConnector) ConnectCluster(name string) (tui.Cluster, error) {
 		return tui.Cluster{}, err
 	}
 	return clusterFor(clients), nil
+}
+
+// contextLister is the launcher's tui.ContextLister seam (M4-04b): it lists the
+// contexts the switcher offers, straight from kube.Contexts (M4-01). Like
+// contextConnector it is bound to the --kubeconfig path and *not* to a context —
+// the flag names the file, the switch changes the context — so both halves of a
+// switch resolve against the same kubeconfig for the whole session.
+//
+// It deliberately passes no Context: kube.Contexts would only use it to compute the
+// Current flag, and the shell does not read that flag. kubecom's switch is
+// session-scoped and never rewrites the kubeconfig's current-context, so the
+// picker marks the context the *shell* is on (D158) — asking the kubeconfig would
+// mark the one the reader started from.
+type contextLister struct {
+	kubeconfig string
+}
+
+// Contexts reads the kubeconfig and returns its declared contexts, sorted by name.
+// It performs no network I/O; a missing or malformed kubeconfig comes back as a
+// classified error the shell toasts (principle 3).
+func (c contextLister) Contexts() ([]kube.ContextInfo, error) {
+	return kube.Contexts(kube.ClientConfig{Kubeconfig: c.kubeconfig})
 }
 
 // loadMenuExtras resolves the per-context menu file for the active context and
