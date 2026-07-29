@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -463,6 +464,20 @@ func WithMenuExtras(extras []config.MenuResource) Option {
 	return func(m *Model) { m.menuExtras = extras }
 }
 
+// WithLogger points the shell's diagnostic log at l — the file logger the launcher
+// set up (`~/.cache/kubecom/kubecom.log`), which is the only place a diagnostic can
+// go while the TUI owns the terminal. It records what the user only ever sees as a
+// transient toast, so a failure that scrolled past is still recoverable afterwards
+// (D159). Unset means discard: a model built without it logs nothing, which keeps
+// every hermetic test silent and makes the sink assertable by injecting one.
+func WithLogger(l *slog.Logger) Option {
+	return func(m *Model) {
+		if l != nil {
+			m.logger = l
+		}
+	}
+}
+
 // WithStartupError seeds a one-shot error the model surfaces as a transient
 // status-bar toast on Init (batched with any discovery start), so a startup-time
 // degradation the launcher chose not to make fatal — chiefly a malformed
@@ -586,6 +601,12 @@ type Model struct {
 	// than swallowed. Both nil by default (the plain default menu, no toast).
 	menuExtras []config.MenuResource
 	startupErr *ErrorMsg
+
+	// logger is the shell's diagnostic sink (WithLogger). It is never the user's
+	// screen — the TUI owns the terminal — so it is the *only* durable record of a
+	// failure whose toast has already expired (D159). Never nil: NewWithKeymap seeds
+	// a discarding logger so every call site can log unconditionally.
+	logger *slog.Logger
 
 	// Cluster holds every seam bound to the cluster kubecom is currently on — the
 	// watch/discovery clients, the viewer sources, the mutating action set (M4-02).
@@ -880,6 +901,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 		searchView:  searchview.New(s),
 		logsView:    logsview.New(s),
 		filterInput: fi,
+		logger:      slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -1272,7 +1294,15 @@ func (m Model) selectResource(r kube.Resource) (tea.Model, tea.Cmd) {
 // an earlier error cannot wipe this one early, and returns the clear Cmd for the
 // caller to schedule (batched with any other work). It mutates the receiver, so
 // callers pass the addressable model value they are about to return.
+//
+// It is also the shell's **single error funnel** — `status.SetError` is called
+// nowhere else — which is why the log line lives here rather than at the ~25 call
+// sites: a future leg that surfaces a new error is recorded without doing anything
+// (D159). The toast is transient (5s) and clipped to the terminal width; the log
+// line is neither, and carries the classified kind plus the *unwrapped* error the
+// toast may have truncated, which is what makes a dogfooding bug report actionable.
 func (m *Model) surfaceError(e ErrorMsg) tea.Cmd {
+	m.logger.Error("surfaced error", "context", e.Context, "kind", e.Kind.String(), "error", e.Err)
 	m.status.SetError(e.Message())
 	m.statusErrGen++
 	gen := m.statusErrGen
@@ -1372,8 +1402,26 @@ func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
 		m.discoveryCancel()
 		m.discoveryCancel = nil
 	}
+	m.logDiscovery(msg.Result)
 	m.menu.Reconcile(msg.Result)
 	return m, nil
+}
+
+// logDiscovery records what a discovery pass could not load. These are the shell's
+// one class of failure that never reaches a toast at all: a total failure seeds the
+// menu instead of erroring, and a per-group failure isolates that group and shows it
+// as unavailable (#87/#76, principle 3) — both deliberately quiet on screen, and
+// therefore both invisible when the question is "why is this CRD's kind missing or
+// broken?". The log is where that answer belongs (D159); the menu keeps degrading
+// exactly as before.
+func (m Model) logDiscovery(r kube.DiscoveryResult) {
+	if r.Err != nil {
+		m.logger.Error("discovery failed", "kind", kube.Classify(r.Err).String(), "error", r.Err)
+		return
+	}
+	for _, f := range r.Failed {
+		m.logger.Warn("discovery group unavailable", "groupVersion", f.GroupVersion, "error", f.Err)
+	}
 }
 
 // stopClusterAsync cancels every asynchronous operation bound to the cluster the

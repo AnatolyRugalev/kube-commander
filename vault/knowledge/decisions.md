@@ -3996,3 +3996,32 @@ Corollary for the seam's placement: `ContextLister` sits on the Model beside
 connector's — it reads *kubeconfig* data, not the cluster, so the same list is correct
 before, during and after a switch, and binding it to a `Cluster` would make the switcher
 unavailable exactly when a connect has failed and the user most needs to pick again.
+
+## D159 — Every error the user is shown is also written to the log file (2026-07-29, DIAG-01)
+
+The TUI owns the terminal, so a failure has exactly two places it can go: a transient
+status-bar toast (5s, clipped to the terminal width) and `~/.cache/kubecom/kubecom.log`.
+Until this decision it only ever went to the first, which means kubecom could tell a user
+that something failed but could never tell them **what** — the reason the CRD feedback
+(`2026-07-29-external-secrets-crd-error`) could not name its own error. From here on:
+
+1. **`surfaceError` logs before it toasts.** It is the shell's single error funnel
+   (`statusbar.SetError` is called nowhere else), so this is a property of the funnel, not
+   of ~25 call sites: a future leg that surfaces a new error is recorded for free. Keep it
+   that way — a new error path goes *through* `surfaceError`, never around it.
+2. **What is quiet on screen by design is loud in the log.** Discovery's per-group
+   isolation and total-failure fallback (#87/#76, principle 3) still degrade silently in
+   the menu, but each failure is logged — the usual answer to "why is this CRD's kind
+   missing?".
+3. **The log is a diagnostic record, not a trace.** Only failures are written; the healthy
+   path stays silent, so a reporter's `tail` shows signal. Nothing user-facing is ever
+   printed to the screen instead — that rule (stack.md) is unchanged.
+4. **The sink is injected (`tui.WithLogger`), and unset means discard.** The shell never
+   reads `slog.Default()` itself: the launcher passes the file logger `setupLogging`
+   installed, hermetic tests pass a buffer and assert on it, and a model built without the
+   option logs nothing — so tests that drive error paths stay silent and can never write
+   over an alt-screen.
+
+Corollary for bug reports: the README now tells the user to `tail` that file while
+reproducing. A leg that receives a "it just errors out" report should ask for the log line
+rather than guess between causes that call for opposite fixes.

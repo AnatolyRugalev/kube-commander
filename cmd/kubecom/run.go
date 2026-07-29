@@ -135,6 +135,11 @@ func runTUI(opts runOptions) error {
 		tui.WithVersion(version.Version),
 		tui.WithMenuExtras(menuExtras),
 		tui.WithStartupError(startupErr),
+		// The same file logger setupLogging installed as the slog default — the shell
+		// records every error it toasts there, so a failure the 5s toast outlived is
+		// still diagnosable afterwards (D159). Wired here rather than read as a global
+		// inside the shell so a test can point it at a buffer.
+		tui.WithLogger(slog.Default()),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("kubecom exited with error: %w", err)

@@ -3,17 +3,17 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-04b put the switcher on a key (`C`), so the context switch is live end-to-end and M4-05 (per-context namespace + menu extras follow the switch) is the next pick. Feedback inbox empty; the board rules. Four advisory dogfood human-tasks open (edit, logs throughput, fuzzy quality, and the new live context switch, which holds the M4 switch criterion unticked). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — DIAG-01 made every surfaced error land in the log file (D159), the first slice of the CRD-error feedback; two feedback items remain (logs tail+perf, then init containers) and they preempt the board, with M4-05 next after that. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **DIAG-01** Every surfaced error is also written to the log file
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-07-29
-      notes: First slice of the CRD feedback triage (see the DIAG line below).
+_(none)_
 
 ## Blocked
 
-_(none)_
+- [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
+      status: blocked | owner: — | added: 2026-07-29
+      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` (the error text). See the DIAG line in the Backlog.
 
 ## Backlog
 
@@ -163,9 +163,15 @@ toast and is then gone; the log file (`~/.cache/kubecom/kubecom.log`, documented
 README since M2-RUN) held only launcher warnings. So the CRD fix has a prerequisite: make
 the error obtainable. DIAG-01 does that, CRD-01 is the fix itself.
 
-- [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
-      status: blocked | owner: — | added: 2026-07-29
-      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` — the sandbox has no cluster and no external-secrets CRDs, and the plausible causes (a conversion-webhook failure the apiserver reports on LIST, a Table-conversion 406, an RBAC 403 on that group, a decode edge case) call for opposite fixes, one of which is "kubecom is right, degrade more legibly". Guessing between them would be inventing a bug. DIAG-01 makes the real error land in the log file; the human pastes it and this becomes a normal leg. Check the other CRDs in the same group (`SecretStore`, `PushSecret`) at the same time.
+DIAG-01 is done: `surfaceError` — the shell's single error funnel — now logs before it
+toasts, and discovery's deliberately-silent failures (total and per-group) log too, so the
+file the README already documented finally holds the errors the user actually hit (D159).
+CRD-01 is in **Blocked** above, waiting on the human task for the error text: the sandbox
+has no cluster and no external-secrets CRDs, and the plausible causes (a conversion-webhook
+failure the apiserver reports on LIST, a Table-conversion 406, an RBAC 403 on that group, a
+decode edge case in a printer column) call for opposite fixes — one of which is "kubecom is
+right, degrade more legibly". Guessing between them would be inventing a bug. Check the
+sibling kinds (`SecretStore`, `PushSecret`) when it unblocks.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
@@ -218,6 +224,8 @@ tested before any gesture can reach it, exactly as M4-03's reset did.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **DIAG-01** Every surfaced error (and every discovery failure) is written to the log file — `WithLogger` seam, logged in the single `surfaceError` funnel — done 2026-07-29 (D159)
 
 - [x] **M4-04b** Context switch action + picker — `C` (`ctx.switch`) opens the reused modal picker over a `ContextLister` seam, the pick routes into `switchContext`; the marker follows the shell's context, not the kubeconfig's — done 2026-07-29 (D158)
 - [x] **M4-04a** Context switch machinery — `ClusterConnector` seam + `switchContext` connects off the update loop, then reset → swap → rediscover; a failed connect changes nothing — done 2026-07-29 (D157)

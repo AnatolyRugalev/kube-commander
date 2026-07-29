@@ -89,6 +89,13 @@ kubeconfig/context fails with a clear message instead of launching. While the UI
 runs it owns the terminal, so all logs (including client-go warnings) go to a file
 under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
 
+**Hit an error?** Every error kubecom shows you in the status bar is also written
+to that log file, in full — the toast clears after five seconds and is clipped to
+your terminal width, the log line is neither and carries the underlying cause.
+Discovery problems go there too, including any API group that failed to load (the
+usual reason a kind is missing from the menu). `tail -f ~/.cache/kubecom/kubecom.log`
+in a second terminal while you reproduce, and paste what you see into the bug report.
+
 `--context` only picks the context to *start* on: press `C` (`ctx.switch`) to
 switch to any other context in the kubeconfig without restarting. The picker marks
 the one you are on; picking it again does nothing, and a context that fails to
