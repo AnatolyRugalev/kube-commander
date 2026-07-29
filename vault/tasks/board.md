@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-03 landed the cluster reset + the single per-cl
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-04a** Context switch machinery — connect + swap (`switchContext`)
+      owner: claude-opus-5 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -170,9 +171,17 @@ seams now sit in one swappable `tui.Cluster` (M4-02, and every new seam goes in 
 every per-cluster async in flight (watch, discovery, log stream, search sweep, drain,
 port-forwards) still belongs to the cluster being left and must be cancelled first.
 
-- [ ] **M4-04** Context switch action + picker (`ctx.switch`)
+M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted, into
+**M4-04a** (the switch itself) and **M4-04b** (the picker that triggers it) — the D52
+bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
+tested before any gesture can reach it, exactly as M4-03's reset did.
+
+- [ ] **M4-04a** Context switch machinery — connect + swap (`switchContext`)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+      notes: Depends on M4-01/02/03 (all done). A `ClusterConnector` seam (`WithClusterConnector`; the launcher implements it with `kube.Connect` + `clusterFor`, keeping `tui` client-free) connects the named context **off the update loop** behind its own generation; a connect error toasts and leaves the old cluster entirely untouched (the reset must not run until the new clients are in hand), then `m.resetCluster()` (M4-03) → swap the M4-02 bundle (`m.Cluster = …`) → `m.context`/`m.status.SetContext`/`m.welcome.SetContext` → restart discovery. Reachable from tests only until M4-04b.
+- [ ] **M4-04b** Context switch action + picker (`ctx.switch`)
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-01/02/03 (all done). A registered action opens the reused modal picker (M2-08a) over M4-01's contexts with the current one marked; the pick connects a new `*kube.Clients` **off the update loop** (generation-guarded, a connect error toasts and leaves the old cluster untouched), then `m.resetCluster()` (M4-03) → swap the M4-02 bundle (`m.Cluster = NewCluster(…)`) → `m.status.SetContext`/`m.welcome.SetContext` → restart discovery. Ticks the first M4 exit criterion.
+      notes: Depends on M4-04a. A registered `ctx.switch` action opens the reused modal picker (M2-08a) over M4-01's `kube.Contexts` with the current one marked (a `ContextLister` seam — kubeconfig data, not a cluster client, so it goes on the Model beside the connector, not on `Cluster`); the pick calls M4-04a's `switchContext`, and picking the context already live is a no-op. Ticks the first M4 exit criterion.
 - [ ] **M4-05** Per-context state follows the switch
       status: todo | owner: — | added: 2026-07-29
       notes: Depends on M4-04. The new context's `menus/<context>.yaml` extras (D83) and its last-namespace state (D90/D91) are per-context and currently resolved once in `run.go` at launch; reload both on switch and rebind the `NamespacePersister` to the new context's state path, so a switch lands on the namespace that context was last left in rather than the previous cluster's.
