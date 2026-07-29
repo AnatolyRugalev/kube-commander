@@ -112,22 +112,7 @@ func (c *Clients) Logs(ctx context.Context, ref ObjectRef, opts LogOptions) (<-c
 		return nil, fmt.Errorf("kube: logs: empty pod name")
 	}
 	open := func(ctx context.Context, since *time.Time) (io.ReadCloser, error) {
-		o := opts
-		if opts.Follow {
-			// Force server-side timestamps so a reconnect can resume from the last
-			// line's time; they are stripped before delivery unless the caller asked
-			// for them (opts.Timestamps).
-			o.Timestamps = true
-		}
-		if since != nil {
-			// Resuming after a drop: anchor at the last-seen second and let the dedup
-			// window drop the lines the server re-serves. SinceSeconds/TailLines only
-			// make sense for the initial read and would fight the resume anchor.
-			o.SinceTime = since
-			o.SinceSeconds = nil
-			o.TailLines = nil
-		}
-		req := c.Clientset.CoreV1().Pods(ref.Namespace).GetLogs(ref.Name, podLogOptions(o))
+		req := c.Clientset.CoreV1().Pods(ref.Namespace).GetLogs(ref.Name, podLogOptions(logOpenOptions(opts, since)))
 		stream, err := req.Stream(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("kube: streaming logs for pod %s/%s: %w", ref.Namespace, ref.Name, err)
@@ -160,6 +145,33 @@ func (c *Clients) PodContainers(ctx context.Context, ref ObjectRef) ([]string, e
 		names = append(names, pod.Spec.Containers[i].Name)
 	}
 	return names, nil
+}
+
+// logOpenOptions derives the options for one open of a log stream: the caller's own for
+// the initial connect (since == nil), and the resume shape for a follow reconnect. It is
+// pure and takes opts by value, so it is unit-tested without a clientset — worth its own
+// function because it holds the one rule that is invisible at the call site: the
+// selectors that mean "where to *start*" are initial-read-only.
+//
+//   - A following stream forces server-side timestamps on the wire so a reconnect can
+//     anchor on the last line's time; they are stripped again before delivery unless the
+//     caller asked for them (LogOptions.Timestamps).
+//   - A reconnect anchors at the last-seen second (the dedup window drops the lines the
+//     server re-serves for it) and **clears TailLines and SinceSeconds**: both select a
+//     starting point relative to *now*, so carrying them across a drop would re-serve the
+//     last N lines (or the last N seconds) on top of output the reader has already seen,
+//     instead of resuming where they were. That matters as of LOGS-05a, where the TUI
+//     opens every log stream with a TailLines of its own.
+func logOpenOptions(opts LogOptions, since *time.Time) LogOptions {
+	if opts.Follow {
+		opts.Timestamps = true
+	}
+	if since != nil {
+		opts.SinceTime = since
+		opts.SinceSeconds = nil
+		opts.TailLines = nil
+	}
+	return opts
 }
 
 // podLogOptions maps kubecom's LogOptions onto client-go's corev1.PodLogOptions.

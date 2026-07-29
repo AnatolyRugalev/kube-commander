@@ -225,6 +225,45 @@ func TestLogsJumpToLatestFromTheShell(t *testing.T) {
 	}
 }
 
+// TestLogsStreamTailsRecentHistory is LOGS-05a: opening a log asks the server for the
+// last defaultLogTail lines rather than the container's whole history. Without it a pod
+// that has been up for a week replays a week before the view reaches "now" — the wait
+// feedback `2026-07-29-logs-tail-and-perf` reported. The other two options are asserted
+// alongside it because the tail is only correct in their company: it must not have cost
+// the stream its follow (the view opens tailing) or its timestamps (LOGS-04b's toggle
+// reads them out of the buffer).
+func TestLogsStreamTailsRecentHistory(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "2026-07-29T12:00:00Z hello"}}}
+	m := logsViewerModel(t, s)
+	_ = openLogsViewHelper(t, m)
+
+	if s.gotOpts.TailLines == nil {
+		t.Fatal("the logs stream should be opened with a TailLines, not replayed from container boot")
+	}
+	if got := *s.gotOpts.TailLines; got != defaultLogTail {
+		t.Errorf("TailLines = %d, want %d (defaultLogTail)", got, defaultLogTail)
+	}
+	if !s.gotOpts.Follow {
+		t.Error("bounding the history must not stop the view tailing live output")
+	}
+	if !s.gotOpts.Timestamps {
+		t.Error("bounding the history must not drop the timestamps the buffer needs (LOGS-04b)")
+	}
+}
+
+// TestLogsTailIsBoundedButScrollable guards the size of the bound rather than the
+// mechanism: a tail smaller than a terminal would leave a reader with nothing to scroll
+// back to, which is the failure mode of tailing too little. It fails loudly if a later
+// leg tunes defaultLogTail down to a screenful.
+func TestLogsTailIsBoundedButScrollable(t *testing.T) {
+	if defaultLogTail < 200 {
+		t.Errorf("defaultLogTail = %d — too small to scroll back through", defaultLogTail)
+	}
+	if defaultLogTail > 100000 {
+		t.Errorf("defaultLogTail = %d — large enough to be the unbounded replay it replaced", defaultLogTail)
+	}
+}
+
 // tsKey is the default logs.timestamps key (`t`) — the LOGS-04b display toggle. Like
 // the wrap key beside it (and unlike the regex chord) it is an ordinary letter, so the
 // open grep types it.

@@ -4025,3 +4025,30 @@ that something failed but could never tell them **what** — the reason the CRD 
 Corollary for bug reports: the README now tells the user to `tail` that file while
 reproducing. A leg that receives a "it just errors out" report should ask for the log line
 rather than guess between causes that call for opposite fixes.
+
+## D160 — The logs view opens on a bounded tail, not the container's whole history (2026-07-29, LOGS-05a)
+
+`kubecom`'s logs view exists to answer "what is this container doing **now**". Until this
+decision it opened with no `TailLines`, so the server replayed the container's log from
+boot and the reader waited out however long the pod had been up before the stream reached
+the present (feedback `2026-07-29-logs-tail-and-perf`). From here on:
+
+1. **Every logs open is bounded.** `openLogs` sets `TailLines` (`defaultLogTail`, 1000) on
+   the initial read. A future surface that streams logs does the same — an unbounded
+   replay is a bug, not a default. The number is a TUI-side policy constant: it is not in
+   the config today, and a leg that wants to make it configurable must add the config
+   section rather than quietly changing the constant's meaning.
+2. **The bound is on the *fetch*, not on the buffer.** A followed stream keeps growing the
+   view's buffer past the tail, by design — pausing and scrolling back through what has
+   arrived since you opened must keep working. So this decision does not bound memory or
+   per-line cost; that is LOGS-05b's, and the two are independent.
+3. **`kube.LogOptions` keeps `kubectl`'s semantics: the zero value replays everything.**
+   The kube layer stays a faithful primitive and the *policy* lives with the view that has
+   an opinion. A caller that genuinely wants the whole history (an export, a one-shot
+   dump) is still one field away from it.
+4. **Initial-read selectors never survive a reconnect.** `TailLines` and `SinceSeconds`
+   both mean "start N back from *now*", so a follow reconnect clears them and anchors on
+   the last line seen instead (`logOpenOptions`). Carrying either across a transport drop
+   would re-serve the last 1000 lines on top of output the reader already had. This rule
+   predates the decision but was untested and unreachable until pt 1 made every stream
+   carry a tail; it is now pinned by name.

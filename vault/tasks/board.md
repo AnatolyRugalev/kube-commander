@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — DIAG-01 made every surfaced error land in the log file (D159), the first slice of the CRD-error feedback; two feedback items remain (logs tail+perf, then init containers) and they preempt the board, with M4-05 next after that. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — LOGS-05a bounded the logs open to the last 1000 lines (D160), the first slice of the logs tail+perf feedback; LOGS-05b (the per-line render cost) and the init-containers feedback are next and both preempt the board, with M4-05 after that. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-05a** Logs open tailing the last ~1000 lines instead of replaying from container boot
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
-      notes: First slice of feedback `2026-07-29-logs-tail-and-perf` (high). See the LOGS section for the triage.
+_(none)_
 
 ## Blocked
 
@@ -144,20 +142,6 @@ indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wi
 retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
 nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
 
-**LOGS-05 reopens the line** — feedback `2026-07-29-logs-tail-and-perf` (high) names two
-independent costs in the same view, so it triages into two slices rather than one leg:
-opening a log **replays the container's whole history** (`openLogs` sets no `TailLines`,
-so a pod up for a week streams a week), and **every appended line re-renders the whole
-buffer** (`logsview.Append` → `render` → `shown` joins all lines, so the cost of one line
-grows with the number held — the exact quadratic the LOGS-02 throughput human-task
-predicted). The first bounds what is fetched, the second bounds what a fetched line
-costs; the feedback is explicit that the second must be fixed either way, since a
-followed stream keeps growing the buffer long after the initial tail.
-
-- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
-      status: todo | owner: — | added: 2026-07-29
-      notes: Second slice of feedback `2026-07-29-logs-tail-and-perf`. `Append` re-runs `shown()` (a full-buffer scan + join) and `viewport.SetContent` for **every** line, so appending n lines is O(n²) — a burst of 1000 lines on open joins ~500k lines. The pump (`internal/tui/logs.go`) delivers exactly one line per Cmd, so the fix has two halves and either alone helps: **batch** (drain what is already buffered in the channel per pump Cmd and append the batch, one render per batch) and/or **cache** the rendered body so an append with no filter is an append, not a re-join. Keep the filter/highlight semantics identical — the grep still narrows live while following.
-
 LOGS-01 (component), LOGS-02 (wiring) and LOGS-03 (regex + highlighting) are done, so the
 dedicated logs view is live on `res.logs`, the shared viewer no longer has a logs mode
 (D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
@@ -166,9 +150,27 @@ scroll), **LOGS-04b** (timestamps) and **LOGS-04c** (jump-to-latest) — three u
 surfaces that were one line item. All three are done: long lines wrap on `logs.wrap` or
 scroll sideways on `nav.left`/`nav.right` (D146); `nav.bottom` rejoins the stream rather
 than just scrolling to it (D147); and `logs.timestamps` shows each line's server stamp as
-a pure display toggle over stamps the stream already carries (D148). **The LOGS line is
-closed** — the dedicated logs view is feature-complete for M3, with only the standing
-throughput dogfood human-task outstanding against it.
+a pure display toggle over stamps the stream already carries (D148). That closed the line
+on **features**: the dedicated logs view is feature-complete for M3.
+
+**LOGS-05 reopens it on cost.** Feedback `2026-07-29-logs-tail-and-perf` (high) names two
+independent costs in the same view, so it triages into two slices rather than one leg:
+opening a log **replayed the container's whole history** (`openLogs` set no `TailLines`,
+so a pod up for a week streamed a week), and **every appended line re-renders the whole
+buffer** (`logsview.Append` → `render` → `shown` joins all lines, so the cost of one line
+grows with the number held — the exact quadratic the LOGS-02 throughput human-task
+predicted). The first bounds what is fetched, the second bounds what a fetched line
+costs; the feedback is explicit that the second must be fixed either way, since a
+followed stream keeps growing the buffer long after the initial tail.
+
+LOGS-05a is done: every logs open asks for the last 1000 lines and tails from there, and
+the reconnect path is pinned not to re-tail on top of what the reader already has (D160).
+LOGS-05b is the remaining half and is unblocked — and it is the half the standing
+throughput dogfood human-task is really about.
+
+- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
+      status: todo | owner: — | added: 2026-07-29
+      notes: Second slice of feedback `2026-07-29-logs-tail-and-perf`. `Append` re-runs `shown()` (a full-buffer scan + join) and `viewport.SetContent` for **every** line, so appending n lines is O(n²) — the 1000-line burst LOGS-05a now opens with joins ~500k lines before the first frame settles. The pump (`internal/tui/logs.go`) delivers exactly one line per Cmd, so the fix has two halves and either alone helps: **batch** (drain what is already buffered in the channel per pump Cmd and append the batch, one render per batch) and/or **cache** the rendered body so an append with no filter is an append, not a re-join. Keep the filter/highlight semantics identical — the grep still narrows live while following, and `shown()`'s no-filter fast path must stay the fast path.
 
 ### Diagnostics (DIAG — feedback-driven)
 Raised by feedback `2026-07-29-external-secrets-crd-error` ("Need to find the actual
@@ -240,6 +242,8 @@ tested before any gesture can reach it, exactly as M4-03's reset did.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **LOGS-05a** Logs open on the last 1000 lines instead of replaying from container boot — `defaultLogTail` on every `openLogs`, and a reconnect still resumes rather than re-tailing — done 2026-07-29 (D160)
 
 - [x] **DIAG-01** Every surfaced error (and every discovery failure) is written to the log file — `WithLogger` seam, logged in the single `surfaceError` funnel — done 2026-07-29 (D159)
 

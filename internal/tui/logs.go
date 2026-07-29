@@ -22,6 +22,19 @@ import (
 // still tag their async work with viewerGen, which remains the one "an async open was
 // superseded" clock for every content surface (shared viewer and logs view alike).
 
+// defaultLogTail is how much history a logs open replays before it starts tailing live
+// output (`kubectl logs --tail=1000`). Without it the server streams the container's log
+// from boot, so opening the logs of a pod that has been up for a week means waiting for a
+// week of output to arrive and be rendered before reaching *now* — and "now" is what the
+// gesture is for (feedback `2026-07-29-logs-tail-and-perf`).
+//
+// 1000 is chosen to be a screenful-of-screenfuls: comfortably more than any terminal can
+// show (so scrolling back has somewhere to go, and a grep over what just happened has a
+// corpus), and small enough that the open is bounded work regardless of the container's
+// age. It is deliberately not user-configurable yet — kubecom's config carries only
+// `keys:` today, and a knob nobody has asked to turn is not worth a config section.
+const defaultLogTail int64 = 1000
+
 // openLogs shows the logs view over ref and starts streaming container's logs into it
 // at generation gen. It replaces streamLogsInto's shared-viewer open: the view is shown
 // immediately (empty, so the gesture feels instant) and the log channel is pumped line
@@ -53,7 +66,20 @@ func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string,
 	// only stops them being stripped before delivery. Having them in the buffer is
 	// what lets logs.timestamps be a redraw rather than a re-fetch — the reader never
 	// loses a line, their grep or their place to see when something happened.
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{Follow: true, Container: container, Timestamps: true})
+	//
+	// TailLines bounds the history replayed before the live tail begins
+	// (defaultLogTail): the view exists to show what a container is doing now, and
+	// re-reading its whole life to get there is the wait the feedback named. It governs
+	// only this initial read — a follow reconnect anchors on the last line's timestamp
+	// instead (M1-07d), so a transient drop resumes where the reader was rather than
+	// re-tailing the last 1000 lines on top of them.
+	tail := defaultLogTail
+	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{
+		Follow:     true,
+		Container:  container,
+		Timestamps: true,
+		TailLines:  &tail,
+	})
 	if err != nil {
 		cancel()
 		return m, m.surfaceError(NewErrorMsg("logs", err))

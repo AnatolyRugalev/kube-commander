@@ -152,6 +152,63 @@ func TestPodLogOptionsMapping(t *testing.T) {
 	}
 }
 
+// TestLogOpenOptionsInitialRead pins what the *first* open of a following stream asks
+// for: the caller's own selectors, untouched, plus the forced wire timestamps that let a
+// reconnect anchor itself. A TailLines the caller set (the TUI always does, LOGS-05a)
+// must survive to the initial read — it is the whole point of asking for it.
+func TestLogOpenOptionsInitialRead(t *testing.T) {
+	got := logOpenOptions(LogOptions{Follow: true, TailLines: ptrInt64(1000)}, nil)
+	if got.TailLines == nil || *got.TailLines != 1000 {
+		t.Errorf("the initial read should carry the caller's tail; TailLines = %v", got.TailLines)
+	}
+	if !got.Timestamps {
+		t.Error("a following stream forces wire timestamps so a reconnect can anchor")
+	}
+	if got.SinceTime != nil {
+		t.Errorf("the initial read has no resume anchor; SinceTime = %v", got.SinceTime)
+	}
+}
+
+// TestLogOpenOptionsResumeDropsInitialSelectors is the rule that only became load-bearing
+// once the TUI started opening every stream with a tail (LOGS-05a): a reconnect resumes
+// from the last line seen, so TailLines and SinceSeconds — both of which mean "start N
+// back from *now*" — must not travel with it. Carrying either would re-serve the last
+// 1000 lines on top of output the reader already has every time the transport blipped.
+func TestLogOpenOptionsResumeDropsInitialSelectors(t *testing.T) {
+	since := time.Date(2026, 7, 29, 12, 0, 5, 0, time.UTC)
+	got := logOpenOptions(LogOptions{
+		Follow:       true,
+		TailLines:    ptrInt64(1000),
+		SinceSeconds: ptrInt64(60),
+	}, &since)
+
+	if got.TailLines != nil {
+		t.Errorf("a resume must not re-tail; TailLines = %v", *got.TailLines)
+	}
+	if got.SinceSeconds != nil {
+		t.Errorf("a resume must not re-window; SinceSeconds = %v", *got.SinceSeconds)
+	}
+	if got.SinceTime == nil || !got.SinceTime.Equal(since) {
+		t.Errorf("a resume anchors on the last line seen; SinceTime = %v, want %v", got.SinceTime, since)
+	}
+}
+
+// TestLogOpenOptionsLeavesTheCallersOptionsAlone: logOpenOptions takes its options by
+// value, so the per-open rewrites above are local to that open. A resume that mutated the
+// caller's struct would clear the tail for good — invisible on the first reconnect and
+// wrong on every subsequent *first* open of a re-created stream.
+func TestLogOpenOptionsLeavesTheCallersOptionsAlone(t *testing.T) {
+	since := time.Date(2026, 7, 29, 12, 0, 5, 0, time.UTC)
+	opts := LogOptions{Follow: true, TailLines: ptrInt64(1000)}
+	_ = logOpenOptions(opts, &since)
+	if opts.TailLines == nil || *opts.TailLines != 1000 {
+		t.Errorf("the caller's options must be untouched; TailLines = %v", opts.TailLines)
+	}
+	if opts.Timestamps {
+		t.Error("the forced wire timestamps must not leak back into the caller's options")
+	}
+}
+
 func TestPodLogOptionsZeroValue(t *testing.T) {
 	got := podLogOptions(LogOptions{})
 	if got.Container != "" || got.Follow || got.Previous || got.Timestamps {
