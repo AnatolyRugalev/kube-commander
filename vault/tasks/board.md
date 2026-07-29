@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — M2-EXIT audited M2's five unticked exit criteria a
 
 ## In Progress
 
-_(none)_
+- [ ] **M2-15** Give the resource menu the half-page/page nav actions the table already has
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+      notes: M2-EXIT filed this as M2's last remaining item. The menu handles `nav.up/down/top/bottom` only, so `ctrl+d`/`pgdn` and `ctrl+u`/`pgup` are inert in the left pane even though it scrolls. Mirror the table's `pageStep`, but in *display rows* — the menu's window math counts section headers, which the cursor cannot land on.
 
 ## Blocked
 
@@ -30,12 +32,7 @@ deferred envtest item remains — not a blocker._
 [`../milestones/M2-core-tui.md`](../milestones/M2-core-tui.md) is ticked against named
 evidence. Only the enhancement below remains, and it gates nothing.
 - [ ] **M2-15** Give the resource menu the half-page/page nav actions the table already has
-      status: todo | owner: — | added: 2026-07-29
-      notes: M2-EXIT — the menu handles `nav.up/down/top/bottom` only, so `ctrl+d`/`pgdn`
-      and `ctrl+u`/`pgup` are inert in the left pane. Harmless on the seed menu; the menu
-      scrolls (it has an offset + scrollbar) and discovery reconcile can grow it past a
-      screen, so paging is worth having. Vim/fallback parity is unaffected — both families
-      are equally inert — so this is an enhancement, not an exit criterion.
+      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-29
 
 M2-01 (action registry + configurable keymap, D10/D11) is **complete** (01a keymap
 core / 01b sequences / 01c config wiring / 01d help overlay / 01e generated doc).
