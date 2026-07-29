@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-02 bundled the 21 cluster-bound seams behind on
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
 
 ## Blocked
 
@@ -171,7 +172,7 @@ every per-cluster async in flight (watch, discovery, log stream, search sweep, d
 port-forwards) still belongs to the cluster being left and must be cancelled first.
 
 - [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
-      status: todo | owner: — | added: 2026-07-29
+      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-29
       notes: M4-02 is done, so the bundle to swap exists and the Model's struct now lists the per-cluster state on its own. One `resetCluster` that cancels every per-cluster async — watch (`m.watchGen`), discovery, log stream, search sweep, drain, and `stopForwards` — and returns the browse panes to their pre-drill-in state (seed menu, empty table, cleared filter/sort/namespace). Reachable from tests only until M4-04; that is deliberate (a compiling, tested stub beats a half-wired switch). This is the leg that makes the switch *safe*: a surviving watch would stream the old cluster's rows into the new context's table (D155 pt 1).
 - [ ] **M4-04** Context switch action + picker (`ctx.switch`)
       status: todo | owner: — | added: 2026-07-29
