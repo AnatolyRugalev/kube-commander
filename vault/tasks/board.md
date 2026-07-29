@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — LOGS-05b killed the logs view's per-line render co
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-05** Per-context state follows the switch
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -223,8 +224,8 @@ M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted
 bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
 tested before any gesture can reach it, exactly as M4-03's reset did.
 
-- [ ] **M4-05** Per-context state follows the switch
-      status: todo | owner: — | added: 2026-07-29
+- [ ] **M4-05** Per-context state follows the switch — _claimed, see In Progress_
+      status: in-progress | owner: claude-opus | added: 2026-07-29
       notes: Depends on M4-04. The new context's `menus/<context>.yaml` extras (D83) and its last-namespace state (D90/D91) are per-context and currently resolved once in `run.go` at launch; reload both on switch and rebind the `NamespacePersister` to the new context's state path, so a switch lands on the namespace that context was last left in rather than the previous cluster's.
 - [ ] **M4-06** Column-aware cell coloring in the table
       status: todo | owner: — | added: 2026-07-29
