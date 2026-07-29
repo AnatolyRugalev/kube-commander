@@ -555,6 +555,16 @@ type Model struct {
 	version    string
 	kubeconfig string
 
+	// connector connects to another kubeconfig context and returns the Cluster
+	// bundle bound to it (M4-04a). It sits here rather than on Cluster on purpose:
+	// a Cluster seam is wrong to keep using after a switch, while the connector
+	// outlives every switch and a Cluster is its product (D155 pt 2). Nil → the
+	// model is switch-inert. ctxGen tags each connect attempt so one superseded by
+	// a later switch is dropped when it lands (D156 pt 2 — the connect has no
+	// stream to cancel, so the generation is the whole guard).
+	connector ClusterConnector
+	ctxGen    int
+
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
 	// before discovery so a discovered twin dedupes against them. startupErr is a
@@ -1036,6 +1046,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case namespacesLoadedMsg:
 		return m.handleNamespacesLoaded(msg)
+
+	case clusterConnectedMsg:
+		return m.handleClusterConnected(msg)
 
 	case picker.SelectedMsg:
 		switch msg.Kind {

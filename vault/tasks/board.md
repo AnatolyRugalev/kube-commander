@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-03 landed the cluster reset + the single per-cluster teardown inventory (D156), so M4-04 (the picker that triggers it) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-04a landed the context switch itself (connect off the loop, then reset → swap → rediscover; D157), so M4-04b (the `ctx.switch` action + picker that triggers it, and the exit-criterion tick) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-04a** Context switch machinery — connect + swap (`switchContext`)
-      owner: claude-opus-5 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -176,9 +175,6 @@ M4-04 was split on pickup, as its own notes and the M4-03 journal both predicted
 bottom-up rhythm the whole switcher line has followed: the connect+swap path lands and is
 tested before any gesture can reach it, exactly as M4-03's reset did.
 
-- [ ] **M4-04a** Context switch machinery — connect + swap (`switchContext`)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
-      notes: Depends on M4-01/02/03 (all done). A `ClusterConnector` seam (`WithClusterConnector`; the launcher implements it with `kube.Connect` + `clusterFor`, keeping `tui` client-free) connects the named context **off the update loop** behind its own generation; a connect error toasts and leaves the old cluster entirely untouched (the reset must not run until the new clients are in hand), then `m.resetCluster()` (M4-03) → swap the M4-02 bundle (`m.Cluster = …`) → `m.context`/`m.status.SetContext`/`m.welcome.SetContext` → restart discovery. Reachable from tests only until M4-04b.
 - [ ] **M4-04b** Context switch action + picker (`ctx.switch`)
       status: todo | owner: — | added: 2026-07-29
       notes: Depends on M4-04a. A registered `ctx.switch` action opens the reused modal picker (M2-08a) over M4-01's `kube.Contexts` with the current one marked (a `ContextLister` seam — kubeconfig data, not a cluster client, so it goes on the Model beside the connector, not on `Cluster`); the pick calls M4-04a's `switchContext`, and picking the context already live is a no-op. Ticks the first M4 exit criterion.
@@ -211,6 +207,7 @@ _Remaining M5 items to be expanded when that milestone opens. See the milestone 
 
 ## Done
 
+- [x] **M4-04a** Context switch machinery — `ClusterConnector` seam + `switchContext` connects off the update loop, then reset → swap → rediscover; a failed connect changes nothing — done 2026-07-29 (D157)
 - [x] **M4-03** Cluster reset path — `resetCluster` + the single `stopClusterAsync` teardown inventory (quit shares it), discovery generation-guarded — done 2026-07-29 (D156)
 - [x] **M4-02** One indirection for the 21 cluster-bound seams — `tui.Cluster` bundle (embedded, built by `NewCluster`/`clusterFor`), no behavior change — done 2026-07-29
 

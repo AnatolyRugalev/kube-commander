@@ -3947,3 +3947,31 @@ menu additions rather than carrying them across. The launch `-n` scope and the
 discovered resources describe the cluster being left, so **M4-05 owns landing the new
 context in its own last-used namespace** — after a reset there is no namespace to
 inherit, by design.
+
+## D157 — A context switch connects before it tears anything down (2026-07-29, M4-04a)
+
+`switchContext` issues the connect off the update loop and does **nothing else**; the
+reset-swap-rediscover sequence runs only in `handleClusterConnected`, with the new
+cluster's seams already in hand. The ordering is the constraint, not an implementation
+detail: the reset is destructive by design (D155 pt 1 — every per-cluster async
+cancelled, every surface dismissed, the browse panes returned to their pre-drill-in
+state), so running it before the new client exists turns a *failed* connect — a typo'd
+context, a kubeconfig entry pointing at a cluster that no longer resolves — into a shell
+sitting on nothing, with the working cluster it had already thrown away. A connect
+failure must therefore cost exactly one transient toast and change nothing else: same
+context, same live watch, same rows (principle 3). Any future path that repoints the
+cluster (a reconnect-on-error, a `--context` reload, M4-05's per-context state) obeys the
+same order.
+
+The corollary that places the seam: **`ClusterConnector` is not a `Cluster` seam.** D155
+pt 2's test — "would it be wrong to keep using this after a switch?" — answers no for the
+connector, since a `Cluster` is its *product*, so it sits on the Model beside the context
+name it changes, and the launcher implements it (`kube.Connect` + the existing
+`clusterFor`) to keep `tui` client-free. Reusing `clusterFor` rather than writing a second
+wiring path is deliberate: a seam added there is live on both the launch and the switched
+cluster, which is the failure D155 pt 2 exists to prevent.
+
+Guard shape: a connect is a single call with no stream to cancel, so `ctxGen` alone
+carries D156 pt 2's "cancel, then guard" — two switches in quick succession are ordered by
+generation, and the superseded result is dropped rather than applied on top of the newer
+one.

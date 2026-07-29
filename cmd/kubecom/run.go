@@ -126,6 +126,7 @@ func runTUI(opts runOptions) error {
 	// or per-launch state, not clients.
 	model := tui.NewWithKeymap(km,
 		tui.WithCluster(clusterFor(clients)),
+		tui.WithClusterConnector(contextConnector{kubeconfig: opts.kubeconfig}),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
@@ -155,6 +156,36 @@ func clusterFor(clients *kube.Clients) tui.Cluster {
 			return clients.PortForward(ctx, ref, ports)
 		},
 	))
+}
+
+// contextConnector is the launcher's tui.ClusterConnector seam (M4-04a): it connects
+// to another kubeconfig context on demand and returns the shell's cluster bundle for
+// it. It is bound to the `--kubeconfig` path kubecom launched with, not to a context,
+// so every switch resolves against the same kubeconfig the launch client did — the
+// flag names the *file*, while the context is what the switch changes.
+//
+// It reuses kube.Connect and clusterFor, so the switched-in cluster is wired exactly
+// like the launch one: a seam added to clusterFor is live on both, and can never be
+// wired at launch but forgotten on switch (D155 pt 2). A connect failure is returned
+// as-is for the shell to classify and toast — the shell keeps browsing the cluster it
+// is on (principle 3), so an unreachable or misconfigured context costs nothing.
+type contextConnector struct {
+	kubeconfig string
+}
+
+// ConnectCluster builds the cluster bundle for the named context. Like the launch
+// path, kube.Connect resolves the rest.Config without a network round-trip, so a
+// wrong context name or a broken kubeconfig fails here (KindBadContext) while a
+// genuinely unreachable server surfaces later, in the UI, on the first watch.
+func (c contextConnector) ConnectCluster(name string) (tui.Cluster, error) {
+	clients, err := kube.Connect(kube.ClientConfig{
+		Kubeconfig: c.kubeconfig,
+		Context:    name,
+	})
+	if err != nil {
+		return tui.Cluster{}, err
+	}
+	return clusterFor(clients), nil
 }
 
 // loadMenuExtras resolves the per-context menu file for the active context and
