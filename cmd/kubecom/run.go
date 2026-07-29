@@ -121,31 +121,11 @@ func runTUI(opts runOptions) error {
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
 	// the alternate screen itself (via View.AltScreen — D70), so no program option
-	// is needed here.
+	// is needed here. Everything cluster-bound goes in as one bundle (M4-02) so a
+	// context switch can repoint it wholesale; the options beside it are per-context
+	// or per-launch state, not clients.
 	model := tui.NewWithKeymap(km,
-		tui.WithWatcher(clients),
-		tui.WithDiscoverer(clients),
-		tui.WithNamespaceLister(clients),
-		tui.WithYAMLGetter(clients),
-		tui.WithDescriber(clients),
-		tui.WithLogStreamer(clients),
-		tui.WithContainerLister(clients),
-		tui.WithPodResolver(clients),
-		tui.WithSecretGetter(clients),
-		tui.WithDeleter(clients),
-		tui.WithScaler(clients),
-		tui.WithRolloutRestarter(clients),
-		tui.WithCordoner(clients),
-		tui.WithSuspender(clients),
-		tui.WithDrainer(clients),
-		tui.WithPortForwarder(tui.PortForwarderFunc(func(ctx context.Context, ref kube.ObjectRef, ports []string) (tui.ActiveForward, error) {
-			return clients.PortForward(ctx, ref, ports)
-		})),
-		tui.WithServiceResolver(clients),
-		tui.WithPortLister(clients),
-		tui.WithSearcher(clients),
-		tui.WithExecer(clients),
-		tui.WithEditor(clients),
+		tui.WithCluster(clusterFor(clients)),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithContext(ctxName),
@@ -158,6 +138,23 @@ func runTUI(opts runOptions) error {
 		return fmt.Errorf("kubecom exited with error: %w", err)
 	}
 	return nil
+}
+
+// clusterFor turns a connected client into the shell's cluster bundle (M4-02): the
+// one place in the launcher where a *kube.Clients becomes the seams the TUI drives.
+// The context switcher (M4-04) connects a second client and calls this same function,
+// so a seam can never be wired at launch and forgotten on switch — which is precisely
+// how the 21 individual With* options used to fail.
+//
+// *kube.Clients satisfies tui.ClusterClient directly; only the port-forward seam needs
+// the PortForwarderFunc adapter, because Clients.PortForward returns the concrete
+// *kube.PortForward rather than the tui.ActiveForward the shell observes.
+func clusterFor(clients *kube.Clients) tui.Cluster {
+	return tui.NewCluster(clients, tui.PortForwarderFunc(
+		func(ctx context.Context, ref kube.ObjectRef, ports []string) (tui.ActiveForward, error) {
+			return clients.PortForward(ctx, ref, ports)
+		},
+	))
 }
 
 // loadMenuExtras resolves the per-context menu file for the active context and

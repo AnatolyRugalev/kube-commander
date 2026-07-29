@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-01 landed the kubeconfig context-list primitive, so M4-02 (one indirection for the 21 cluster-bound seams) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-02 bundled the 21 cluster-bound seams behind one swappable `tui.Cluster`, so M4-03 (the cluster reset path) is the next pick. Feedback inbox empty; the board rules. Edit, logs-throughput and fuzzy-quality dogfood human-tasks still open (all advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-02** One indirection for the cluster-bound seams — see the M4 Backlog entry below
-      status: in-progress | owner: claude-opus-5 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -166,17 +165,14 @@ degrade-don't-crash (principle 3). Ordering is a default, not a contract — re-
 slice that proves > ~300 lines.
 
 **The context switcher (#80) is the milestone's hard part** and takes five slices, because
-switching clusters is a teardown, not a pointer swap (D155): `run.go` closes **21**
-cluster-bound seams over one `*kube.Clients` fixed at construction, and every per-cluster
-async in flight (watch, discovery, log stream, search sweep, drain, port-forwards) belongs
-to the cluster being left.
+switching clusters is a teardown, not a pointer swap (D155): the **21** cluster-bound
+seams now sit in one swappable `tui.Cluster` (M4-02, and every new seam goes in it), but
+every per-cluster async in flight (watch, discovery, log stream, search sweep, drain,
+port-forwards) still belongs to the cluster being left and must be cancelled first.
 
-- [ ] **M4-02** One indirection for the cluster-bound seams (`cmd/kubecom/run.go`, `internal/tui`) — **no behavior change**
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-07-29
-      notes: The enabler, and the reason the switch is not one leg. Today 21 `With*` options each close over the same `clients` value, so nothing can repoint them. Route them through a single cluster bundle built by one constructor and held behind one pointer, so a switch swaps one value instead of 21 closures. Pure refactor: same seams, same tests, green on its own. **Any seam added after this goes through the bundle** (D155 pt 2).
 - [ ] **M4-03** Cluster **reset** path in the root model (`internal/tui/app.go`)
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-02. One `resetCluster` that cancels every per-cluster async — watch (`m.watchGen`), discovery, log stream, search sweep, drain, and `stopForwards` — and returns the browse panes to their pre-drill-in state (seed menu, empty table, cleared filter/sort/namespace). Reachable from tests only until M4-04; that is deliberate (a compiling, tested stub beats a half-wired switch). This is the leg that makes the switch *safe*: a surviving watch would stream the old cluster's rows into the new context's table (D155 pt 1).
+      notes: M4-02 is done, so the bundle to swap exists and the Model's struct now lists the per-cluster state on its own. One `resetCluster` that cancels every per-cluster async — watch (`m.watchGen`), discovery, log stream, search sweep, drain, and `stopForwards` — and returns the browse panes to their pre-drill-in state (seed menu, empty table, cleared filter/sort/namespace). Reachable from tests only until M4-04; that is deliberate (a compiling, tested stub beats a half-wired switch). This is the leg that makes the switch *safe*: a surviving watch would stream the old cluster's rows into the new context's table (D155 pt 1).
 - [ ] **M4-04** Context switch action + picker (`ctx.switch`)
       status: todo | owner: — | added: 2026-07-29
       notes: Depends on M4-01/02/03. A registered action opens the reused modal picker (M2-08a) over M4-01's contexts with the current one marked; the pick connects a new `*kube.Clients` **off the update loop** (generation-guarded, a connect error toasts and leaves the old cluster untouched), then M4-03's reset → swap the M4-02 bundle → restart discovery → status bar renames the context. Ticks the first M4 exit criterion.
@@ -208,6 +204,8 @@ to the cluster being left.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-02** One indirection for the 21 cluster-bound seams — `tui.Cluster` bundle (embedded, built by `NewCluster`/`clusterFor`), no behavior change — done 2026-07-29
 
 - [x] **M4-01** Kubeconfig context-list primitive `kube.Contexts` — name/cluster/namespace/current, sorted, no network I/O — done 2026-07-29
 

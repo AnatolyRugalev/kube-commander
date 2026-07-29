@@ -564,15 +564,22 @@ type Model struct {
 	menuExtras []config.MenuResource
 	startupErr *ErrorMsg
 
-	// watcher is the kube watch client (nil → watch-inert). namespace scopes the
-	// watch ("" = all namespaces until the M2-08 namespace picker lands). watchCh
-	// and watchCancel are the current live watch: watchCh is re-read to pull the
-	// next event, watchCancel tears it down when a newer resource is selected (or
-	// the app quits). watchGen tags every watch-pump message so a delta from a
-	// superseded watch — whose channel is already being drained — is dropped rather
-	// than applied or used to re-issue a pump on the new channel (the same stale-
-	// message guard seqGen gives the sequence timeout, D61).
-	watcher     ResourceWatcher
+	// Cluster holds every seam bound to the cluster kubecom is currently on — the
+	// watch/discovery clients, the viewer sources, the mutating action set (M4-02).
+	// It is embedded, so the shell reads them unqualified (m.watcher, m.deleter, …)
+	// exactly as when they were 21 separate fields; the point of the bundle is that a
+	// context switch repoints one value rather than 21 (D155 pt 2). Everything below
+	// is per-cluster *state* — in-flight channels, cancels, generations, stashes —
+	// which a switch tears down (M4-03) rather than swaps.
+	Cluster
+
+	// namespace scopes the watch ("" = all namespaces). watchCh and watchCancel are
+	// the current live watch: watchCh is re-read to pull the next event, watchCancel
+	// tears it down when a newer resource is selected (or the app quits). watchGen
+	// tags every watch-pump message so a delta from a superseded watch — whose
+	// channel is already being drained — is dropped rather than applied or used to
+	// re-issue a pump on the new channel (the same stale-message guard seqGen gives
+	// the sequence timeout, D61).
 	namespace   string
 	watchCh     <-chan kube.WatchEvent
 	watchCancel context.CancelFunc
@@ -584,70 +591,46 @@ type Model struct {
 	current    kube.Resource
 	hasCurrent bool
 
-	// nsLister seeds the namespace picker (nil → ns.switch inert). nsPicker (below,
-	// with the other components) is the modal itself. nsPersister records a picked
-	// namespace to the per-context state file so the next launch restores it (nil →
-	// persistence-inert, M2-11b-2).
-	nsLister    NamespaceLister
+	// nsPersister records a picked namespace to the per-context state file so the next
+	// launch restores it (nil → persistence-inert, M2-11b-2). It is bound to one
+	// context's state path, not to the cluster client, so it is not part of the
+	// Cluster bundle — M4-05 rebinds it on a context switch. The picker it feeds
+	// (nsPicker, with the other components) is seeded by the bundle's nsLister.
 	nsPersister NamespacePersister
 
-	// yamlGetter fetches a row's object as YAML for the unified View/Edit YAML action's
-	// editor buffer (M3-15b/D135; nil → that action is inert). The standalone read-only
-	// YAML viewer that once used this seam was retired into the edit flow (M3-15c), so
-	// the getter no longer feeds the shared viewer. describer renders an object's
-	// describe output for the shared viewer (M3-04; nil → the res.describe action is
-	// inert). viewerGen tags each shared-viewer open so an async fetch that returns after
-	// the user closed the viewer, or opened a newer one, is dropped rather than populating
-	// the wrong content — the same stale-message guard watchGen/seqGen give their async
-	// work; the describe/logs/secret opens all share it (the viewer is one component).
-	yamlGetter YAMLGetter
-	describer  Describer
-	viewerGen  int
+	// viewerGen tags each shared-viewer open (describe/secret and, through logMsg, the
+	// log stream — the viewer is one component) so an async fetch that returns after
+	// the user closed the viewer, or opened a newer one, is dropped rather than
+	// populating the wrong content — the same stale-message guard watchGen/seqGen give
+	// their async work.
+	viewerGen int
 
-	// logStreamer streams a pod's logs into the dedicated logs view (M3-05, rehomed by
-	// LOGS-02/D144; nil → the res.logs action is inert). Unlike the one-shot YAML/describe
-	// fetches a log stream is a channel pumped line by line (D53): logCh is re-read to
-	// pull the next line and logCancel tears the stream's goroutine down when the logs
-	// view closes or a newer open supersedes it. Each pumped line rides the shared
-	// viewerGen (a logMsg), so a line from a superseded stream — one whose view was
-	// closed or replaced — is dropped rather than appended under the wrong object,
-	// exactly as watchGen guards the table watch. logCh/logCancel are touched only from
-	// the single-threaded update loop.
-	logStreamer LogStreamer
-	logCh       <-chan kube.LogEvent
-	logCancel   context.CancelFunc
+	// The live log stream behind the dedicated logs view (LOGS-02/D144). Unlike the
+	// one-shot YAML/describe fetches it is a channel pumped line by line (D53): logCh
+	// is re-read to pull the next line and logCancel tears the stream's goroutine down
+	// when the logs view closes or a newer open supersedes it. Each pumped line rides
+	// viewerGen, so a line from a superseded stream — one whose view was closed or
+	// replaced — is dropped rather than appended under the wrong object, exactly as
+	// watchGen guards the table watch. Touched only from the single-threaded update loop.
+	logCh     <-chan kube.LogEvent
+	logCancel context.CancelFunc
 
-	// containerLister resolves a pod's containers before streaming logs or opening an
-	// exec session (M3-07a/M3-14b-2; nil → the default/sole container is used directly,
-	// no picker). When wired, logs (or exec) on a pod first fetches its container names:
-	// a single container is used directly, multiple open ctrPicker so the user chooses.
-	// ctrStreamRes/ctrStreamRef stash the pod the picker's selection applies to and
-	// ctrPurpose which terminal it routes to (logs stream vs exec session) — the picker's
-	// SelectedMsg carries only the chosen container name (D65), so the object + purpose
-	// are held here between the picker opening and the pick landing. Only one picker is
-	// ever up at a time, so a single stash serves both purposes. Touched only from the
-	// single-threaded update loop.
-	containerLister ContainerLister
-	ctrStreamRes    kube.Resource
-	ctrStreamRef    kube.ObjectRef
-	ctrPurpose      ctrPurpose
+	// ctrStreamRes/ctrStreamRef stash the pod the container picker's selection applies
+	// to and ctrPurpose which terminal it routes to (logs stream vs exec session,
+	// M3-07a/M3-14b-2) — the picker's SelectedMsg carries only the chosen container
+	// name (D65), so the object + purpose are held here between the picker opening and
+	// the pick landing. Only one picker is ever up at a time, so a single stash serves
+	// both purposes. Touched only from the single-threaded update loop.
+	ctrStreamRes kube.Resource
+	ctrStreamRef kube.ObjectRef
+	ctrPurpose   ctrPurpose
 
-	// podResolver resolves a backing pod for a pod-owning workload kind so its logs
-	// can be streamed (M3-07b; nil → logs on a non-pod kind degrade to a toast). When
-	// wired, opening logs on a Deployment/RS/StatefulSet/DaemonSet/Job/RC first
-	// resolves it to a pod off the update loop, then feeds that pod into the same
-	// container resolution/stream path a pod row takes. Touched only from the
-	// single-threaded update loop.
-	podResolver PodResolver
-
-	// secretGetter fetches a Secret's decoded data for the shared viewer (M3-08a; nil
-	// → the Reveal-secret action is inert, the viewer never opens). secretData holds
-	// the fetched entries so the reveal toggle can re-render them without re-fetching,
-	// and secretRevealed is whether values are currently unmasked (false on open — the
-	// deliberate-reveal contract, #89). Both are consulted only while the secret viewer
-	// is up (viewerKindSecret), so a stale value left from a closed one is harmless.
-	// Touched only from the single-threaded update loop.
-	secretGetter   SecretGetter
+	// secretData holds the fetched entries of the Secret in the shared viewer (M3-08a)
+	// so the reveal toggle can re-render them without re-fetching, and secretRevealed
+	// is whether values are currently unmasked (false on open — the deliberate-reveal
+	// contract, #89). Both are consulted only while the secret viewer is up
+	// (viewerKindSecret), so a stale value left from a closed one is harmless. Touched
+	// only from the single-threaded update loop.
 	secretData     kube.SecretData
 	secretRevealed bool
 	// secretSel is the entry cursor into secretData.Entries (M3-08b): the entry
@@ -673,59 +656,42 @@ type Model struct {
 	// (D107); only the update loop touches it.
 	actByLabel map[string]rowAction
 
-	// deleter runs the delete action once the confirm modal is accepted (M3-09; nil
-	// → the res.delete action is inert, the modal never opens). deleteRes/deleteRef
-	// stash the target the open confirm applies to: modal.ConfirmedMsg carries only
-	// the modal's Kind (no payload in confirm mode, D88), so the resource + the row's
-	// ObjectRef (its UID guards the snapshot race, M1-06a/D35) are held here between
-	// the modal opening and the accept landing. Consulted only while the delete modal
-	// is up (deleteModalKind), so a stale value left from a declined one is harmless.
-	// Touched only from the single-threaded update loop.
-	deleter   Deleter
+	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
+	// modal.ConfirmedMsg carries only the modal's Kind (no payload in confirm mode,
+	// D88), so the resource + the row's ObjectRef (its UID guards the snapshot race,
+	// M1-06a/D35) are held here between the modal opening and the accept landing.
+	// Consulted only while the delete modal is up (deleteModalKind), so a stale value
+	// left from a declined one is harmless. Touched only from the single-threaded
+	// update loop.
 	deleteRes kube.Resource
 	deleteRef kube.ObjectRef
 
-	// scaler/restarter run the two mutating workload actions once their modal
-	// resolves (M3-10; nil → the action is inert, no modal opens): scaler.Scale on a
-	// submitted replicas prompt, restarter.RolloutRestart on an accepted confirm. Both
-	// are idempotent (no UID guard, D35). mutateRes/mutateRef stash the target the open
-	// modal applies to — like deleteRes/deleteRef, ConfirmedMsg carries only the modal
-	// Kind (D88) — shared between the two because only one modal is ever up at a time;
+	// mutateRes/mutateRef stash the target the open scale/rollout-restart modal applies
+	// to (M3-10) — like deleteRes/deleteRef, ConfirmedMsg carries only the modal Kind
+	// (D88) — shared between the two because only one modal is ever up at a time;
 	// consulted only while the scale/rollout modal is up (scaleModalKind/
-	// rolloutRestartModalKind), so a stale value from a declined one is harmless.
-	// Touched only from the single-threaded update loop.
-	scaler    Scaler
-	restarter RolloutRestarter
+	// rolloutRestartModalKind), so a stale value from a declined one is harmless. Both
+	// actions are idempotent (no UID guard, D35). The port-forward prompt reuses the
+	// same stash. Touched only from the single-threaded update loop.
 	mutateRes kube.Resource
 	mutateRef kube.ObjectRef
 
-	// cordoner runs the cordon/uncordon actions on a Node (M3-11a; nil → the actions
-	// are inert). Unlike scale/rollout it needs no target stash: cordoning is
-	// idempotent (no UID guard, D35) and has no confirm modal (D115), so the action
-	// dispatches straight from handleRowAction with the row's ref in hand — nothing is
-	// held between an open modal and an accept because there is no modal. Touched only
-	// from the single-threaded update loop.
-	cordoner Cordoner
+	// The cordon/uncordon (M3-11a) and suspend/resume (M3-12) actions need no target
+	// stash at all: each is idempotent (no UID guard, D35) and has no confirm modal
+	// (D115/D120), so the action dispatches straight from handleRowAction with the
+	// row's ref in hand — nothing is held between an open modal and an accept because
+	// there is no modal.
 
-	// suspender runs the suspend/resume actions on a CronJob (M3-12; nil → the actions
-	// are inert). Like cordoner it needs no target stash: suspending is idempotent (no
-	// UID guard, D35) and has no confirm modal (D120), so the action dispatches straight
-	// from handleRowAction with the row's ref in hand. Touched only from the
-	// single-threaded update loop.
-	suspender Suspender
-
-	// drainer streams a node drain's progress once the confirm modal is accepted
-	// (M3-11b; nil → the Drain action is inert, no modal opens). Unlike the one-shot
-	// mutating actions a drain is long-running and pumped step by step (D53): drainCh
-	// is re-read to pull the next progress event and drainCancel tears the drain's
-	// goroutine down on quit or when a newer drain supersedes it (stopDrain) — the
-	// mutating twin of stopLogStream's cancel-on-close. drainGen tags each pumped
+	// The live node drain behind the accepted drain confirm (M3-11b). Unlike the
+	// one-shot mutating actions a drain is long-running and pumped step by step (D53):
+	// drainCh is re-read to pull the next progress event and drainCancel tears the
+	// drain's goroutine down on quit or when a newer drain supersedes it (stopDrain) —
+	// the mutating twin of stopLogStream's cancel-on-close. drainGen tags each pumped
 	// event so a step from a superseded/cancelled drain is dropped rather than
 	// reported to the status bar (mirroring viewerGen for the log stream). drainRes/
 	// drainRef stash the confirm's target (the ConfirmedMsg carries only the modal
 	// Kind, D88), and drainLabel the human node name for the final status message.
 	// All touched only from the single-threaded update loop.
-	drainer     Drainer
 	drainCh     <-chan kube.DrainEvent
 	drainCancel context.CancelFunc
 	drainGen    int
@@ -733,81 +699,60 @@ type Model struct {
 	drainRef    kube.ObjectRef
 	drainLabel  string
 
-	// portForwarder starts a background port-forward to the selected Pod once its
-	// ports prompt is submitted (M3-13a; nil → the Port-forward action is inert, no
-	// prompt opens). Its target is stashed in mutateRes/mutateRef between the prompt
-	// opening and the submit landing, like scale (only one modal is ever up at a time).
-	// forwards holds the running forwards; each carries its own context cancel and the
-	// ActiveForward handle. Lifecycle (Ready → bound ports, Done → removal) flows in
-	// through messages, never a mutex (principle 1); forwardSeq stamps a stable id on
-	// each so a Ready/Done message finds its entry after the slice shifts. On quit
-	// stopForwards cancels them all (cancel-on-exit). All fields are touched only from
-	// the single-threaded update loop.
+	// forwards holds the running background port-forwards (M3-13a); each carries its
+	// own context cancel and the ActiveForward handle. The target of the one being
+	// started is stashed in mutateRes/mutateRef between the ports prompt opening and
+	// the submit landing, like scale (only one modal is ever up at a time). Lifecycle
+	// (Ready → bound ports, Done → removal) flows in through messages, never a mutex
+	// (principle 1); forwardSeq stamps a stable id on each so a Ready/Done message
+	// finds its entry after the slice shifts. On quit stopForwards cancels them all
+	// (cancel-on-exit). All fields are touched only from the single-threaded update loop.
 	//
 	// forwardsPanel/forwardsSel are the M3-13b listing overlay: forwards.panel (`F`)
 	// toggles a global panel listing the active forwards, forwardsSel is the cursor
 	// into m.forwards (nav.up/down move it), nav.drillIn stops the selected forward and
 	// forwards.stopAll (`X`) stops every one. The panel reads m.forwards directly; like
 	// the secret viewer's entry cursor it is inline state, not a separate component.
-	portForwarder PortForwarder
 	forwards      []*forward
 	forwardSeq    int
 	forwardsPanel bool
 	forwardsSel   int
 
-	// serviceResolver resolves a Service to a backing endpoint pod before forwarding
-	// (M3-13c; nil → the Port-forward action on a Service degrades to a toast). When
-	// wired, port-forwarding a Service first resolves it to a pod off the update loop
-	// (pfResolveGen stamps the request so a superseded resolution is dropped), then the
-	// ports prompt opens over that resolved pod and the forward targets it — a Pod row
-	// forwards directly, no hop. Touched only from the single-threaded update loop.
-	serviceResolver ServiceResolver
-	pfResolveGen    int
+	// pfResolveGen stamps the two async hops a port-forward can take before its prompt
+	// opens — resolving a Service to a backing endpoint pod (M3-13c) and listing the
+	// target's declared ports (FB-pf-port-picker-b) — so a superseded resolution is
+	// dropped. Touched only from the single-threaded update loop.
+	pfResolveGen int
 
-	// portLister lists the declared ports of a port-forward target so they can be
-	// offered as choices instead of typed into the free-text prompt (FB-pf-port-picker-b;
-	// nil → the prompt opens directly, the M3-13a behaviour). The listing runs off the
-	// update loop stamped with the same pfResolveGen that guards the Service→pod hop, so
-	// a superseded request is dropped; any declared port opens portPicker (D139).
-	// pfPorts holds the listed set between the picker opening and the pick landing — the
-	// picker's SelectedMsg carries only the chosen label (D65), so the label maps back
-	// to a port through here. pfPort is the one port the local-port gesture
-	// (FB-pf-local-port) is acting on, held across its prompt so the submitted local
-	// half can be joined to the right remote port. The target itself is stashed in
-	// mutateRes/mutateRef, as it is for the prompt. Touched only from the
-	// single-threaded update loop.
-	portLister PortLister
-	pfPorts    []kube.Port
-	pfPort     kube.Port
+	// pfPorts holds a port-forward target's listed declared ports between the picker
+	// opening and the pick landing (FB-pf-port-picker-b) — the picker's SelectedMsg
+	// carries only the chosen label (D65), so the label maps back to a port through
+	// here. pfPort is the one port the local-port gesture (FB-pf-local-port) is acting
+	// on, held across its prompt so the submitted local half can be joined to the right
+	// remote port. The target itself is stashed in mutateRes/mutateRef, as it is for
+	// the prompt. Touched only from the single-threaded update loop.
+	pfPorts []kube.Port
+	pfPort  kube.Port
 
-	// execer opens an interactive shell in the selected Pod's container (M3-14b-1;
-	// nil → the Exec-shell action is inert). The exec is a *blocking* kube.Exec run
-	// from a suspended terminal via tea.Exec (off the update loop, D124), so there is
-	// no channel/goroutine to track here — bubbletea drives the ExecCommand and
-	// delivers the result as an execDoneMsg the update loop reports. See exec.go.
-	execer Execer
+	// Exec (M3-14b-1) and edit (M3-15b) hold no state here: each is a *blocking* call
+	// run from a suspended terminal via tea.Exec (off the update loop, D124), so there
+	// is no channel or goroutine to track — bubbletea drives the command and delivers
+	// the outcome as an execDoneMsg/editDoneMsg the update loop reports. See exec.go
+	// and edit.go.
 
-	// editor applies an edited object's YAML after the $EDITOR suspend (M3-15b; nil →
-	// the Edit action is inert). Like exec it is a suspend flow off the update loop
-	// (tea.Exec), so there is no channel/goroutine here — the fetch runs off the loop
-	// (reusing yamlGetter), bubbletea drives the editCommand, and the result lands as
-	// an editDoneMsg the update loop reports. See edit.go.
-	editor Editor
-
-	// searcher runs the cluster-search fan-out behind the search.cluster action
-	// (SEARCH-02b; nil → search-inert, the view never opens). Like a log stream the
-	// search is a channel pumped item by item (D53): searchCh is re-read to pull the
-	// next hit and searchCancel tears the fan-out down when the query changes, the view
-	// closes, or the app quits. searchGen tags every debounce tick and pumped hit with
-	// the query it belongs to, so a hit from a superseded query — one whose channel is
-	// still draining after cancellation — is dropped rather than shown under a query it
-	// does not describe (D140 pt 3), exactly as watchGen guards the table watch.
+	// The live cluster-search fan-out behind the search.cluster action (SEARCH-02b).
+	// Like a log stream the search is a channel pumped item by item (D53): searchCh is
+	// re-read to pull the next hit and searchCancel tears the fan-out down when the
+	// query changes, the view closes, or the app quits. searchGen tags every debounce
+	// tick and pumped hit with the query it belongs to, so a hit from a superseded
+	// query — one whose channel is still draining after cancellation — is dropped
+	// rather than shown under a query it does not describe (D140 pt 3), exactly as
+	// watchGen guards the table watch.
 	//
 	// searchTarget/hasSearchTarget are the pending selection a drill-in leaves behind:
 	// the hit's kind is switched to immediately, but its row only exists once the fresh
 	// watch's first RESET lands, so the watch pump applies the selection when it does.
 	// All are touched only from the single-threaded update loop.
-	searcher        Searcher
 	searchCh        <-chan kube.SearchEvent
 	searchCancel    context.CancelFunc
 	searchGen       int
@@ -824,11 +769,9 @@ type Model struct {
 	filterInput textinput.Model
 	filtering   bool
 
-	// discoverer runs the async discovery pass that reconciles the menu (nil →
-	// discovery-inert; the menu stays on its static seed). discoveryCancel tears
-	// the in-flight pass down on quit (the cap-1 discovery channel already keeps
-	// the goroutine from leaking, D8, but cancelling drops the result promptly).
-	discoverer      Discoverer
+	// discoveryCancel tears the in-flight discovery pass down on quit (the cap-1
+	// discovery channel already keeps the goroutine from leaking, D8, but cancelling
+	// drops the result promptly).
 	discoveryCancel context.CancelFunc
 
 	// menuHidden gates the left resource-menu pane (FB-nav-menu-toggle, D96's first
