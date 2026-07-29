@@ -4184,3 +4184,42 @@ recognise stays ordinary body text.
    therefore concatenated from independently-rendered segments and padded by hand,
    rather than wrapped in the base style. This applies to any future surface that
    paints spans inside a width-constrained line.
+
+### D165 — Owner → children is a *scope*, never a fetched list
+**2026-07-29.** `kube.Children` (M4-07) answers "what does this object drill
+into?" with a `ChildScope` — the child `Resource`, a namespace, and a
+`metav1.ListOptions` — and never with rows.
+
+1. **A scope, not a list.** `List`/`Watch` already take a namespace and
+   `ListOptions`, so returning the scope hands the TUI a *live* child table for
+   free. Returning `[]Row` would have built a second, snapshot-only data path that
+   goes stale the moment a pod restarts, and would have needed its own refresh
+   story (D155 pt 3). Anything else that "narrows a table" should return a scope
+   for the same reason.
+2. **The server does the filtering.** Exactly one of `LabelSelector`
+   (spec.selector owners) or `FieldSelector` (Node → `spec.nodeName`) is set, and
+   it is passed through verbatim. `spec.nodeName` is safe here — and was not safe
+   for cluster search (SEARCH-04c) — only because the child kind is known to be
+   Pod, the kind the apiserver indexes that field on. A field selector may be used
+   only where the kind is known.
+3. **The child kind comes from the caller's available set, matched on
+   `GroupKind`.** `Children` takes the discovered resources and looks the child up
+   in them rather than synthesizing a `Resource`, so the returned kind carries the
+   cluster's real verbs (verb-gating stays honest) and its preferred version. A
+   cluster or RBAC scope that does not expose pods has *no* child scope, and says
+   so.
+4. **A match-everything selector is refused, not passed through.** A
+   `spec.selector` that is present but selects everything, or absent entirely,
+   returns an error — a table that claims to show one owner's pods while showing
+   all of them is a wrong answer dressed as a right one. There is no fall back to
+   an empty selector anywhere in this path.
+5. **The relation is "related pods", not `ownerReferences`.** Service and Node are
+   in the table beside the workloads: neither owns anything, but both name a pod
+   set by exactly the mechanism the drill-down uses. Conversely CronJob→Job and
+   Deployment→ReplicaSet are deliberately absent — that link is
+   `metadata.ownerReferences`, which no field selector indexes, so it could not be
+   a scope at all and would need a client-side filter over a full list.
+6. **`HasChildren` is a pure predicate.** The drill-down action gates on a map
+   lookup with no network I/O (the role `canGet` plays for row actions), so
+   extending the owner set is a one-line map entry — and, for a `spec.selector`
+   kind, needs no new parsing at all.

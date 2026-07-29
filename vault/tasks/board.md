@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-06 landed, so the browse table now colors its status-carrying cells off the server-side column name (D164); the owner→children line (M4-07/08) is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-07 landed, so `kube.Children` hands the TUI a live child *scope* rather than a fetched list (D165); its consumer M4-08 is next. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`)
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -229,12 +228,9 @@ the cluster's client *and* everything keyed by the context (menu extras, remembe
 namespace, state file). The M4 exit criterion stays unticked on purpose — it claims a live
 rebind against a second real cluster, which is the standing dogfood human-task (D79).
 
-- [ ] **M4-07** Kube layer: owner → **children scope** primitive (`internal/kube/children.go`) — _claimed, see In Progress_
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: Returns the child `Resource` **plus a `metav1.ListOptions` scope**, not a fetched list — `kube.Watch`/`List` already take `ListOptions`, so a scope hands the TUI a *live* child table for free instead of a second, snapshot-only data path (D155 pt 3). Workload owners resolve through `spec.selector` to a label selector (the `PodForOwner` path, M3-07b, generalized); Node→Pods is the `spec.nodeName` field selector — safe here precisely because the child kind is known to be Pod, which is what made a general field selector wrong for search (SEARCH-04c note).
 - [ ] **M4-08** TUI: owner → children drill-down (`res.children`)
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-07. A registered action on an owner row switches the browse table to the child kind under M4-07's scope, with the scope named in the status bar so it is obvious the table is filtered; `nav.back` returns to the owner. The browse model must carry the scope alongside the resource so a watch restart (namespace change, reconnect) re-applies it. Ticks the drill-down exit criterion.
+      notes: Depends on M4-07 (**done** — `kube.Children` returns `ChildScope{Resource, Namespace, Options}`, `HasChildren` is the gate, D165). A registered action on an owner row switches the browse table to the child kind under that scope, with `ChildScope.Selector()` named in the status bar so it is obvious the table is filtered; `nav.back` returns to the owner. The browse model must carry **both** scope fields alongside the resource — a Node's children are cluster-wide (`Namespace: ""`), so reusing the app's own namespace would silently show one namespace's pods — and re-apply them on every watch restart (namespace change, reconnect). Ticks the drill-down exit criterion.
 - [ ] **M4-09** Kube layer: **metrics** primitive over `metrics.k8s.io` (`internal/kube/metrics.go`)
       status: todo | owner: — | added: 2026-07-29
       notes: Pod + node CPU/memory via the **dynamic client** on `metrics.k8s.io/v1beta1` — no new module dependency (`k8s.io/metrics` is not in `go.mod`) and no kubectl (D2). Availability comes from the discovery result already in hand (the group is absent when metrics-server is not installed); absence is silent, never an error (principle 3) — the aggregated API being *present but down* is the common case and must degrade the same way.
@@ -251,6 +247,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-07** Kube layer owner → children scope primitive — `kube.Children` returns a `ChildScope` (child `Resource` + namespace + `ListOptions`) instead of rows, so the TUI gets a live child table; `spec.selector` for workloads/Service, `spec.nodeName` for Node, `HasChildren` as the pure gate — done 2026-07-29 (D165)
 
 - [x] **M4-06** Column-aware cell coloring in the table — a pure classifier keyed off the server-side column name (`STATUS`/`STATE`/`PHASE`, `READY`, `RESTARTS`) paints status cells with the theme's Success/Warn/Error roles; selection still wins on the cursor row — done 2026-07-29 (D164)
 

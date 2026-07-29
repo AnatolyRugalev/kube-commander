@@ -10,7 +10,8 @@ SEARCH line) and sort by column (landed in M2) — so the slices cover the conte
 switcher (M4-01…05, the hard part: a switch is a teardown, not a pointer swap),
 column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
 (M4-09/10) and themes (M4-11/12). The switcher line and the coloring are done; the
-drill-down, metrics and theme lines remain. Per-leg history: `vault/journal/`._
+drill-down is half landed (its kube primitive, M4-07/D165), and the metrics and theme
+lines remain. Per-leg history: `vault/journal/`._
 
 ## Goal
 
@@ -41,7 +42,12 @@ The capabilities the original lacked, now natural on the new architecture.
       `2026-07-29-context-switch-live-dogfood.md` rather than being ticked against
       hermetic tests (D79) — the M3 Edit precedent.)
 - [x] Any column sortable; sort indicator visible; stable under live updates. (met since M2-13a/13b/D94/D98 — `table.SortBy`/`ClearSort` sort the *displayed* view over the authoritative watch-ordered set, so deltas keep flowing and re-sort in place: `TestSortSurvivesWatchDelta`, `TestSortPreservesSelectionByUID` (selection follows its object by UID, not its row), `TestClearSortRestoresWatchOrder`, `TestSetTableResetsSort`; the header arrow and its column alignment are `TestHeaderShowsSortIndicator`/`TestSortIndicatorKeepsColumnsAligned`; the `sort.column`/`sort.clear` cycle through the real key path is `TestSortCycleAdvancesColumnsAndClears`/`TestClearSortKeyRestoresOrder`. Ticked here rather than reopening M2: #85 was scheduled in M4 but implemented early, in the milestone that owns the table. Column-aware coloring, the other half of that scope bullet, landed separately as M4-06/D164 — a pure classifier keyed off the server-side column name, `TestClassifyCell` + the render tests in `internal/tui/components/table/color_test.go` — which closes the bullet, though it was never what this criterion asked for.)
-- [ ] Drill-down navigates from an owner to its pods and back.
+- [ ] Drill-down navigates from an owner to its pods and back. (Kube layer done since
+      M4-07/D165: `kube.Children` resolves an owner ref into a `ChildScope` — the child
+      `Resource`, a namespace and the `ListOptions` that narrow a list/watch to that
+      owner's pods — so the child table is a live watch, not a snapshot. Nothing calls it
+      yet; the gesture, the status-bar scope label and `nav.back` are M4-08, which is what
+      ticks this.)
 - [ ] Metrics columns appear only when metrics-server is present; absence is silent.
 - [ ] At least two themes selectable and persisted.
 - [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Matching gained a server-side label selector (`-l app=web`, SEARCH-04c-1/D151), score ranking (SEARCH-04c-2a/D152) and a subsequence fallback ranked below it (SEARCH-04c-2b/D153), which closes the SEARCH line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
