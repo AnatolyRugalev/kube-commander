@@ -7,7 +7,9 @@ _Last updated: 2026-07-29 — DIAG-01 made every surfaced error land in the log 
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-05a** Logs open tailing the last ~1000 lines instead of replaying from container boot
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29
+      notes: First slice of feedback `2026-07-29-logs-tail-and-perf` (high). See the LOGS section for the triage.
 
 ## Blocked
 
@@ -141,6 +143,20 @@ stern/k9s), full-screen for high throughput, clear `[following]`/`[paused]` + ac
 indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wiring that
 retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
 nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
+
+**LOGS-05 reopens the line** — feedback `2026-07-29-logs-tail-and-perf` (high) names two
+independent costs in the same view, so it triages into two slices rather than one leg:
+opening a log **replays the container's whole history** (`openLogs` sets no `TailLines`,
+so a pod up for a week streams a week), and **every appended line re-renders the whole
+buffer** (`logsview.Append` → `render` → `shown` joins all lines, so the cost of one line
+grows with the number held — the exact quadratic the LOGS-02 throughput human-task
+predicted). The first bounds what is fetched, the second bounds what a fetched line
+costs; the feedback is explicit that the second must be fixed either way, since a
+followed stream keeps growing the buffer long after the initial tail.
+
+- [ ] **LOGS-05b** Kill the per-line render cost in the logs view
+      status: todo | owner: — | added: 2026-07-29
+      notes: Second slice of feedback `2026-07-29-logs-tail-and-perf`. `Append` re-runs `shown()` (a full-buffer scan + join) and `viewport.SetContent` for **every** line, so appending n lines is O(n²) — a burst of 1000 lines on open joins ~500k lines. The pump (`internal/tui/logs.go`) delivers exactly one line per Cmd, so the fix has two halves and either alone helps: **batch** (drain what is already buffered in the channel per pump Cmd and append the batch, one render per batch) and/or **cache** the rendered body so an append with no filter is an append, not a re-join. Keep the filter/highlight semantics identical — the grep still narrows live while following.
 
 LOGS-01 (component), LOGS-02 (wiring) and LOGS-03 (regex + highlighting) are done, so the
 dedicated logs view is live on `res.logs`, the shared viewer no longer has a logs mode
