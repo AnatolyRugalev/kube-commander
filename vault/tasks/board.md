@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-10 put the metrics columns on the browse table (D168), closing the metrics line; themes (M4-11/12) are all that is left of M4. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-29 — M4-11 shipped the two built-in theme ports and the registry over them (D169), leaving M4-12 (selection + persistence) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
-      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
+_(none)_
 
 ## Blocked
 
@@ -237,16 +236,15 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 kind grows CPU/MEMORY columns fed by a 10 s poll and joined onto the watched rows by
 namespace/name; a cluster with no metrics API shows nothing and says nothing.
 
-- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`) — _claimed, see In Progress_
-      status: in-progress | owner: claude-opus | added: 2026-07-29
-      notes: Pure data. Two more `Theme` constructors (ported monokai + solarized, D6) beside `DefaultTheme`, plus a lookup/list (`Themes()`/`ByName`) for the picker and the config field. Nothing selects them yet.
 - [ ] **M4-12** Theme selection + persistence
       status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-11. A `theme:` field in `config.yaml` applied at launch (unknown name → default + a startup toast, principle 3) and a picker action that writes the choice back through `Config.Save` (M2-11a/D89). **Split on pickup if needed:** a live restyle needs a `SetStyles` on every component that caches a `styles.Styles` at construction — if that half is large, land the config field first and the picker second. Ticks the themes exit criterion.
+      notes: M4-11 landed the palettes and the registry (`styles.Themes`/`ThemeNames`/`ByName`, D169), so this is the selection half only. A `theme:` field in `config.yaml` applied at launch (unknown name → default + a startup toast, principle 3 — `ByName` reports not-found rather than guessing, D169 pt 2) and a picker action that writes the choice back through `Config.Save` (M2-11a/D89). **Split on pickup if needed:** a live restyle needs a `SetStyles` on every component that caches a `styles.Styles` at construction — if that half is large, land the config field first and the picker second. Ticks the themes exit criterion and closes M4.
 
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-11** Built-in themes + registry — ported monokai + solarized-dark palettes beside the default, with `Themes()`/`ThemeNames()`/`ByName()` over one `builtins` list; nothing selects them yet — done 2026-07-29 (D169)
 
 - [x] **M4-10** TUI metrics columns when available — CPU/MEMORY overlay on the Pod/Node table, 10 s poll joined onto the watched rows, absent and silent without metrics-server — done 2026-07-29 (D168)
 

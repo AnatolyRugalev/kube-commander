@@ -1,7 +1,6 @@
 package styles
 
 import (
-	"image/color"
 	"strings"
 	"testing"
 )
@@ -13,22 +12,7 @@ func TestDefaultThemeColorsSet(t *testing.T) {
 	}
 	// Every semantic color must be set; a nil color silently falls back to the
 	// terminal default, which would mask a missing palette entry.
-	colors := map[string]color.Color{
-		"Foreground":  th.Foreground,
-		"Subtle":      th.Subtle,
-		"Primary":     th.Primary,
-		"Selection":   th.Selection,
-		"SelectionFg": th.SelectionFg,
-		"Border":      th.Border,
-		"BorderFocus": th.BorderFocus,
-		"Header":      th.Header,
-		"StatusBarFg": th.StatusBarFg,
-		"StatusBarBg": th.StatusBarBg,
-		"Error":       th.Error,
-		"Warn":        th.Warn,
-		"Success":     th.Success,
-	}
-	for name, c := range colors {
+	for name, c := range themeColors(th) {
 		if c == nil {
 			t.Errorf("DefaultTheme().%s is nil", name)
 		}

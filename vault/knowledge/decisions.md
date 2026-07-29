@@ -4326,3 +4326,31 @@ contradict:
 5. **A failed refresh keeps the previous samples and is logged, never toasted**
    (D167 pt 5). Columns that blink empty whenever metrics-server restarts are worse
    than numbers a few seconds stale, and the reader did not ask for the overlay.
+
+## D169 — A theme name is a persisted identifier, and a built-in theme is complete or it is not built in (2026-07-29, M4-11)
+
+`internal/tui/styles/themes.go` holds the built-in palettes (`MonokaiTheme`,
+`SolarizedDarkTheme`) and the registry over them (`Themes`, `ThemeNames`,
+`ByName`). What a future leg must not contradict:
+
+1. **A theme's `Name` is API, not a label.** M4-12 persists the chosen name in
+   `config.yaml`, so renaming a shipped theme silently breaks the config of
+   everyone who selected it. Hence `solarized-dark` rather than `solarized`: a
+   light port lands beside it as a new name instead of forcing a rename or
+   quietly changing what an existing name renders. Adding a theme is free;
+   renaming one is a migration.
+2. **Lookup is lenient about formatting, never fuzzy.** `ByName` trims and
+   case-folds because the name is typed into a config file by hand, but a
+   near-miss (`mono`, `solarized`) is *not found*. Resolving an unknown name to
+   "something close" would silently give the reader a theme nobody chose; the
+   caller degrades to the default and says so (principle 3).
+3. **Every built-in sets every `Theme` role.** A nil color is not a fallback —
+   lipgloss simply does not apply it, so the terminal default leaks through and
+   the theme is half-applied in a way that looks like a rendering bug rather than
+   a missing entry. A new role added to `Theme` must be filled in *every*
+   built-in in the same leg (`TestBuiltinThemesAreComplete` fails otherwise).
+4. **`builtins` is the single registry** and the ordering contract is "default
+   first, the rest sorted by name". A picker, a config error message and any
+   generated doc all read that one order, so none of them can disagree about what
+   exists. `Themes()` rebuilds its slice per call, so the registry stays
+   unmutatable by a caller (principle 1).
