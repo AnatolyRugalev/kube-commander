@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-10 put the metrics columns on the browse table 
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
 
 ## Blocked
 
@@ -236,8 +237,8 @@ rebind against a second real cluster, which is the standing dogfood human-task (
 kind grows CPU/MEMORY columns fed by a 10 s poll and joined onto the watched rows by
 namespace/name; a cluster with no metrics API shows nothing and says nothing.
 
-- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`)
-      status: todo | owner: — | added: 2026-07-29
+- [ ] **M4-11** Built-in themes + registry (`internal/tui/styles`) — _claimed, see In Progress_
+      status: in-progress | owner: claude-opus | added: 2026-07-29
       notes: Pure data. Two more `Theme` constructors (ported monokai + solarized, D6) beside `DefaultTheme`, plus a lookup/list (`Themes()`/`ByName`) for the picker and the config field. Nothing selects them yet.
 - [ ] **M4-12** Theme selection + persistence
       status: todo | owner: — | added: 2026-07-29
