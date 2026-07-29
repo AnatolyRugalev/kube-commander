@@ -7,7 +7,8 @@ _Last updated: 2026-07-29 — M4-09 landed the metrics primitive (`kube.MetricsF
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-10** TUI: metrics columns when available
+      status: in-progress | owner: claude-opus | added: 2026-07-29 | claimed: 2026-07-29
 
 ## Blocked
 
