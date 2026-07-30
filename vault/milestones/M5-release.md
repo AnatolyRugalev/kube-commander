@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b) and migration is now both true and schema-verified (M5-04/05); what remains is distribution, the screencast and the human-performed ends (including one real legacy file).
+**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b), migration is true and schema-verified (M5-04/05) and the screencast tape is written and guarded (M5-09); what remains is distribution and the human-performed ends (the recording, one real legacy file, the tag).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -27,9 +27,15 @@ from the old kube-commander.
   (M5-06/07/08) documents its own path as it lands, and M5-10 drops the "why not `@v1`"
   explainer once a real tag exists. There is deliberately **no standalone README slice**
   (D173 pt 3).
-- Screencast via **vhs** (replaces the old terminalizer GIF pipeline) — M5-09 writes the
-  tape and the `make` target; the recording itself needs `vhs`, a real cluster and a real
-  terminal, so it is a human task (D79).
+- Screencast via **vhs** (replaces the old terminalizer GIF pipeline). **M5-09 ✅ 2026-07-30**
+  (D181): `docs/screencast.tape` scripts the browse → filter → logs → describe tour (opened
+  through the resource palette, so it does not depend on menu position), `make screencast`
+  builds this checkout's binary onto PATH and runs vhs on it, and three guards hold the tape
+  to the registry — every keypress is annotated with the action it triggers and checked
+  against `DefaultKeymap`, the tour must press the headline actions, and the README may
+  reference the GIF exactly when the file exists. The tape is validated by `vhs validate`
+  (vhs is `go install`-able); **recording** needs ttyd + ffmpeg, a real cluster and a real
+  terminal, so it is human task `2026-07-30-record-screencast` (D79).
 - Keybindings reference (generated from the `keys/` bindings where possible) — **already
   met**: `docs/keybindings.md` is generated from the keymap registry by `make keys-doc`
   and `make check` fails on drift (M2-01e/D51). Nothing to build; M5-01 ticks it.
@@ -70,7 +76,10 @@ raise come back done, not when the config that would produce them compiles.
       (Keybindings half is **already met** — generated + drift-gated by `make check`,
       M2-01e/D51. The README half is continuously maintained under D68 but cannot be called
       accurate until the install paths it will describe exist: M5-06/07/08 add them, M5-10
-      does the final pass.)
+      does the final pass. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
+      landed the tape, the `make` target and the guards (D181), and the README stays
+      deliberately image-free — and is test-forced to — until human task
+      `2026-07-30-record-screencast` brings back a real recording.)
 - [ ] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
       (M5-02 ✅ 2026-07-30: the artifact reports its own commit and build date, guarded by
       `TestGoreleaserSetsAllVersionVars` (D175). M5-03 ✅ 2026-07-30: `release.yml` exists —

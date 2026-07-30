@@ -3,3 +3,4 @@
 /.kube
 /kubectl
 /kubecom
+/bin

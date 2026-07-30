@@ -38,7 +38,17 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   **`charm.land/lipgloss/v2` v2.0.0** (indirect, via bubbles/help; go directive
   1.24.2).
 - **teatest** — TUI model testing.
-- **vhs** — recording the README screencast (replaces terminalizer).
+- **vhs** — recording the README screencast (replaces terminalizer). The tape lives at
+  `docs/screencast.tape`, `make screencast` runs it, and D181 governs both. Practical
+  facts an agent needs (verified M5-09): vhs is a Go program, so
+  `go install github.com/charmbracelet/vhs@latest` works in the sandbox and
+  **`vhs validate <tape>` parses a tape with no cluster, no terminal and no display** —
+  use it, it is the only mechanical check of tape *syntax* there is. It cannot
+  **record** there: vhs drives **ttyd** for the terminal and **ffmpeg** for encoding, and
+  neither is in the image nor obtainable with `go install`. Tape syntax notes: `Require`
+  goes at the top (before `Output`), comments are `#` lines (keep annotations on their own
+  line rather than trailing a command), and `Set Width/Height` are **pixels** — at
+  `FontSize 16` a 1200×700 frame is roughly 125×36 cells.
 
 ## Kubernetes
 - **k8s.io/client-go** (target **v0.31**), apimachinery, cli-runtime as needed.

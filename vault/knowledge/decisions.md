@@ -4708,3 +4708,34 @@ contradict:
    that closes it records that it closed that way. The interesting failure the sandbox cannot
    see is a *silent* one: an unparseable legacy file degrades to no migration, no config and
    no toast by design (D92), which looks exactly like having no legacy file at all.
+
+## D181 — The screencast is a committed script plus a human recording, and its keys are pinned to the keymap (2026-07-30, M5-09)
+
+A demo GIF is documentation that no test can read: it asserts, to the first visitor the
+project ever gets, that pressing these keys does these things — and it goes on asserting it
+long after a rebinding makes it false, because a recorder types keys, it never checks them.
+The 2020 build had exactly this shape (`ci/terminalizer/` + a GIF on a GitHub CDN) and the
+GIF outlived the UI it filmed. What a future leg must not silently contradict:
+
+1. **The tape is the artifact this repo owns; the GIF is recorded, never fabricated.**
+   `docs/screencast.tape` is the source of truth for the tour, and `make screencast` builds
+   *this checkout's* binary onto PATH before running vhs, so a recording can only ever show
+   the committed code. An agent may write and validate the tape (`vhs validate` needs no
+   cluster); it may not produce the GIF — recording needs ttyd + ffmpeg, a real cluster and a
+   human's eyes on the result (D79, human task `2026-07-30-record-screencast`). Do not commit
+   a GIF built any other way, and do not "approximate" one with a static image.
+2. **Every keypress in the tape carries a `# kubecom-action:` annotation naming the action it
+   triggers, or `# kubecom-input:` when it is plain text.** `TestScreencastTapeMatchesTheKeymap`
+   checks each annotated key against `DefaultKeymap` and fails on an *unannotated* keypress, so
+   the tape cannot drift from the registry (D11) and cannot smuggle in an unchecked key. A leg
+   that rebinds an action fixes the tape in the same leg — the annotation is the join, and the
+   correct fix is to change the key, never to relabel it as input.
+3. **The README references the screencast exactly when the file exists.**
+   `TestScreencastAssetAndReadmeAgree` enforces both directions: a README pointing at a missing
+   image is worse than no screencast, and an unreferenced GIF is dead weight in the tree. So
+   the recording and the README line land in one commit — which is why the human task carries
+   the exact markdown to paste rather than leaving it to be discovered.
+4. **The tour is a claim about what kubecom is for, so it has a floor.**
+   `TestScreencastTapeShowsTheHeadlineActions` requires the tape to press the resource palette,
+   the filter, drill-in, logs and describe — the surfaces the README sells. Extending the tour
+   is free; dropping one of those is a decision, not an edit.
