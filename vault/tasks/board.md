@@ -7,7 +7,18 @@ _Last updated: 2026-07-30 — M5-07 landed the AUR `-bin` package (D183) and fou
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-08** Docker image
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+      notes: Exit criterion 3, third of three, and the **only one the agent can fully
+      dry-run**: `docker` is present in the sandbox, and `ghcr.io` authenticates with the
+      workflow's own `GITHUB_TOKEN`, so no human-owned secret is needed (`packages: write`
+      on the release job). The old `Dockerfile` was deleted by M0-08/D25, so a new minimal
+      one returns — scratch/distroless over the goreleaser-built static binary
+      (`CGO_ENABLED=0` already), *not* a Go build stage, so the image ships the same
+      artifact the archives do. Worth stating in the README that a containerized TUI needs
+      `-it` and a mounted kubeconfig, and that this is a convenience path, not the
+      recommended one (kubecom is a local zero-deploy tool — `vault/goals.md`). Depends on:
+      M5-03.
 
 ## Blocked
 
@@ -272,18 +283,6 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-08** Docker image
-      status: todo | owner: — | added: 2026-07-30
-      notes: Exit criterion 3, third of three, and the **only one the agent can fully
-      dry-run**: `docker` is present in the sandbox, and `ghcr.io` authenticates with the
-      workflow's own `GITHUB_TOKEN`, so no human-owned secret is needed (`packages: write`
-      on the release job). The old `Dockerfile` was deleted by M0-08/D25, so a new minimal
-      one returns — scratch/distroless over the goreleaser-built static binary
-      (`CGO_ENABLED=0` already), *not* a Go build stage, so the image ships the same
-      artifact the archives do. Worth stating in the README that a containerized TUI needs
-      `-it` and a mounted kubeconfig, and that this is a convenience path, not the
-      recommended one (kubecom is a local zero-deploy tool — `vault/goals.md`). Depends on:
-      M5-03.
 - [ ] **M5-10** Release pre-flight, then the first tag (human performs the tag)
       status: todo | owner: — | added: 2026-07-30
       notes: The point of no return (D173 pt 1). The agent leg does the pre-flight: confirm
