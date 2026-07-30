@@ -7,7 +7,7 @@ _Last updated: 2026-07-30 — M5-06 landed the Homebrew cask (D182) and added `g
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-07** AUR distribution — owner: claude-opus-5 | claimed: 2026-07-30 (see Backlog entry for notes)
 
 ## Blocked
 
@@ -273,7 +273,7 @@ so a leg can likely obtain it, and if it cannot, the gate for a config-only slic
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 - [ ] **M5-07** AUR distribution
-      status: todo | owner: — | added: 2026-07-30
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
       notes: Exit criterion 3, second of three. The original shipped an AUR package (`ci/aur/`,
       deleted from `v1` by M0-08/D25) so this is a **refresh of an existing published
       package**, not a new one. M5-06 already looked the name up while doing the same
