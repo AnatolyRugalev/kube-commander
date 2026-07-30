@@ -54,13 +54,52 @@ checksum:
 snapshot:
   version_template: "{{ .Tag }}-next"
 
+# Release notes, generated from the git log between the previous tag and this one.
+# The M5-10 pre-flight rendered them for real (a local `v1.0.0-rc.1`, `goreleaser
+# release --skip=publish`) rather than reasoning about them, and found the filters
+# below were matching almost nothing — see D185 pt 1.
 changelog:
   sort: asc
+  # Drop the commit SHA from each line: it is 40 characters of noise ahead of the
+  # only part a reader is scanning, and the GitHub release body links every PR and
+  # commit anyway.
+  abbrev: -1
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+      # The `(\(.+\))?` is load-bearing, not defensive. Every commit in this repo
+      # is *scoped* (`chore(board): claim M5-08`, `docs(screencast): …`), which
+      # `^chore:` does not match — so before this fix the first release's notes
+      # opened with ~180 board-claim lines and buried the features under them.
+      - '^chore(\(.+\))?:'
+      - '^docs(\(.+\))?:'
+      - '^test(\(.+\))?:'
+      - '^ci(\(.+\))?:'
+      - '^build(\(.+\))?:'
+      - '^style(\(.+\))?:'
+      - '^refactor(\(.+\))?:'
+      # An abandoned experiment and its revert say nothing to a user; both are
+      # in this history (`wip(M0-02)` / `Revert "wip(M0-02)…"`).
+      - '^wip(\(.+\))?:'
+      - '^Revert '
+      - '^Merge '
+      # `feedback:` and `dogfood …` are this project's vault bookkeeping: the
+      # maintainer filing a report or a dogfood result (D69/D79). The change that
+      # answers one is its own `feat:`/`fix:` commit, so keeping these would list
+      # every issue twice — once as reported, once as fixed.
+      - '^feedback(\(.+\))?:'
+      - '^dogfood '
+  # `feat`/`fix` are the two types a release reader scans for; everything else
+  # that survives the filters (`perf:`, `feedback:` — the type this repo uses for
+  # maintainer-reported changes) lands in the catch-all rather than disappearing.
+  groups:
+    - title: Features
+      regexp: '^feat(\(.+\))?:'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\(.+\))?:'
+      order: 1
+    - title: Other changes
+      order: 999
 
 # Homebrew (M5-06/D182). A **cask**, not a formula: `brews:` is deprecated in
 # goreleaser v2 and `goreleaser check` now fails on it, and Homebrew's own policy

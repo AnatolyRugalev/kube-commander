@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — every buildable M5 slice has landed: the release pipeline (M5-02/03), the DoD audit's findings (M5-01a/01b), migration (M5-04/05), the screencast tape (M5-09) and all three distribution paths (M5-06 Homebrew, M5-07 AUR, M5-08 Docker); what remains is M5-10's pre-flight and the human-performed ends (the tap and AUR access, the recording, one real legacy file, the tag, the branch rename).
+**Status:** `in-progress` (2026-07-30) — every agent-performable M5 slice has landed, M5-10's pre-flight included (D185), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access, the recording, one real legacy file, and the branch rename (M5-11, blocked on the tag).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -94,8 +94,12 @@ raise come back done, not when the config that would produce them compiles.
 - [ ] README + keybindings docs current and accurate.
       (Keybindings half is **already met** — generated + drift-gated by `make check`,
       M2-01e/D51. The README half is continuously maintained under D68 but cannot be called
-      accurate until the install paths it will describe exist: M5-06/07/08 add them, M5-10
-      does the final pass. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
+      accurate until the install paths it will describe exist: M5-06/07/08 add them, and
+      **M5-10 ✅ 2026-07-30** did the pass — it found the status banner still announcing that
+      the browse UI was yet to land (stale since M2-RUN, 2026-07-20), rewrote it, and added
+      the release-archive install path the three package paths had left implicit. The
+      remaining README edits are the ones only a tag can make true (drop the `@v1` explainer,
+      restore `go install …@latest`), listed as step 3 of the tag human task. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
       landed the tape, the `make` target and the guards (D181), and the README stays
       deliberately image-free — and is test-forced to — until human task
       `2026-07-30-record-screencast` brings back a real recording.)
@@ -104,8 +108,16 @@ raise come back done, not when the config that would produce them compiles.
       `TestGoreleaserSetsAllVersionVars` (D175). M5-03 ✅ 2026-07-30: `release.yml` exists —
       `goreleaser release` on a `v*` tag, gated on `make check` via ci.yml, plus a
       `--snapshot --clean` dry run on every push that keeps the config from drifting (D176).
-      The pipeline is complete; it has just never been fired by a tag. Ticked when a real
-      tag has produced real artifacts, i.e. after M5-10's human tag push.)
+      The pipeline is complete; it has just never been fired by a tag. **M5-10 ✅ 2026-07-30**
+      (D185) ran the closest thing to firing it that leaves nothing behind: `goreleaser
+      release --clean --skip=publish` against a *real* local `v1.0.0-rc.1` tag, which built
+      all four platforms, rendered the cask, the PKGBUILD/`.SRCINFO` and the release notes,
+      and succeeded — the tag was then deleted, never pushed. It also found and fixed the one
+      thing only a real rendering could show: the changelog filters matched unscoped subjects
+      and every commit here is scoped, so the notes were 373 lines opening with ~180 board
+      claims (now 151, grouped, guarded). Ticked when a real
+      tag has produced real artifacts, i.e. after the human tag push
+      (`2026-07-30-first-release-tag`).)
 - [ ] Homebrew/AUR/Docker install paths verified.
       (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
       back — except possibly Docker, which the agent can build and run locally.

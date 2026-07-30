@@ -4855,3 +4855,35 @@ config is silently wrong rather than rejected. What a future leg must not silent
    name — but a Docker tag does not, so an unguarded `latest` would make `docker run
    ghcr.io/anatolyrugalev/kubecom` resolve to exactly the release M5-10 recommends cutting
    *because* it is not ready. `TestDockerLatestTagSkipsPrereleases` binds it.
+
+## D185 — Release notes are rendered, not reasoned about; and nothing is closed on the tracker before a release carries the fix (2026-07-30, M5-10)
+
+1. **Every changelog filter and group in `.goreleaser.yml` matches a *scoped* conventional
+   subject** — `^chore(\(.+\))?:`, never `^chore:`. This repo has written scoped subjects
+   since M0 (`chore(board): claim M5-08`), so the original unscoped patterns matched almost
+   nothing: the first release's notes rendered as 373 lines opening with ~180 board claims,
+   with the 143 feature commits buried below them. The general constraint a future leg must
+   not silently contradict: **a release-notes change is verified by rendering the notes**
+   (`goreleaser release --skip=publish` against a throwaway local tag), not by reading the
+   config — a filter that matches nothing is indistinguishable from one that works, and the
+   run that would reveal it is the tag push, which cannot be retried (D173 pt 1).
+   `TestChangelogFiltersDropTheNoise` / `TestChangelogGroupsTheKeptCommits` bind it against
+   real subjects from this history.
+2. **`feedback:` and `dogfood …` commits are excluded from the notes.** They are vault
+   bookkeeping — the maintainer filing a report (D69) or a dogfood result (D79) — and the
+   change that answers one is its own `feat:`/`fix:` commit. Keeping both would list every
+   issue twice, once as reported and once as fixed.
+3. **A GitHub issue is closed when a release carries its fix, not when the code lands.** The
+   fixes for #8, #28, #68, #76, #80, #83, #84, #85, #86, #87 and #89 are all on `v1` and none
+   of them has reached a user, because no version has ever been tagged. So M5-10's pre-flight
+   *checked* the tracker (13 open, all accounted for, and #8 was missing from the
+   REWRITE_PLAN inventory) and closed nothing; closing is a step of the tag human task. This
+   is not the same rule as D173 pt 1 — closing an issue is reversible — it is about what the
+   closing message would claim.
+4. **The first release's notes span the 2020 tag `0.7.6`.** goreleaser derives the range from
+   `git describe`, the 2020 tags are unprefixed (`0.7.6`, not `v0.7.6`) and reachable from
+   `v1`, so `v1.0.0`'s notes cover all 373 commits since. That is correct rather than
+   fixable — it *is* everything since the last release — and the release body is the one
+   published artifact that stays editable, so a future leg must not "fix" it by rewriting
+   history or by hardcoding `GORELEASER_PREVIOUS_TAG` into the workflow, which would then be
+   wrong for every subsequent release.

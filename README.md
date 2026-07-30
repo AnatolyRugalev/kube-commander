@@ -11,11 +11,13 @@ in-cluster deployment and **no `kubectl` binary required**.
 > construction and dropping the hard `kubectl` dependency. The original 2020 code
 > lives on [`master`](https://github.com/AnatolyRugalev/kube-commander/tree/master).
 >
-> **Current status:** the in-process Kubernetes layer is complete and the TUI
-> components are built and tested; the interactive UI is being wired to launch
-> against a live cluster (task `M2-RUN`). Today the binary builds and exposes the
-> `version` and `keys` subcommands — the browse UI lands with `M2-RUN`. This README
-> tracks what the built binary actually does and is updated as the UI comes online.
+> **Current status:** feature-complete and dogfooded against real clusters. The
+> two-pane browse UI, the in-process action set, the dedicated logs view, cluster
+> search, the context switcher, metrics columns and themes all work today —
+> everything documented below is in the binary, not planned. What is left is the
+> release itself: **no version has been tagged yet**, so you install from a `v1`
+> checkout (below), and the Homebrew, AUR and container paths start working with
+> that first tag.
 >
 > The rewrite is driven autonomously and documents itself in **[`vault/`](vault/)**
 > (goals, plan, live task board, decision log, per-leg journal); see
@@ -76,6 +78,24 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 > supports on macOS only — on Linux, use the release tarball, the AUR package or
 > `go install` above. Until the first tagged release, that tap still serves the
 > 2020 formula, so do not install from it expecting kubecom.
+
+### From a release archive
+
+From the first tagged release onward, every release carries `.tar.gz` archives for
+`linux`/`darwin` × `amd64`/`arm64` plus a `checksums.txt`. Download the one for your
+platform from the [Releases page](https://github.com/AnatolyRugalev/kube-commander/releases),
+verify it, and put the binary on your `PATH`:
+
+```bash
+sha256sum --check --ignore-missing checksums.txt
+tar xzf kubecom_<version>_<os>_<arch>.tar.gz
+install -m 0755 kubecom ~/.local/bin/kubecom
+```
+
+The archives are the same artifacts the Homebrew cask and the AUR package install,
+so this is the no-package-manager path, not a lesser one. Note that macOS binaries
+are unsigned: downloaded by hand rather than through Homebrew, they need
+`xattr -dr com.apple.quarantine kubecom` before Gatekeeper will run them.
 
 > **Arch Linux users, note the rename.** The AUR package will be **`kubecom-bin`**
 > — *not* the 2020 `kube-commander`, whose name this project can no longer publish

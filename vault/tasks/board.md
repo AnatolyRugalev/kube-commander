@@ -3,18 +3,26 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-08 landed the ghcr.io container image (D184), the last distribution slice and the only one verifiable end to end in the sandbox, leaving **M5-10 (release pre-flight, then the human tag push) as the top unblocked M5 item** with M5-11 behind it. Ten human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and nine advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF, and the Homebrew and AUR ones carry two thirds of the install-paths criterion. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-10's pre-flight landed (D185), so **the board holds no unblocked work**: every remaining act publishes, and D173 pt 1 makes each one a human's. Eleven human-tasks open, two now **blocking** — the CRD error text (CRD-01) and the first release tag (M5-11) — and nine advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one an M5 exit criterion, the screencast one the README's demo GIF, and the Homebrew and AUR ones two thirds of the install-paths criterion. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-10** Release pre-flight, then the first tag (human performs the tag)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+_(none)_
 
 ## Blocked
 
 - [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
       status: blocked | owner: — | added: 2026-07-29
       notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` (the error text). See the DIAG line in the Backlog.
+
+- [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
+      status: blocked | owner: — | added: 2026-07-30
+      notes: Blocked on human task `2026-07-30-first-release-tag` — renaming the branch before
+      a release exists would retarget every clone and PR for a tree nobody can install yet, and
+      the rename also dissolves the `@v1` collision the tag is what actually fixes. The agent
+      share is preparation: what to rename, `master` kept as the permanent 2020 reference
+      (D14, do *not* delete), the workflow `branches:` lists (both already name `main`) and the
+      README/vault links that say `v1`. The act itself is a GitHub admin setting — a human's.
 
 ## Backlog
 
@@ -273,29 +281,12 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-10** Release pre-flight, then the first tag (human performs the tag)
-      status: todo | owner: — | added: 2026-07-30
-      notes: The point of no return (D173 pt 1). The agent leg does the pre-flight: confirm
-      every earlier slice landed, README install paths match what actually ships, the
-      changelog filters produce sensible notes, `--snapshot` is clean, and the DoD items
-      M5-01 left open are now closable. Then a human task carries the **tag push** —
-      irreversible in a way no previous leg's work was: `proxy.golang.org` caches a version
-      permanently, so a bad `v1.0.0` can never be replaced, only superseded by `v1.0.1`.
-      Recommend a `v1.0.0-rc.1` first for exactly that reason (a pre-release is excluded
-      from `@latest`, so a mistake costs nothing). This is also what finally restores
-      `go install …@latest` and lets the README drop its "why not `@v1`" explainer
-      (FB-go-install). Depends on: M5-01…M5-09.
-- [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
-      status: todo | owner: — | added: 2026-07-30
-      notes: The last step, and **entirely a human's**: changing a repo's default branch is
-      a GitHub admin setting, and it retargets every open PR and every clone. The agent
-      leg's share is preparation and a precise human task — what to rename, what to do with
-      `master` (keep as the permanent 2020 reference, D14 — do *not* delete it), which
-      workflow `branches:` lists need `main` (both already list it), and the README/vault
-      links that name `v1`. Renaming also dissolves the branch-vs-semver collision that
-      forced the `@v1` explainer. Depends on: M5-10.
+_(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** above, waiting
+on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M5-10** Release pre-flight — every earlier M5 slice confirmed landed, the notes rendered against a throwaway local `v1.0.0-rc.1` (373 lines of mostly board claims → 151 grouped, the filters matched unscoped subjects and this repo writes only scoped ones), `--snapshot` clean, README install paths audited and a release-archive path added, the tracker checked (13 open issues, all accounted for, #8 missing from the plan's inventory); the tag itself is human task `2026-07-30-first-release-tag` — done 2026-07-30 (D185)
 
 - [x] **M5-08** Docker — a `dockers_v2:` multi-arch image at `ghcr.io/anatolyrugalev/kubecom` over a build-stage-free `Dockerfile` (distroless-root, `COPY $TARGETPLATFORM/kubecom`), `latest` withheld from pre-releases, published with the workflow's own `GITHUB_TOKEN` so it is the one distribution slice needing no human task; verified end to end in the sandbox by starting `dockerd` and rendering the TUI inside the built image — done 2026-07-30 (D184)
 

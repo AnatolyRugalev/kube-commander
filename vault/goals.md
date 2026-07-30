@@ -159,9 +159,15 @@ text is preserved in that bullet's annotation._
       `TestDiscoverResourcesGroupFaultIsolation`), #86 (no panics, degrade), #88 (new
       toolchain), #84 (logs for pod-owning kinds), #83 (workload actions), #89 (secret
       viewer), #80 (context switcher — mechanism), #85 (column sort). **#28** (CD to
-      distributors) is the outstanding one: M5-06/07/08. Also unticked because the tracker
-      itself was not checked — no `gh` in the sandbox — so whether these issues are
-      *closed* is unknown here; closing them is part of M5-10's pre-flight.)
+      distributors) is the outstanding one: M5-06/07/08. **M5-10 checked the tracker**
+      (2026-07-30, via the GitHub API rather than `gh`): 13 issues are open, and every one is
+      accounted for — the 11 above, the rewrite announcement #90, and **#8** ("UI: hotkeys
+      configurability"), which is resolved by the fully-rebindable keymap (M2-01, D11) but was
+      **missing from the REWRITE_PLAN table**, so the plan's inventory undercounted the scope
+      by one. None are closed, and M5-10 deliberately did not close them: an issue is resolved
+      for the person who filed it when a *release* carries the fix, and no release exists yet
+      (D185 pt 3). Closing them is step 3 of human task `2026-07-30-first-release-tag`, which
+      names all thirteen.)
 
 ## Non-goals
 
