@@ -36,25 +36,79 @@ import (
 // `keys:` today, and a knob nobody has asked to turn is not worth a config section.
 const defaultLogTail int64 = 1000
 
+// logRequest is everything one logs open is made of: the object whose logs are shown,
+// the container inside it (empty = the pod's default/sole one), and which instance —
+// the running one, or the previous terminated one (M5-01a). The model keeps the last
+// one so logs.previous can re-issue the very same open with that one bit flipped,
+// without re-resolving the owning workload's pod or re-asking which container.
+type logRequest struct {
+	res       kube.Resource
+	ref       kube.ObjectRef
+	container string
+	previous  bool
+}
+
 // openLogs shows the logs view over ref and starts streaming container's logs into it
-// at generation gen. It replaces streamLogsInto's shared-viewer open: the view is shown
+// at generation gen — the fresh open every row gesture takes. Reset drops any previous
+// object's lines and its reader state, so the view always opens clean, tailing and on
+// the running instance. container "" streams the pod's default/sole container.
+func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string, gen int) (tea.Model, tea.Cmd) {
+	m.logsView.Reset()
+	return m.startLogStream(logRequest{res: res, ref: ref, container: container}, gen)
+}
+
+// toggleLogsPrevious flips the open logs view between the container's running instance
+// and its previous terminated one (logs.previous, M5-01a) — `kubectl logs -p`, and the
+// gesture that answers why a CrashLoopBackOff pod is crash-looping, since the log that
+// explains it belongs to the instance that already died.
+//
+// It re-issues the *same* request with Previous flipped rather than being a second row
+// action, which is what makes it cheap: the pod resolution (M3-07b) and the container
+// pick (M3-07a) that got the reader here are already spent, and one entry point means
+// `L` stays the only way to reach logs. Two instances are two different logs, so this
+// really is a restream — the buffer is replaced — but Restream keeps the reader's grep,
+// wrap and timestamps, since the point of flipping is to look for the same thing in the
+// other log. The generation is bumped so lines still draining from the stream being
+// replaced are dropped rather than interleaved into the new instance's output.
+//
+// With no previous instance the server rejects the request and the stream's terminal
+// error lands on an empty view, which the existing open-failure path (handleLogMsg)
+// degrades exactly as it degrades any other: a status-bar toast naming the reason, and
+// the view closes (D74). Nothing here pre-checks for one — only the apiserver knows,
+// and a wrong guess would either hide a readable log or promise one that is not there.
+func (m Model) toggleLogsPrevious() (tea.Model, tea.Cmd) {
+	if m.logStreamer == nil || m.logReq.ref.Name == "" {
+		return m, nil // logs-viewer-inert, or nothing has streamed yet.
+	}
+	req := m.logReq
+	req.previous = !req.previous
+	m.logsView.Restream()
+	m.viewerGen++
+	return m.startLogStream(req, m.viewerGen)
+}
+
+// startLogStream is the shared tail of every logs open: it tears down whatever stream
+// was running, titles the view for req, and starts streaming. The view is shown
 // immediately (empty, so the gesture feels instant) and the log channel is pumped line
 // by line off the update loop (D53), appending each line as it lands — a large or slow
-// log never blocks Update. Reset drops any previous object's lines and re-arms following
-// (like `kubectl logs -f`), so the view always opens clean and tailing; the follow state
-// and the filter now live in the component, not on the model. The stream runs on a
-// cancellable context torn down when the view closes or a newer open supersedes it
-// (stopLogStream). An open failure degrades to a status-bar toast and leaves the view
-// closed (D74); a mid-stream error after some lines already showed keeps them on screen.
-// container "" streams the pod's default/sole container.
-func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string, gen int) (tea.Model, tea.Cmd) {
+// log never blocks Update. The stream runs on a cancellable context torn down when the
+// view closes or a newer open supersedes it (stopLogStream). An open failure degrades to
+// a status-bar toast and leaves the view closed (D74); a mid-stream error after some
+// lines already showed keeps them on screen. The caller has already emptied the buffer
+// (Reset for a new object, Restream for an instance flip), which is the one thing the
+// two paths do differently.
+func (m Model) startLogStream(req logRequest, gen int) (tea.Model, tea.Cmd) {
 	m.stopLogStream() // idempotent; ensures no prior stream survives this open.
-	m.logsView.Reset()
-	title := viewerTitle(res, ref)
-	if container != "" {
-		title += " · " + container
+	m.logReq = req
+	title := viewerTitle(req.res, req.ref)
+	if req.container != "" {
+		title += " · " + req.container
 	}
 	m.logsView.SetTitle(title)
+	// Which instance is on screen is a property of the request, so the view is told
+	// with every open — including the fresh ones, where it re-asserts the false Reset
+	// just set.
+	m.logsView.SetPrevious(req.previous)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Follow keeps the stream open and reconnects transparently across transport
@@ -74,10 +128,17 @@ func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string,
 	// only this initial read — a follow reconnect anchors on the last line's timestamp
 	// instead (M1-07d), so a transient drop resumes where the reader was rather than
 	// re-tailing the last 1000 lines on top of them.
+	//
+	// Previous carries the instance choice (M5-01a). It rides alongside Follow rather
+	// than instead of it: a terminated instance's log cannot grow, so the kubelet
+	// serves it and closes, and a clean end is exactly how the kube layer stops
+	// following (followLogStream) — the same way following a running pod ends when its
+	// container dies. So the flip changes one bit and nothing else about the request.
 	tail := defaultLogTail
-	ch, err := m.logStreamer.Logs(ctx, ref, kube.LogOptions{
+	ch, err := m.logStreamer.Logs(ctx, req.ref, kube.LogOptions{
 		Follow:     true,
-		Container:  container,
+		Container:  req.container,
+		Previous:   req.previous,
 		Timestamps: true,
 		TailLines:  &tail,
 	})
@@ -187,6 +248,12 @@ func (m Model) handleLogsAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionQuit {
 		m.closeLogs()
 		return m, nil
+	}
+	// logs.previous is handled here rather than in the component: it is a *request*
+	// flag, not a display mode, so honouring it means re-opening the stream — which
+	// only the shell can do (M5-01a).
+	if a == keymap.ActionLogsPrevious {
+		return m.toggleLogsPrevious()
 	}
 	var cmd tea.Cmd
 	m.logsView, cmd = m.logsView.Update(a)

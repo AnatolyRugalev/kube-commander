@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -475,5 +476,161 @@ func TestLogBatchStreamEndClosesAnEmptyView(t *testing.T) {
 	}
 	if f := frame(m); !strings.Contains(f, "tail line") {
 		t.Errorf("the batch's line should survive the EOF; got:\n%s", f)
+	}
+}
+
+// previousKey is the default logs.previous chord (`ctrl+p`) — the instance toggle
+// (M5-01a). Like the regex chord it carries no text, so it acts while the grep is open.
+var previousKey = tea.Key{Code: 'p', Mod: tea.ModCtrl}
+
+// crashLoopLogStreamer serves the running instance's log and rejects any request for a
+// previous one — the shape of a pod whose container has never terminated, where the
+// apiserver answers `Previous` with "previous terminated container not found". It
+// delivers that as a *terminal event* rather than an open error, which is how the real
+// kube layer reports it: Logs returns immediately and opens the stream in a goroutine,
+// so a server rejection can only arrive on the channel (internal/kube/logs.go).
+type crashLoopLogStreamer struct {
+	calls   int
+	gotOpts kube.LogOptions
+}
+
+func (f *crashLoopLogStreamer) Logs(_ context.Context, _ kube.ObjectRef, opts kube.LogOptions) (<-chan kube.LogEvent, error) {
+	f.calls++
+	f.gotOpts = opts
+	ch := make(chan kube.LogEvent, 1)
+	if opts.Previous {
+		ch <- kube.LogEvent{Err: errors.New(`previous terminated container "app" in pod "api" not found`)}
+	} else {
+		ch <- kube.LogEvent{Line: "still serving"}
+	}
+	close(ch)
+	return ch, nil
+}
+
+// TestLogsPreviousTogglesTheInstanceStreamed is M5-01a's headline: `ctrl+p` inside the
+// open logs view re-opens the stream against the container's previous terminated
+// instance (`kubectl logs -p`) and the header names which one is on screen, and pressing
+// it again comes back. The assertion that matters beyond the flag is that *only* the
+// flag changed — follow, timestamps and the tail bound are the same request — since the
+// toggle's whole claim is that it re-issues the open the reader already made.
+func TestLogsPreviousTogglesTheInstanceStreamed(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "current instance"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewHelper(t, m)
+	if s.gotOpts.Previous {
+		t.Fatal("a fresh logs open should stream the running instance")
+	}
+	opens, ref := s.calls, s.gotRef
+
+	m, cmd := press(t, m, previousKey)
+	m = drainLogPump(t, m, cmd)
+	if s.calls != opens+1 {
+		t.Fatalf("logs.previous should re-open the stream: %d opens, want %d", s.calls, opens+1)
+	}
+	if !s.gotOpts.Previous {
+		t.Fatal("logs.previous should ask the streamer for LogOptions.Previous")
+	}
+	if s.gotRef != ref {
+		t.Fatalf("the flip should re-address the same pod: %v, want %v", s.gotRef, ref)
+	}
+	if !s.gotOpts.Follow || !s.gotOpts.Timestamps || s.gotOpts.TailLines == nil {
+		t.Fatalf("the flip should change only Previous: %+v", s.gotOpts)
+	}
+	if !m.logsView.Previous() {
+		t.Fatal("the view should know it is showing the previous instance")
+	}
+	if f := frame(m); !strings.Contains(f, "[previous]") {
+		t.Fatalf("the logs header should name the previous instance: %q", f)
+	}
+
+	m, cmd = press(t, m, previousKey)
+	m = drainLogPump(t, m, cmd)
+	if s.gotOpts.Previous {
+		t.Fatal("a second logs.previous should return to the running instance")
+	}
+	if m.logsView.Previous() {
+		t.Fatal("the view's marker should come back with the flip")
+	}
+	if f := frame(m); strings.Contains(f, "[previous]") {
+		t.Fatalf("the header marker should go with the flip back: %q", f)
+	}
+}
+
+// TestLogsPreviousKeepsTheGrepAndReplacesTheBuffer covers the reason the flip is a
+// Restream rather than a Reset: two instances are two different logs, so the buffer is
+// replaced (never appended to — the counts would double), but the reader's grep is not,
+// because the point of flipping is to look for the same thing in the other log. It also
+// proves the chord acts through the open grep field, which a plain letter could not
+// (D140 pt 1).
+func TestLogsPreviousKeepsTheGrepAndReplacesTheBuffer(t *testing.T) {
+	s := &fakeLogStreamer{events: []kube.LogEvent{{Line: "panic: boom"}, {Line: "GET /healthz 200"}}}
+	m := logsViewerModel(t, s)
+	m = openLogsViewHelper(t, m)
+
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "panic")
+	if f := frame(m); !strings.Contains(f, "1/2") {
+		t.Fatalf("precondition: the grep should narrow 2 lines to 1: %q", f)
+	}
+
+	m, cmd := press(t, m, previousKey)
+	m = drainLogPump(t, m, cmd)
+
+	if !m.logsView.Filtering() {
+		t.Fatal("the flip should leave the grep field open")
+	}
+	if q := m.logsView.Query(); q != "panic" {
+		t.Fatalf("the grep query = %q, want it to survive the flip", q)
+	}
+	// The fake replays the same two lines, so a buffer that was replaced counts 2 and
+	// one that was appended to counts 4.
+	if f := frame(m); !strings.Contains(f, "1/2") {
+		t.Fatalf("the flip should replace the buffer, not extend it: %q", f)
+	}
+}
+
+// TestLogsPreviousWithNoTerminatedInstanceDegrades is the answer to "what happens when
+// there is no previous instance": nothing pre-checks for one (only the apiserver knows),
+// so the request goes out, its rejection lands on the emptied view as any open failure
+// does, and the existing degrade applies — the reason reaches the status bar and the
+// view closes rather than sitting there empty (D74). No crash, no blank pager.
+func TestLogsPreviousWithNoTerminatedInstanceDegrades(t *testing.T) {
+	s := &crashLoopLogStreamer{}
+	m := logsViewerModel(t, s)
+	m = openLogsViewHelper(t, m)
+	if !m.logsView.Active() {
+		t.Fatal("precondition: the running instance's logs should open")
+	}
+
+	m, cmd := press(t, m, previousKey)
+	lm, ok := cmd().(logMsg)
+	if !ok {
+		t.Fatalf("logs.previous should start a stream (a pump cmd), got %T", cmd())
+	}
+	next, toast := m.Update(lm)
+	m = next.(Model)
+
+	if m.logsView.Active() {
+		t.Fatal("a rejected previous-instance request should close the emptied view")
+	}
+	if toast == nil {
+		t.Error("the rejection should surface (a toast cmd), not be swallowed")
+	}
+	if f := frame(m); !strings.Contains(f, "previous terminated container") {
+		t.Fatalf("the status bar should name the reason: %q", f)
+	}
+}
+
+// TestLogsPreviousIsInertWithoutAStream guards the toggle against being pressed with no
+// logs open — the browse context routes it to the panes, where it does nothing, and the
+// stashed request is empty so nothing re-opens.
+func TestLogsPreviousIsInertWithoutAStream(t *testing.T) {
+	m := logsViewerModel(t, &fakeLogStreamer{})
+	m, cmd := press(t, m, previousKey)
+	if cmd != nil {
+		t.Fatalf("logs.previous outside the logs view should do nothing, got a %T", cmd())
+	}
+	if m.logsView.Active() {
+		t.Fatal("logs.previous must not open the logs view")
 	}
 }

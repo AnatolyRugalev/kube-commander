@@ -111,6 +111,15 @@ const (
 	// re-fetching the log. It is meaningful only while the logs view is up;
 	// elsewhere it is inert.
 	ActionLogsTimestamps Action = "logs.timestamps"
+	// ActionLogsPrevious switches the open logs view between the container's running
+	// instance and its previous *terminated* one (`kubectl logs -p`, M5-01a) — the
+	// 2020 build's second log gesture, and what you want after a CrashLoopBackOff,
+	// since the log that explains the crash belongs to the instance that already
+	// died. Unlike the display toggles beside it this one is a **request** flag: the
+	// two instances are two different logs, so flipping it re-opens the stream and
+	// the view starts over on the other instance's output. It is meaningful only
+	// while the logs view is up; elsewhere it is inert.
+	ActionLogsPrevious Action = "logs.previous"
 	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
 	// open secret viewer (M3-08a). Values start masked; this is the deliberate
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
@@ -244,6 +253,7 @@ var actionMeta = []struct {
 	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
 	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
 	{ActionLogsTimestamps, "Toggle timestamps in the logs viewer"},
+	{ActionLogsPrevious, "Toggle logs of the previous (crashed) container instance"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
@@ -357,10 +367,22 @@ var defaultBindings = map[Action][]string{
 	// there is no need to reach for it mid-query — and with the grep open `t` types a
 	// `t` like every other letter (D140 pt 1). `t` is free in the browse context.
 	ActionLogsTimestamps: {"t"},
-	ActionRevealSecret:   {"r"},
-	ActionCopySecret:     {"c"},
-	ActionForwards:       {"F"},
-	ActionStopForwards:   {"X"},
+	// The previous-instance toggle joins the ctrl+<letter> family rather than taking a
+	// plain letter, for two reasons. The mnemonic one: `p` — kubectl's own flag for
+	// this — is already the port picker's local-port prompt (FB-pf-local-port/D139)
+	// and `P` is res.children (D165), so the letter this gesture wants is spent twice
+	// over, and ctrl+p is the nearest thing to it that is free. The behavioural one:
+	// this is the one logs gesture that is worth reaching for *mid-query* — you grep a
+	// crash-looping pod for the stack trace, find the running instance has not printed
+	// it yet, and want the same look at the instance that died — and only a key
+	// carrying no text survives the open grep field (D140 pt 1), exactly as logs.regex
+	// takes ctrl+r. ctrl+p is free in the browse context and is not a reserved nav
+	// chord (D10).
+	ActionLogsPrevious: {"ctrl+p"},
+	ActionRevealSecret: {"r"},
+	ActionCopySecret:   {"c"},
+	ActionForwards:     {"F"},
+	ActionStopForwards: {"X"},
 	// Port-picker local-port gestures (FB-pf-local-port): `p` for the local **p**ort
 	// prompt, `0` for "let the OS pick one" — the port-0 convention, though the spec
 	// kubectl/client-go actually accepts is the leading-colon form `:<remote>` (`:0`

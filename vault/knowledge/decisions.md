@@ -4558,3 +4558,38 @@ future leg must not silently contradict:
    workflow.** M5-06/07/08 (Homebrew, AUR, Docker) add config to `.goreleaser.yml` and, if
    they need one, a secret to the existing `release` job. Two workflows triggering on the
    same tag is a double publish, and D173 pt 1 means neither half can be taken back.
+
+## D177 — Which log instance you are reading is one bit of one request, toggled inside the view, and the header always names it (2026-07-30, M5-01a)
+
+`kube.LogOptions.Previous` existed since M1-07c but nothing reached it, so the log that
+explains a `CrashLoopBackOff` — the one belonging to the instance that already died — was
+unreachable. M5-01a added `logs.previous` (`ctrl+p`). What a future leg must not silently
+contradict:
+
+1. **`L` stays the only way into logs.** `logs.previous` is a toggle *inside* the open
+   view, not a second row action. The pod resolution (M3-07b) and the container pick
+   (M3-07a) that got the reader here are already spent, so flipping instances re-issues
+   the stashed `logRequest` with one bit changed (`Model.logReq`, `startLogStream`). Do not
+   add a "previous logs" row action or menu entry: two entry points would need `Previous`
+   threaded through `rowActionMsg`, `ctrPurpose` and the picker stash to reach nothing the
+   toggle does not already reach.
+2. **The flip changes `Previous` and nothing else about the request.** `Follow` stays on: a
+   terminated instance's log cannot grow, the kubelet serves it and closes, and a clean end
+   is already how `followLogStream` stops following — the same path a followed pod takes
+   when its container dies. A leg that special-cases follow, tail or timestamps for the
+   previous instance is changing more than the reader asked for.
+3. **A restream is not a reset.** Two instances are two logs, so the buffer is replaced
+   (`logsview.Restream`), but the grep query and mode, wrap and timestamps survive, because
+   the point of flipping is to ask the same question of the other log. `Reset` — the
+   *new object* path — is written in terms of `Restream` plus clearing that lens, so the
+   two cannot drift apart.
+4. **Nothing pre-checks for a previous instance.** Only the apiserver knows whether one
+   exists; a container-status guess would either hide a readable log or promise one that is
+   not there. The request goes out and its rejection lands on the emptied view as any open
+   failure does — status-bar toast naming the server's reason, view closes (D74).
+5. **The `[previous]` header marker is not optional, and sits ahead of the follow state.**
+   Two runs of one container produce output that looks alike, so this is state the reader
+   can lose sight of and D146 says name it. The header is clipped from the right: losing
+   `[following]` or the match counts misleads no one, losing `[previous]` makes a dead
+   instance's log read as the running one's. It is the counter-example to LOGS-04b's
+   unmarked timestamps toggle — that one restates the body, this one cannot be seen in it.

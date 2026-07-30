@@ -3,26 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-03 added `release.yml` (tag release gated on ci.yml, plus a `--snapshot` dry run on every push), so the release pipeline now exists end-to-end and the next unblocked M5 items are the independent ones (M5-01a previous-container logs, M5-01b the YAML-viewer call, M5-04 the stale theme migration note). Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-01a landed `logs.previous` (`ctrl+p`), so the last missing 2020 log gesture is back and the remaining unblocked M5 items are M5-01b (the YAML-viewer call), M5-04/05 (the theme migration pair) and M5-09 (the vhs tape). Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods, now five with the previous-logs dogfood. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-01a** Previous-container logs: surface `LogOptions.Previous` (2020 parity, `L`)
-      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Found by the M5-01 DoD audit (D174 pt 4). The 2020 build had two log gestures —
-      `l` current, **`L` previous** (`legacy-architecture.md`, "Behavior worth preserving") —
-      and `kube.LogOptions.Previous` exists and is wired all the way to the API request
-      (`internal/kube/logs.go`), but **no action, key or menu entry reaches it**, so the
-      one thing you want after a CrashLoopBackOff is unavailable. Small and self-contained:
-      a registered `logs.previous` action (D11 — the registry is the only key source), a
-      `Previous` flag threaded through `openLogsViewer`/`streamLogsInto`, the logs-view
-      header saying which instance it is showing, and the generated `docs/keybindings.md`.
-      Two decisions to make and record: whether it is a separate open action or a toggle
-      inside the open view (a toggle re-requests the stream, which is closer to the other
-      logs toggles), and what happens when there is no previous instance (a toast — the
-      server 400s). Note the current `L` is `res.logs`, so a rebind of the *default* is a
-      shipped-key change like FB-delete-key-d/D133 — pick a free key instead unless that
-      is deliberate.
+_(none)_
 
 ## Blocked
 
@@ -395,6 +380,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 ## Done
 
+- [x] **M5-01a** Previous-container logs — `logs.previous` (`ctrl+p`) toggles the open logs view between the running instance and the previous terminated one (`kubectl logs -p`), re-issuing the stashed request with one bit flipped; the buffer is replaced but the grep/wrap/timestamps survive it, and the header names the instance with `[previous]` — done 2026-07-30 (D177)
 - [x] **M5-03** Release workflow — `release.yml` runs `goreleaser release` on a `v*` tag (gated on `make check` via ci.yml as a reusable workflow) plus a `--snapshot --clean` dry run on every push to `v1`/`main`, with the goreleaser pin and the dry run guarded by `TestReleaseWorkflowPinsGoreleaser` — done 2026-07-30 (D176)
 - [x] **M5-02** Wire `Commit` and `Date` into the release ldflags — released binaries now report their commit and build date, guarded by `TestGoreleaserSetsAllVersionVars` so an unwired `internal/version` var fails `make check` — done 2026-07-30 (D175)
 - [x] **M5-01** Audit the Definition of Done against named evidence — 6 of 13 boxes ticked, every unticked box names what closes it; found two gaps (no previous-logs surface → M5-01a, the DoD's YAML bullet vs D135 → M5-01b) — done 2026-07-30 (D174)

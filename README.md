@@ -227,7 +227,14 @@ the timestamps are already in the buffer, so turning them on or off redraws what
 screen — no re-fetch, no lost lines, and your grep and scroll position survive. They are
 off by default because an RFC3339 timestamp is 30 columns wide; the grep always matches
 the *message*, so a query never accidentally matches the clock, and `w`/`h`/`l` are
-there for the extra width. `Esc` with no filter open, or `q`, closes the view. YAML, describe
+there for the extra width. Press `Ctrl+P` (`logs.previous`) to read the container's
+**previous terminated instance** instead of the running one — `kubectl logs -p`, and the
+log that explains a `CrashLoopBackOff`, since the run that crashed is the one that already
+ended. It is a toggle: the header shows `[previous]` while you are on it and `Ctrl+P`
+comes back. Because the two instances are two different logs, the lines are replaced —
+but your grep, wrapping and timestamps are not, so you can ask the same question of both,
+and the chord works with the grep field open. A container that has never terminated has
+no previous log, and the cluster says so in the status bar. `Esc` with no filter open, or `q`, closes the view. YAML, describe
 and secret content still open in the shared centered viewer — only logs stream, so only
 logs get their own screen.
 

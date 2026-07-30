@@ -42,7 +42,8 @@ on an open dogfood or bug, three are release acts that have not happened yet._
       CRD-01, itself blocked on the human task for the error text.)
 - [ ] In-TUI logs, describe, and YAML viewers (no external pager required).
       (Logs and describe are met and then some — a dedicated full-screen logs view with a
-      live grep, wrap, sideways scroll and timestamps (LOGS-01…04c, D144–D148) and
+      live grep, wrap, sideways scroll, timestamps and the previous-instance toggle
+      (LOGS-01…04c, M5-01a, D144–D148, D177) and
       `kubectl describe`-identical output in-process (M3-04, `internal/kube/describe.go`).
       **The YAML third of this box no longer describes what kubecom does**: D135/M3-15c
       retired the standalone read-only YAML viewer and unified YAML into the `$EDITOR`

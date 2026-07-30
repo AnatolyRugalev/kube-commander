@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — M4 is feature-complete, so the release milestone is open and expanded into slices M5-01…M5-11.
+**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03) and M5-01a closed the last 2020 parity gap; the remaining slices are migration, distribution, the screencast and the two human-performed ends.
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -84,8 +84,10 @@ raise come back done, not when the config that would produce them compiles.
       context switch), one on the CRD-01 bug, one on the migration note (M5-04/05), two on
       release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08), and one on
       a maintainer decision the audit refused to make for them (M5-01b — the DoD's in-TUI
-      YAML viewer vs D135). Also found M5-01a: no surface reaches previous-container logs,
-      a 2020 parity gap. Ticked when the last box is.)
+      YAML viewer vs D135). Also found M5-01a: no surface reached previous-container logs,
+      a 2020 parity gap — **closed 2026-07-30** by `logs.previous`/`ctrl+p` (D177), which
+      does not tick a box of its own (the logs box waits on M5-01b's YAML question) but
+      removes the parity gap the audit found. Ticked when the last box is.)
 
 ## Depends on
 M0 CI/goreleaser scaffolding; feature milestones M1–M4 complete.

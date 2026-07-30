@@ -125,6 +125,16 @@ type Model struct {
 	// keeps their scroll position, their grep and every line already streamed.
 	timestamps bool
 
+	// previous marks that the lines on screen are the container's *previous*
+	// terminated instance rather than the running one (logs.previous, M5-01a). Unlike
+	// every other flag here it is not a mode this view implements — the app sets it
+	// when it opens the stream with kube.LogOptions.Previous — it is held only so the
+	// header can name it. It has to be named: two instances of one container produce
+	// output that looks alike, so without the marker a reader cannot tell an
+	// explanation of the crash from the aftermath of it (D146 — state the reader can
+	// lose sight of).
+	previous bool
+
 	// shownLines is the rendered body: the subset of lines the current query keeps,
 	// each already timestamp-prefixed and highlight-painted, in stream order. It is
 	// the cache that makes appending a line cost a line (LOGS-05b): before it, every
@@ -187,6 +197,12 @@ func (m Model) Kind() string { return kind }
 // SetTitle sets the object label shown in the header.
 func (m *Model) SetTitle(t string) { m.title = t }
 
+// SetPrevious records whether the stream now feeding the view is the container's
+// previous terminated instance (logs.previous, M5-01a), which the header names. The app
+// sets it with each open, since which instance is on screen is a property of the
+// request, not a mode this view can flip on its own.
+func (m *Model) SetPrevious(p bool) { m.previous = p }
+
 // Reset clears the buffer and filter and re-arms following, so opening the view over a
 // new object always starts clean and tailing regardless of a prior session. The grep
 // mode, the wrap mode and the timestamps toggle reset with it: a new object's logs open
@@ -194,14 +210,28 @@ func (m *Model) SetTitle(t string) { m.title = t }
 // who never touched logs.regex, logs.wrap or logs.timestamps expects (all three are
 // per-session, not sticky across objects).
 func (m *Model) Reset() {
+	m.timestamps = false
+	m.previous = false
+	m.closeFilter()
+	m.setRegex(false)
+	m.setWrap(false)
+	m.Restream()
+}
+
+// Restream clears the buffer for a re-open of the *same* container's other instance
+// (logs.previous, M5-01a) and keeps the reader's lens on it: the grep query and its
+// mode, wrapping and the timestamps toggle all survive, so flipping to the instance
+// that died answers "is the same thing in that log?" without retyping the query. Only
+// the lines go, and following is re-armed because the new stream tails from its own
+// start — the same reason a fresh open starts following.
+//
+// It is Reset minus the lens, and Reset is written in terms of it, so the two can never
+// disagree about what emptying the buffer means.
+func (m *Model) Restream() {
 	m.lines = m.lines[:0]
 	m.stamps = m.stamps[:0]
 	m.shownLines = m.shownLines[:0]
 	m.following = true
-	m.timestamps = false
-	m.closeFilter()
-	m.setRegex(false)
-	m.setWrap(false)
 	m.render()
 }
 
@@ -280,6 +310,10 @@ func (m Model) HOffset() int { return m.viewport.XOffset() }
 // Timestamps reports whether each line's server timestamp is shown ahead of its message
 // (logs.timestamps, LOGS-04b).
 func (m Model) Timestamps() bool { return m.timestamps }
+
+// Previous reports whether the lines on screen are the container's previous terminated
+// instance rather than its running one (logs.previous, M5-01a).
+func (m Model) Previous() bool { return m.previous }
 
 // Show reveals the view (it then captures input until Hide). Hide dismisses it and
 // closes any open filter so it reopens clean next time.
@@ -696,12 +730,22 @@ func (m Model) View() string {
 // (the field's own `re/` prompt is only visible while it is open), and a query that
 // does not compile is called out rather than left to look like a query that simply
 // matched nothing — the counts beside it are the last good pattern's (D145).
+//
+// The previous-instance marker (M5-01a) is the one piece of state that sits *before* the
+// follow state, because it is the only one that changes what the lines below mean rather
+// than how they are shown: a header clipped to a narrow terminal may lose `[following]`
+// or the counts without misleading anyone, but losing `[previous]` turns a dead
+// instance's log into what looks like the running one's.
 func (m Model) header() string {
 	state := "[paused]"
 	if m.following {
 		state = "[following]"
 	}
-	seg := m.title + "  " + state
+	seg := m.title
+	if m.previous {
+		seg += "  [previous]"
+	}
+	seg += "  " + state
 	// Long-line state (LOGS-04a): wrapping is a mode the reader turned on, so it is
 	// always named; clipping is the default and only worth a marker once it is actually
 	// hiding something to the left — the column offset doubles as "you are scrolled".

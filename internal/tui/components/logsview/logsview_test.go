@@ -886,3 +886,76 @@ func TestSetStylesRepaintsPaintedHighlights(t *testing.T) {
 		t.Errorf("the restyle changed which lines the grep keeps:\n%s", got)
 	}
 }
+
+// TestRestreamEmptiesTheBufferButKeepsTheLens is the contract the previous-instance
+// toggle rests on (M5-01a): a restream of the same container's other instance replaces
+// the lines — they are a different log — while leaving every reader gesture in place, so
+// flipping instances asks the same question of the other log instead of resetting the
+// question. Following is re-armed, because the new stream tails from its own start.
+func TestRestreamEmptiesTheBufferButKeepsTheLens(t *testing.T) {
+	m := newLogs()
+	appendStamped(&m)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	m = typeFilter(m, "error")
+	m, _ = m.Update(keymap.ActionLogsFollow) // pause, so the re-arm is observable
+
+	m.Restream()
+
+	if v := plain(m.View()); strings.Contains(v, "alpha error one") {
+		t.Errorf("a restream should empty the buffer; got:\n%s", v)
+	}
+	if !m.Timestamps() || !m.Wrap() || !m.Filtering() || m.Query() != "error" {
+		t.Errorf("a restream must keep the reader's lens: stamps=%v wrap=%v filtering=%v query=%q",
+			m.Timestamps(), m.Wrap(), m.Filtering(), m.Query())
+	}
+	if !m.Following() {
+		t.Error("a restream should re-arm following — the new stream tails from its start")
+	}
+}
+
+// TestResetClearsTheLensToo is the other half: Reset is the *new object* path, so unlike
+// a restream it drops the modes with the lines. The two are one implementation (Reset
+// calls Restream), and this is what keeps them distinguishable.
+func TestResetClearsTheLensToo(t *testing.T) {
+	m := newLogs()
+	appendStamped(&m)
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	m = typeFilter(m, "error")
+	m.SetPrevious(true)
+
+	m.Reset()
+
+	if v := plain(m.View()); strings.Contains(v, "alpha error one") {
+		t.Errorf("Reset should empty the buffer; got:\n%s", v)
+	}
+	if m.Timestamps() || m.Wrap() || m.Filtering() || m.Query() != "" || m.Previous() {
+		t.Errorf("Reset should clear the lens: stamps=%v wrap=%v filtering=%v query=%q previous=%v",
+			m.Timestamps(), m.Wrap(), m.Filtering(), m.Query(), m.Previous())
+	}
+	if !m.Following() {
+		t.Error("Reset should leave the view tailing")
+	}
+}
+
+// TestPreviousMarkerNamesTheInstance: unlike the timestamps toggle beside it, which gets
+// no header marker on purpose (it restates the body), which *instance* is on screen is
+// invisible in the lines themselves — two runs of one container look alike — so the
+// header has to say it, and say it ahead of the follow state (D146).
+func TestPreviousMarkerNamesTheInstance(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 2)
+	if v := plain(m.View()); strings.Contains(v, "[previous]") {
+		t.Errorf("the running instance needs no marker; got:\n%s", v)
+	}
+
+	m.SetPrevious(true)
+	v := plain(m.View())
+	if !strings.Contains(v, "[previous]") {
+		t.Errorf("the previous instance should be named in the header; got:\n%s", v)
+	}
+	if strings.Index(v, "[previous]") > strings.Index(v, "[following]") {
+		t.Errorf("the instance marker should precede the follow state; got:\n%s", v)
+	}
+}

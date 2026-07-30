@@ -1,0 +1,53 @@
+# Read a real crash-looping pod's previous-instance logs (`ctrl+p`)
+
+- Created: 2026-07-30
+- By: M5-01a
+- Priority: normal
+- Blocks: none (advisory — every claim below is covered by hermetic tests against a fake
+  streamer; what a sandbox cannot supply is a real kubelet serving a real terminated
+  container's log. The M5 line is unaffected.)
+- Status: open
+
+## What's needed
+
+Make a pod crash-loop and read the log of the instance that died. If nothing in the
+cluster is obliging:
+
+```bash
+kubectl run crashy --image=busybox --restart=Always -- sh -c 'echo starting; sleep 3; echo "fatal: goodbye" >&2; exit 1'
+```
+
+Wait for `RESTARTS` to reach 2 or so, then in `kubecom`: select the pod, press `L`, then
+press `Ctrl+P`.
+
+1. **Does the previous instance's log actually arrive?** You should see the *completed*
+   output of the run that died — `starting` and `fatal: goodbye` — not the partial output
+   of the one currently running. The header should read `pod/crashy  [previous]` (and, at
+   a multi-container pod, the container name too).
+2. **Does the stream end, or does it sit there?** This is the one thing the sandbox could
+   not test and the reasoning behind it is inference, not observation. kubecom asks for
+   `Follow` and `Previous` together, betting that the kubelet serves the terminated
+   instance's log and closes — because the container being read is not running, so the
+   follow loop should stop at a clean EOF (D177 pt 2, `internal/kube/logs.go`
+   `followLogStream`). If instead the view goes empty, or hangs before delivering the
+   lines, or keeps reconnecting every 2 seconds, that bet is wrong and `Previous` needs
+   `Follow: false` — say which of those you saw.
+3. **Does `Ctrl+P` come back?** A second press should return to the running instance, drop
+   `[previous]` from the header, and show the current run's output.
+4. **The no-previous-instance case.** Do the same on a pod that has never restarted (any
+   healthy one). Expect a status-bar toast carrying the server's own words — something
+   like `logs: previous terminated container "…" in pod "…" not found` — and the view to
+   close rather than sit empty. Is that message *readable* at your terminal width, or is
+   it clipped to uselessness? (It is also in `~/.cache/kubecom/kubecom.log` in full,
+   D159 — worth pasting here either way, since the exact wording the apiserver uses is
+   not something the sandbox could know.)
+5. **Does the grep survive the flip, and should it?** With a query typed (`/fatal`),
+   `Ctrl+P` keeps it and re-narrows the other instance's lines (D177 pt 3). The claim is
+   that this is what you want — the same question asked of both logs. If it feels wrong
+   (e.g. the query from the running instance is noise in the dead one), that is a taste
+   call only a user can make, and reverting it is a one-line change (`Restream` →
+   `Reset`).
+
+## Result
+
+_(fill in — a leg will fold this into the journal / a decision and delete the file)_

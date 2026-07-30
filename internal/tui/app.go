@@ -720,6 +720,12 @@ type Model struct {
 	// watchGen guards the table watch. Touched only from the single-threaded update loop.
 	logCh     <-chan kube.LogEvent
 	logCancel context.CancelFunc
+	// logReq is the request the current (or last) stream was opened with — object,
+	// container and which instance. It is what makes logs.previous a toggle rather than
+	// a second row action (M5-01a): flipping instances re-issues this with one bit
+	// changed, so the pod resolution and the container pick that got the reader here are
+	// not spent again.
+	logReq logRequest
 
 	// ctrStreamRes/ctrStreamRef stash the pod the container picker's selection applies
 	// to and ctrPurpose which terminal it routes to (logs stream vs exec session,
@@ -4041,10 +4047,11 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// logs.follow is inert here: it belongs to the dedicated logs view (LOGS-02/D144),
-	// and the shared viewer only ever shows one-shot content (YAML/describe/secret) —
-	// there is nothing to follow. Swallowed rather than forwarded so it cannot scroll.
-	if a == keymap.ActionLogsFollow {
+	// logs.follow and logs.previous are inert here: both belong to the dedicated logs
+	// view (LOGS-02/D144, M5-01a), and the shared viewer only ever shows one-shot
+	// content (YAML/describe/secret) — there is nothing to follow and no other instance
+	// of it to fetch. Swallowed rather than forwarded so they cannot scroll.
+	if a == keymap.ActionLogsFollow || a == keymap.ActionLogsPrevious {
 		return m, nil
 	}
 	var cmd tea.Cmd
