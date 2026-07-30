@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03) and the DoD audit's findings are closed (M5-01a parity gap, M5-01b YAML wording); the remaining slices are migration, distribution, the screencast and the two human-performed ends.
+**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b) and the migration report is true again (M5-04); what remains is verifying migration on a real legacy file, distribution, the screencast and the two human-performed ends.
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -34,9 +34,13 @@ from the old kube-commander.
   met**: `docs/keybindings.md` is generated from the keymap registry by `make keys-doc`
   and `make check` fails on drift (M2-01e/D51). Nothing to build; M5-01 ticks it.
 - Migration note: old `~/.kubecom.yaml` auto-migration + any behavior changes — the
-  mechanism landed in M2-12a/12b, but M5-PLAN found its report **stale**: it still tells
-  the user themes were dropped, which stopped being true at M4-11/12. M5-04 fixes that and
-  M5-05 verifies the whole path against the legacy protobuf schema on `master`.
+  mechanism landed in M2-12a/12b, but M5-PLAN found its report **stale**: it still told
+  the user themes were dropped, which stopped being true at M4-11/12. **M5-04 ✅ 2026-07-30**
+  (D179): a legacy `currentTheme` naming a palette v1 still ships is written to `theme:` in
+  the migrated config (`solarized` → `solarized-dark` via an enumerated legacy rename), an
+  unported name falls back to the default with the note listing the themes that exist, and the
+  palette tree stays deliberately un-migratable. M5-05 still verifies the whole path against
+  the legacy protobuf schema on `master`.
 - **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
   Docker image (Linux/macOS binaries only). The goreleaser skeleton exists (M0-06/D27) but
   carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
@@ -75,14 +79,18 @@ raise come back done, not when the config that would produce them compiles.
       (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
       back — except possibly Docker, which the agent can build and run locally.)
 - [ ] Migration verified from a real legacy config file.
-      (M5-04 fixes the stale theme report first, M5-05 verifies the path against the legacy
-      protobuf schema on `master` and asks the maintainer for a genuinely real file.)
+      (M5-04 ✅ 2026-07-30 fixed the stale theme report and made the selection actually
+      migrate (D179). M5-05 verifies the path against the legacy protobuf schema on `master`
+      and asks the maintainer for a genuinely real file — this criterion says "real", so it
+      is ticked on that human task coming back, not on the schema-derived fixture.)
 - [ ] Definition of Done in [`../goals.md`](../goals.md) fully checked.
       (Audited by M5-01 (2026-07-30, D174): **6 of 13 ticked**, each against named tests /
       decisions / milestone criteria, and each unticked box now names the one thing that
       closes it. The remaining seven are: **three** waiting on open dogfood human-tasks (the
       Edit → `$EDITOR` check, which since M5-01b carries the logs/describe/YAML box too, and
-      the context switch), one on the CRD-01 bug, one on the migration note (M5-04/05), and
+      the context switch), one on the CRD-01 bug, one on the migration note (**M5-04 ✅
+      2026-07-30/D179** — the false "themes were dropped" claim is gone from the code *and*
+      the README; the box now waits only on M5-05's real-file verification), and
       two on release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08). Also
       found M5-01a: no surface reached previous-container logs, a 2020 parity gap — **closed
       2026-07-30** by `logs.previous`/`ctrl+p` (D177). **M5-01b ✅ 2026-07-30**: the audit's

@@ -175,6 +175,44 @@ func TestMaybeMigrateReportsNotes(t *testing.T) {
 	}
 }
 
+// TestMaybeMigrateCarriesThemeIntoTheWrittenConfig closes the loop M5-04 opened: a
+// legacy theme selection is not merely *reported*, it must survive into the config
+// file the launcher writes and then resolve to the palette the shell renders with.
+// `solarized` also exercises the one legacy rename (it became `solarized-dark`), so
+// this fails if either the alias or the write-back regresses.
+func TestMaybeMigrateCarriesThemeIntoTheWrittenConfig(t *testing.T) {
+	writeLegacyConfig(t, "currentTheme: solarized\n")
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	toast := maybeMigrate(cfgPath)
+	if toast == nil {
+		t.Fatal("a carried-over theme should still be reported so the user knows")
+	}
+	if msg := toast.Message(); !strings.Contains(msg, "solarized-dark") {
+		t.Errorf("toast %q should name the v1 theme the choice became", msg)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read migrated config: %v", err)
+	}
+	if !strings.Contains(string(data), "theme: solarized-dark") {
+		t.Fatalf("migrated config must persist the theme, got %q", string(data))
+	}
+	// And the persisted name must resolve on the launcher's own path, not just look
+	// right in YAML: a value the config writes but resolveTheme rejects would
+	// silently launch on the default and warn.
+	cfg, err := config.LoadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadFile(migrated): %v", err)
+	}
+	theme, err := resolveTheme(cfg.Theme)
+	if err != nil {
+		t.Fatalf("resolveTheme(%q) after migration: %v", cfg.Theme, err)
+	}
+	if theme.Name != "solarized-dark" {
+		t.Errorf("resolved theme = %q, want %q", theme.Name, "solarized-dark")
+	}
+}
+
 // TestMaybeMigrateEmptyLegacyNoNotes proves an empty legacy file still establishes
 // the new config (so migration is one-shot) but surfaces no toast — there is
 // nothing to report.

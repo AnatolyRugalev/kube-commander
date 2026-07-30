@@ -335,12 +335,22 @@ context you launched on, not for every context you visit.
 
 If you have an old `~/.kubecom.yaml` from the original kube-commander, kubecom
 migrates it once on first start — when no `config.yaml` exists yet. The old file
-only held a custom resource menu and color themes, neither of which maps directly
-to kubecom v1 (the menu stored no API version/resource, and v1 uses a single fixed
-theme), so migration writes a fresh default `config.yaml` and shows a brief startup
-notice listing what to re-add by hand: recreate the menu resources in a per-context
-menu file (above). Your old `~/.kubecom.yaml` is left untouched. A malformed legacy
-file is ignored and never blocks launch.
+held two things, and they migrate differently:
+
+- **Your theme choice is carried over.** If `currentTheme` named a palette kubecom
+  still ships, migration writes it to `theme:` in the new `config.yaml` — `monokai`
+  stays `monokai`, and the old `solarized` becomes `solarized-dark` (the same
+  palette, renamed). The 2020 built-ins with no port yet (`base16`, `paraiso`,
+  `twilight`) fall back to the default theme, and the startup notice names the
+  themes you *can* pick. Hand-written palettes under `themes:` are not migrated —
+  kubecom's themes are built-in, so a custom color set has nowhere to go.
+- **The custom resource menu is not.** The old format stored no API
+  version/resource, which the per-context menu needs, so migration lists the
+  entries it found and you re-add them in a per-context menu file (above).
+
+Migration writes the new `config.yaml` once and shows a brief startup notice with
+whatever it could not carry over. Your old `~/.kubecom.yaml` is left untouched. A
+malformed legacy file is ignored and never blocks launch.
 
 ## Contributing
 

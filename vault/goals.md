@@ -132,11 +132,14 @@ text is preserved in that bullet's annotation._
 - [ ] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
       (The config half is met: plain YAML via `sigs.k8s.io/yaml`, config/state/menus split
       across XDG dirs (D20/D83/D91). The migration half is built and one-shot (M2-12a/12b,
-      D92/D93) and degrades rather than blocks on a malformed legacy file — but its report
-      **states something false**: it still tells the user themes were dropped because v1 has
-      no runtime theming, which stopped being true at M4-11/12 (three built-in palettes, a
-      `theme:` field and a picker). Unticked until M5-04 fixes the note and M5-05 verifies
-      the path against a genuinely legacy file; this is the smallest gap in the list.)
+      D92/D93) and degrades rather than blocks on a malformed legacy file. Its report used to
+      **state something false** — that themes were dropped because v1 has no runtime theming,
+      untrue since M4-11/12 — and **M5-04 ✅ 2026-07-30 (D179)** fixed it in the only way that
+      is honest: the legacy `currentTheme` is now *carried onto* `theme:` when v1 still ships
+      that palette (`solarized` → `solarized-dark` by an enumerated rename), an unported name
+      degrades to the default with the note naming the themes that exist, and the README's
+      matching claim went with it. Unticked only until M5-05 runs the path against a
+      genuinely legacy file; this is the smallest gap in the list.)
 - [ ] Linux + macOS release artifacts via goreleaser + GitHub Actions; tests green.
       (Tests green is continuous — `make check` (build + test + vet + lint) gates every leg
       and CI runs it (D17). The artifacts half has **not happened**: `.goreleaser.yml`

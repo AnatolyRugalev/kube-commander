@@ -7,6 +7,8 @@
 // 2026-07-21-02). Both loaders reject unknown fields so a typo surfaces as an
 // error rather than a silent no-op. The one-shot migration from the legacy
 // ~/.kubecom.yaml (D6) is provided by Migrate (see migrate.go): it recognises the
-// old protobuf-yaml file and reports the menu/theme content that has no automatic
-// home in v1; the launcher wiring that runs it on first start lands in a later leg.
+// old protobuf-yaml file, carries the `currentTheme` selection onto `theme:` where
+// v1 still ships that palette (M5-04), and reports the rest — the menu, and any
+// hand-authored theme palette — as content with no automatic home in v1. The
+// launcher wiring that runs it on first start is cmd/kubecom's maybeMigrate.
 package config

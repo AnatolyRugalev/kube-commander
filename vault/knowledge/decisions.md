@@ -4627,3 +4627,43 @@ silently contradict:
    documentation that still promises a YAML viewer is stale — `README.md` claimed "YAML,
    describe and secret content still open in the shared centered viewer" three milestones
    after that stopped being true.
+
+## D179 — Migration carries the theme *name*, never the palette, and a legacy rename is an enumerated alias rather than a guess (2026-07-30, M5-04)
+
+M5-PLAN found `migrationNotes` telling a 2020 user "legacy theme configuration was dropped:
+kubecom v1 uses a single fixed theme and has no runtime theming" — true under D6 when
+M2-12a wrote it, false since M4-11/12 shipped three built-in themes, a `theme:` field
+(D170) and a picker (D172). So a user whose `currentTheme` was `monokai` was told their
+choice was gone by a binary that ships that exact palette. What a future leg must not
+silently contradict:
+
+1. **The migratable unit is the theme's name, and only its name.** `currentTheme` maps onto
+   `Config.Theme` when `styles.ByName` resolves it; the legacy `themes[].colors/styles`
+   tree stays un-migratable *by design*, because v1 themes are built-in (D169) and there is
+   no config field for a palette. Whenever a note reports a carried-over selection and the
+   legacy file also defined palettes, it must say both things — a user who reads only "your
+   theme was carried over" will believe their hand-tuned colors came with it. Do **not**
+   resolve this asymmetry by inventing a custom-palette config field: that is a feature
+   request, not a migration.
+2. **A legacy rename is an enumerated alias; D169 pt 2 (never fuzzy) is unchanged.**
+   `legacyThemeAliases` holds exactly the 2020→v1 renames that are the same palette under a
+   different name — today `solarized` → `solarized-dark` (the 2020 built-in *was* the dark
+   variant: background `#002b36`; v1 named its port for the variant so a light one could
+   land beside it). The 2020 built-ins with no v1 port — `base16` (which was also the
+   legacy default when `currentTheme` was empty), `paraiso`, `twilight` — are deliberately
+   **absent** from the table. An unported name resolves to nothing, the user gets v1's
+   default, and the note names the themes that do exist. Picking the "closest" palette for
+   them would be the guessing D169 pt 2 forbids, and every entry added to the table must be
+   a rename an agent can point at in `master:app/ui/theme/themes/`, not a resemblance.
+3. **An empty `currentTheme` is not a selection, even though the 2020 build defaulted it.**
+   `manager.ConfigUpdated` substituted `base16` for an empty value; v1 has no base16 port,
+   so migrating that default would mean picking an arbitrary v1 theme for a user who never
+   named one. The honest outcome is v1's own default with `theme:` left unset.
+4. **A migration note that describes v1's own capabilities has to be re-read whenever those
+   capabilities change.** This defect survived two milestones because the note was correct
+   when written and nothing links a `config/migrate.go` string to the feature it describes.
+   The guard is the note's *tests*: `TestMigrateThemeNoteNamesEveryBuiltIn` derives its
+   expectation from `styles.ThemeNames()` and `TestMigrateAliasedLegacyThemesAllResolve`
+   fails if a rename in `styles/` leaves a dangling alias, so the registry growing or being
+   renamed breaks `make check` instead of quietly ageing the note. Any future note that
+   asserts something about v1 must be pinned to the thing it asserts, not to a literal.

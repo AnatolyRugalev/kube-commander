@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-01b settled the DoD's YAML-viewer question from the maintainer's own (deleted, git-recovered) feedback (D178), so no DoD box waits on a decision any more; the remaining unblocked M5 items are M5-04/05 (the theme migration pair) and M5-09 (the vhs tape). Six human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and five advisory dogfoods, of which the Edit one now carries two DoD boxes. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-04 made the migration report true again: a legacy theme choice is now carried onto `theme:` instead of declared dropped (D179), so the remaining unblocked M5 items are M5-05 (verify migration against the legacy protobuf schema, now unblocked) and M5-09 (the vhs tape). Six human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and five advisory dogfoods, of which the Edit one carries two DoD boxes. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
-      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
+_(none)_
 
 ## Blocked
 
@@ -273,20 +272,6 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
-      status: in-progress (see In Progress) | owner: claude-opus | added: 2026-07-30
-      notes: A **stale claim in shipped code**, found by M5-PLAN. `migrationNotes`
-      (`internal/config/migrate.go`) tells the user "legacy theme configuration was
-      dropped: kubecom v1 uses a single fixed theme and has no runtime theming" — true
-      under D6 when M2-12a wrote it, **false since M4-11/12**: there are three built-in
-      themes, a `theme:` config field (D170) and a picker (D172). A 2020 user whose
-      `currentTheme` was `monokai` or `solarized-dark` is told their choice was dropped by
-      a binary that ships that exact palette. Map the name through `styles.ByName` (lenient
-      on case/space, never fuzzy — D169 pt 2): a hit sets `Config.Theme` and says so, a
-      miss keeps the note but names the themes that *do* exist. Note the legacy palette
-      detail (`themes[].colors/styles`) is still genuinely un-migratable — a named
-      selection is not a custom palette; do not silently widen this into porting colors.
-      Independent of the packaging line; pickable any time.
 - [ ] **M5-05** Verify migration against a real legacy config file
       status: todo | owner: — | added: 2026-07-30
       notes: Exit criterion 4. M2-12a/12b are unit-tested against hand-written YAML, which
@@ -299,7 +284,9 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       tree rather than failing (principle 3). Also raise a human task for the maintainer's
       *actual* `~/.kubecom.yaml` if one survives — a schema-derived fixture is strong
       evidence but the criterion says "real", and only a human has a real one (D79).
-      Depends on: M5-04 (so the fixture covers the new theme mapping).
+      Depends on: M5-04 ✅ done 2026-07-30 — the fixture must now also cover the theme
+      mapping D179 introduced (a carried `monokai`, the `solarized`→`solarized-dark` alias, an
+      unported `base16`/`paraiso`/`twilight`, and a palette tree that is parsed and ignored).
 - [ ] **M5-06** Homebrew distribution
       status: todo | owner: — | added: 2026-07-30
       notes: Exit criterion 3, first of three. Needs a **tap repo the agent cannot
@@ -365,6 +352,8 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       forced the `@v1` explainer. Depends on: M5-10.
 
 ## Done
+
+- [x] **M5-04** Migration carries the legacy `currentTheme` onto `theme:` — a resolvable name is written to the new config (with `solarized`→`solarized-dark` as an enumerated legacy rename), an unported one falls back to the default and the note names the themes that exist; the palette tree stays un-migratable, and the shipped "themes were dropped" claim is gone from the code and the README — done 2026-07-30 (D179)
 
 - [x] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135 — needed no maintainer round-trip: the maintainer settled it in the 2026-07-24 feedback that produced D135 (recovered from git after D69 deleted it), so the DoD bullet now says an object's YAML round-trips through `$EDITOR` and closes with the Edit dogfood instead of a decision; fixed the README, which still promised a YAML viewer — done 2026-07-30 (D178)
 - [x] **M5-01a** Previous-container logs — `logs.previous` (`ctrl+p`) toggles the open logs view between the running instance and the previous terminated one (`kubectl logs -p`), re-issuing the stashed request with one bit flipped; the buffer is replaced but the grep/wrap/timestamps survive it, and the header names the instance with `[previous]` — done 2026-07-30 (D177)
