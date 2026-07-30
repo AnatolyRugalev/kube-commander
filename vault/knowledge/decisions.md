@@ -4667,3 +4667,44 @@ silently contradict:
    fails if a rename in `styles/` leaves a dangling alias, so the registry growing or being
    renamed breaks `make check` instead of quietly ageing the note. Any future note that
    asserts something about v1 must be pinned to the thing it asserts, not to a literal.
+
+## D180 — A legacy-format fixture is generated from the 2020 writer and pinned to `master:pb/config.proto`, never hand-typed (2026-07-30, M5-05)
+
+Every test of the legacy migration up to this leg fed `Migrate` YAML a test author typed
+from memory, and one of them was wrong: `rgb: "#000000"`, when
+`theme.ColorToProto` wrote `fmt.Sprintf("%06x", …)` — a bare hex string, no `#`, with
+`ProtoToColor` prepending the `#` on read. Nothing caught it, because the migration ignores
+the palette tree, so a fixture can misdescribe the format and still pass. That is the whole
+hazard of asserting against remembered file shapes. What a future leg must not silently
+contradict:
+
+1. **The 2020 file's shape is not a matter of opinion — it is `master:pb/config.proto` plus
+   `protojson`.** `master:config/config.go`'s `Save` did `protojson.Marshal(*pb.Config)` →
+   `yaml.JSONToYAML`, so four rules follow and any fixture claiming to be a legacy file must
+   obey them: mapping keys are **sorted alphabetically** (yaml.v2 orders map keys, so
+   `currentTheme` precedes `menu` precedes `themes`, and `attrs`/`bg`/`fg`/`name` sort inside
+   a style); **zero values are omitted** (`namespaced: false` never appears — its absence is
+   the value); `xterm` is a bare **number** and `rgb` a bare **hex string with no `#`**; and
+   `attrs` holds **enum names** (`UNDERLINE`, `REVERSE`), not integers. `currentTheme` is the
+   only multi-word field and it is already lowerCamel, so proto field name == JSON key
+   throughout — a snake_case field added to the schema would break that equality, which
+   `TestLegacyFixtureCoversTheProtoSchema` reports rather than silently tolerating.
+2. **`internal/config/testdata/legacy-kubecom.yaml` is generated, not authored, and the proto
+   beside it is a verbatim copy.** Regenerate by copying `master:pb/config.pb.go` into a
+   throwaway module and running the two calls above (`testdata/README.md` has the recipe).
+   Do **not** vendor the legacy `pb` package into v1 to make this convenient — D3/D14 deleted
+   that codegen on purpose, and a test fixture is not a reason to bring a protobuf dependency
+   and a generated 1000-line file back into the tree.
+3. **The fixture is bound to the schema in both directions, and that binding is the point.**
+   `TestLegacyFixtureCoversTheProtoSchema` fails if the YAML contains a key the proto does not
+   declare (the fixture would no longer be a real legacy file) *and* if the proto declares a
+   field the YAML never exercises (that part of the legacy shape would be untested). A future
+   leg that adds a case to the fixture keeps both halves true; one that trims the fixture down
+   must expect the second half to complain.
+4. **A generated fixture is strong evidence about the format and says nothing about a real
+   user's file.** The M5 exit criterion says "real", so it closes on the human task
+   `2026-07-30-real-legacy-config-migration` (D79), not on this fixture. If no legacy file
+   survives on the maintainer's machine, the criterion may close on the fixture — but the leg
+   that closes it records that it closed that way. The interesting failure the sandbox cannot
+   see is a *silent* one: an unparseable legacy file degrades to no migration, no config and
+   no toast by design (D92), which looks exactly like having no legacy file at all.

@@ -49,3 +49,30 @@ server-side Table printing (kubectl columns). `listTable` maintains rows behind
   with container/port pickers.
 - Flags/env: config, kubectl, editor, pager, log-pager, tail, kubeconfig,
   context, namespace, timeout (see `cli/cli.go`).
+
+## The legacy config file on disk (`~/.kubecom.yaml`) — verified, M5-05
+
+The migration's input, as the 2020 build actually wrote it. `config/config.go`:
+`Save` = `protojson.Marshal(*pb.Config)` → `yaml.JSONToYAML` → `WriteFile`; `Load` is the
+inverse, and an **empty file is valid** (it short-circuits to the zero `pb.Config`). A
+generated example lives in `internal/config/testdata/legacy-kubecom.yaml`; the four shape
+rules that follow from that pipeline are D180 pt 1.
+
+Only three top-level keys exist (`pb/config.proto`), and only two things could ever appear
+in a real file:
+
+- **`menu`** — written by `app/ui/resourceMenu.saveItems`, which serializes the *whole* menu
+  (not a diff) as `{namespaced, group, kind, title}`. There is **no apiVersion and no plural
+  resource name**, which is why v1 cannot carry it over: `MenuResource` addresses a resource
+  by group/version/resource, and only live discovery can supply the rest.
+- **`currentTheme`** — written by `theme/manager.NextTheme`/`PrevTheme`, so its value is one
+  of the five 2020 built-ins (`base16`, `monokai`, `paraiso`, `solarized`, `twilight`).
+  `ConfigUpdated` substituted `base16` when it was empty, so an **empty value meant base16**
+  in the running app while still being empty on disk (D179 pt 3 declines to migrate that).
+- **`themes`** — the abandoned theme engine's palette tree. The 2020 app **never wrote this
+  key**: nothing calls `UpdateConfig` with it, so a palette tree in a real file was
+  hand-authored by the user. It round-trips through `Save` once present, because `Save`
+  re-marshals the whole loaded message.
+
+There were **no keybindings** in the legacy config — the 2020 keymap was hardcoded, so
+v1's `keys:` has nothing to migrate from.

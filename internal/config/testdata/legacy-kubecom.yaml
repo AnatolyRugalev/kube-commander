@@ -1,0 +1,40 @@
+currentTheme: solarized
+menu:
+- group: apps
+  kind: Deployment
+  namespaced: true
+  title: Deployments
+- group: cert-manager.io
+  kind: Certificate
+  namespaced: true
+  title: Certificates
+- kind: Node
+  title: Nodes
+- kind: Pod
+  namespaced: true
+themes:
+- colors:
+  - name: bg
+    rgb: 002b36
+  - name: fg
+    rgb: 93a1a1
+  - name: status-bar
+    xterm: 240
+  name: solarized
+  styles:
+  - bg: bg
+    fg: fg
+    name: screen
+  - attrs:
+    - UNDERLINE
+    bg: bg
+    fg: fg
+    name: row-header
+  - attrs:
+    - REVERSE
+    - BOLD
+    bg: title-bg
+    fg: title-fg
+    name: logo-icon
+  - bg: status-bar
+    name: status-bar
