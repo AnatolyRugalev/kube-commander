@@ -3,22 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-07 landed the AUR `-bin` package (D183) and found the 2020 package name unreachable, leaving **M5-08 (Docker) as the top unblocked M5 item** — the only distribution slice needing no human-owned secret — with M5-10/11 behind it. Ten human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and nine advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF, and the Homebrew and AUR ones carry two thirds of the install-paths criterion. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-08 landed the ghcr.io container image (D184), the last distribution slice and the only one verifiable end to end in the sandbox, leaving **M5-10 (release pre-flight, then the human tag push) as the top unblocked M5 item** with M5-11 behind it. Ten human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and nine advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF, and the Homebrew and AUR ones carry two thirds of the install-paths criterion. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-08** Docker image
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Exit criterion 3, third of three, and the **only one the agent can fully
-      dry-run**: `docker` is present in the sandbox, and `ghcr.io` authenticates with the
-      workflow's own `GITHUB_TOKEN`, so no human-owned secret is needed (`packages: write`
-      on the release job). The old `Dockerfile` was deleted by M0-08/D25, so a new minimal
-      one returns — scratch/distroless over the goreleaser-built static binary
-      (`CGO_ENABLED=0` already), *not* a Go build stage, so the image ships the same
-      artifact the archives do. Worth stating in the README that a containerized TUI needs
-      `-it` and a mounted kubeconfig, and that this is a convenience path, not the
-      recommended one (kubecom is a local zero-deploy tool — `vault/goals.md`). Depends on:
-      M5-03.
+_(none)_
 
 ## Blocked
 
@@ -306,6 +295,8 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       forced the `@v1` explainer. Depends on: M5-10.
 
 ## Done
+
+- [x] **M5-08** Docker — a `dockers_v2:` multi-arch image at `ghcr.io/anatolyrugalev/kubecom` over a build-stage-free `Dockerfile` (distroless-root, `COPY $TARGETPLATFORM/kubecom`), `latest` withheld from pre-releases, published with the workflow's own `GITHUB_TOKEN` so it is the one distribution slice needing no human task; verified end to end in the sandbox by starting `dockerd` and rendering the TUI inside the built image — done 2026-07-30 (D184)
 
 - [x] **M5-07** AUR — an `aurs:` `-bin` package from the released linux archives, inert without `AUR_SSH_PRIVATE_KEY`, with no kubectl dependency (D2) and a real `conflicts` with the 2020 package; the "refresh the existing package" framing was impossible — goreleaser forces the `-bin` suffix and the AUR ties `pkgbase` to the repo name, so `kube-commander` is unreachable and `kubecom-bin` is a new package with no upgrade path — human task `2026-07-30-aur-package-access` — done 2026-07-30 (D183)
 

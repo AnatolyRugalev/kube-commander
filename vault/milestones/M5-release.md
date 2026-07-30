@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b), migration is true and schema-verified (M5-04/05), the screencast tape is written and guarded (M5-09) and two of the three distribution slices are wired (M5-06 Homebrew, M5-07 AUR); what remains is Docker and the human-performed ends (the tap and AUR access, the recording, one real legacy file, the tag).
+**Status:** `in-progress` (2026-07-30) — every buildable M5 slice has landed: the release pipeline (M5-02/03), the DoD audit's findings (M5-01a/01b), migration (M5-04/05), the screencast tape (M5-09) and all three distribution paths (M5-06 Homebrew, M5-07 AUR, M5-08 Docker); what remains is M5-10's pre-flight and the human-performed ends (the tap and AUR access, the recording, one real legacy file, the tag, the branch rename).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -64,7 +64,13 @@ from the old kube-commander.
   "refresh an existing package" framing turned out to be impossible — goreleaser forces the
   `-bin` suffix and the AUR ties `pkgbase` to the repo name, so `kube-commander` is
   unreachable from any config and `kubecom-bin` is a *new* package with no upgrade path
-  (human task `2026-07-30-aur-package-access`). The goreleaser skeleton exists (M0-06/D27) but
+  (human task `2026-07-30-aur-package-access`). **M5-08 ✅ 2026-07-30** (D184) wired the third
+  and needed **no human task at all**: a `dockers_v2:` multi-arch image at
+  `ghcr.io/anatolyrugalev/kubecom`, published with the workflow's own `GITHUB_TOKEN` under
+  `packages: write`, over a `Dockerfile` that is a base plus one `COPY` of the *released*
+  binary — no build stage, unlike the 2020 image, and no kubectl (D2). It is also the only
+  distribution slice the sandbox can verify end to end: `dockerd` is installed here, so the
+  image was built, run, and the TUI itself rendered inside it. The goreleaser skeleton exists (M0-06/D27) but
   carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
   only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded) and
   M5-03 added `release.yml`, the workflow that runs them (D176). Each publisher is
@@ -116,7 +122,15 @@ raise come back done, not when the config that would produce them compiles.
       and the key→`skip_upload` template was proved to flip both ways. The package is
       **renamed** — goreleaser forces the `-bin` suffix, so `kube-commander` is unreachable
       and there is no upgrade path — which makes retiring the 2020 package, alongside the
-      AUR account/SSH key, human task `2026-07-30-aur-package-access`.)
+      AUR account/SSH key, human task `2026-07-30-aur-package-access`.
+      **M5-08 ✅ 2026-07-30** (D184) closed the Docker third as far as anything can be closed
+      before a tag exists, and unlike the other two that is *most* of the way: the sandbox has
+      a docker daemon, so the image was built for both arches, its labels and
+      `kubecom version` checked, and the TUI driven inside it against a bind-mounted
+      kubeconfig. What no leg can verify before M5-10 is the ghcr.io push itself — in
+      particular whether `GITHUB_TOKEN` may create the package on its first push; if GHCR
+      refuses, the fallback is to name the package after the repository. M5-10's pre-flight
+      carries that, not a human task.)
 - [ ] Migration verified from a real legacy config file.
       (M5-04 ✅ 2026-07-30 fixed the stale theme report and made the selection actually
       migrate (D179). **M5-05 ✅ 2026-07-30** (D180) closed the agent-side half: the launcher's

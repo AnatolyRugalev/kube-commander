@@ -82,10 +82,29 @@ Publisher facts an agent needs (all verified by reading `internal/pipe/*` at v2.
   AUR keys must be **passphrase-less**: goreleaser hard-errors on an encrypted one.
 - **Version transforms differ per packager.** `.Version` drops the tag's leading `v`; the
   AUR PKGBUILD additionally rewrites `-` to `_` (`v1.0.0-rc.1` → `pkgver=1.0.0_rc.1`).
+- **`dockers_v2` is the live docker pipe; `dockers:` + `docker_manifests:` are deprecated**
+  (`check` says "being phased out", M5-08). One entry replaces both. Its build context is a
+  **temp dir**, not the repo — the Dockerfile is copied in and the binaries laid out as
+  `<goos>/<goarch>/<binary>`, so `ARG TARGETPLATFORM` + `COPY $TARGETPLATFORM/<bin>` is the
+  only correct source path, a repo-root `.dockerignore` is dead, and any repo file the
+  Dockerfile needs must be listed in `extra_files`. Under `--snapshot` it builds **one image
+  per platform** with `--load` and suffixes each tag with `-<arch>`; the real run builds one
+  index and pushes it. `sbom:` defaults to **true**, which with `--push` adds
+  `--attest=type=sbom` — that plus a multi-platform index is why the docker-container buildx
+  driver is required and the default `docker` driver is not enough (D184 pt 2).
 - **Sandbox artifact:** download URLs are derived from the git remote, which here is the
   local proxy — so generated files contain `https://github.com/git/AnatolyRugalev/…` and a
   synthesized `v0.0.0-next`. Both are correct on a real tagged CI run; neither is a bug to
   chase.
+
+**Docker in the sandbox (verified M5-08).** The `docker` *client* is on PATH but **no daemon
+is running** — `dockerd &` starts one (we are root) and then everything works: pulls reach
+`gcr.io`/`docker.io` through the proxy, buildx builds both arches of a `COPY`-only Dockerfile
+with no QEMU, and `--load`ed images run. So the Docker slice is the one distribution path an
+agent can verify end to end: build the image, `docker run … version`, and even drive the TUI
+— `docker run -d -it` keeps it alive and `script -qec "docker attach <c>" /dev/null` with a
+FIFO on stdin captures a real rendered frame. (`docker logs` on a tty container returns
+nothing useful; attach is the way.)
 
 ## Kubernetes
 - **k8s.io/client-go** (target **v0.31**), apimachinery, cli-runtime as needed.

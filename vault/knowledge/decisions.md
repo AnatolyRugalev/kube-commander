@@ -4815,3 +4815,43 @@ config is silently wrong rather than rejected. What a future leg must not silent
    package installed two scripts that re-exec the binary; v1's binary is `kubecom` and there
    is no kubectl-plugin story (D2). Restoring `kubectl ui` is a scoped decision, not a
    packaging detail to slip back in.
+
+## D184 — The container image is the released binary over distroless-root, published to ghcr.io with no human-owned secret (2026-07-30, M5-08)
+
+1. **The image ships the released artifact; it never rebuilds it.** `dockers_v2` lays the
+   goreleaser-built binaries into the build context as `<goos>/<goarch>/<binary>` and the
+   `Dockerfile` is a `FROM` + `COPY $TARGETPLATFORM/kubecom` — no build stage, no `RUN`. This
+   is a constraint, not a style: the 2020 Dockerfile compiled kubecom in a `golang:` stage, so
+   the published image held a *different* binary from the archives — different toolchain, no
+   version ldflags (D175), unverifiable against `checksums.txt` — and nothing about that is
+   visible from outside, because the image runs and only `kubecom version` lies. A future leg
+   must not add a build stage to "fix" a build problem; fix the build. It also keeps the image
+   free of QEMU: with no `RUN`, nothing foreign-architecture is executed, so multi-arch needs
+   only a multi-arch base. `TestDockerfileShipsTheReleasedBinary` binds all of it.
+2. **`dockers_v2:`, not `dockers:` + `docker_manifests:`.** `goreleaser check` reports the
+   classic pair as being phased out — the same signal M5-06 heeded on `brews:` — and the v2
+   pipe replaces both. Consequence a future leg must carry: `dockers_v2` requires a buildx
+   builder on the **docker-container** driver (the default `docker` driver can produce neither
+   the multi-platform index nor the SBOM attestation it requests), so
+   `docker/setup-buildx-action` is load-bearing in the release *and* the snapshot job, not
+   boilerplate. `TestReleaseWorkflowCanPublishTheDockerImage` binds it.
+3. **The base is distroless `static`, root variant, and `:nonroot` is rejected on purpose.** A
+   kubeconfig is conventionally mode 0600, so a bind-mounted one is unreadable to distroless'
+   fixed uid 65532; `--user $(id -u)` in turn leaves `$HOME` unwritable (Docker resolves an
+   unknown uid to `HOME=/`), and kubecom refuses to start when it cannot open its log file
+   (`cmd/kubecom/logging.go`). Root inside a throwaway local container holding the user's own
+   kubeconfig is not the threat model; an image whose one documented command does not work is.
+   `scratch` is rejected for a different reason and guarded separately: without a CA bundle
+   every apiserver connection fails x509, and no hermetic test in this repo can see it.
+4. **Docker is the one publisher with nothing to make inert.** Unlike the cask (D182) and the
+   AUR package (D183) it needs no human-owned secret — `ghcr.io` authenticates with the
+   workflow's own `GITHUB_TOKEN` under `packages: write` — so the D173 pt 2 `skip_upload`
+   pattern has no analogue here and its absence is not an oversight. The corresponding risk
+   moves to the *first* push: the `org.opencontainers.image.source` label is what makes GHCR
+   attach a new package to this repository and grant it the repo's visibility, so it is
+   required, not decoration.
+5. **`latest` is conditioned on `.Prerelease`.** Every other channel has a native notion of a
+   pre-release — Go's proxy excludes it from `@latest`, Homebrew and the AUR make you ask by
+   name — but a Docker tag does not, so an unguarded `latest` would make `docker run
+   ghcr.io/anatolyrugalev/kubecom` resolve to exactly the release M5-10 recommends cutting
+   *because* it is not ready. `TestDockerLatestTagSkipsPrereleases` binds it.

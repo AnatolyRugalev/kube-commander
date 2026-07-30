@@ -13,9 +13,10 @@
 # The tag push itself is a human act, never an agent's (D173 pt 1).
 # Publishers land one M5 slice at a time, and each must stay inert without its
 # secret so a missing credential can never break a release run that cannot be
-# retried (D173 pt 2). Wired so far: Homebrew cask (M5-06 — HOMEBREW_TAP_TOKEN
-# below) and the AUR package (M5-07 — AUR_SSH_PRIVATE_KEY). Still to come:
-# Docker (M5-08), which needs no human-owned secret.
+# retried (D173 pt 2). Wired: Homebrew cask (M5-06 — HOMEBREW_TAP_TOKEN below),
+# the AUR package (M5-07 — AUR_SSH_PRIVATE_KEY) and the ghcr.io image (M5-08),
+# which is the one publisher needing no human-owned secret and so has nothing to
+# make inert — it authenticates with this workflow's own GITHUB_TOKEN.
 name: Release
 
 on:
@@ -57,6 +58,13 @@ jobs:
           # Single source of truth for the Go floor: the go.mod directive (D23).
           go-version-file: go.mod
           check-latest: true
+
+      # The snapshot builds the container image too (M5-08), and on the same
+      # driver the publishing run uses. The default `docker` buildx driver would
+      # also build here — a snapshot loads one image per platform and pushes
+      # nothing — but then the dry run would exercise a different code path than
+      # the tag does, which is exactly the drift this job exists to catch.
+      - uses: docker/setup-buildx-action@v3
 
       # `check` before `release --snapshot`, because they catch different things:
       # a snapshot happily succeeds on deprecated options, and deprecated options
@@ -100,6 +108,9 @@ jobs:
     permissions:
       # goreleaser creates the GitHub release and uploads the artifacts to it.
       contents: write
+      # Lets GITHUB_TOKEN push ghcr.io/anatolyrugalev/kubecom (M5-08). This is
+      # why Docker needed no human-owned secret, unlike the tap and the AUR.
+      packages: write
     concurrency:
       # Never cancel a publishing run: its output leaves the repo (D173 pt 1).
       group: release-${{ github.ref }}
@@ -113,6 +124,23 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
+
+      # Required, not an optimization: `dockers_v2` asks buildx for a
+      # multi-platform index and an SBOM attestation, and the default `docker`
+      # driver can produce neither — it fails the build rather than degrading.
+      # This action's default is the docker-container driver, which does both.
+      # No setup-qemu step on purpose: the Dockerfile has no RUN instruction, so
+      # nothing foreign-architecture is ever executed during the build.
+      - uses: docker/setup-buildx-action@v3
+
+      # ghcr.io login. `github.actor` + GITHUB_TOKEN is the whole credential —
+      # no human-owned secret, which is what made M5-08 the distribution slice
+      # an agent could finish end to end.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: goreleaser/goreleaser-action@v6
         with:

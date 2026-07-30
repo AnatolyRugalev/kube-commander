@@ -68,8 +68,9 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 >
 > A clean `go install …@latest` returns with the first tagged release.
 
-> Release binaries (goreleaser), Homebrew, AUR, and Docker images are planned for
-> the M5 release milestone and will be documented here when they land. Two notes
+> Release binaries (goreleaser), Homebrew, AUR and the container image below are
+> all wired and waiting on the first tagged release (M5); each is documented here
+> as it lands. Two notes
 > on Homebrew, since the 2020 kube-commander had a tap: it will keep its address
 > (`brew tap AnatolyRugalev/kubecom`), and it ships as a **cask**, which Homebrew
 > supports on macOS only — on Linux, use the release tarball, the AUR package or
@@ -84,6 +85,35 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 > 2020 build, so do not treat one as an upgrade of the other. The two conflict
 > deliberately: both own `/usr/bin/kubecom`, so `pacman` will refuse to install
 > `kubecom-bin` until `kube-commander` is removed.
+
+### In a container
+
+A convenience path, not the recommended one — kubecom is a local, zero-deploy
+tool, and the native binary is always the better install. The image exists to try
+kubecom without putting anything on your `PATH`. It is published from the first
+tagged release onward:
+
+```bash
+docker run --rm -it \
+  -v "$HOME/.kube:/root/.kube:ro" \
+  ghcr.io/anatolyrugalev/kubecom
+```
+
+`-it` is required, not optional: without a TTY the TUI has no terminal to draw
+on. The kubeconfig is mounted read-only because kubecom never writes to it —
+though note that it also cannot then remember your last-used namespace across
+runs, since that state lives beside the config in the (throwaway) container.
+
+Two limits worth knowing before you reach them. The image is distroless — the
+binary, a CA bundle and nothing else — so a kubeconfig using an **exec credential
+plugin** (`aws`, `gcloud`, `kubelogin`, …) will not authenticate inside it, and
+the **Edit** action has no `$EDITOR` to suspend into. Both work fine with the
+native binary. Exec-into-a-pod and port-forwarding do work, the latter with the
+usual `-p` mapping since the forward binds inside the container.
+
+Tags follow the releases: `ghcr.io/anatolyrugalev/kubecom:v1.2.3` (or `:1.2.3`),
+with `:latest` tracking the newest **final** release — never a pre-release.
+Images are multi-arch (`linux/amd64`, `linux/arm64`).
 
 ## Usage
 
