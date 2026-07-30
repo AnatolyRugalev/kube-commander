@@ -14,7 +14,8 @@
 # Publishers land one M5 slice at a time, and each must stay inert without its
 # secret so a missing credential can never break a release run that cannot be
 # retried (D173 pt 2). Wired so far: Homebrew cask (M5-06 — HOMEBREW_TAP_TOKEN
-# below). Still to come: AUR (M5-07), Docker (M5-08).
+# below) and the AUR package (M5-07 — AUR_SSH_PRIVATE_KEY). Still to come:
+# Docker (M5-08), which needs no human-owned secret.
 name: Release
 
 on:
@@ -125,3 +126,10 @@ jobs:
           # skip_upload reads as "skip the cask" — so a release before the secret
           # exists publishes everything else and succeeds (D173 pt 2).
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # SSH private key for the `aur@aur.archlinux.org` account that owns the
+          # `kubecom-bin` package (M5-07/D183). Must be an *unencrypted* key:
+          # goreleaser hard-errors on a password-protected one ("git: key is
+          # password-protected") rather than skipping, so a passphrase turns a
+          # release into a failed release. Absent → empty string → skip_upload
+          # is "true" and the AUR step is a no-op (D173 pt 2).
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

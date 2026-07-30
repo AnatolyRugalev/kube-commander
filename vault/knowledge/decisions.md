@@ -4784,3 +4784,34 @@ config is silently wrong rather than rejected. What a future leg must not silent
    on the floor and would have shipped as a silent no-op. Deprecations are how release config
    rots between the tag that exercises it and the next one, so the dry-run job gates on both
    (`TestReleaseWorkflowPinsGoreleaser`).
+
+## D183 — The AUR package is `kubecom-bin`, a new package; the 2020 `kube-commander` is retired by hand (2026-07-30, M5-07)
+
+1. **The published AUR package is `kubecom-bin`, not the 2020 `kube-commander`, and that is
+   forced rather than preferred.** goreleaser's AUR pipe appends `-bin` to any `name` lacking
+   the suffix, unconditionally and with no opt-out (`internal/pipe/aur/aur.go`, `Default`),
+   and the AUR requires `pkgbase` to equal the repository name — so `.goreleaser.yml` *cannot*
+   write to `aur@aur.archlinux.org:kube-commander` however it is configured. A future leg that
+   "restores the original package name" is chasing something the tool will not do. The
+   consequence to keep in mind wherever the install path is documented: **there is no upgrade
+   path.** The AUR has no `replaces:` and goreleaser exposes no such field, so nobody holding
+   `kube-commander` is ever offered `kubecom-bin` — retiring the old package (merge, delete,
+   or a final pkgdesc pointing at the new one) is a required step of human task
+   `2026-07-30-aur-package-access`, not a tidy-up. This is the AUR twin of D182 pt 2, and it
+   generalises: **for each distributor, the 2020 artifact is still being served until a human
+   removes it, and no config in this repo can see that it exists.**
+2. **`git_url` is written out explicitly, with the `-bin` suffix.** goreleaser has no default
+   for it and its git client returns `pipe.Skip("url is empty")` when it is unset — a release
+   that publishes nothing to the AUR and reports success. It also never appends `-bin` to the
+   URL the way it does to `name`, so the two are only ever correct together.
+   `TestAURGitURLMatchesThePackageName` binds them.
+3. **The package declares `conflicts=('kubecom' 'kube-commander')` and no `depends`.** The
+   conflict is a real seatbelt, not a gesture: both packages own `/usr/bin/kubecom`, and
+   unlike a Homebrew cask (D182 pt 2) pacman honours a conflict, so it is the one distributor
+   where the collision can be expressed in config. The absent `depends` is D2 restated at the
+   packaging layer — the 2020 PKGBUILD declared `depends=('kubectl')`, so copying it forward
+   would *reintroduce* a runtime dependency kubecom does not have. Both are guarded.
+4. **The 2020 `kube-commander` and `kubectl-ui` shell shims are not carried forward.** The old
+   package installed two scripts that re-exec the binary; v1's binary is `kubecom` and there
+   is no kubectl-plugin story (D2). Restoring `kubectl ui` is a scoped decision, not a
+   packaging detail to slip back in.

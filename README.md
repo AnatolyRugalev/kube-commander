@@ -76,6 +76,15 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 > `go install` above. Until the first tagged release, that tap still serves the
 > 2020 formula, so do not install from it expecting kubecom.
 
+> **Arch Linux users, note the rename.** The AUR package will be **`kubecom-bin`**
+> — *not* the 2020 `kube-commander`, whose name this project can no longer publish
+> to (`goreleaser` requires the `-bin` suffix on a prebuilt-binary package, and the
+> AUR requires the package name to match the repository). `kubecom-bin` does not
+> exist until the first tagged release, and `kube-commander` still installs the
+> 2020 build, so do not treat one as an upgrade of the other. The two conflict
+> deliberately: both own `/usr/bin/kubecom`, so `pacman` will refuse to install
+> `kubecom-bin` until `kube-commander` is removed.
+
 ## Usage
 
 Run bare `kubecom` to launch the interactive browse UI against your current

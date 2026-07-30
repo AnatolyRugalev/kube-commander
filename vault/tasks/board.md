@@ -3,11 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-06 landed the Homebrew cask (D182) and added `goreleaser check` to the CI dry run, leaving **M5-07 (AUR) as the top unblocked M5 item**, with M5-08 (Docker) behind it and M5-10/11 waiting on the rest. Nine human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and eight advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF and the new Homebrew one carries a third of the install-paths criterion. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-07 landed the AUR `-bin` package (D183) and found the 2020 package name unreachable, leaving **M5-08 (Docker) as the top unblocked M5 item** — the only distribution slice needing no human-owned secret — with M5-10/11 behind it. Ten human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and nine advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF, and the Homebrew and AUR ones carry two thirds of the install-paths criterion. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-07** AUR distribution — owner: claude-opus-5 | claimed: 2026-07-30 (see Backlog entry for notes)
+_(none)_
 
 ## Blocked
 
@@ -272,21 +272,6 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-07** AUR distribution
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Exit criterion 3, second of three. The original shipped an AUR package (`ci/aur/`,
-      deleted from `v1` by M0-08/D25) so this is a **refresh of an existing published
-      package**, not a new one. M5-06 already looked the name up while doing the same
-      archaeology for the tap: `master:ci/aur/publish.sh` pushes to
-      `aur@aur.archlinux.org:kube-commander`, so the published package is **`kube-commander`**,
-      not `kubecom` (it also shipped a `kubectl-ui` file — decide what happens to that).
-      Expect the same shape of trap M5-06 hit with the Homebrew tap: the *existing* published
-      package is what users already have, so renaming it is a breaking change needing its own
-      decision, and a stale package left in place keeps serving the 2020 binary (D182 pt 2).
-      goreleaser's `aurs:` needs an **AUR SSH private key** as a secret; the agent can
-      neither create nor test it, so same shape as M5-06: config + README + human task
-      (D173 pt 2/3). `aurs:` publishes a `-bin` package from the built archives, which is
-      the right choice here (no Go toolchain on the user's machine). Depends on: M5-03.
 - [ ] **M5-08** Docker image
       status: todo | owner: — | added: 2026-07-30
       notes: Exit criterion 3, third of three, and the **only one the agent can fully
@@ -322,6 +307,8 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       forced the `@v1` explainer. Depends on: M5-10.
 
 ## Done
+
+- [x] **M5-07** AUR — an `aurs:` `-bin` package from the released linux archives, inert without `AUR_SSH_PRIVATE_KEY`, with no kubectl dependency (D2) and a real `conflicts` with the 2020 package; the "refresh the existing package" framing was impossible — goreleaser forces the `-bin` suffix and the AUR ties `pkgbase` to the repo name, so `kube-commander` is unreachable and `kubecom-bin` is a new package with no upgrade path — human task `2026-07-30-aur-package-access` — done 2026-07-30 (D183)
 
 - [x] **M5-06** Homebrew — a `homebrew_casks:` cask (formula route closed: `brews:` fails `goreleaser check`) publishing to the 2020 tap `AnatolyRugalev/homebrew-kubecom`, inert without `HOMEBREW_TAP_TOKEN` and carrying the Gatekeeper quarantine hook; `goreleaser check` added to the CI dry run, which caught `conflicts.formula` being accepted-then-dropped so the stale 2020 formula must be deleted from the tap by hand — human task `2026-07-30-homebrew-tap-access` — done 2026-07-30 (D182)
 

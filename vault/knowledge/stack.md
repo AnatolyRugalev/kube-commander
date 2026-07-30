@@ -50,6 +50,43 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
   line rather than trailing a command), and `Set Width/Height` are **pixels** — at
   `FontSize 16` a 1200×700 frame is roughly 125×36 cells.
 
+## Release & packaging (goreleaser)
+
+Pinned to **v2.17.1** in `.github/workflows/release.yml` (one place, guarded). It is a Go
+tool, so `go install github.com/goreleaser/goreleaser/v2@v2.17.1` works in the sandbox —
+do that rather than reasoning about the config. Note it needs Go ≥ 1.26.5 and will switch
+toolchains on its own; that does not affect this module's 1.24.2 floor.
+
+Three commands, and they are **not** substitutes for each other:
+- `goreleaser check` — validates the config, and is the only thing that reports
+  **deprecated** options. Verified M5-06: a snapshot passes a config `check` rejects.
+- `goreleaser release --snapshot --clean` — builds and *renders every publisher's output*
+  into `dist/` (`dist/homebrew/Casks/*.rb`, `dist/aur/*.pkgbuild`, `*.srcinfo`) without
+  publishing anything. Reading those files is how a publisher gets verified without
+  credentials.
+- `goreleaser jsonschema -o schema.json` — dumps the full config schema. Faster and more
+  reliable than recalling field names; `$defs` holds one entry per config block.
+
+Publisher facts an agent needs (all verified by reading `internal/pipe/*` at v2.17.1):
+- **`skip_upload` is templated and checked first**, before any credential is read, in every
+  publisher — which is what makes the D182 pt 3 / D183 "inert without its secret" pattern
+  work. Use `{{ index .Env "X" }}`, never `.Env.X` (the latter *errors* on an absent key).
+- **A field can be accepted, documented and silently dropped.** `homebrew_casks.conflicts.formula`
+  parses fine and never reaches the generated `.rb` (M5-06). `check` catches some of these;
+  reading the pipe's `template.go` catches the rest. Do not assume a config line does
+  something because goreleaser accepted it.
+- **`aurs:` forces a `-bin` suffix on `name`** (`Default()`), and `git_url` has **no
+  default** — an unset one makes the publish a silent no-op (`pipe.Skip("url is empty")`).
+  `aurs` also matches *both* archive types, so `ids:` is required when the config declares a
+  bare-binary archive alongside the tar.gz, or each arch gets duplicate `source_` lines.
+  AUR keys must be **passphrase-less**: goreleaser hard-errors on an encrypted one.
+- **Version transforms differ per packager.** `.Version` drops the tag's leading `v`; the
+  AUR PKGBUILD additionally rewrites `-` to `_` (`v1.0.0-rc.1` → `pkgver=1.0.0_rc.1`).
+- **Sandbox artifact:** download URLs are derived from the git remote, which here is the
+  local proxy — so generated files contain `https://github.com/git/AnatolyRugalev/…` and a
+  synthesized `v0.0.0-next`. Both are correct on a real tagged CI run; neither is a bug to
+  chase.
+
 ## Kubernetes
 - **k8s.io/client-go** (target **v0.31**), apimachinery, cli-runtime as needed.
 - **k8s.io/client-go/dynamic** — generic typed-free access (CRDs, unstructured).

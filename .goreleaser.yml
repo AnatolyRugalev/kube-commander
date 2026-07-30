@@ -124,5 +124,80 @@ homebrew_casks:
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kubecom"]
           end
 
-# AUR and Docker publishers land with M5-07 / M5-08 — see
-# vault/milestones/M5-release.md.
+# AUR (M5-07/D183). A `-bin` package built from the released linux archives, so
+# an Arch user installs the same artifact the tarball ships instead of compiling
+# it — kubecom needs no Go toolchain on the user's machine.
+#
+# The package name is **not** the 2020 one, and that is forced, not chosen.
+# `master:ci/aur/publish.sh` pushed to `aur@aur.archlinux.org:kube-commander`,
+# but goreleaser's aur pipe appends `-bin` to any name lacking it
+# (internal/pipe/aur/aur.go, Default), and the AUR requires `pkgbase` to equal
+# the repository name — so this config *cannot* write to `kube-commander`. The
+# new package is `kubecom-bin`, and the 2020 one has to be retired by hand:
+# human task `2026-07-30-aur-package-access`.
+aurs:
+  - name: kubecom # goreleaser makes this `kubecom-bin`; git_url below must match
+    # Restricted to the tar.gz archive on purpose. Without `ids` the pipe also
+    # matches the `binaries` archive, which has the same GOOS/GOARCH pair, and
+    # the PKGBUILD would carry two `source_x86_64=` lines — the second silently
+    # overwriting the first.
+    ids:
+      - release
+    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+    description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
+    # Apache-2.0, per this repo's LICENSE. The 2020 PKGBUILD said MIT; the
+    # repository has carried the Apache license since before that package was
+    # published, so it was simply wrong and is not something to preserve.
+    license: "Apache-2.0"
+    maintainers:
+      - "Anatoly Rugalev <anatoly.rugalev@gmail.com>"
+
+    # No `depends`. The 2020 package declared `depends=('kubectl')`; kubecom
+    # talks to the apiserver through client-go and shells out to nothing (D2),
+    # so requiring kubectl would pull in a dependency the binary never uses.
+    # Stated as a comment rather than omitted silently, because an empty
+    # `depends` looks like an oversight and this one is the whole point of D2.
+
+    # `provides`/`conflicts` are set explicitly; goreleaser otherwise defaults
+    # both to the *project* name (`kube-commander`), which would advertise this
+    # package as providing a `kube-commander` binary it does not install.
+    provides:
+      - kubecom
+    conflicts:
+      - kubecom
+      # The 2020 `kube-commander` package installs its own `/usr/bin/kubecom`.
+      # Unlike the Homebrew cask — where `conflicts.formula` is accepted and
+      # dropped on the floor (D182 pt 2) — pacman honours this, so the two
+      # packages cannot be co-installed and a user upgrading gets a clear
+      # conflict instead of one binary silently overwriting the other. It is a
+      # real seatbelt, but not a migration: the AUR has no `replaces`, and
+      # goreleaser exposes no such field, so retiring the old package is a
+      # human step.
+      - kube-commander
+
+    # Explicit rather than inferred. goreleaser guesses this from the archive
+    # and logs `guessing package to be …`; spelling it out keeps the installed
+    # path visible in review. Only `kubecom` is installed — the 2020 package
+    # also shipped `kube-commander` and `kubectl-ui` shell shims that re-exec
+    # the binary, and both are dropped (D183).
+    package: |-
+      install -Dm755 "./kubecom" "${pkgdir}/usr/bin/kubecom"
+
+    # Inert without its secret (D173 pt 2), the same property the cask has and
+    # for the same reason — but note the failure mode differs: an empty
+    # `private_key` only skips *after* the pipe has run, and an empty `git_url`
+    # skips with a message about a URL. Conditioning skip_upload on the secret
+    # is what makes the skip explicit and first, before any of that.
+    skip_upload: '{{ if index .Env "AUR_SSH_PRIVATE_KEY" }}false{{ else }}true{{ end }}'
+    private_key: '{{ index .Env "AUR_SSH_PRIVATE_KEY" }}'
+    # Required, and it has no default: goreleaser skips the publish entirely
+    # ("url is empty") if this is unset, which looks like success. The `-bin`
+    # suffix must be written out here because goreleaser appends it to `name`
+    # but never to this URL.
+    git_url: "ssh://aur@aur.archlinux.org/kubecom-bin.git"
+    # git_ssh_command left at goreleaser's default, which is
+    # `ssh -i "{{ .KeyPath }}" -o StrictHostKeyChecking=accept-new -F /dev/null`.
+    # The 2020 script used `StrictHostKeyChecking=no` with `UserKnownHostsFile=
+    # /dev/null`; accept-new is strictly better and needs no configuration.
+
+# The Docker publisher lands with M5-08 — see vault/milestones/M5-release.md.
