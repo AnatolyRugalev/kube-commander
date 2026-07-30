@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-09 landed the screencast tape, `make screencast
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-06** Homebrew distribution
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
@@ -272,8 +273,7 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-06** Homebrew distribution
-      status: todo | owner: — | added: 2026-07-30
+- [ ] **M5-06** Homebrew distribution — see In Progress
       notes: Exit criterion 3, first of three. Needs a **tap repo the agent cannot
       create** (`AnatolyRugalev/homebrew-tap`) plus a token with write access to it, so the
       slice lands the goreleaser block + README install path and raises the human task for
