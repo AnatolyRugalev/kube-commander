@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-08 landed the ghcr.io container image (D184), t
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-10** Release pre-flight, then the first tag (human performs the tag)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
