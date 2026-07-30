@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-05 verified the migration path against a legacy
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-09** Screencast: vhs tape + `make` target
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
@@ -305,7 +306,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       recommended one (kubecom is a local zero-deploy tool — `vault/goals.md`). Depends on:
       M5-03.
 - [ ] **M5-09** Screencast: vhs tape + `make` target
-      status: todo | owner: — | added: 2026-07-30
+      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-30
       notes: M5 scope replaces the old terminalizer GIF pipeline with **vhs**. Split by what
       the sandbox can do: the agent writes the `.tape` (a scripted browse → filter → logs →
       describe tour), the `make screencast` target and the README image reference; the
