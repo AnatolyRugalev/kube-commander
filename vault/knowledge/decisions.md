@@ -4445,3 +4445,42 @@ D171's `applyStyles`, and writes the name back to `config.yaml` through a
    repaints nor dismisses the theme picker — the one picker a context switch leaves
    open, because it shows nothing the switch invalidates. It is also not per-context
    state (D163): there is one `theme:` for the user, not one per kubeconfig context.
+
+## D173 — A release leaves the repo and cannot be reverted, so an agent prepares and dry-runs it and a human publishes it (2026-07-30, M5-PLAN)
+
+M5 is decomposed into slices M5-01…M5-11 on the [board](../tasks/board.md). Every
+milestone before it enjoyed the same safety net — land it, and if it is wrong, revert it.
+M5 does not have one: its artifacts leave the repository. What a future leg must not
+contradict:
+
+1. **No agent leg pushes a release tag or performs a distributor's first publish.** These
+   are irreversible in a stronger sense than the "irreversible actions" D79 already
+   reserves for humans: `proxy.golang.org` caches a module version **permanently**, so a
+   broken `v1.0.0` can never be corrected, only superseded by `v1.0.1`, and distributor
+   mirrors copy whatever the tag produced. So the agent's share of M5-10/11 is the
+   pre-flight and a precise human task; the tag push and the default-branch change are the
+   human's. A corollary for ordering: everything that affects *what the artifact contains*
+   (M5-02's build metadata, M5-03's workflow) lands before anything that publishes it,
+   because after the tag those are no longer fixable in place.
+2. **A publisher is inert without its credential, never fatal.** Each distribution slice
+   (M5-06 Homebrew, M5-07 AUR, M5-08 Docker) needs an external resource only a human owns —
+   a tap repo, an AUR SSH key, a registry. The slice lands its goreleaser config and raises
+   the human task rather than blocking, and that config must **skip** cleanly when the
+   secret is absent. A publisher that hard-fails on a missing token converts a good release
+   into a failed one at the exact moment nothing can be retried (pt 1), which is principle 3
+   applied to the release pipeline.
+3. **Install docs describe only paths that actually work, and land with them.** D68 already
+   requires a leg touching install/launch/config/usage to update `README.md`; in M5 that
+   binds specifically: a distribution slice documents its path **in the same leg** that
+   makes it real, and never in advance. There is deliberately no standalone "rewrite the
+   README" slice — the README has been maintained continuously under D68, and a README
+   advertising a `brew install` that does not resolve yet is worse than one that says the
+   path is coming. Same rule for assets: no reference to a screencast that has not been
+   recorded.
+4. **The credential-free gate for release config is `goreleaser release --snapshot
+   --clean`.** It needs no tag, no secrets and publishes nothing, so it is to the release
+   pipeline what fake clients are to the kube layer (D18): the check a leg can actually run.
+   M5-03 puts it in CI so release-config drift is caught continuously instead of by the one
+   tag push that cannot be retried. Where a leg genuinely cannot run it — neither
+   `goreleaser` nor `vhs` is in the sandbox image — the honest gate is that CI job plus
+   config review, never a claimed-but-unrun command (D79).

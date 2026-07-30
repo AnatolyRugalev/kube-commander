@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M4-12b-2 landed the theme picker and its config write-back (D172), which closes M4; the next milestone (M5, release) needs expanding into leg-sized slices. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-PLAN expanded the release milestone into slices M5-01…M5-11 and set M5 in-progress (D173), so M5-01 (audit the Definition of Done) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices
-      status: in-progress | owner: claude-opus | added: 2026-07-30
+_(none)_
 
 ## Blocked
 
@@ -256,9 +255,149 @@ _(none — M4 is **feature-complete** (2026-07-30): every slice M4-01…M4-12b-2
 and every exit criterion in [`../milestones/M4-capabilities.md`](../milestones/M4-capabilities.md)
 is ticked but the context switch, which waits on its two-cluster dogfood human-task (D79).)_
 
-_Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
+### M5 — Release & docs
+M5 ships v1: documented, packaged, installable — expanded here into ordered, leg-sized
+slices (M5-PLAN, D52/D173). M5 differs from every milestone before it in one way that
+shapes the whole plan: **its output leaves the repo and cannot be recalled.** A pushed
+`v1.x.x` tag is cached immutably by the Go module proxy and mirrored by distributors, so
+"green, then revert" — the safety net every previous leg relied on — does not exist here.
+D173 therefore draws the line: an agent leg prepares and dry-runs everything, and a human
+performs each act that publishes (the tag, and each distributor's first push). Ordering is
+bottom-up as usual (D52): audit what is actually done, make the artifact *correct*, then
+make it *publishable*, then publish. Re-split any slice that proves > ~300 lines.
+
+Verification without credentials is `goreleaser release --snapshot --clean` — no tag, no
+secrets, no network publish (D173 pt 4). Neither `goreleaser` nor `vhs` is in the sandbox
+image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@latest`)
+so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
+CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
+
+- [ ] **M5-01** Audit and tick the Definition of Done in [`../goals.md`](../goals.md)
+      status: todo | owner: — | added: 2026-07-30
+      notes: The **highest-value first slice**, and the M2-EXIT/D154 + M4-PLAN precedent:
+      all 12 DoD checkboxes are still unticked though M1–M4 demonstrably delivered most of
+      them, so nobody knows which are genuinely outstanding. Tick each *feature* item
+      against named tests/code paths (D154 pt 1), exactly as M2-EXIT and the M4 criteria
+      did — the point is to surface a gap now, before packaging work assumes there is
+      none. The four release-flavored items (release artifacts, `go install`, docs, issues)
+      stay unticked by construction until M5-10/11. Expect at least one surprise: #85 was
+      already met in M2 and went unnoticed until M4-PLAN looked. Split into feature/release
+      halves on pickup if the evidence prose runs long. No code.
+- [ ] **M5-02** Wire `Commit` and `Date` into the release ldflags
+      status: todo | owner: — | added: 2026-07-30
+      notes: Concrete, cheap, and a real defect found by M5-PLAN: `internal/version`
+      declares `Version`, `Commit` and `Date`, and `Info()` prints all three — but
+      `.goreleaser.yml`'s ldflags sets **only** `Version`, so every released binary will
+      report `commit none, built unknown`. `kubecom version` is the first thing a bug
+      report quotes, and this is unfixable after a tag ships (D173 pt 1), so it lands
+      *before* any release path. Add `-X …version.Commit={{ .FullCommit }}` and
+      `-X …version.Date={{ .Date }}`. Gate: a `--snapshot` build whose binary prints real
+      values, else the config review + M5-03's dry run.
+- [ ] **M5-03** Release workflow: `goreleaser release` on a `v*` tag, plus a dry-run job
+      status: todo | owner: — | added: 2026-07-30
+      notes: Exit criterion 2 has **nothing to run it** — `.github/workflows/` holds only
+      `ci.yml`. Add `release.yml`: trigger on `push: tags: ['v*']`, `contents: write`,
+      checkout with `fetch-depth: 0` (goreleaser needs full history for the changelog),
+      `setup-go` off `go-version-file: go.mod` (D23), pinned goreleaser action,
+      `GITHUB_TOKEN`. Add the **dry-run job too** — `--snapshot --clean` on every push to
+      `v1` — so release-config drift is caught by `make check`-adjacent CI rather than by
+      the one tag push that cannot be retried (D173 pt 4). Publishers are *not* wired here;
+      each arrives with its own slice so a missing secret never breaks the release run
+      (D173 pt 2). Depends on: M5-02 (so the first real run is already correct).
+- [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
+      status: todo | owner: — | added: 2026-07-30
+      notes: A **stale claim in shipped code**, found by M5-PLAN. `migrationNotes`
+      (`internal/config/migrate.go`) tells the user "legacy theme configuration was
+      dropped: kubecom v1 uses a single fixed theme and has no runtime theming" — true
+      under D6 when M2-12a wrote it, **false since M4-11/12**: there are three built-in
+      themes, a `theme:` config field (D170) and a picker (D172). A 2020 user whose
+      `currentTheme` was `monokai` or `solarized-dark` is told their choice was dropped by
+      a binary that ships that exact palette. Map the name through `styles.ByName` (lenient
+      on case/space, never fuzzy — D169 pt 2): a hit sets `Config.Theme` and says so, a
+      miss keeps the note but names the themes that *do* exist. Note the legacy palette
+      detail (`themes[].colors/styles`) is still genuinely un-migratable — a named
+      selection is not a custom palette; do not silently widen this into porting colors.
+      Independent of the packaging line; pickable any time.
+- [ ] **M5-05** Verify migration against a real legacy config file
+      status: todo | owner: — | added: 2026-07-30
+      notes: Exit criterion 4. M2-12a/12b are unit-tested against hand-written YAML, which
+      is the weak spot: the legacy file was a **protobuf message** (`pb.Config`) written as
+      protojson→YAML, so its real on-disk shape is fixed by `master:pb/config.proto`, not
+      by what a test author guessed. Build the fixture *from that schema* (`menu[]` with
+      `namespaced`/`group`/`kind`/`title`, `currentTheme`, `themes[]` with
+      `colors[].rgb|xterm` and `styles[].bg/fg/attrs[]`) and run the real
+      `maybeMigrate` path over it, asserting the lenient parse ignores the whole palette
+      tree rather than failing (principle 3). Also raise a human task for the maintainer's
+      *actual* `~/.kubecom.yaml` if one survives — a schema-derived fixture is strong
+      evidence but the criterion says "real", and only a human has a real one (D79).
+      Depends on: M5-04 (so the fixture covers the new theme mapping).
+- [ ] **M5-06** Homebrew distribution
+      status: todo | owner: — | added: 2026-07-30
+      notes: Exit criterion 3, first of three. Needs a **tap repo the agent cannot
+      create** (`AnatolyRugalev/homebrew-tap`) plus a token with write access to it, so the
+      slice lands the goreleaser block + README install path and raises the human task for
+      the repo/secret (D173 pt 2/3). Note `brews:` is **deprecated in goreleaser v2** in
+      favour of `homebrew_casks:` — the existing `.goreleaser.yml` comment flags this and
+      the choice is this slice's to make and record. Config must be inert without the
+      secret: a publisher that hard-fails on a missing token turns a release into a broken
+      release. Updates `README.md` in the same leg (D68/D173 pt 3) — and only to describe a
+      path that actually works. Depends on: M5-03.
+- [ ] **M5-07** AUR distribution
+      status: todo | owner: — | added: 2026-07-30
+      notes: Exit criterion 3, second of three. The original shipped an AUR package (`ci/aur/`,
+      deleted from `v1` by M0-08/D25) so this is a **refresh of an existing published
+      package**, not a new one — check what name it used on `master` before choosing one.
+      goreleaser's `aurs:` needs an **AUR SSH private key** as a secret; the agent can
+      neither create nor test it, so same shape as M5-06: config + README + human task
+      (D173 pt 2/3). `aurs:` publishes a `-bin` package from the built archives, which is
+      the right choice here (no Go toolchain on the user's machine). Depends on: M5-03.
+- [ ] **M5-08** Docker image
+      status: todo | owner: — | added: 2026-07-30
+      notes: Exit criterion 3, third of three, and the **only one the agent can fully
+      dry-run**: `docker` is present in the sandbox, and `ghcr.io` authenticates with the
+      workflow's own `GITHUB_TOKEN`, so no human-owned secret is needed (`packages: write`
+      on the release job). The old `Dockerfile` was deleted by M0-08/D25, so a new minimal
+      one returns — scratch/distroless over the goreleaser-built static binary
+      (`CGO_ENABLED=0` already), *not* a Go build stage, so the image ships the same
+      artifact the archives do. Worth stating in the README that a containerized TUI needs
+      `-it` and a mounted kubeconfig, and that this is a convenience path, not the
+      recommended one (kubecom is a local zero-deploy tool — `vault/goals.md`). Depends on:
+      M5-03.
+- [ ] **M5-09** Screencast: vhs tape + `make` target
+      status: todo | owner: — | added: 2026-07-30
+      notes: M5 scope replaces the old terminalizer GIF pipeline with **vhs**. Split by what
+      the sandbox can do: the agent writes the `.tape` (a scripted browse → filter → logs →
+      describe tour), the `make screencast` target and the README image reference; the
+      *recording* needs `vhs` (absent here), a real cluster and a real terminal, so it is a
+      human task (D79). Do not commit a fabricated GIF or reference an image that does not
+      exist — a README pointing at a missing asset is worse than no screencast. Keep the
+      tape in-repo so a re-record after UI changes is repeatable rather than artisanal.
+      Independent of the packaging line.
+- [ ] **M5-10** Release pre-flight, then the first tag (human performs the tag)
+      status: todo | owner: — | added: 2026-07-30
+      notes: The point of no return (D173 pt 1). The agent leg does the pre-flight: confirm
+      every earlier slice landed, README install paths match what actually ships, the
+      changelog filters produce sensible notes, `--snapshot` is clean, and the DoD items
+      M5-01 left open are now closable. Then a human task carries the **tag push** —
+      irreversible in a way no previous leg's work was: `proxy.golang.org` caches a version
+      permanently, so a bad `v1.0.0` can never be replaced, only superseded by `v1.0.1`.
+      Recommend a `v1.0.0-rc.1` first for exactly that reason (a pre-release is excluded
+      from `@latest`, so a mistake costs nothing). This is also what finally restores
+      `go install …@latest` and lets the README drop its "why not `@v1`" explainer
+      (FB-go-install). Depends on: M5-01…M5-09.
+- [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
+      status: todo | owner: — | added: 2026-07-30
+      notes: The last step, and **entirely a human's**: changing a repo's default branch is
+      a GitHub admin setting, and it retargets every open PR and every clone. The agent
+      leg's share is preparation and a precise human task — what to rename, what to do with
+      `master` (keep as the permanent 2020 reference, D14 — do *not* delete it), which
+      workflow `branches:` lists need `main` (both already list it), and the README/vault
+      links that name `v1`. Renaming also dissolves the branch-vs-semver collision that
+      forced the `@v1` explainer. Depends on: M5-10.
 
 ## Done
+
+- [x] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices M5-01…M5-11 — M5 set in-progress; found four concrete gaps (unticked DoD, unset `Commit`/`Date` ldflags, no release workflow, a migration note stale since themes landed) — done 2026-07-30 (D173)
 
 - [x] **M4-12b-2** Theme picker + write-back — `T` picks a theme, `applyStyles` repaints it live and the name is written back to `config.yaml` load-modify-save; closes M4 — done 2026-07-30 (D172)
 
