@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-PLAN expanded the release milestone into slices
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-01** Audit and tick the Definition of Done in [`../goals.md`](../goals.md)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
