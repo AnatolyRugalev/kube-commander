@@ -22,7 +22,10 @@ set, killing nearly all kubectl shell-outs.
   picker. Enable logs for pod-owning resources — Deployment/RS/StatefulSet/
   DaemonSet/Job (**#84**).
 - **Describe viewer**: `kubectl/pkg/describe` in-process → viewport.
-- **YAML viewer**: get object as YAML → viewport (no external pager).
+- **YAML viewer**: get object as YAML → viewport (no external pager). _(Superseded
+  mid-milestone: on the maintainer's 2026-07-24 feedback, M3-15c/D135 folded this into the
+  **Edit** bullet below — one `e` opens the object's YAML in `$EDITOR` for reading and
+  writing — so no standalone YAML viewer shipped. The DoD says the same since M5-01b/D178.)_
 - **Secret viewer** with reveal/decode + copy (**#89**).
 - **Workload actions** (generic): delete, scale, rollout restart, cordon/drain,
   cronjob suspend/resume (**#83**), with confirm modal.

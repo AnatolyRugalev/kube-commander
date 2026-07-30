@@ -21,7 +21,11 @@ _Audited item by item against named evidence by **M5-01** (2026-07-30, D174): **
 ticked**, and every unticked box names the one thing that closes it. A box is ticked only
 when its claim is decidable from the code and its tests, or has been confirmed by a human
 against a real cluster — never to make the list read as finished (D79/D174). Four boxes wait
-on an open dogfood or bug, three are release acts that have not happened yet._
+on an open dogfood or bug; three wait on work that has not happened yet (the migration
+note, and the two release acts). **M5-01b** (2026-07-30, D178) amended the wording of the
+logs/describe/YAML bullet — the one amendment made to a claim in this list, made on the
+maintainer's own recorded feedback and not on the agent's reading of the code; the original
+text is preserved in that bullet's annotation._
 
 - [x] Two-pane browse UX (resource menu + live-watched table) at parity with the original.
       (M2 exit criteria 1–2: menu drill-in → `kube.Watch` deltas pumped into the table —
@@ -40,17 +44,31 @@ on an open dogfood or bug, three are release acts that have not happened yet._
       `ExternalSecret` errors instead of listing. A box reading "any resource incl. CRDs"
       cannot be ticked while a CRD is reported broken, whatever the tests say. Closes with
       CRD-01, itself blocked on the human task for the error text.)
-- [ ] In-TUI logs, describe, and YAML viewers (no external pager required).
-      (Logs and describe are met and then some — a dedicated full-screen logs view with a
+- [ ] In-TUI logs and describe viewers; an object's YAML round-trips through your `$EDITOR`
+      (no external pager required).
+      (**Wording amended by M5-01b, 2026-07-30, D178.** It read "In-TUI logs, describe, and
+      YAML viewers (no external pager required)" until then. M5-01's audit found the YAML
+      third had stopped describing kubecom — D135/D136/M3-15c retired the standalone
+      read-only YAML viewer and made `e` open the object's YAML in `$EDITOR` — and filed the
+      call as a maintainer decision (D174 pt 3). **The maintainer had already made it**, in
+      their own words, in the feedback that caused D135: "Having a separate read-only YAML
+      viewer (`y`) and a separate edit (`e`) action is redundant … prefer suspending to the
+      user's real `$EDITOR` … that IS the 'proper editor' for YAML"
+      (`vault/feedback/2026-07-24-unify-yaml-view-and-edit.md`, deleted per D69 when
+      addressed, readable at `git show 7897d1f -- <that path>`). So the promise changed
+      shape by the maintainer's choice, and the bullet now says so rather than the box
+      staying open on a question that was answered before it was asked. D135 pt 1 stands: no
+      leg re-adds a read-only YAML viewer.
+      Logs and describe are met and then some — a dedicated full-screen logs view with a
       live grep, wrap, sideways scroll, timestamps and the previous-instance toggle
       (LOGS-01…04c, M5-01a, D144–D148, D177) and
       `kubectl describe`-identical output in-process (M3-04, `internal/kube/describe.go`).
-      **The YAML third of this box no longer describes what kubecom does**: D135/M3-15c
-      retired the standalone read-only YAML viewer and unified YAML into the `$EDITOR`
-      round-trip, so viewing YAML now suspends the TUI. No pager is required either way, so
-      the parenthetical still holds, but the bullet does not. This is a wording-vs-decision
-      divergence for the maintainer to settle, not something to edit away (D174) — filed as
-      **M5-01b**.)
+      Nothing here requires a pager: the editor is the user's own, invoked once and returned
+      from, not a pager kubecom shells out to for reading.
+      **Still unticked — but on missing evidence now, not on an open question**: the YAML
+      third rides the same live `$EDITOR` suspend that leaves the Exec/Edit box below
+      unticked, so it closes with the same human task,
+      `2026-07-24-edit-live-cluster-dogfood`.)
 - [x] Core actions in-process: delete, scale, rollout restart, cordon/drain, port-forward (background), view secrets.
       (M3 exit criteria 2–4, all ticked, all client-go: delete (D115), scale +
       rollout-restart (D117, kubectl's own `restartedAt` annotation so the two tools are

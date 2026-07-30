@@ -10,6 +10,16 @@ in the same leg that addresses it. The permanent record of what happened lives i
 the journal (`vault/journal/`), which the addressing leg links back to. If this
 directory contains only this README, the inbox is empty.
 
+**Deleted is not gone** (D178 pt 2). Git keeps every item, and it is the only place your
+*exact words* survive — a decision written from your feedback can read like the agent's own
+idea once the file is gone. So before any leg concludes "this needs the maintainer", it
+should check whether you already said:
+
+```bash
+git log --diff-filter=D --all -- 'vault/feedback/*'   # what was addressed, and when
+git show <commit> -- vault/feedback/<file>.md         # your words, verbatim
+```
+
 ## How to submit (human)
 
 Add a markdown file named **`YYYY-MM-DD-short-slug.md`** (any name but `README.md`;

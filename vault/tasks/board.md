@@ -3,25 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-01a landed `logs.previous` (`ctrl+p`), so the last missing 2020 log gesture is back and the remaining unblocked M5 items are M5-01b (the YAML-viewer call), M5-04/05 (the theme migration pair) and M5-09 (the vhs tape). Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods, now five with the previous-logs dogfood. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-01b settled the DoD's YAML-viewer question from the maintainer's own (deleted, git-recovered) feedback (D178), so no DoD box waits on a decision any more; the remaining unblocked M5 items are M5-04/05 (the theme migration pair) and M5-09 (the vhs tape). Six human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and five advisory dogfoods, of which the Edit one now carries two DoD boxes. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Found by the M5-01 DoD audit; a **maintainer decision**, not a defect (D174
-      pt 3). The DoD promises "In-TUI logs, describe, and YAML viewers"; M3-15c/D135
-      deliberately retired the standalone read-only YAML viewer and unified YAML into the
-      `$EDITOR` round-trip, so viewing an object's YAML now suspends the TUI. Both readings
-      are defensible — one surface for read+write is simpler, but "let me glance at the
-      YAML" is a read gesture that arguably should not leave the TUI — and the audit
-      deliberately did not tick the box or reword the bullet. Two ways to close it: re-add a
-      read-only YAML view (cheap now: the `viewer` component and the `YAMLGetter` seam both
-      still exist, only `res.yaml`/`ActionYAML` were removed — see the M3-15c board entry
-      for the exact list), or amend the DoD bullet to say YAML rides the editor and
-      supersede D135's wording. Needs no code either way if the answer is the second.
-      Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
-      closed.
+_(none)_
 
 ## Blocked
 
@@ -379,6 +365,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 ## Done
 
+- [x] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135 — needed no maintainer round-trip: the maintainer settled it in the 2026-07-24 feedback that produced D135 (recovered from git after D69 deleted it), so the DoD bullet now says an object's YAML round-trips through `$EDITOR` and closes with the Edit dogfood instead of a decision; fixed the README, which still promised a YAML viewer — done 2026-07-30 (D178)
 - [x] **M5-01a** Previous-container logs — `logs.previous` (`ctrl+p`) toggles the open logs view between the running instance and the previous terminated one (`kubectl logs -p`), re-issuing the stashed request with one bit flipped; the buffer is replaced but the grep/wrap/timestamps survive it, and the header names the instance with `[previous]` — done 2026-07-30 (D177)
 - [x] **M5-03** Release workflow — `release.yml` runs `goreleaser release` on a `v*` tag (gated on `make check` via ci.yml as a reusable workflow) plus a `--snapshot --clean` dry run on every push to `v1`/`main`, with the goreleaser pin and the dry run guarded by `TestReleaseWorkflowPinsGoreleaser` — done 2026-07-30 (D176)
 - [x] **M5-02** Wire `Commit` and `Date` into the release ldflags — released binaries now report their commit and build date, guarded by `TestGoreleaserSetsAllVersionVars` so an unwired `internal/version` var fails `make check` — done 2026-07-30 (D175)

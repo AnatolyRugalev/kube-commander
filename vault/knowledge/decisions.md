@@ -4593,3 +4593,37 @@ contradict:
    `[following]` or the match counts misleads no one, losing `[previous]` makes a dead
    instance's log read as the running one's. It is the counter-example to LOGS-04b's
    unmarked timestamps toggle — that one restates the body, this one cannot be seen in it.
+
+## D178 — A DoD claim is amended only on the maintainer's own recorded words, and deleted feedback is still that record (2026-07-30, M5-01b)
+
+M5-01b was filed as "a maintainer decision, not a defect": the DoD promised an in-TUI YAML
+viewer, D135 had retired it, and D174 pt 3 forbade the agent from rewording the promise. It
+turned out not to need a decision at all — the maintainer made this one on **2026-07-24**,
+in the feedback file that produced D135, and the file had been deleted (per D69) once it was
+addressed, leaving D135 to read like the agent's own idea. What a future leg must not
+silently contradict:
+
+1. **The one exception to D174 pt 3.** An agent may amend the text of a Definition-of-Done
+   claim **only** when a human's own recorded words already settled the divergence — a
+   feedback file, a human-task `## Result`, a commit of theirs — and only if the amendment
+   **quotes or cites that record and preserves the original claim text** in the annotation.
+   Every other reason to reword a bullet remains barred: not because the code went another
+   way, not because a promise now looks unachievable, not on the agent's taste. The test is
+   whether a reader can check *whose* decision changed the promise; an amendment that cannot
+   name a human is the thing D174 pt 3 exists to stop.
+2. **Deleted feedback is evidence, not history that was thrown away.** D69 keeps the inbox a
+   live to-do list by deleting addressed items, which means the working tree can make a
+   human's call look like an agent's. Before treating any question as needing the
+   maintainer, search what was deleted:
+   `git log --diff-filter=D --all -- 'vault/feedback/*'`, then
+   `git show <commit> -- <path>`. Cite the recovery command wherever a leg relies on one, so
+   the next reader does not have to re-find it. This applies to `vault/human-tasks/` too,
+   which is deleted on the same principle.
+3. **The object's YAML has exactly one surface, and it is the editor** — D135 pt 1
+   reaffirmed, now with the DoD agreeing rather than dissenting. The last standing argument
+   for re-adding a read-only YAML view was that a v1 promise asked for one; it does not. A
+   future in-TUI YAML *reading* surface therefore needs **new** human feedback, not a leg's
+   initiative. Corollary, and the defect this leg actually fixed in shipped output:
+   documentation that still promises a YAML viewer is stale — `README.md` claimed "YAML,
+   describe and secret content still open in the shared centered viewer" three milestones
+   after that stopped being true.

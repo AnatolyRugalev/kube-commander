@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03) and M5-01a closed the last 2020 parity gap; the remaining slices are migration, distribution, the screencast and the two human-performed ends.
+**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03) and the DoD audit's findings are closed (M5-01a parity gap, M5-01b YAML wording); the remaining slices are migration, distribution, the screencast and the two human-performed ends.
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -80,14 +80,17 @@ raise come back done, not when the config that would produce them compiles.
 - [ ] Definition of Done in [`../goals.md`](../goals.md) fully checked.
       (Audited by M5-01 (2026-07-30, D174): **6 of 13 ticked**, each against named tests /
       decisions / milestone criteria, and each unticked box now names the one thing that
-      closes it. The remaining seven are: two waiting on open dogfood human-tasks (Edit,
-      context switch), one on the CRD-01 bug, one on the migration note (M5-04/05), two on
-      release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08), and one on
-      a maintainer decision the audit refused to make for them (M5-01b — the DoD's in-TUI
-      YAML viewer vs D135). Also found M5-01a: no surface reached previous-container logs,
-      a 2020 parity gap — **closed 2026-07-30** by `logs.previous`/`ctrl+p` (D177), which
-      does not tick a box of its own (the logs box waits on M5-01b's YAML question) but
-      removes the parity gap the audit found. Ticked when the last box is.)
+      closes it. The remaining seven are: **three** waiting on open dogfood human-tasks (the
+      Edit → `$EDITOR` check, which since M5-01b carries the logs/describe/YAML box too, and
+      the context switch), one on the CRD-01 bug, one on the migration note (M5-04/05), and
+      two on release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08). Also
+      found M5-01a: no surface reached previous-container logs, a 2020 parity gap — **closed
+      2026-07-30** by `logs.previous`/`ctrl+p` (D177). **M5-01b ✅ 2026-07-30**: the audit's
+      one open *question* — in-TUI YAML viewer vs D135 — is settled, and it needed no
+      maintainer round-trip after all, because the maintainer had settled it in the 2026-07-24
+      feedback that produced D135 (D178). The DoD bullet now states that YAML rides the
+      editor, so every unticked box waits on evidence or on work, none on a decision. Ticked
+      when the last box is.)
 
 ## Depends on
 M0 CI/goreleaser scaffolding; feature milestones M1–M4 complete.

@@ -3,7 +3,9 @@
 - Created: 2026-07-24
 - By: M3-15b
 - Priority: normal
-- Blocks: none (advisory — gates only the M3 "Edit round-trips through $EDITOR" exit criterion, not other work)
+- Blocks: none (advisory — gates the M3 "Edit round-trips through $EDITOR" exit criterion
+  and, since M5-01b/D178, the DoD's logs/describe/YAML box as well, because reading an
+  object's YAML now rides this same suspend. No board work is blocked.)
 - Status: open
 
 ## What's needed
@@ -39,5 +41,12 @@ only the live interactive suspend + real apply need a human.
 ## How to resolve
 
 Do the check, then EITHER set `Status: done` with a `## Result` (the agent ticks the M3
-Edit exit criterion and deletes this file next leg), OR delete it if nothing needs to
-flow back. Any bug goes in `../feedback/`.
+Edit exit criterion **and** the DoD's logs/describe/YAML box — M5-01b/D178 put both on this
+one check — and deletes this file next leg), OR delete it if nothing needs to flow back.
+Any bug goes in `../feedback/`.
+
+Note step 2 is also the **read** path now: since D135 there is no separate read-only YAML
+viewer, so "glance at an object's YAML" *is* pressing `e` and quitting without saving. If
+that turns out to be an unpleasant way to read YAML on a real cluster (a slow editor, a big
+object, wanting to keep the table in view), that is worth a feedback file — it is the only
+thing that would reopen the question D178 closed.

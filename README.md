@@ -234,9 +234,18 @@ ended. It is a toggle: the header shows `[previous]` while you are on it and `Ct
 comes back. Because the two instances are two different logs, the lines are replaced —
 but your grep, wrapping and timestamps are not, so you can ask the same question of both,
 and the chord works with the grep field open. A container that has never terminated has
-no previous log, and the cluster says so in the status bar. `Esc` with no filter open, or `q`, closes the view. YAML, describe
-and secret content still open in the shared centered viewer — only logs stream, so only
-logs get their own screen.
+no previous log, and the cluster says so in the status bar. `Esc` with no filter open, or
+`q`, closes the view. **Describe** output and **secret** content still open in the shared
+centered viewer — only logs stream, so only logs get their own screen.
+
+An object's **YAML** is not a viewer at all. Press `e` (`res.edit`) and kubecom opens the
+YAML in your own `$EDITOR` (`$KUBE_EDITOR` first, else `$EDITOR`, else `vi`; flags work, so
+`EDITOR="code -w"` is fine), suspending the TUI the way `kubectl edit` does and restoring it
+when you quit. Close without changing anything and nothing is sent — reading the YAML is
+just an edit you did not make. Save a change and it is applied through the API, with the
+server's own validation and a conflict check, so a stale buffer is refused rather than
+allowed to clobber someone else's write. Viewing and editing YAML are deliberately one
+gesture rather than two keys.
 
 The other subcommands report information and exit:
 
