@@ -7,7 +7,17 @@ _Last updated: 2026-07-30 — M5-02 wired `Commit`/`Date` into the release ldfla
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-03** Release workflow: `goreleaser release` on a `v*` tag, plus a dry-run job
+      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
+      notes: Exit criterion 2 has **nothing to run it** — `.github/workflows/` holds only
+      `ci.yml`. Add `release.yml`: trigger on `push: tags: ['v*']`, `contents: write`,
+      checkout with `fetch-depth: 0` (goreleaser needs full history for the changelog),
+      `setup-go` off `go-version-file: go.mod` (D23), pinned goreleaser action,
+      `GITHUB_TOKEN`. Add the **dry-run job too** — `--snapshot --clean` on every push to
+      `v1` — so release-config drift is caught by `make check`-adjacent CI rather than by
+      the one tag push that cannot be retried (D173 pt 4). Publishers are *not* wired here;
+      each arrives with its own slice so a missing secret never breaks the release run
+      (D173 pt 2). Depends on: M5-02 (so the first real run is already correct).
 
 ## Blocked
 
@@ -303,17 +313,6 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       supersede D135's wording. Needs no code either way if the answer is the second.
       Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
       closed.
-- [ ] **M5-03** Release workflow: `goreleaser release` on a `v*` tag, plus a dry-run job
-      status: todo | owner: — | added: 2026-07-30
-      notes: Exit criterion 2 has **nothing to run it** — `.github/workflows/` holds only
-      `ci.yml`. Add `release.yml`: trigger on `push: tags: ['v*']`, `contents: write`,
-      checkout with `fetch-depth: 0` (goreleaser needs full history for the changelog),
-      `setup-go` off `go-version-file: go.mod` (D23), pinned goreleaser action,
-      `GITHUB_TOKEN`. Add the **dry-run job too** — `--snapshot --clean` on every push to
-      `v1` — so release-config drift is caught by `make check`-adjacent CI rather than by
-      the one tag push that cannot be retried (D173 pt 4). Publishers are *not* wired here;
-      each arrives with its own slice so a missing secret never breaks the release run
-      (D173 pt 2). Depends on: M5-02 (so the first real run is already correct).
 - [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
       status: todo | owner: — | added: 2026-07-30
       notes: A **stale claim in shipped code**, found by M5-PLAN. `migrationNotes`
