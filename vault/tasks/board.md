@@ -7,7 +7,22 @@ _Last updated: 2026-07-30 — M5-03 added `release.yml` (tag release gated on ci
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-01a** Previous-container logs: surface `LogOptions.Previous` (2020 parity, `L`)
+      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
+      notes: Found by the M5-01 DoD audit (D174 pt 4). The 2020 build had two log gestures —
+      `l` current, **`L` previous** (`legacy-architecture.md`, "Behavior worth preserving") —
+      and `kube.LogOptions.Previous` exists and is wired all the way to the API request
+      (`internal/kube/logs.go`), but **no action, key or menu entry reaches it**, so the
+      one thing you want after a CrashLoopBackOff is unavailable. Small and self-contained:
+      a registered `logs.previous` action (D11 — the registry is the only key source), a
+      `Previous` flag threaded through `openLogsViewer`/`streamLogsInto`, the logs-view
+      header saying which instance it is showing, and the generated `docs/keybindings.md`.
+      Two decisions to make and record: whether it is a separate open action or a toggle
+      inside the open view (a toggle re-requests the stream, which is closer to the other
+      logs toggles), and what happens when there is no previous instance (a toast — the
+      server 400s). Note the current `L` is `res.logs`, so a rebind of the *default* is a
+      shipped-key change like FB-delete-key-d/D133 — pick a free key instead unless that
+      is deliberate.
 
 ## Blocked
 
@@ -272,22 +287,6 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-01a** Previous-container logs: surface `LogOptions.Previous` (2020 parity, `L`)
-      status: todo | owner: — | added: 2026-07-30
-      notes: Found by the M5-01 DoD audit (D174 pt 4). The 2020 build had two log gestures —
-      `l` current, **`L` previous** (`legacy-architecture.md`, "Behavior worth preserving") —
-      and `kube.LogOptions.Previous` exists and is wired all the way to the API request
-      (`internal/kube/logs.go`), but **no action, key or menu entry reaches it**, so the
-      one thing you want after a CrashLoopBackOff is unavailable. Small and self-contained:
-      a registered `logs.previous` action (D11 — the registry is the only key source), a
-      `Previous` flag threaded through `openLogsViewer`/`streamLogsInto`, the logs-view
-      header saying which instance it is showing, and the generated `docs/keybindings.md`.
-      Two decisions to make and record: whether it is a separate open action or a toggle
-      inside the open view (a toggle re-requests the stream, which is closer to the other
-      logs toggles), and what happens when there is no previous instance (a toast — the
-      server 400s). Note the current `L` is `res.logs`, so a rebind of the *default* is a
-      shipped-key change like FB-delete-key-d/D133 — pick a free key instead unless that
-      is deliberate.
 - [ ] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135
       status: todo | owner: — | added: 2026-07-30
       notes: Found by the M5-01 DoD audit; a **maintainer decision**, not a defect (D174
