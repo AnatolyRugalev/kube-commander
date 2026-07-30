@@ -7,7 +7,9 @@ _Last updated: 2026-07-30 — M4-12b-1 landed the live restyle every component n
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-12b-2** Theme picker + write-back (the gesture on top of 12b-1)
+      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
+      notes: Depends on M4-12b-1. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), the pick calling the 12b-1 fan-out (`applyStyles`) for the live repaint, and the name written back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. The write-back must not clobber a hand-edited config: `LoadFile`, set `Theme`, save — never a fresh `&Config{Theme: name}` (that would delete the user's `keys:` section). Any save also loses the file's comments, which is worth a README line. Ticks the themes exit criterion and closes M4.
 
 ## Blocked
 
@@ -251,9 +253,7 @@ reach it, exactly as M4-04a preceded M4-04b. Restyling is the larger and riskier
 eleven components cache a `styles.Styles` and three of them *derive* from it at
 construction, so a plain field assignment is a silent half-restyle.
 
-- [ ] **M4-12b-2** Theme picker + write-back (the gesture on top of 12b-1)
-      status: todo | owner: — | added: 2026-07-30
-      notes: Depends on M4-12b-1. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), the pick calling the 12b-1 fan-out (`applyStyles`) for the live repaint, and the name written back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. The write-back must not clobber a hand-edited config: `LoadFile`, set `Theme`, save — never a fresh `&Config{Theme: name}` (that would delete the user's `keys:` section). Any save also loses the file's comments, which is worth a README line. Ticks the themes exit criterion and closes M4.
+_(none — the last M4 item, M4-12b-2, is In Progress above.)_
 
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
