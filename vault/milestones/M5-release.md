@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b), migration is true and schema-verified (M5-04/05) and the screencast tape is written and guarded (M5-09); what remains is distribution and the human-performed ends (the recording, one real legacy file, the tag).
+**Status:** `in-progress` (2026-07-30) — the release pipeline exists end-to-end (M5-02/03), the DoD audit's findings are closed (M5-01a/01b), migration is true and schema-verified (M5-04/05), the screencast tape is written and guarded (M5-09) and the first distribution slice is wired (M5-06 Homebrew); what remains is AUR + Docker and the human-performed ends (the tap access, the recording, one real legacy file, the tag).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -51,7 +51,14 @@ from the old kube-commander.
   made — with the fixture pinned key-for-field to a verbatim copy of `master:pb/config.proto`.
   A genuinely *real* file is the human task `2026-07-30-real-legacy-config-migration`.
 - **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
-  Docker image (Linux/macOS binaries only). The goreleaser skeleton exists (M0-06/D27) but
+  Docker image (Linux/macOS binaries only). **M5-06 ✅ 2026-07-30** (D182) wired the first:
+  a `homebrew_casks:` cask (the formula route is closed — `brews:` is deprecated and
+  `goreleaser check` fails on it, which also makes Homebrew macOS-only here) publishing to
+  the tap the 2020 build already used, inert without `HOMEBREW_TAP_TOKEN` and carrying the
+  Gatekeeper quarantine hook. It also added `goreleaser check` to the CI dry run, which
+  caught `conflicts.formula` being accepted and then silently dropped — so the stale 2020
+  formula must be deleted from the tap by hand (human task
+  `2026-07-30-homebrew-tap-access`). The goreleaser skeleton exists (M0-06/D27) but
   carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
   only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded) and
   M5-03 added `release.yml`, the workflow that runs them (D176). Each publisher is
@@ -89,7 +96,15 @@ raise come back done, not when the config that would produce them compiles.
       tag has produced real artifacts, i.e. after M5-10's human tag push.)
 - [ ] Homebrew/AUR/Docker install paths verified.
       (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
-      back — except possibly Docker, which the agent can build and run locally.)
+      back — except possibly Docker, which the agent can build and run locally.
+      **M5-06 ✅ 2026-07-30** (D182) closed the agent-side Homebrew third: `goreleaser check`
+      is clean, `goreleaser release --snapshot --clean` renders
+      `dist/homebrew/Casks/kubecom.rb` with the quarantine postflight, and the
+      token→`skip_upload` template was proved to flip both ways. The *installed-from* half
+      needs a macOS box, a published tag, and three account-level acts the agent cannot
+      perform — confirming the tap, deleting the 2020 formula still in it, and creating
+      `HOMEBREW_TAP_TOKEN` — so it waits on human task
+      `2026-07-30-homebrew-tap-access`.)
 - [ ] Migration verified from a real legacy config file.
       (M5-04 ✅ 2026-07-30 fixed the stale theme report and made the selection actually
       migrate (D179). **M5-05 ✅ 2026-07-30** (D180) closed the agent-side half: the launcher's

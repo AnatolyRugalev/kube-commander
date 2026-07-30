@@ -79,8 +79,9 @@ type releaseWorkflow struct {
 	Env  map[string]string `json:"env"`
 	Jobs map[string]struct {
 		Steps []struct {
-			Uses string         `json:"uses"`
-			With map[string]any `json:"with"`
+			Uses string            `json:"uses"`
+			With map[string]any    `json:"with"`
+			Env  map[string]string `json:"env"`
 		} `json:"steps"`
 	} `json:"jobs"`
 }
@@ -119,7 +120,7 @@ func TestReleaseWorkflowPinsGoreleaser(t *testing.T) {
 			releaseWorkflowPath, pin)
 	}
 
-	var steps, snapshots, releases int
+	var steps, snapshots, releases, checks int
 	for name, job := range wf.Jobs {
 		for _, step := range job.Steps {
 			if !strings.HasPrefix(step.Uses, "goreleaser/goreleaser-action@") {
@@ -136,6 +137,8 @@ func TestReleaseWorkflowPinsGoreleaser(t *testing.T) {
 				snapshots++
 			case strings.Contains(args, "release"):
 				releases++
+			case strings.TrimSpace(args) == "check":
+				checks++
 			}
 		}
 	}
@@ -148,6 +151,11 @@ func TestReleaseWorkflowPinsGoreleaser(t *testing.T) {
 	}
 	if releases == 0 {
 		t.Errorf("%s never runs a real `goreleaser release`", releaseWorkflowPath)
+	}
+	if checks == 0 {
+		t.Errorf("%s never runs `goreleaser check`; a snapshot succeeds on deprecated options, "+
+			"and a deprecated option can be silently dropped rather than published (M5-06/D182 pt 5)",
+			releaseWorkflowPath)
 	}
 }
 

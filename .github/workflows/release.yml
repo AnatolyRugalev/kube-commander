@@ -11,9 +11,10 @@
 #     golangci-lint pin and the matrix stay in exactly one place).
 #
 # The tag push itself is a human act, never an agent's (D173 pt 1).
-# Publishers (Homebrew, AUR, Docker) are deliberately NOT wired here — each lands
-# with its own M5 slice so a missing secret can never break a release run that
-# cannot be retried (D173 pt 2).
+# Publishers land one M5 slice at a time, and each must stay inert without its
+# secret so a missing credential can never break a release run that cannot be
+# retried (D173 pt 2). Wired so far: Homebrew cask (M5-06 — HOMEBREW_TAP_TOKEN
+# below). Still to come: AUR (M5-07), Docker (M5-08).
 name: Release
 
 on:
@@ -55,6 +56,16 @@ jobs:
           # Single source of truth for the Go floor: the go.mod directive (D23).
           go-version-file: go.mod
           check-latest: true
+
+      # `check` before `release --snapshot`, because they catch different things:
+      # a snapshot happily succeeds on deprecated options, and deprecated options
+      # are how config rots into a release that breaks. M5-06 found two this way
+      # that the snapshot passed over — one of them (`conflicts.formula`) was
+      # accepted, dropped on the floor and would have shipped as a silent no-op.
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: check
 
       - uses: goreleaser/goreleaser-action@v6
         with:
@@ -108,3 +119,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Writes the Homebrew cask to the AnatolyRugalev/homebrew-kubecom tap
+          # (M5-06/D182). GITHUB_TOKEN cannot: it is scoped to this repo only.
+          # An absent secret expands to the empty string, which .goreleaser.yml's
+          # skip_upload reads as "skip the cask" — so a release before the secret
+          # exists publishes everything else and succeeds (D173 pt 2).
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

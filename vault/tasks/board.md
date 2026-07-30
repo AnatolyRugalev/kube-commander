@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-09 landed the screencast tape, `make screencast` and the guards that keep the tape pinned to the keymap (D181), leaving **M5-08 (the Docker image) as the top unblocked M5 item** — it is the one distribution slice needing no human-owned secret, while M5-06/07 are config+README+human-task shaped and M5-10/11 wait on the rest. Eight human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and seven advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion and the new screencast one carries the README's demo GIF. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-06 landed the Homebrew cask (D182) and added `goreleaser check` to the CI dry run, leaving **M5-07 (AUR) as the top unblocked M5 item**, with M5-08 (Docker) behind it and M5-10/11 waiting on the rest. Nine human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and eight advisory, of which the Edit dogfood carries two DoD boxes, the legacy-config one carries an M5 exit criterion, the screencast one carries the README's demo GIF and the new Homebrew one carries a third of the install-paths criterion. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-06** Homebrew distribution
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+_(none)_
 
 ## Blocked
 
@@ -273,21 +272,17 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-06** Homebrew distribution — see In Progress
-      notes: Exit criterion 3, first of three. Needs a **tap repo the agent cannot
-      create** (`AnatolyRugalev/homebrew-tap`) plus a token with write access to it, so the
-      slice lands the goreleaser block + README install path and raises the human task for
-      the repo/secret (D173 pt 2/3). Note `brews:` is **deprecated in goreleaser v2** in
-      favour of `homebrew_casks:` — the existing `.goreleaser.yml` comment flags this and
-      the choice is this slice's to make and record. Config must be inert without the
-      secret: a publisher that hard-fails on a missing token turns a release into a broken
-      release. Updates `README.md` in the same leg (D68/D173 pt 3) — and only to describe a
-      path that actually works. Depends on: M5-03.
 - [ ] **M5-07** AUR distribution
       status: todo | owner: — | added: 2026-07-30
       notes: Exit criterion 3, second of three. The original shipped an AUR package (`ci/aur/`,
       deleted from `v1` by M0-08/D25) so this is a **refresh of an existing published
-      package**, not a new one — check what name it used on `master` before choosing one.
+      package**, not a new one. M5-06 already looked the name up while doing the same
+      archaeology for the tap: `master:ci/aur/publish.sh` pushes to
+      `aur@aur.archlinux.org:kube-commander`, so the published package is **`kube-commander`**,
+      not `kubecom` (it also shipped a `kubectl-ui` file — decide what happens to that).
+      Expect the same shape of trap M5-06 hit with the Homebrew tap: the *existing* published
+      package is what users already have, so renaming it is a breaking change needing its own
+      decision, and a stale package left in place keeps serving the 2020 binary (D182 pt 2).
       goreleaser's `aurs:` needs an **AUR SSH private key** as a secret; the agent can
       neither create nor test it, so same shape as M5-06: config + README + human task
       (D173 pt 2/3). `aurs:` publishes a `-bin` package from the built archives, which is
@@ -327,6 +322,8 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       forced the `@v1` explainer. Depends on: M5-10.
 
 ## Done
+
+- [x] **M5-06** Homebrew — a `homebrew_casks:` cask (formula route closed: `brews:` fails `goreleaser check`) publishing to the 2020 tap `AnatolyRugalev/homebrew-kubecom`, inert without `HOMEBREW_TAP_TOKEN` and carrying the Gatekeeper quarantine hook; `goreleaser check` added to the CI dry run, which caught `conflicts.formula` being accepted-then-dropped so the stale 2020 formula must be deleted from the tap by hand — human task `2026-07-30-homebrew-tap-access` — done 2026-07-30 (D182)
 
 - [x] **M5-09** Screencast — `docs/screencast.tape` (browse → filter → logs → describe, opened through the resource palette so it is position-independent) plus `make screencast`, which builds this checkout's binary onto PATH before running vhs; three guards pin every annotated keypress to the keymap, require the headline actions, and let the README reference the GIF exactly when it exists — the recording is human task `2026-07-30-record-screencast` — done 2026-07-30 (D181)
 - [x] **M5-05** Migration verified against a legacy `~/.kubecom.yaml` generated by the 2020 writer itself (protojson→YAML over a `pb.Config`) and pinned key-for-field to a verbatim copy of `master:pb/config.proto`; the whole launcher path (`Migrate`→`SaveFile`→`LoadFile`→`resolveTheme`) runs over it, the palette tree is proved parsed-and-ignored, all five 2020 theme names are mapped, and a hand-typed fixture with the wrong `rgb` format was fixed — the *real*-file half is human task `2026-07-30-real-legacy-config-migration` — done 2026-07-30 (D180)

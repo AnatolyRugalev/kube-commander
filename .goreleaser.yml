@@ -62,7 +62,67 @@ changelog:
       - '^test:'
       - '^chore:'
 
-# Publishers (Homebrew, AUR, Docker) are added and verified in M5 — see
-# vault/milestones/M5-release.md. This skeleton only builds the Linux+macOS
-# artifacts; `brews` is deprecated in goreleaser v2 in favour of Homebrew casks,
-# chosen at M5 alongside the tap it needs.
+# Homebrew (M5-06/D182). A **cask**, not a formula: `brews:` is deprecated in
+# goreleaser v2 and `goreleaser check` now fails on it, and Homebrew's own policy
+# is that a pre-compiled binary belongs in a cask. Consequence to keep in mind:
+# casks are **macOS-only** — `brew` on Linux refuses to install one — even though
+# goreleaser still emits the `on_linux` stanzas below from the Linux archives.
+# Linux users get the tarball, the AUR package (M5-07) or `go install`.
+#
+# The tap is the one the 2020 build already published to
+# (`AnatolyRugalev/homebrew-kubecom` → `brew tap AnatolyRugalev/kubecom`), so the
+# 2020 install line keeps working instead of stranding existing users on a dead
+# tap. That tap still holds the 2020 **formula**, which Homebrew prefers over a
+# cask of the same name — deleting it is part of human task
+# `2026-07-30-homebrew-tap-access` and `conflicts` below is the seatbelt.
+homebrew_casks:
+  - name: kubecom
+    ids:
+      - release
+    # `binaries` (plural), not the deprecated singular `binary`; and no `license`
+    # key, which goreleaser accepts but never renders — a cask has no license
+    # stanza. `goreleaser check` in CI is what keeps both honest.
+    binaries:
+      - kubecom
+    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+    description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
+
+    # Inert without its secret (D173 pt 2, D182 pt 3). goreleaser evaluates
+    # skip_upload as a template and checks it *before* it touches the token, so
+    # a release run with no HOMEBREW_TAP_TOKEN skips the cask and still publishes
+    # everything else. Without this the publisher would fall back to the
+    # workflow's own GITHUB_TOKEN, which cannot write to the tap repo, and a
+    # release that cannot be retried would fail at the last step.
+    # `index .Env` (not `.Env.X`) is deliberate: it yields "" for an absent key
+    # instead of erroring, so unset and set-but-empty behave the same — which is
+    # what GitHub Actions produces for a secret that does not exist.
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: AnatolyRugalev
+      name: homebrew-kubecom
+      # branch omitted on purpose: goreleaser then uses the tap's default branch,
+      # which beats guessing master vs main for a repo created in 2020.
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+
+    # NOTE: there is deliberately no `conflicts:` entry for the 2020
+    # `Formula/kubecom.rb` that may still sit in this tap. A cask can only
+    # declare conflicts with other *casks* — goreleaser drops `conflicts.formula`
+    # silently (it is deprecated *and* never rendered), because Homebrew removed
+    # `conflicts_with formula:` from the cask DSL. So the stale formula cannot be
+    # handled from here at all: it has to be deleted from the tap, which is why
+    # human task `2026-07-30-homebrew-tap-access` makes that a required step
+    # rather than a tidy-up (D182 pt 2).
+
+    # goreleaser builds unsigned, un-notarized darwin binaries, so macOS attaches
+    # a quarantine attribute on download and Gatekeeper kills the binary on first
+    # run. Stripping it is what makes `brew install --cask` actually yield a
+    # runnable kubecom (D182 pt 4).
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kubecom"]
+          end
+
+# AUR and Docker publishers land with M5-07 / M5-08 — see
+# vault/milestones/M5-release.md.

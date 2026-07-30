@@ -69,7 +69,12 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 > A clean `go install …@latest` returns with the first tagged release.
 
 > Release binaries (goreleaser), Homebrew, AUR, and Docker images are planned for
-> the M5 release milestone and will be documented here when they land.
+> the M5 release milestone and will be documented here when they land. Two notes
+> on Homebrew, since the 2020 kube-commander had a tap: it will keep its address
+> (`brew tap AnatolyRugalev/kubecom`), and it ships as a **cask**, which Homebrew
+> supports on macOS only — on Linux, use the release tarball, the AUR package or
+> `go install` above. Until the first tagged release, that tap still serves the
+> 2020 formula, so do not install from it expecting kubecom.
 
 ## Usage
 

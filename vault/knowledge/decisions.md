@@ -4739,3 +4739,48 @@ GIF outlived the UI it filmed. What a future leg must not silently contradict:
    `TestScreencastTapeShowsTheHeadlineActions` requires the tape to press the resource palette,
    the filter, drill-in, logs and describe — the surfaces the README sells. Extending the tour
    is free; dropping one of those is a decision, not an edit.
+
+## D182 — Homebrew ships as a cask, to the 2020 tap, inert without its token (2026-07-30, M5-06)
+
+The first of the three distribution slices. Two of its constraints exist because the obvious
+config is silently wrong rather than rejected. What a future leg must not silently contradict:
+
+1. **kubecom is distributed as a Homebrew *cask*, not a formula.** `brews:` is deprecated in
+   goreleaser v2 and `goreleaser check` fails on it, and Homebrew's own position is that a
+   pre-compiled binary belongs in a cask. The cost is real and must be stated wherever the
+   install path is documented: **Homebrew on Linux does not install casks**, so the Homebrew
+   path is macOS-only, even though goreleaser still emits `on_linux` stanzas into the cask
+   from the Linux archives. Linux users are served by the release tarball, the AUR package
+   (M5-07) and `go install`. Reversing this — serving Linux Homebrew users too — means going
+   back to a deprecated formula, so it is a decision, not a config tweak.
+2. **The tap is `AnatolyRugalev/homebrew-kubecom`, the one the 2020 build already published
+   to** (`brew tap AnatolyRugalev/kubecom`), so the old README's install line keeps resolving.
+   The consequence is that the tap still holds the 2020 `Formula/kubecom.rb`, and Homebrew
+   resolves a bare name to a **formula** in preference to a cask — so until that file is
+   deleted from the tap, every `brew install kubecom` keeps installing the 2020 binary with no
+   error anywhere. This cannot be fixed from `.goreleaser.yml`: Homebrew removed
+   `conflicts_with formula:` from the cask DSL, and goreleaser accepts `conflicts.formula`
+   only to drop it (deprecated *and* never rendered). Deleting the stale formula is therefore
+   a required step of human task `2026-07-30-homebrew-tap-access`, not a tidy-up. Changing the
+   tap address is a breaking change for anyone already tapped, and needs its own decision.
+3. **Every publisher needing a human-owned secret must skip when the secret is absent, never
+   fail** (this sharpens D173 pt 2 into a testable shape). goreleaser evaluates `skip_upload`
+   as a template and checks it *before* it reads the token, so the pattern is
+   `skip_upload: '{{ if index .Env "X" }}false{{ else }}true{{ end }}'` with
+   `token: '{{ index .Env "X" }}'`. `index .Env` and not `.Env.X`: `index` yields `""` for an
+   absent key, while `.Env.X` errors — which would convert "the secret does not exist yet"
+   into "the release run fails", after the GitHub release has already been created and on the
+   one execution nobody can retry (D173 pt 1). `TestHomebrewCaskIsInertWithoutItsToken` binds
+   the three pieces that must agree: the token's env var, the skip condition, and the workflow
+   step actually passing it.
+4. **A cask over unsigned darwin binaries carries the quarantine-stripping `postflight`.**
+   goreleaser builds unsigned, un-notarized macOS binaries, so Gatekeeper kills them on first
+   run; the `hooks.post.install` running `xattr -dr com.apple.quarantine` is what makes the
+   install path yield a *runnable* kubecom. If the project ever signs and notarizes, that hook
+   is what to remove — and not before.
+5. **`goreleaser check` runs in CI alongside the snapshot, because they catch different
+   things.** A `--snapshot` run succeeds happily on deprecated options, and a deprecated
+   option is not always a warning about the future: `conflicts.formula` was accepted, dropped
+   on the floor and would have shipped as a silent no-op. Deprecations are how release config
+   rots between the tag that exercises it and the next one, so the dry-run job gates on both
+   (`TestReleaseWorkflowPinsGoreleaser`).
