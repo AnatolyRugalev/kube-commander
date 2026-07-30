@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-01 audited the Definition of Done (6 of 13 tick
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-02** Wire `Commit` and `Date` into the release ldflags
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
@@ -303,16 +304,6 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
       supersede D135's wording. Needs no code either way if the answer is the second.
       Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
       closed.
-- [ ] **M5-02** Wire `Commit` and `Date` into the release ldflags
-      status: todo | owner: — | added: 2026-07-30
-      notes: Concrete, cheap, and a real defect found by M5-PLAN: `internal/version`
-      declares `Version`, `Commit` and `Date`, and `Info()` prints all three — but
-      `.goreleaser.yml`'s ldflags sets **only** `Version`, so every released binary will
-      report `commit none, built unknown`. `kubecom version` is the first thing a bug
-      report quotes, and this is unfixable after a tag ships (D173 pt 1), so it lands
-      *before* any release path. Add `-X …version.Commit={{ .FullCommit }}` and
-      `-X …version.Date={{ .Date }}`. Gate: a `--snapshot` build whose binary prints real
-      values, else the config review + M5-03's dry run.
 - [ ] **M5-03** Release workflow: `goreleaser release` on a `v*` tag, plus a dry-run job
       status: todo | owner: — | added: 2026-07-30
       notes: Exit criterion 2 has **nothing to run it** — `.github/workflows/` holds only
