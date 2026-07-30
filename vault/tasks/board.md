@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-04 made the migration report true again: a lega
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-05** Verify migration against a real legacy config file
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
@@ -273,7 +274,7 @@ so a leg can likely obtain it, and if it cannot, the gate for a config-only slic
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 - [ ] **M5-05** Verify migration against a real legacy config file
-      status: todo | owner: — | added: 2026-07-30
+      status: in-progress (see In Progress) | owner: claude-opus-5 | added: 2026-07-30
       notes: Exit criterion 4. M2-12a/12b are unit-tested against hand-written YAML, which
       is the weak spot: the legacy file was a **protobuf message** (`pb.Config`) written as
       protojson→YAML, so its real on-disk shape is fixed by `master:pb/config.proto`, not
