@@ -1,0 +1,110 @@
+# Release: build (and, on a tag, publish) the Linux+macOS artifacts (D7) with
+# goreleaser. Two jobs, one `.goreleaser.yml`:
+#
+#   • snapshot — `goreleaser release --snapshot --clean` on every push to v1/main
+#     and on PRs. No tag, no secrets, publishes nothing (D173 pt 4). This is the
+#     only continuous gate the release config has: `make check` cannot see drift
+#     in `.goreleaser.yml`, and the alternative feedback loop is a tag push, which
+#     the Go module proxy caches permanently and nobody can retry (D173 pt 1).
+#   • release — `goreleaser release --clean` on a `v*` tag, gated on the full
+#     `make check` run of ci.yml (called as a reusable workflow, so the
+#     golangci-lint pin and the matrix stay in exactly one place).
+#
+# The tag push itself is a human act, never an agent's (D173 pt 1).
+# Publishers (Homebrew, AUR, Docker) are deliberately NOT wired here — each lands
+# with its own M5 slice so a missing secret can never break a release run that
+# cannot be retried (D173 pt 2).
+name: Release
+
+on:
+  push:
+    branches: [v1, main]
+    tags: ['v*']
+  pull_request:
+    branches: [v1, main]
+
+permissions:
+  contents: read
+
+env:
+  # Pinned exactly, and load-bearing: .goreleaser.yml tracks the current v2
+  # schema and an older goreleaser refuses to parse it at all (v2.5.1 cannot —
+  # D175 pt 2). A bump is a config change to re-dry-run, not a transparent one,
+  # so TestReleaseWorkflowPinsGoreleaser keeps it an exact version.
+  GORELEASER_VERSION: v2.17.1
+
+jobs:
+  # The dry run: catches release-config drift continuously, instead of on the one
+  # tag push that cannot be taken back.
+  snapshot:
+    name: goreleaser dry run
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-snapshot-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser reads the git log for the changelog and derives the
+          # snapshot version from the most recent tag.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          # Single source of truth for the Go floor: the go.mod directive (D23).
+          go-version-file: go.mod
+          check-latest: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean
+
+      # Lets a human inspect exactly what a tag would produce *before* pushing
+      # one (D173 pt 1), without installing goreleaser. Archives + checksums
+      # only; the bare-binary archive would double the upload for no new bits.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubecom-snapshot-${{ github.sha }}
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  # ci.yml triggers on branches only, so without this a tag could publish a red
+  # tree. `needs:` below makes it a gate rather than a parallel opinion.
+  verify:
+    name: make check
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: goreleaser release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      # goreleaser creates the GitHub release and uploads the artifacts to it.
+      contents: write
+    concurrency:
+      # Never cancel a publishing run: its output leaves the repo (D173 pt 1).
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,21 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-02 wired `Commit`/`Date` into the release ldflags behind a drift guard (D175), so M5-03 (the release workflow + its `--snapshot` dry-run job) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-03 added `release.yml` (tag release gated on ci.yml, plus a `--snapshot` dry run on every push), so the release pipeline now exists end-to-end and the next unblocked M5 items are the independent ones (M5-01a previous-container logs, M5-01b the YAML-viewer call, M5-04 the stale theme migration note). Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-03** Release workflow: `goreleaser release` on a `v*` tag, plus a dry-run job
-      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Exit criterion 2 has **nothing to run it** — `.github/workflows/` holds only
-      `ci.yml`. Add `release.yml`: trigger on `push: tags: ['v*']`, `contents: write`,
-      checkout with `fetch-depth: 0` (goreleaser needs full history for the changelog),
-      `setup-go` off `go-version-file: go.mod` (D23), pinned goreleaser action,
-      `GITHUB_TOKEN`. Add the **dry-run job too** — `--snapshot --clean` on every push to
-      `v1` — so release-config drift is caught by `make check`-adjacent CI rather than by
-      the one tag push that cannot be retried (D173 pt 4). Publishers are *not* wired here;
-      each arrives with its own slice so a missing secret never breaks the release run
-      (D173 pt 2). Depends on: M5-02 (so the first real run is already correct).
+_(none)_
 
 ## Blocked
 
@@ -406,6 +396,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 ## Done
 
+- [x] **M5-03** Release workflow — `release.yml` runs `goreleaser release` on a `v*` tag (gated on `make check` via ci.yml as a reusable workflow) plus a `--snapshot --clean` dry run on every push to `v1`/`main`, with the goreleaser pin and the dry run guarded by `TestReleaseWorkflowPinsGoreleaser` — done 2026-07-30 (D176)
 - [x] **M5-02** Wire `Commit` and `Date` into the release ldflags — released binaries now report their commit and build date, guarded by `TestGoreleaserSetsAllVersionVars` so an unwired `internal/version` var fails `make check` — done 2026-07-30 (D175)
 - [x] **M5-01** Audit the Definition of Done against named evidence — 6 of 13 boxes ticked, every unticked box names what closes it; found two gaps (no previous-logs surface → M5-01a, the DoD's YAML bullet vs D135 → M5-01b) — done 2026-07-30 (D174)
 - [x] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices M5-01…M5-11 — M5 set in-progress; found four concrete gaps (unticked DoD, unset `Commit`/`Date` ldflags, no release workflow, a migration note stale since themes landed) — done 2026-07-30 (D173)

@@ -40,8 +40,8 @@ from the old kube-commander.
 - **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
   Docker image (Linux/macOS binaries only). The goreleaser skeleton exists (M0-06/D27) but
   carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
-  only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded); M5-03
-  adds the workflow that runs them. Each publisher is
+  only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded) and
+  M5-03 added `release.yml`, the workflow that runs them (D176). Each publisher is
   then its own slice because each needs a human-owned external resource (a tap repo, an AUR
   key), except Docker, which authenticates to `ghcr.io` with the workflow's own token.
 - **Restore remote `go install`**: tag a real `v1.x.x` release so
@@ -66,9 +66,11 @@ raise come back done, not when the config that would produce them compiles.
       does the final pass.)
 - [ ] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
       (M5-02 ✅ 2026-07-30: the artifact reports its own commit and build date, guarded by
-      `TestGoreleaserSetsAllVersionVars` (D175). M5-03 still has to add the workflow — there
-      is none today — and its `--snapshot` dry-run job. Ticked when a real tag has produced
-      real artifacts, i.e. after M5-10's human tag push.)
+      `TestGoreleaserSetsAllVersionVars` (D175). M5-03 ✅ 2026-07-30: `release.yml` exists —
+      `goreleaser release` on a `v*` tag, gated on `make check` via ci.yml, plus a
+      `--snapshot --clean` dry run on every push that keeps the config from drifting (D176).
+      The pipeline is complete; it has just never been fired by a tag. Ticked when a real
+      tag has produced real artifacts, i.e. after M5-10's human tag push.)
 - [ ] Homebrew/AUR/Docker install paths verified.
       (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
       back — except possibly Docker, which the agent can build and run locally.)

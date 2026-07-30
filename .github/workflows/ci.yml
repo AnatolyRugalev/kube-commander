@@ -9,6 +9,10 @@ on:
     branches: [v1, main]
   pull_request:
     branches: [v1, main]
+  # release.yml calls this workflow so a `v*` tag is gated on the same gate a
+  # branch push is — the tag is the one push that cannot be retried (D173 pt 1),
+  # and reusing this job keeps the golangci-lint pin in exactly one place.
+  workflow_call:
 
 # Cancel superseded runs on the same ref so a fast follow-up push doesn't queue.
 concurrency:

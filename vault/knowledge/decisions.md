@@ -4533,3 +4533,28 @@ whatever closes the remaining boxes — must not silently contradict:
    local dry run, and any contributor instruction must name a recent v2 (v2.17.1 is the
    version this config was dry-run against). A goreleaser upgrade is therefore a config
    change to re-dry-run, not a transparent bump.
+
+## D176 — There is exactly one release entry point, and the tag path is gated by the same gate a branch push is (2026-07-30, M5-03)
+
+M5-03 added `.github/workflows/release.yml`: a `--snapshot --clean` dry run on every push
+to `v1`/`main` and on PRs, and a real `goreleaser release --clean` on a `v*` tag. What a
+future leg must not silently contradict:
+
+1. **goreleaser runs in that one workflow, at one pinned version.** Both jobs read the
+   workflow-level `GORELEASER_VERSION`; `TestReleaseWorkflowPinsGoreleaser` (in
+   `internal/version`) fails `make check` if the pin becomes floating (`latest`, `~> v2`),
+   if a job hard-codes its own version, or if the `--snapshot` dry run disappears. The pin
+   is load-bearing, not cosmetic (D175 pt 2), and the dry run is the only credential-free
+   gate release config has (D173 pt 4) — both are the kind of thing whose absence looks
+   green until a tag push fails, which is why they are guarded rather than reviewed.
+2. **The tag path gates on `make check` by *calling* ci.yml, not by copying it.** ci.yml
+   triggers on branches only, so a tag would otherwise publish an unchecked tree; it now
+   also carries `workflow_call` and release.yml's `release` job `needs:` it. That makes
+   ci.yml's `workflow_call` trigger and its `check` job **load-bearing for releases**:
+   editing them can break the release path, and the breakage surfaces only on a tag push,
+   which cannot be retried (D173 pt 1). Reusing the workflow rather than duplicating it
+   keeps the golangci-lint pin and the OS matrix in exactly one place.
+3. **Distribution slices extend the existing pipeline; they never add a second `v*`
+   workflow.** M5-06/07/08 (Homebrew, AUR, Docker) add config to `.goreleaser.yml` and, if
+   they need one, a secret to the existing `release` job. Two workflows triggering on the
+   same tag is a double publish, and D173 pt 1 means neither half can be taken back.

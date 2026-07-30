@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -14,8 +15,9 @@ import (
 
 // Paths are relative to this package dir (go test sets cwd to the package).
 var (
-	goreleaserPath = filepath.Join("..", "..", ".goreleaser.yml")
-	goModPath      = filepath.Join("..", "..", "go.mod")
+	goreleaserPath      = filepath.Join("..", "..", ".goreleaser.yml")
+	goModPath           = filepath.Join("..", "..", "go.mod")
+	releaseWorkflowPath = filepath.Join("..", "..", ".github", "workflows", "release.yml")
 )
 
 // goreleaserConfig is the sliver of .goreleaser.yml this guard reads.
@@ -69,6 +71,83 @@ func TestGoreleaserSetsAllVersionVars(t *testing.T) {
 				t.Errorf("build %q: %s sets %s to an empty value", build.ID, goreleaserPath, name)
 			}
 		}
+	}
+}
+
+// releaseWorkflow is the sliver of .github/workflows/release.yml this guard reads.
+type releaseWorkflow struct {
+	Env  map[string]string `json:"env"`
+	Jobs map[string]struct {
+		Steps []struct {
+			Uses string         `json:"uses"`
+			With map[string]any `json:"with"`
+		} `json:"steps"`
+	} `json:"jobs"`
+}
+
+// goreleaserPin is the one accepted spelling of the version input: every
+// goreleaser step reads the workflow-level env var, so the pin has a single home.
+const goreleaserPin = "${{ env.GORELEASER_VERSION }}"
+
+var exactVersion = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+
+// TestReleaseWorkflowPinsGoreleaser guards the two properties of the release
+// workflow that cannot be caught by running it, because the run that would catch
+// them is the tag push — permanently cached by the Go module proxy and impossible
+// to retry (D173 pt 1).
+//
+//  1. goreleaser is pinned to an exact version, in one place. .goreleaser.yml
+//     tracks the current v2 schema and an older goreleaser cannot parse it at all
+//     (D175 pt 2), so `latest` or a floating `~> v2` would make the release depend
+//     on whatever upstream shipped that morning.
+//  2. A `--snapshot` dry run exists alongside the real release. It is the only
+//     credential-free gate release config has (D173 pt 4); deleting it would look
+//     green until a tag failed.
+func TestReleaseWorkflowPinsGoreleaser(t *testing.T) {
+	data, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	var wf releaseWorkflow
+	if err := yaml.Unmarshal(data, &wf); err != nil {
+		t.Fatalf("parse %s: %v", releaseWorkflowPath, err)
+	}
+
+	pin := wf.Env["GORELEASER_VERSION"]
+	if !exactVersion.MatchString(pin) {
+		t.Errorf("%s: GORELEASER_VERSION is %q, want an exact version like v2.17.1 (D175 pt 2)",
+			releaseWorkflowPath, pin)
+	}
+
+	var steps, snapshots, releases int
+	for name, job := range wf.Jobs {
+		for _, step := range job.Steps {
+			if !strings.HasPrefix(step.Uses, "goreleaser/goreleaser-action@") {
+				continue
+			}
+			steps++
+			if got, _ := step.With["version"].(string); got != goreleaserPin {
+				t.Errorf("job %q: goreleaser step pins version %q, want %q so the pin has one home",
+					name, got, goreleaserPin)
+			}
+			args, _ := step.With["args"].(string)
+			switch {
+			case strings.Contains(args, "--snapshot"):
+				snapshots++
+			case strings.Contains(args, "release"):
+				releases++
+			}
+		}
+	}
+	if steps == 0 {
+		t.Fatalf("%s runs goreleaser nowhere — the guard is not reading the workflow", releaseWorkflowPath)
+	}
+	if snapshots == 0 {
+		t.Errorf("%s has no `--snapshot` dry run; it is the only credential-free gate the release config has (D173 pt 4)",
+			releaseWorkflowPath)
+	}
+	if releases == 0 {
+		t.Errorf("%s never runs a real `goreleaser release`", releaseWorkflowPath)
 	}
 }
 
