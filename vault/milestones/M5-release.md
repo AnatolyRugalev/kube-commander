@@ -74,9 +74,14 @@ raise come back done, not when the config that would produce them compiles.
       (M5-04 fixes the stale theme report first, M5-05 verifies the path against the legacy
       protobuf schema on `master` and asks the maintainer for a genuinely real file.)
 - [ ] Definition of Done in [`../goals.md`](../goals.md) fully checked.
-      (M5-01 audits and ticks the *feature* items against named evidence now — all 12 are
-      still unticked though M1–M4 delivered most of them. The release-flavored items close
-      at M5-10/11.)
+      (Audited by M5-01 (2026-07-30, D174): **6 of 13 ticked**, each against named tests /
+      decisions / milestone criteria, and each unticked box now names the one thing that
+      closes it. The remaining seven are: two waiting on open dogfood human-tasks (Edit,
+      context switch), one on the CRD-01 bug, one on the migration note (M5-04/05), two on
+      release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08), and one on
+      a maintainer decision the audit refused to make for them (M5-01b — the DoD's in-TUI
+      YAML viewer vs D135). Also found M5-01a: no surface reaches previous-container logs,
+      a 2020 parity gap. Ticked when the last box is.)
 
 ## Depends on
 M0 CI/goreleaser scaffolding; feature milestones M1–M4 complete.

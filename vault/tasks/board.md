@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-PLAN expanded the release milestone into slices M5-01…M5-11 and set M5 in-progress (D173), so M5-01 (audit the Definition of Done) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-01 audited the Definition of Done (6 of 13 ticked, D174) and filed its two findings as M5-01a/M5-01b, so M5-02 (the `Commit`/`Date` release ldflags) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-01** Audit and tick the Definition of Done in [`../goals.md`](../goals.md)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+_(none)_
 
 ## Blocked
 
@@ -273,17 +272,37 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-01** Audit and tick the Definition of Done in [`../goals.md`](../goals.md)
+- [ ] **M5-01a** Previous-container logs: surface `LogOptions.Previous` (2020 parity, `L`)
       status: todo | owner: — | added: 2026-07-30
-      notes: The **highest-value first slice**, and the M2-EXIT/D154 + M4-PLAN precedent:
-      all 12 DoD checkboxes are still unticked though M1–M4 demonstrably delivered most of
-      them, so nobody knows which are genuinely outstanding. Tick each *feature* item
-      against named tests/code paths (D154 pt 1), exactly as M2-EXIT and the M4 criteria
-      did — the point is to surface a gap now, before packaging work assumes there is
-      none. The four release-flavored items (release artifacts, `go install`, docs, issues)
-      stay unticked by construction until M5-10/11. Expect at least one surprise: #85 was
-      already met in M2 and went unnoticed until M4-PLAN looked. Split into feature/release
-      halves on pickup if the evidence prose runs long. No code.
+      notes: Found by the M5-01 DoD audit (D174 pt 4). The 2020 build had two log gestures —
+      `l` current, **`L` previous** (`legacy-architecture.md`, "Behavior worth preserving") —
+      and `kube.LogOptions.Previous` exists and is wired all the way to the API request
+      (`internal/kube/logs.go`), but **no action, key or menu entry reaches it**, so the
+      one thing you want after a CrashLoopBackOff is unavailable. Small and self-contained:
+      a registered `logs.previous` action (D11 — the registry is the only key source), a
+      `Previous` flag threaded through `openLogsViewer`/`streamLogsInto`, the logs-view
+      header saying which instance it is showing, and the generated `docs/keybindings.md`.
+      Two decisions to make and record: whether it is a separate open action or a toggle
+      inside the open view (a toggle re-requests the stream, which is closer to the other
+      logs toggles), and what happens when there is no previous instance (a toast — the
+      server 400s). Note the current `L` is `res.logs`, so a rebind of the *default* is a
+      shipped-key change like FB-delete-key-d/D133 — pick a free key instead unless that
+      is deliberate.
+- [ ] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135
+      status: todo | owner: — | added: 2026-07-30
+      notes: Found by the M5-01 DoD audit; a **maintainer decision**, not a defect (D174
+      pt 3). The DoD promises "In-TUI logs, describe, and YAML viewers"; M3-15c/D135
+      deliberately retired the standalone read-only YAML viewer and unified YAML into the
+      `$EDITOR` round-trip, so viewing an object's YAML now suspends the TUI. Both readings
+      are defensible — one surface for read+write is simpler, but "let me glance at the
+      YAML" is a read gesture that arguably should not leave the TUI — and the audit
+      deliberately did not tick the box or reword the bullet. Two ways to close it: re-add a
+      read-only YAML view (cheap now: the `viewer` component and the `YAMLGetter` seam both
+      still exist, only `res.yaml`/`ActionYAML` were removed — see the M3-15c board entry
+      for the exact list), or amend the DoD bullet to say YAML rides the editor and
+      supersede D135's wording. Needs no code either way if the answer is the second.
+      Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
+      closed.
 - [ ] **M5-02** Wire `Commit` and `Date` into the release ldflags
       status: todo | owner: — | added: 2026-07-30
       notes: Concrete, cheap, and a real defect found by M5-PLAN: `internal/version`
@@ -398,6 +417,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 ## Done
 
+- [x] **M5-01** Audit the Definition of Done against named evidence — 6 of 13 boxes ticked, every unticked box names what closes it; found two gaps (no previous-logs surface → M5-01a, the DoD's YAML bullet vs D135 → M5-01b) — done 2026-07-30 (D174)
 - [x] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices M5-01…M5-11 — M5 set in-progress; found four concrete gaps (unticked DoD, unset `Commit`/`Date` ldflags, no release workflow, a migration note stale since themes landed) — done 2026-07-30 (D173)
 
 - [x] **M4-12b-2** Theme picker + write-back — `T` picks a theme, `applyStyles` repaints it live and the name is written back to `config.yaml` load-modify-save; closes M4 — done 2026-07-30 (D172)

@@ -17,19 +17,123 @@ high-value capabilities the original lacked.
 
 ## Definition of Done (v1)
 
-- [ ] Two-pane browse UX (resource menu + live-watched table) at parity with the original.
+_Audited item by item against named evidence by **M5-01** (2026-07-30, D174): **6 of 13
+ticked**, and every unticked box names the one thing that closes it. A box is ticked only
+when its claim is decidable from the code and its tests, or has been confirmed by a human
+against a real cluster — never to make the list read as finished (D79/D174). Four boxes wait
+on an open dogfood or bug, three are release acts that have not happened yet._
+
+- [x] Two-pane browse UX (resource menu + live-watched table) at parity with the original.
+      (M2 exit criteria 1–2: menu drill-in → `kube.Watch` deltas pumped into the table —
+      `TestSelectResourceStartsWatch`, `TestWatchClosedStopsChain`, `TestProgramFilterFlow`
+      end-to-end through the real program — and live browse + drill-in was human-confirmed
+      against a real cluster on 2026-07-24. Two differences from the 2020 UX are recorded
+      decisions, not gaps: menu customization is the per-context `menus/<context>.yaml` file
+      instead of in-TUI add/hide/reorder (D83/D89), and the menu pane is optional with a
+      `:` resource palette beside it (D96/D100).)
 - [ ] Resource listing works generically for **any** resource incl. CRDs (discovery-driven, kubectl-identical columns).
+      (Mechanism complete: server-side Table printing for any GVR, CRD
+      `additionalPrinterColumns` included (`internal/kube/table.go`, D33); discovery folds
+      CRDs into the menu (`TestDiscoveryReadyReconcilesMenu`, with a CRD); CRD group
+      list/watch param encoding fixed (D103); kinds without `watch` degrade to list-only
+      polling (D104). **Unticked on an open bug, not on missing evidence** — CRD-01: a real
+      `ExternalSecret` errors instead of listing. A box reading "any resource incl. CRDs"
+      cannot be ticked while a CRD is reported broken, whatever the tests say. Closes with
+      CRD-01, itself blocked on the human task for the error text.)
 - [ ] In-TUI logs, describe, and YAML viewers (no external pager required).
-- [ ] Core actions in-process: delete, scale, rollout restart, cordon/drain, port-forward (background), view secrets.
+      (Logs and describe are met and then some — a dedicated full-screen logs view with a
+      live grep, wrap, sideways scroll and timestamps (LOGS-01…04c, D144–D148) and
+      `kubectl describe`-identical output in-process (M3-04, `internal/kube/describe.go`).
+      **The YAML third of this box no longer describes what kubecom does**: D135/M3-15c
+      retired the standalone read-only YAML viewer and unified YAML into the `$EDITOR`
+      round-trip, so viewing YAML now suspends the TUI. No pager is required either way, so
+      the parenthetical still holds, but the bullet does not. This is a wording-vs-decision
+      divergence for the maintainer to settle, not something to edit away (D174) — filed as
+      **M5-01b**.)
+- [x] Core actions in-process: delete, scale, rollout restart, cordon/drain, port-forward (background), view secrets.
+      (M3 exit criteria 2–4, all ticked, all client-go: delete (D115), scale +
+      rollout-restart (D117, kubectl's own `restartedAt` annotation so the two tools are
+      interchangeable), cordon/uncordon (D120), drain with streamed eviction progress
+      (D121), CronJob suspend/resume (D120), port-forwards that run in the background, are
+      listed in a panel and stop cleanly on exit (D122/D123, `forwards.panel`/`stopAll`),
+      and secrets with explicit reveal + per-entry clipboard copy (D113/D114, #89).)
 - [ ] Exec shell + `$EDITOR` edit (the only sanctioned TUI-suspending actions).
+      (Exec is done and human-confirmed against a real cluster in a real terminal
+      (2026-07-24, HT-exec-dogfood): in-process SPDY with a `kubectl exec` parity fallback
+      when the binary is present (D125–D128). Edit is built and hermetically covered —
+      temp-file round-trip, no-change detection, identity/conflict guards that refuse rather
+      than clobber (M3-15a/15b, D129/D135) — but its **live** `$EDITOR` suspend has never
+      been driven by a human, so the M3 Edit exit criterion is deliberately unticked and so
+      is this. Closes with the human task `2026-07-24-edit-live-cluster-dogfood`.)
 - [ ] Context/cluster switcher; namespace switcher; filter; sort by column.
-- [ ] **Vim-first navigation** (`hjkl`, `gg`/`G`, `/`, `n`/`N`) with arrows/classic keys as an equivalent fallback.
-- [ ] **Fully configurable keybindings** — every action rebindable via config; zero hard-coded keys in view code.
-- [ ] **Cold start is responsive** — UI renders immediately; discovery is async and cached.
-- [ ] No `kubectl` binary required for anything except the exec fallback.
+      (Three of four met: namespace picker (M2-08c) that remembers per-context scope
+      (D163), table filter with `n`/`N` search (D80), and any column sortable, stable under
+      live watch deltas, selection following its object by UID (M2-13a/13b, D94/D98, #85).
+      The context switcher is complete as a mechanism — connect-then-teardown, watch and
+      menu rebind, per-context namespace/menu/state (M4-03…05, D156/D157/D163) — but the
+      claim is a *live* rebind against a second real cluster, which no fake can show, so
+      the M4 criterion and this box both wait on
+      `2026-07-29-context-switch-live-dogfood`.)
+- [x] **Vim-first navigation** (`hjkl`, `gg`/`G`, `/`, `n`/`N`) with arrows/classic keys as an equivalent fallback.
+      (M2 exit criterion 5: `defaultBindings` pairs every nav action with a non-vim
+      fallback — `k`/`up`, `j`/`down`, `h`/`left`, `l`/`right`, `gg`/`home`, `G`/`end`,
+      `ctrl+d`/`pgdn`, `ctrl+u`/`pgup` — and resolution is central, so both families reach
+      every list and table identically (`TestDefaultKeymapValid`, `TestDefaultResolution`,
+      `TestMenuPagingKeysReachTheMenu`). `/` filters and `n`/`N` walk the matches
+      (`TestFilterOpensAndNarrows`, `TestSearchWrapsThroughMatches`), and the `?` overlay
+      shows *both* keys per action (`TestHelpMapFullHelp`).)
+- [x] **Fully configurable keybindings** — every action rebindable via config; zero hard-coded keys in view code.
+      (M2 exit criterion 6: `Config.Keymap()` = `DefaultKeymap().Merge(overrides)`, resolved
+      before the alt-screen so a bad keymap reports and never launches
+      (`TestKeymapResolvesOverride`, `TestKeymapUnknownActionErrors`,
+      `TestKeymapBadTokenErrors`, `TestKeysOverrideAndWarning`). Every raw key token in the
+      tree lives under `internal/tui/keymap`; components take a `keymap.Action`, and the
+      only `tea.KeyPressMsg` consumers are the text-entry surfaces where the key *is* the
+      text (D11). All 16 action namespaces are covered by `TestBindingsCoversRegistry`, and
+      `docs/keybindings.md` is generated from the registry with `make check` failing on
+      drift (M2-01e/D51).)
+- [x] **Cold start is responsive** — UI renders immediately; discovery is async and cached.
+      (D8, and it is structural rather than tuned: `menu.New` opens on a static seed set
+      (`internal/kube/seed.go`, `seedItems()`) so the two panes and the welcome page paint
+      on the first `WindowSizeMsg` with no round-trip (`TestViewRendersWhenSized`);
+      discovery is started from `Init` as a channel-fed pump and merged in place when it
+      arrives (`TestInitStartsDiscovery`, `TestReconcilePreservesSelection`), and a total
+      discovery failure leaves the seed menu navigable (`TestDiscoveryTotalFailureKeepsSeed`
+      — degrade, don't blank). Cached on disk per cluster host with kubectl's own 6 h TTL
+      (`internal/kube/cache.go`, `TestComputeDiscoverCacheDirPerHost`,
+      `TestNewCachedDiscoveryImplementsInterface`, `TestClientsInvalidate`).)
+- [x] No `kubectl` binary required for anything except the exec fallback.
+      (D2, and checkable by grep rather than by claim: the only `os/exec` uses in the whole
+      tree are `internal/tui/edit.go` (the `$EDITOR` the next-but-one bullet sanctions) and
+      `internal/tui/exec.go`'s *optional* `kubectl exec` parity path, which is used only
+      when the binary is on PATH and otherwise falls back to in-process SPDY
+      (`TestKubectlExecProcAbsent`, `TestExecRoutesToKubectlWhenPresent`, D128). Every other
+      capability the 2020 build shelled out for is client-go now — logs, describe, YAML,
+      exec, port-forward, apply, drain, secrets (`internal/kube/`). Closes #68.)
 - [ ] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
+      (The config half is met: plain YAML via `sigs.k8s.io/yaml`, config/state/menus split
+      across XDG dirs (D20/D83/D91). The migration half is built and one-shot (M2-12a/12b,
+      D92/D93) and degrades rather than blocks on a malformed legacy file — but its report
+      **states something false**: it still tells the user themes were dropped because v1 has
+      no runtime theming, which stopped being true at M4-11/12 (three built-in palettes, a
+      `theme:` field and a picker). Unticked until M5-04 fixes the note and M5-05 verifies
+      the path against a genuinely legacy file; this is the smallest gap in the list.)
 - [ ] Linux + macOS release artifacts via goreleaser + GitHub Actions; tests green.
+      (Tests green is continuous — `make check` (build + test + vet + lint) gates every leg
+      and CI runs it (D17). The artifacts half has **not happened**: `.goreleaser.yml`
+      builds linux/darwin × amd64/arm64 but sets only `Version` in its ldflags (M5-02), and
+      `.github/workflows/` holds only `ci.yml`, so nothing has ever run it (M5-03). Ticked
+      when a real tag has produced real artifacts — a human act by D173, so M5-10.)
 - [ ] Every open GH issue in scope is resolved or explicitly deferred with a reason.
+      (10 of the 11 issues in the REWRITE_PLAN table are resolved in code with named
+      evidence: #68 (in-process client-go), #76 (discovery + dynamic Table path), #87
+      (fault-isolating discovery — one bad group cannot break the load,
+      `TestDiscoverResourcesGroupFaultIsolation`), #86 (no panics, degrade), #88 (new
+      toolchain), #84 (logs for pod-owning kinds), #83 (workload actions), #89 (secret
+      viewer), #80 (context switcher — mechanism), #85 (column sort). **#28** (CD to
+      distributors) is the outstanding one: M5-06/07/08. Also unticked because the tracker
+      itself was not checked — no `gh` in the sandbox — so whether these issues are
+      *closed* is unknown here; closing them is part of M5-10's pre-flight.)
 
 ## Non-goals
 

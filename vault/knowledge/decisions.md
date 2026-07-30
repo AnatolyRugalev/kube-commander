@@ -4484,3 +4484,32 @@ contradict:
    tag push that cannot be retried. Where a leg genuinely cannot run it — neither
    `goreleaser` nor `vhs` is in the sandbox image — the honest gate is that CI job plus
    config review, never a claimed-but-unrun command (D79).
+
+## D174 — The Definition of Done is audited against evidence, never edited to match what shipped (2026-07-30, M5-01)
+
+M5-01 audited all 13 boxes of the Definition of Done in [`../goals.md`](../goals.md) and
+ticked 6. The rules it followed are the ones a future audit — M5-10's pre-flight, or
+whatever closes the remaining boxes — must not silently contradict:
+
+1. **A box is ticked only when its claim is decidable from the code and its tests, or has
+   been confirmed by a human against a real cluster.** This is D79 and D154 pt 1 applied to
+   the DoD: the annotation names the tests, decisions and milestone criteria that carry it,
+   so a reader can check the tick without trusting it. An unticked box names the single
+   thing that closes it, and by whom.
+2. **An open bug outranks a green test suite.** The "any resource incl. CRDs" box stays
+   unticked because CRD-01 reports a real `ExternalSecret` failing to open, even though the
+   generic-listing path is thoroughly covered. A DoD box states a property of the shipped
+   product, not of the test suite, so a credible field report that contradicts it is
+   decisive — the fix, or a finding that the fault is cluster-side, is what unticks it.
+3. **Where the DoD text and a later decision disagree, the divergence is filed, not
+   edited.** The DoD asks for an in-TUI YAML viewer; D135 deliberately retired it and
+   unified YAML into the `$EDITOR` round-trip. Rewriting the bullet to match the code would
+   erase the only remaining record that a v1 promise changed shape, and the DoD is the
+   maintainer's contract, not the agent's scratch pad. So the box stays unticked with the
+   divergence stated, and the choice — re-add a read-only YAML view, or amend the bullet —
+   is a board item (M5-01b) for a human to settle. This binds any bullet, not just this one:
+   an agent may annotate a DoD item freely, and may tick or untick it on evidence, but may
+   not reword the claim itself.
+4. **A DoD audit files what it finds and fixes nothing.** It is a reading leg; a defect it
+   turns up becomes a board item (M5-01a, M5-01b here) so the audit stays small, honest and
+   re-runnable, rather than growing into the repairs it discovers.
