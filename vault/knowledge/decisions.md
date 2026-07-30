@@ -4513,3 +4513,23 @@ whatever closes the remaining boxes — must not silently contradict:
 4. **A DoD audit files what it finds and fixes nothing.** It is a reading leg; a defect it
    turns up becomes a board item (M5-01a, M5-01b here) so the audit stays small, honest and
    re-runnable, rather than growing into the repairs it discovers.
+
+## D175 — A released binary reports complete build metadata, and the release config is gated like code (2026-07-30, M5-02)
+
+1. **Every exported var in `internal/version` must be injected by `.goreleaser.yml`'s
+   ldflags.** `TestGoreleaserSetsAllVersionVars` (in `internal/version`) parses both files
+   and fails `make check` if a var is missing from the ldflags of any build, is set to an
+   empty value, or is set under an import path that is not this module's — so adding build
+   metadata without wiring it is a red build, not a placeholder discovered in a shipped
+   binary. This is the M2-01e/D51 drift-gate shape applied to release config, and it exists
+   because D173 pt 1 means a wrong value cannot be corrected in place after a tag ships.
+   `-X` paths are strings the compiler does not check: a rename of the package or the module
+   silently stops setting anything, which is why the guard derives the path from `go.mod`
+   rather than hard-coding it.
+2. **`.goreleaser.yml` tracks the current goreleaser v2 schema, so whatever runs it must be
+   current too.** v2.5.1 cannot parse this config at all (`archives[].ids` and
+   `archives[].formats` are newer fields) — it fails before building anything. That is the
+   good failure mode, but only if the pin is deliberate: the CI action pin M5-03 adds, any
+   local dry run, and any contributor instruction must name a recent v2 (v2.17.1 is the
+   version this config was dry-run against). A goreleaser upgrade is therefore a config
+   change to re-dry-run, not a transparent bump.

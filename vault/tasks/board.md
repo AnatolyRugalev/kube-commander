@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M5-01 audited the Definition of Done (6 of 13 ticked, D174) and filed its two findings as M5-01a/M5-01b, so M5-02 (the `Commit`/`Date` release ldflags) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M5-02 wired `Commit`/`Date` into the release ldflags behind a drift guard (D175), so M5-03 (the release workflow + its `--snapshot` dry-run job) is the top unblocked item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M5-02** Wire `Commit` and `Date` into the release ldflags
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+_(none)_
 
 ## Blocked
 
@@ -408,6 +407,7 @@ CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 ## Done
 
+- [x] **M5-02** Wire `Commit` and `Date` into the release ldflags — released binaries now report their commit and build date, guarded by `TestGoreleaserSetsAllVersionVars` so an unwired `internal/version` var fails `make check` — done 2026-07-30 (D175)
 - [x] **M5-01** Audit the Definition of Done against named evidence — 6 of 13 boxes ticked, every unticked box names what closes it; found two gaps (no previous-logs surface → M5-01a, the DoD's YAML bullet vs D135 → M5-01b) — done 2026-07-30 (D174)
 - [x] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices M5-01…M5-11 — M5 set in-progress; found four concrete gaps (unticked DoD, unset `Commit`/`Date` ldflags, no release workflow, a migration note stale since themes landed) — done 2026-07-30 (D173)
 

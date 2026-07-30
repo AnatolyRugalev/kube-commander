@@ -13,8 +13,15 @@ builds:
     binary: kubecom
     env:
       - CGO_ENABLED=0
+    # Every exported var in internal/version must be set here, or the released
+    # binary reports a placeholder ("commit none, built unknown") that a bug
+    # report then quotes — and a shipped tag cannot be rebuilt (D173 pt 1).
+    # TestGoreleaserSetsAllVersionVars is the drift guard.
     ldflags:
-      - -s -w -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{ .Version }}
+      - -s -w
+      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{ .Version }}
+      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Date={{ .Date }}
     goos:
       - linux
       - darwin

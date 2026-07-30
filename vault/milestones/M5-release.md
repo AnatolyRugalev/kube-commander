@@ -39,8 +39,9 @@ from the old kube-commander.
   M5-05 verifies the whole path against the legacy protobuf schema on `master`.
 - **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
   Docker image (Linux/macOS binaries only). The goreleaser skeleton exists (M0-06/D27) but
-  carries **no publishers**, sets no `Commit`/`Date` ldflags, and has **no workflow to run
-  it** — `.github/workflows/` holds only `ci.yml`. M5-02/03 close that; each publisher is
+  carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
+  only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded); M5-03
+  adds the workflow that runs them. Each publisher is
   then its own slice because each needs a human-owned external resource (a tap repo, an AUR
   key), except Docker, which authenticates to `ghcr.io` with the workflow's own token.
 - **Restore remote `go install`**: tag a real `v1.x.x` release so
@@ -64,9 +65,10 @@ raise come back done, not when the config that would produce them compiles.
       accurate until the install paths it will describe exist: M5-06/07/08 add them, M5-10
       does the final pass.)
 - [ ] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
-      (M5-03 adds the workflow — there is none today — and its `--snapshot` dry-run job;
-      M5-02 first makes the artifact report its own commit and build date. Ticked when a
-      real tag has produced real artifacts, i.e. after M5-10's human tag push.)
+      (M5-02 ✅ 2026-07-30: the artifact reports its own commit and build date, guarded by
+      `TestGoreleaserSetsAllVersionVars` (D175). M5-03 still has to add the workflow — there
+      is none today — and its `--snapshot` dry-run job. Ticked when a real tag has produced
+      real artifacts, i.e. after M5-10's human tag push.)
 - [ ] Homebrew/AUR/Docker install paths verified.
       (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
       back — except possibly Docker, which the agent can build and run locally.)
