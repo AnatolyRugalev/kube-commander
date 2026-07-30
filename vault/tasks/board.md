@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M4-12b-2 landed the theme picker and its config wr
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices
+      status: in-progress | owner: claude-opus | added: 2026-07-30
 
 ## Blocked
 
