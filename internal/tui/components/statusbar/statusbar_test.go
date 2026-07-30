@@ -6,6 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -185,5 +186,34 @@ func TestViewInlineWhenWidthUnknown(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "prod") {
 		t.Errorf("View with unknown width = %q, want the context present", view)
+	}
+}
+
+// TestSetStylesRestylesTheSpinner is the trap this component's SetStyles exists to
+// avoid (M4-12b-1): New copies the accent role *into* the spinner bubble, so a
+// SetStyles that only assigned m.styles would leave a spinning discovery indicator in
+// the departed theme's accent while the bar around it moved to the new one. The
+// animation frame must survive, so a restyle mid-discovery does not stutter.
+func TestSetStylesRestylesTheSpinner(t *testing.T) {
+	m := newBar()
+	m.StartDiscovery()
+	glyph := ansi.Strip(m.spinner.View())
+
+	mono := styles.New(styles.MonokaiTheme())
+	m.SetStyles(mono)
+
+	if got, want := m.spinner.Style.Render("x"), mono.Spinner.Render("x"); got != want {
+		t.Errorf("the spinner kept the old theme's style: %q, want %q", got, want)
+	}
+	if old := styles.Default().Spinner.Render("x"); mono.Spinner.Render("x") == old {
+		t.Fatal("the two themes style the spinner identically; the check above is vacuous")
+	}
+	// A restyle is not a reset: the animation frame is where it was, so the indicator
+	// does not stutter when a theme is picked mid-discovery.
+	if got := ansi.Strip(m.spinner.View()); got != glyph {
+		t.Errorf("the restyle advanced or reset the spinner frame: %q, want %q", got, glyph)
+	}
+	if !m.Discovering() {
+		t.Error("a restyle must not stop discovery")
 	}
 }

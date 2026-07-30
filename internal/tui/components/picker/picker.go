@@ -137,6 +137,20 @@ func New(s styles.Styles, kind string) Model {
 	}
 }
 
+// SetStyles repaints the picker through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+//
+// The list's delegate has to be replaced, not just m.styles assigned: the delegate
+// is what draws every row (and the cursor's Selection bar), and list.New was handed
+// a *copy* of the old Styles. Swapping it leaves the items, the cursor position and
+// the scroll page exactly as they were — only the row that draws them changes — so
+// an open picker can be restyled without losing the reader's place.
+func (m *Model) SetStyles(s styles.Styles) {
+	m.styles = s
+	m.list.SetDelegate(itemDelegate{styles: s})
+}
+
 // Kind returns the picker's kind id.
 func (m Model) Kind() string { return m.kind }
 

@@ -163,6 +163,24 @@ func New(s styles.Styles) Model {
 	}
 }
 
+// SetStyles repaints the view through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+//
+// This one has to re-render, not just assign: shownLines is a *painted* cache — each
+// kept line already carries the previous theme's Match escape sequences around its
+// matched spans (LOGS-05b) — so a restyle that only swapped m.styles would leave every
+// highlight already on screen in the old theme's colors, and only lines streamed
+// afterwards would follow the new one. rebuildShown is the same O(n) path a filter or
+// timestamps change takes, and a restyle is exactly that class of event: a reader
+// gesture, not a stream event, so it never costs an append anything. The buffer, the
+// query, every mode and the scroll position survive it, and following stays as it was
+// (syncContent only pins the newest line if it was already following).
+func (m *Model) SetStyles(s styles.Styles) {
+	m.styles = s
+	m.render()
+}
+
 // Kind returns the view's kind id (always "logs").
 func (m Model) Kind() string { return kind }
 

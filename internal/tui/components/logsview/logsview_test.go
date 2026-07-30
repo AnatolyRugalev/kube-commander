@@ -850,3 +850,39 @@ func TestAppendBatchOfNothingIsANoOp(t *testing.T) {
 		t.Errorf("an empty batch changed the view: %d lines\n%s", len(m.lines), plain(m.View()))
 	}
 }
+
+// TestSetStylesRepaintsPaintedHighlights is the trap this component's SetStyles exists
+// to avoid (M4-12b-1). shownLines is a *painted* cache — since LOGS-05b each kept line
+// is stored with the Match escape sequences already wrapped around its matched spans —
+// so a SetStyles that only assigned the field would leave every highlight on screen in
+// the departed theme's colors while the header moved to the new one, and only lines
+// streamed afterwards would follow. The assertion is against the theme's own rendering
+// of the span, so it states the invariant rather than an escape sequence.
+func TestSetStylesRepaintsPaintedHighlights(t *testing.T) {
+	m := newLogs()
+	m.Append("", "GET /healthz 200")
+	m.Append("", "POST /api/v1 500")
+	m = typeFilter(m, "500")
+	if !strings.Contains(m.View(), matchSpan("500")) {
+		t.Fatal("precondition: the matched span should be highlighted in the default theme")
+	}
+
+	mono := styles.New(styles.MonokaiTheme())
+	m.SetStyles(mono)
+
+	if want := mono.Match.Render("500"); !strings.Contains(m.View(), want) {
+		t.Errorf("the highlight kept the old theme's colors after SetStyles; want the span rendered as %q in:\n%q",
+			want, m.View())
+	}
+	if strings.Contains(m.View(), matchSpan("500")) {
+		t.Error("the old theme's highlight is still on screen — the painted cache was not rebuilt")
+	}
+	// The repaint is a rebuild, not a reset: the buffer, the query and what it narrows to
+	// all survive.
+	if q := m.Query(); q != "500" {
+		t.Errorf("the grep query did not survive the restyle: %q", q)
+	}
+	if got := plain(m.View()); !strings.Contains(got, "POST /api/v1 500") || strings.Contains(got, "GET /healthz 200") {
+		t.Errorf("the restyle changed which lines the grep keeps:\n%s", got)
+	}
+}

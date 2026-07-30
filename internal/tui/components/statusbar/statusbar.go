@@ -57,6 +57,19 @@ func New(s styles.Styles) Model {
 	return Model{styles: s, spinner: sp}
 }
 
+// SetStyles repaints the bar through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+//
+// The spinner's Style has to be re-derived, not left alone: New copies the accent
+// role *into* the bubble, so assigning m.styles by itself would leave a spinning
+// discovery indicator in the previous theme's accent while the bar around it moved.
+// Its animation frame is preserved, so a restyle mid-discovery does not stutter.
+func (m *Model) SetStyles(s styles.Styles) {
+	m.styles = s
+	m.spinner.Style = s.Spinner
+}
+
 // SetContext sets the displayed kube context name.
 func (m *Model) SetContext(ctx string) { m.context = ctx }
 

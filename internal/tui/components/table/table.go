@@ -108,6 +108,14 @@ func New(s styles.Styles) Model {
 	return Model{styles: s, sortCol: -1}
 }
 
+// SetStyles repaints the table through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+// Colors only: the row set, the filter, the sort, the metrics overlay and the
+// selection all survive, and the column widths need no recompute because they are
+// derived from the data rather than from the palette.
+func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
 // SetTable installs a new snapshot, recomputing the visible columns and their
 // widths and resetting the selection to the first row. It is the deliberate
 // reset entry point (a fresh List for a newly selected resource starts at the

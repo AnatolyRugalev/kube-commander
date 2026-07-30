@@ -94,6 +94,13 @@ func New(s styles.Styles) Model {
 	return Model{styles: s, input: in}
 }
 
+// SetStyles repaints the modal through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+// Colors only: an open confirm/prompt keeps its kind, title, message and typed
+// text, so restyling under a live modal cannot lose an answer in progress.
+func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
 // ShowConfirm configures the modal as a yes/no confirm and reveals it. Kind stamps
 // the result messages; title and message are the box heading and the question.
 // confirm.accept then accepts (ConfirmedMsg, empty Value), confirm.decline declines

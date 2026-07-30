@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M4-12b was split on pickup into the live-restyle mechanism (M4-12b-1, in progress) and the picker + write-back on top of it (M4-12b-2), which is now the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M4-12b-1 landed the live restyle every component now joins (D171), leaving M4-12b-2 (the theme picker + write-back) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-12b-1** Live restyle mechanism — `SetStyles` on every component + the shell fan-out
-      status: in-progress | owner: claude-opus | added: 2026-07-30
-      notes: First half of M4-12b (split on pickup). A `SetStyles(styles.Styles)` on each of the eleven components that cache a `Styles` at construction (help, menu, table, statusbar, hintbar, picker ×6, viewer, modal, welcome, searchview, logsview) plus a `Model.applyStyles` that fans one out across all sixteen component fields, so a theme chosen at runtime repaints an already-built shell. Must **re-derive**, not just assign, where construction derived from the palette: the statusbar's spinner style, the picker's and searchview's list delegates, and the logsview's painted line cache (LOGS-05b). Nothing calls it yet — the action, the picker and the write-back are M4-12b-2.
+_(none)_
 
 ## Blocked
 
@@ -260,6 +258,8 @@ construction, so a plain field assignment is a silent half-restyle.
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-12b-1** Live restyle mechanism — `SetStyles` on all eleven components plus the `applyStyles` fan-out; three re-derive rather than assign, and nothing calls it yet — done 2026-07-30 (D171)
 
 - [x] **M4-12a** Theme applied at launch — `theme:` config field resolved by the launcher and built into every component; unknown name → default + one startup notice — done 2026-07-29 (D170)
 

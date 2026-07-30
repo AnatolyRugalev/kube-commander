@@ -49,6 +49,12 @@ func New(s styles.Styles) Model {
 	return Model{styles: s}
 }
 
+// SetStyles repaints the page through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+// Colors only: no state and no layout is disturbed.
+func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
 // SetSize sets the page's total size (including its border), wired from the root
 // model's table-pane geometry so the welcome page occupies exactly the table's
 // slot.

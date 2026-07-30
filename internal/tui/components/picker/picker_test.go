@@ -274,3 +274,35 @@ func TestHideClosesFilter(t *testing.T) {
 		t.Fatalf("after Hide/Show, Len() = %d, want 3 (filter cleared)", got)
 	}
 }
+
+// TestSetStylesRestylesRowsAndKeepsPlace is the trap this component's SetStyles exists
+// to avoid (M4-12b-1): every row — including the cursor's Selection bar — is drawn by
+// the list's itemDelegate, which list.New was handed a *copy* of the old Styles. A
+// SetStyles that only assigned m.styles would repaint the title and the frame while the
+// rows below stayed in the departed theme. Swapping the delegate must not disturb the
+// list's contents or the cursor.
+func TestSetStylesRestylesRowsAndKeepsPlace(t *testing.T) {
+	m := newTestModel("default", "kube-system", "web")
+	m.Show()
+	m, _ = m.Update(keymap.ActionDown)
+	before, ok := m.Selected()
+	if !ok {
+		t.Fatal("precondition: a row should be selected")
+	}
+
+	mono := styles.New(styles.MonokaiTheme())
+	m.SetStyles(mono)
+	view := m.View()
+
+	// The cursor row is drawn through Selection; under the new theme that is the new
+	// theme's bar. Width-padded by the delegate, so match on the escape prefix.
+	if want := mono.Selection.Render(""); !strings.Contains(view, strings.TrimSuffix(want, "\x1b[m")) {
+		t.Errorf("the cursor row was not repainted by the new theme's Selection style:\n%q", view)
+	}
+	if got, _ := m.Selected(); got != before {
+		t.Errorf("the cursor moved on restyle: %q, want %q", got, before)
+	}
+	if got := m.Len(); got != 3 {
+		t.Errorf("the item set changed on restyle: Len() = %d, want 3", got)
+	}
+}

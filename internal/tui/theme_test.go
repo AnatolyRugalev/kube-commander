@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
@@ -75,6 +76,156 @@ func TestWithThemeLeavesOtherOptionsApplied(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("themed shell dropped %q from its view:\n%s", want, view)
 		}
+	}
+}
+
+// themeSurfaces are the screen states a live restyle has to cover: the browse shell
+// plus every overlay and full-screen view, each built through the shell's own
+// constructor so the components under test are the ones the app really runs. Each
+// entry takes construction Options so the same surface can be built two ways — themed
+// at launch, and themed afterwards — which is what makes the comparison below
+// possible. Surfaces are seeded with *content* (rows, items, hits, log lines) on
+// purpose: an empty overlay draws little more than a border and would hide a component
+// that was left behind.
+var themeSurfaces = []struct {
+	name  string
+	build func(t *testing.T, opts ...Option) Model
+}{
+	{"browse shell (menu, bars, welcome page)", func(t *testing.T, opts ...Option) Model {
+		return sizedWith(t, opts...)
+	}},
+	{"resource table (rows, filtered, sorted)", func(t *testing.T, opts ...Option) Model {
+		return browsingModel(t, &fakeWatcher{}, opts...)
+	}},
+	{"help overlay", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.help.SetVisible(true)
+		return m
+	}},
+	{"picker overlay", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.nsPicker.SetItems([]string{"default", "kube-system", "web"})
+		m.nsPicker.Show()
+		return m
+	}},
+	{"viewer overlay", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.viewer.SetTitle("Pod web/api-1")
+		m.viewer.SetContent("apiVersion: v1\nkind: Pod\n")
+		m.viewer.Show()
+		return m
+	}},
+	{"confirm modal", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.modal.ShowConfirm(deleteModalKind, "Delete", "delete api-1?")
+		return m
+	}},
+	{"cluster search view", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.searchView.Show()
+		m.searchView.AppendHit(searchHit("Pod", "pods", "web", "api-1"))
+		m.searchView.AppendHit(searchHit("Service", "services", "web", "api"))
+		return m
+	}},
+	{"logs view", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.logsView.Show()
+		m.logsView.Append("", "GET /healthz 200")
+		m.logsView.Append("", "POST /api/v1 500")
+		return m
+	}},
+}
+
+// TestApplyStylesMatchesLaunchTimeTheme is the headline invariant of M4-12b-1, and the
+// one assertion that can prove the fan-out is *complete*: for every surface, a shell
+// built on the default palette and then restyled must render byte-for-byte identically
+// to one built with that theme from the start (M4-12a's path, which is known to reach
+// every component). A component missing from applyStyles keeps its default Styles and
+// so keeps drawing in default colors, which shows up here as a diff — including for
+// components that only appear in one overlay, which is exactly the failure a
+// hand-written "does it look different?" test would miss.
+func TestApplyStylesMatchesLaunchTimeTheme(t *testing.T) {
+	theme := styles.MonokaiTheme()
+	for _, sf := range themeSurfaces {
+		t.Run(sf.name, func(t *testing.T) {
+			want := sf.build(t, WithTheme(theme)).View().Content
+
+			m := sf.build(t)
+			plain := m.View().Content
+			m.applyStyles(styles.New(theme))
+			got := m.View().Content
+
+			if plain == "" {
+				t.Fatal("the surface rendered nothing; the comparisons below would be vacuous")
+			}
+			if plain == want {
+				t.Fatal("this surface renders identically under both themes, so it cannot show a missed restyle")
+			}
+			if got != want {
+				t.Errorf("a restyled shell does not match one built with the theme — a component was left on the old palette:\nrestyled:\n%q\nbuilt themed:\n%q", got, want)
+			}
+		})
+	}
+}
+
+// TestApplyStylesChangesOnlyColors is the other half of the contract: a restyle
+// repaints, it never re-lays-out or resets. Same glyphs in the same places on every
+// surface (so no component was re-created, resized or cleared), different escape
+// sequences around them.
+func TestApplyStylesChangesOnlyColors(t *testing.T) {
+	for _, sf := range themeSurfaces {
+		t.Run(sf.name, func(t *testing.T) {
+			m := sf.build(t)
+			before := m.View().Content
+			m.applyStyles(styles.New(styles.SolarizedDarkTheme()))
+			after := m.View().Content
+
+			if before == after {
+				t.Error("the surface did not repaint at all")
+			}
+			if stripANSI(before) != stripANSI(after) {
+				t.Errorf("a restyle changed the rendered text, not just its colors:\nbefore:\n%s\nafter:\n%s",
+					stripANSI(before), stripANSI(after))
+			}
+			if got := m.styles.Theme.Name; got != "solarized-dark" {
+				t.Errorf("the shell's own styles were not repointed: Theme.Name = %q", got)
+			}
+		})
+	}
+}
+
+// TestApplyStylesKeepsComponentState guards the "colors only" promise where it is
+// easiest to break — the components whose SetStyles has to re-derive something and so
+// does more than assign a field. A reader who picks a theme mid-task must not lose
+// their filter, their sort, their place in a list or their log buffer.
+func TestApplyStylesKeepsComponentState(t *testing.T) {
+	m := browsingModel(t, &fakeWatcher{}) // rows + a filter + a sort
+	m.nsPicker.SetItems([]string{"default", "kube-system", "web"})
+	m.nsPicker.Show()
+	m.nsPicker, _ = m.nsPicker.Update(keymap.ActionDown) // move off the first row
+	cursor, _ := m.nsPicker.Selected()
+	m.logsView.Show()
+	m.logsView.Append("", "GET /healthz 200")
+	m.logsView.Append("", "POST /api/v1 500")
+	wantCol, wantDesc := m.table.SortColumn()
+
+	m.applyStyles(styles.New(styles.MonokaiTheme()))
+
+	if got := m.table.Filter(); got != "api" {
+		t.Errorf("the table's filter did not survive the restyle: %q", got)
+	}
+	if col, desc := m.table.SortColumn(); col != wantCol || desc != wantDesc {
+		t.Errorf("the table's sort did not survive the restyle: col=%d desc=%v, want col=%d desc=%v",
+			col, desc, wantCol, wantDesc)
+	}
+	if got, _ := m.nsPicker.Selected(); got != cursor {
+		t.Errorf("the picker's cursor moved on restyle: %q, want %q", got, cursor)
+	}
+	if !m.nsPicker.Active() || !m.logsView.Active() {
+		t.Error("a restyle must not dismiss an open surface")
+	}
+	if m.logsView.Empty() || !m.logsView.Following() {
+		t.Error("the logs buffer and its follow state must survive a restyle")
 	}
 }
 

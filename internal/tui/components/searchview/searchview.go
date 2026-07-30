@@ -226,6 +226,20 @@ func New(s styles.Styles) Model {
 	}
 }
 
+// SetStyles repaints the view through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+//
+// Like the picker's, the list's delegate has to be replaced and not merely m.styles
+// assigned — the delegate draws every result row and its cursor bar. The hits, their
+// rank order, the query text and the fan-out counters are untouched, so a restyle
+// mid-search neither loses results nor re-runs the sweep. The row labels need no
+// rebuild either: they are plain aligned text the delegate styles at draw time.
+func (m *Model) SetStyles(s styles.Styles) {
+	m.styles = s
+	m.list.SetDelegate(itemDelegate{styles: s})
+}
+
 // Kind returns the view's kind id (always "search").
 func (m Model) Kind() string { return kind }
 

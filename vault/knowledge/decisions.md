@@ -4380,3 +4380,37 @@ contradict:
    palette, logs, and takes the single startup-toast slot only if a migration
    report and a fallen-back menu file have not (principle 3, D169 pt 2). Empty —
    an absent key — is the default and is silent: the common case says nothing.
+
+## D171 — A live restyle is a fan-out every component must join (2026-07-30, M4-12b-1)
+
+D170 fixed the palette at construction, which is enough for a `theme:` config field
+and not enough for a theme picked from inside kubecom: the components are already
+built. `Model.applyStyles` (`internal/tui/theme.go`) repoints the shell and all
+sixteen component fields at a new `styles.Styles`, and each component now has a
+`SetStyles`. What a future leg must not contradict:
+
+1. **A component that caches a `Styles` exposes `SetStyles`, and `applyStyles` calls
+   it.** These two are one rule, and the second half is the one that rots: a new
+   component field added to `Model` must be added to `applyStyles` **in the same
+   leg**. Skipping it is not a compile error and not visibly wrong until someone has
+   that particular overlay open while picking a theme, which is why the guard is
+   `TestApplyStylesMatchesLaunchTimeTheme` — a restyled shell must render
+   byte-identically to one built with the theme, per surface. Adding a component
+   without adding a surface there leaves the same hole one level up.
+2. **`SetStyles` re-derives; it does not merely assign.** If `New` reads its `Styles`
+   argument for anything beyond storing it, `SetStyles` must redo that read, because
+   the derived copy is what actually draws. Three exist today — the status bar copies
+   the accent into the spinner bubble, the picker and search view hand a `Styles` copy
+   to a `list` delegate, and the logs view stores *painted* lines (LOGS-05b), so it
+   re-renders. A plain field assignment in any of them is a silent half-restyle:
+   `m.styles.Theme.Name` reports the new theme while the screen keeps the old colors.
+3. **A restyle is colors only, never a reset.** No `SetStyles` may clear or rebuild
+   state: a typed filter, a table's rows/sort/selection, an open picker's cursor, the
+   logs buffer and scroll position all survive it. This is what makes `applyStyles`
+   safe to call unconditionally — from any overlay, mid-stream, mid-search — so the
+   caller never has to reason about *when* a theme may be picked.
+4. **The two theming paths stay separate.** `WithTheme` runs before construction
+   (D170 pt 2) and feeds constructors; `applyStyles` runs after and repaints. Neither
+   is expressible as the other — an `Option` cannot restyle a component that does not
+   exist yet, and a fan-out cannot reach a constructor — so they are not to be
+   collapsed into one mechanism, and both are load-bearing.

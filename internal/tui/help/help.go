@@ -49,6 +49,14 @@ func New(s styles.Styles, km *keymap.Keymap) Model {
 	return Model{help: h, keys: km.HelpMap(), styles: s}
 }
 
+// SetStyles repaints the overlay's frame and title through s, replacing the palette
+// it was built with (M4-12b-1). A component caches the Styles it is handed, so a
+// theme chosen at runtime reaches an already-constructed model only through this
+// (D170 pt 2). The embedded bubbles/help renderer keeps its own styling, which this
+// package has never themed — the bindings it lays out are unaffected, as are the
+// keymap, the visibility and the recorded size.
+func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
 // Visible reports whether the overlay is currently shown.
 func (m Model) Visible() bool { return m.visible }
 

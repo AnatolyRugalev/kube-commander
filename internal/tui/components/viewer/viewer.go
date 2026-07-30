@@ -78,6 +78,13 @@ func New(s styles.Styles, kind string) Model {
 	}
 }
 
+// SetStyles repaints the viewer through s, replacing the palette it was built with
+// (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
+// runtime reaches an already-constructed model only through this (D170 pt 2).
+// Colors only: the content, the title and the scroll position are untouched — the
+// viewport holds the text unstyled, so nothing has to be re-rendered into it.
+func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
 // Kind returns the viewer's kind id.
 func (m Model) Kind() string { return m.kind }
 

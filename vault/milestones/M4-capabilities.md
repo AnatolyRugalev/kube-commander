@@ -11,8 +11,9 @@ switcher (M4-01…05, the hard part: a switch is a teardown, not a pointer swap)
 column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
 (M4-09/10) and themes (M4-11/12). The switcher, coloring, drill-down and metrics lines
 are done, and the themes line is one slice from finished: M4-11 landed the built-in
-palettes and M4-12a made `theme:` in `config.yaml` take effect, leaving M4-12b (the
-in-UI picker, the live restyle and the write-back). Per-leg history: `vault/journal/`._
+palettes, M4-12a made `theme:` in `config.yaml` take effect and M4-12b-1 the live
+restyle a runtime pick needs, leaving M4-12b-2 (the picker and the write-back). Per-leg
+history: `vault/journal/`._
 
 ## Goal
 
@@ -32,9 +33,10 @@ The capabilities the original lacked, now natural on the new architecture.
   (M4-10/D168) both landed, so this bullet is closed.
 - **Theme selection**; ship a couple of solid built-ins (port monokai/solarized) — the
   built-ins and the registry over them landed as M4-11/D169 (`monokai`,
-  `solarized-dark`) and the `theme:` config field that selects one at launch as
-  M4-12a/D170; picking one *inside* kubecom and persisting it is M4-12b, the bullet's
-  remaining half.
+  `solarized-dark`), the `theme:` config field that selects one at launch as
+  M4-12a/D170, and the live restyle a runtime pick needs — `SetStyles` on every
+  component behind one `applyStyles` fan-out — as M4-12b-1/D171; the picker over it
+  and the write-back are M4-12b-2, the bullet's remaining half.
 - **Cluster search** — cross-object query across kinds (Kind · ns · name), one-shot +
   curated-scope by default, drill into a hit (feedback-driven, D131; kube primitive
   `kube.Search` landed as SEARCH-01, TUI slices SEARCH-02…04 on the board).
@@ -97,10 +99,14 @@ The capabilities the original lacked, now natural on the new architecture.
       to the default plus a single startup notice (`TestWithThemeReachesTheComponents`
       in `internal/tui/theme_test.go` is the load-bearing one — a themed shell renders
       differently while its glyphs stay identical; `TestResolveTheme*` in
-      `cmd/kubecom/run_test.go` cover the resolution and its degrade). Still unticked
-      because the criterion also claims *persisted*, which means chosen from inside
-      kubecom and written back: the picker, the live restyle and `Config.SaveFile` are
-      M4-12b. A hand-edited config file is configuration, not persistence.)
+      `cmd/kubecom/run_test.go` cover the resolution and its degrade). Since M4-12b-1/D171
+      a theme can also be swapped on an *already-built* shell — `Model.applyStyles` fans
+      a `styles.Styles` out to every component, guarded by
+      `TestApplyStylesMatchesLaunchTimeTheme` (a restyled shell must render byte-identically
+      to one built with that theme, per surface, so a component left behind is a failure
+      rather than a shrug). Still unticked because the criterion claims *persisted*, which
+      means chosen from inside kubecom and written back: the picker and `Config.SaveFile`
+      are M4-12b-2. A hand-edited config file is configuration, not persistence.)
 - [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Matching gained a server-side label selector (`-l app=web`, SEARCH-04c-1/D151), score ranking (SEARCH-04c-2a/D152) and a subsequence fallback ranked below it (SEARCH-04c-2b/D153), which closes the SEARCH line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
 
 ## Depends on
