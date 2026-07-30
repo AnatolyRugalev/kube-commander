@@ -7,7 +7,8 @@ _Last updated: 2026-07-30 — M5-01b settled the DoD's YAML-viewer question from
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
+      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
 
 ## Blocked
 
@@ -273,7 +274,7 @@ so a leg can likely obtain it, and if it cannot, the gate for a config-only slic
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 - [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
-      status: todo | owner: — | added: 2026-07-30
+      status: in-progress (see In Progress) | owner: claude-opus | added: 2026-07-30
       notes: A **stale claim in shipped code**, found by M5-PLAN. `migrationNotes`
       (`internal/config/migrate.go`) tells the user "legacy theme configuration was
       dropped: kubecom v1 uses a single fixed theme and has no runtime theming" — true
