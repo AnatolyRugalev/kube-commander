@@ -7,7 +7,21 @@ _Last updated: 2026-07-30 — M5-01a landed `logs.previous` (`ctrl+p`), so the l
 
 ## In Progress
 
-_(none)_
+- [ ] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-30 | claimed: 2026-07-30
+      notes: Found by the M5-01 DoD audit; a **maintainer decision**, not a defect (D174
+      pt 3). The DoD promises "In-TUI logs, describe, and YAML viewers"; M3-15c/D135
+      deliberately retired the standalone read-only YAML viewer and unified YAML into the
+      `$EDITOR` round-trip, so viewing an object's YAML now suspends the TUI. Both readings
+      are defensible — one surface for read+write is simpler, but "let me glance at the
+      YAML" is a read gesture that arguably should not leave the TUI — and the audit
+      deliberately did not tick the box or reword the bullet. Two ways to close it: re-add a
+      read-only YAML view (cheap now: the `viewer` component and the `YAMLGetter` seam both
+      still exist, only `res.yaml`/`ActionYAML` were removed — see the M3-15c board entry
+      for the exact list), or amend the DoD bullet to say YAML rides the editor and
+      supersede D135's wording. Needs no code either way if the answer is the second.
+      Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
+      closed.
 
 ## Blocked
 
@@ -272,21 +286,6 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-- [ ] **M5-01b** Settle the DoD's "in-TUI YAML viewer" against D135
-      status: todo | owner: — | added: 2026-07-30
-      notes: Found by the M5-01 DoD audit; a **maintainer decision**, not a defect (D174
-      pt 3). The DoD promises "In-TUI logs, describe, and YAML viewers"; M3-15c/D135
-      deliberately retired the standalone read-only YAML viewer and unified YAML into the
-      `$EDITOR` round-trip, so viewing an object's YAML now suspends the TUI. Both readings
-      are defensible — one surface for read+write is simpler, but "let me glance at the
-      YAML" is a read gesture that arguably should not leave the TUI — and the audit
-      deliberately did not tick the box or reword the bullet. Two ways to close it: re-add a
-      read-only YAML view (cheap now: the `viewer` component and the `YAMLGetter` seam both
-      still exist, only `res.yaml`/`ActionYAML` were removed — see the M3-15c board entry
-      for the exact list), or amend the DoD bullet to say YAML rides the editor and
-      supersede D135's wording. Needs no code either way if the answer is the second.
-      Cheap to do at any point; it gates the M5-10 pre-flight, since that pass wants the DoD
-      closed.
 - [ ] **M5-04** Migration: carry the legacy `currentTheme` onto the new `theme:` field
       status: todo | owner: — | added: 2026-07-30
       notes: A **stale claim in shipped code**, found by M5-PLAN. `migrationNotes`
