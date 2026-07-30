@@ -3,11 +3,13 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-29 — M4-12a wired the `theme:` config field through to the rendered shell (D170), leaving M4-12b (picker + live restyle + write-back) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M4-12b was split on pickup into the live-restyle mechanism (M4-12b-1, in progress) and the picker + write-back on top of it (M4-12b-2), which is now the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **M4-12b-1** Live restyle mechanism — `SetStyles` on every component + the shell fan-out
+      status: in-progress | owner: claude-opus | added: 2026-07-30
+      notes: First half of M4-12b (split on pickup). A `SetStyles(styles.Styles)` on each of the eleven components that cache a `Styles` at construction (help, menu, table, statusbar, hintbar, picker ×6, viewer, modal, welcome, searchview, logsview) plus a `Model.applyStyles` that fans one out across all sixteen component fields, so a theme chosen at runtime repaints an already-built shell. Must **re-derive**, not just assign, where construction derived from the palette: the statusbar's spinner style, the picker's and searchview's list delegates, and the logsview's painted line cache (LOGS-05b). Nothing calls it yet — the action, the picker and the write-back are M4-12b-2.
 
 ## Blocked
 
@@ -242,9 +244,18 @@ theme) and **M4-12b** (the picker, the write-back and therefore the live restyle
 `SetStyles` on every component that caches a `styles.Styles` at construction). The
 criterion claims selection *and* persistence, so it stays unticked until 12b.
 
-- [ ] **M4-12b** Theme picker + persistence (live restyle)
-      status: todo | owner: — | added: 2026-07-29
-      notes: Depends on M4-12a. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), applying the pick **live** — which needs a `SetStyles` on every component that caches a `styles.Styles` at construction (table, menu, statusbar, hintbar, picker, viewer, modal, welcome, searchview, logsview, help) — and writing the name back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. Note the write-back must not clobber a hand-edited config: load, set `Theme`, save. Ticks the themes exit criterion and closes M4.
+**M4-12b was split on pickup**, as its own notes and the M4-12a journal both predicted,
+into **M4-12b-1** (the live restyle: `SetStyles` across every component, plus the shell
+fan-out that applies one) and **M4-12b-2** (the `theme.switch` action, the picker over
+`styles.Themes()` and the write-back to `config.yaml`) — the D52 bottom-up rhythm the
+whole M4 switcher line followed: the mechanism lands and is tested before any gesture can
+reach it, exactly as M4-04a preceded M4-04b. Restyling is the larger and riskier half:
+eleven components cache a `styles.Styles` and three of them *derive* from it at
+construction, so a plain field assignment is a silent half-restyle.
+
+- [ ] **M4-12b-2** Theme picker + write-back (the gesture on top of 12b-1)
+      status: todo | owner: — | added: 2026-07-30
+      notes: Depends on M4-12b-1. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), the pick calling the 12b-1 fan-out (`applyStyles`) for the live repaint, and the name written back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. The write-back must not clobber a hand-edited config: `LoadFile`, set `Theme`, save — never a fresh `&Config{Theme: name}` (that would delete the user's `keys:` section). Any save also loses the file's comments, which is worth a README line. Ticks the themes exit criterion and closes M4.
 
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
