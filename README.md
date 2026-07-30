@@ -270,8 +270,14 @@ keys:
 
 The name is matched ignoring case and surrounding space, but it is never guessed
 at: an unknown name launches on the default theme and shows a brief startup notice
-listing the ones that exist. (Choosing a theme from inside the UI is coming; today
-it is this file.)
+listing the ones that exist.
+
+You can also switch theme from inside kubecom: `T` opens a picker over the built-in
+palettes (the one you are rendering in is marked `*`), the pick repaints immediately,
+and the name is written back to `config.yaml` so the next launch opens on it. The
+write-back keeps the rest of the file's settings, but it rewrites the file — **YAML
+comments and hand-crafted formatting are lost** — so if you keep comments in your
+config, set `theme:` by hand instead.
 
 #### Per-context menu
 

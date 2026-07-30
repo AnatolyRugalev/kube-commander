@@ -1,6 +1,6 @@
 # M4 — New Capabilities
 
-**Status:** `in-progress`
+**Status:** `feature-complete` (2026-07-30) — every M4 slice is landed and every exit criterion is ticked except the context switch, which awaits its two-cluster dogfood (D79).
 **Phase:** REWRITE_PLAN Phase 4
 
 _Scope expanded into ordered, leg-sized Backlog slices **M4-01 … M4-12** on the
@@ -10,10 +10,11 @@ SEARCH line) and sort by column (landed in M2) — so the slices cover the conte
 switcher (M4-01…05, the hard part: a switch is a teardown, not a pointer swap),
 column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
 (M4-09/10) and themes (M4-11/12). The switcher, coloring, drill-down and metrics lines
-are done, and the themes line is one slice from finished: M4-11 landed the built-in
-palettes, M4-12a made `theme:` in `config.yaml` take effect and M4-12b-1 the live
-restyle a runtime pick needs, leaving M4-12b-2 (the picker and the write-back). Per-leg
-history: `vault/journal/`._
+are done, and so is the themes line: M4-11 landed the built-in palettes, M4-12a made
+`theme:` in `config.yaml` take effect, M4-12b-1 the live restyle a runtime pick needs
+and M4-12b-2 the picker and the write-back — every slice is landed and every exit
+criterion but the context-switch one (which waits on a two-cluster dogfood, D79) is
+ticked. Per-leg history: `vault/journal/`._
 
 ## Goal
 
@@ -35,8 +36,9 @@ The capabilities the original lacked, now natural on the new architecture.
   built-ins and the registry over them landed as M4-11/D169 (`monokai`,
   `solarized-dark`), the `theme:` config field that selects one at launch as
   M4-12a/D170, and the live restyle a runtime pick needs — `SetStyles` on every
-  component behind one `applyStyles` fan-out — as M4-12b-1/D171; the picker over it
-  and the write-back are M4-12b-2, the bullet's remaining half.
+  component behind one `applyStyles` fan-out — as M4-12b-1/D171; the picker over it and
+  the write-back to `config.yaml` as M4-12b-2/D172, which closes the bullet: `T` selects
+  a theme in-UI and the choice survives a restart.
 - **Cluster search** — cross-object query across kinds (Kind · ns · name), one-shot +
   curated-scope by default, drill into a hit (feedback-driven, D131; kube primitive
   `kube.Search` landed as SEARCH-01, TUI slices SEARCH-02…04 on the board).
@@ -91,22 +93,27 @@ The capabilities the original lacked, now natural on the new architecture.
       `TestUsageSortsNumerically`. Ticked on hermetic evidence: what no fake shows is a
       real metrics-server's numbers, and reading those is a taste question the next
       dogfood pass answers for free.)
-- [ ] At least two themes selectable and persisted. (Three built-in palettes exist
-      behind one registry since M4-11/D169 — `default`, `monokai`, `solarized-dark`,
-      each complete and rendering distinctly — and since M4-12a/D170 one of them is
-      *selectable*: `theme:` in `config.yaml` is resolved by the launcher through
-      `styles.ByName` and built into every component, with an unknown name degrading
-      to the default plus a single startup notice (`TestWithThemeReachesTheComponents`
-      in `internal/tui/theme_test.go` is the load-bearing one — a themed shell renders
-      differently while its glyphs stay identical; `TestResolveTheme*` in
-      `cmd/kubecom/run_test.go` cover the resolution and its degrade). Since M4-12b-1/D171
-      a theme can also be swapped on an *already-built* shell — `Model.applyStyles` fans
-      a `styles.Styles` out to every component, guarded by
-      `TestApplyStylesMatchesLaunchTimeTheme` (a restyled shell must render byte-identically
-      to one built with that theme, per surface, so a component left behind is a failure
-      rather than a shrug). Still unticked because the criterion claims *persisted*, which
-      means chosen from inside kubecom and written back: the picker and `Config.SaveFile`
-      are M4-12b-2. A hand-edited config file is configuration, not persistence.)
+- [x] At least two themes selectable and persisted. (met since M4-12b-2/D172, over
+      M4-11/D169's three built-in palettes — `default`, `monokai`, `solarized-dark`,
+      each complete and rendering distinctly. `T` (`theme.switch`) opens a picker over
+      `styles.Themes()` with the rendering theme marked, the pick repaints the running
+      shell through M4-12b-1/D171's `applyStyles` fan-out, and the name is written back
+      to `config.yaml` through a `ThemePersister` the launcher implements as
+      load-modify-save, so the next launch resolves it via M4-12a/D170's `theme:` field.
+      Evidence in `internal/tui/theme_test.go`:
+      `TestThemeKeyOpensThePickerOverTheRegistry` (the real key path, no async seam),
+      `TestThemePickerMarksTheRenderingTheme` (the marker follows the shell, D158's rule),
+      `TestThemePickRepaintsAndPersists` (the headline — the picked shell renders
+      byte-identically to one *built* with that theme, and the write runs off the update
+      loop), `TestThemePickOfTheRenderingThemeIsANoOp` (no write for a no-op pick),
+      `TestThemeWriteBackFailureKeepsTheTheme` and
+      `TestThemeSwitchWithoutAPersisterStillRepaints` (the degrade paths),
+      `TestThemeSwitchSurvivesAContextSwitch`; plus `TestPersistTheme*` in
+      `cmd/kubecom/run_test.go` for the write itself — the user's `keys:` section
+      survives, a missing config is created, and an unparseable one fails the write
+      rather than being clobbered. Ticked on hermetic evidence: what a fake cannot show
+      is whether the palettes *look* good in a real terminal, which is taste, not
+      behavior — the standing dogfood passes answer it for free.)
 - [x] Cluster search returns matching objects across kinds and drills into the selected hit. (met since SEARCH-02b/D141 — `ctrl+s`, streamed cross-kind hits, `enter` switches the browse table to the hit; scope is now widenable on both axes, `search.allKinds`/D149 and `search.allNamespaces`/D150. Matching gained a server-side label selector (`-l app=web`, SEARCH-04c-1/D151), score ranking (SEARCH-04c-2a/D152) and a subsequence fallback ranked below it (SEARCH-04c-2b/D153), which closes the SEARCH line. Ticked here rather than reopening M4: the capability was pulled forward by feedback while M3 is the active milestone.)
 
 ## Depends on

@@ -332,3 +332,75 @@ func TestStatePersisterRoundTrip(t *testing.T) {
 		t.Fatalf("reloaded LastNamespace = %q, want monitoring", reloaded.LastNamespace)
 	}
 }
+
+// TestPersistThemeKeepsTheRestOfTheConfig is the leg's real risk (M4-12b-2): SaveFile
+// marshals the whole struct, so a write-back that does not load the file first deletes
+// everything else in it — a user's entire `keys:` section for the sake of one theme
+// name. The write must be load-modify-save.
+func TestPersistThemeKeepsTheRestOfTheConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("keys:\n  app.quit: [x]\ntheme: monokai\n"), 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	p := &configThemePersister{path: path}
+	if err := p.PersistTheme("solarized-dark"); err != nil {
+		t.Fatalf("PersistTheme: %v", err)
+	}
+	cfg, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("re-read config: %v", err)
+	}
+	if cfg.Theme != "solarized-dark" {
+		t.Errorf("theme = %q, want solarized-dark", cfg.Theme)
+	}
+	if got := cfg.Keys["app.quit"]; len(got) != 1 || got[0] != "x" {
+		t.Errorf("the write-back dropped the user's keys section: %v", cfg.Keys)
+	}
+}
+
+// TestPersistThemeCreatesAMissingConfig: the common case is a user with no config file
+// at all (kubecom runs entirely on defaults), so the first theme pick has to *create*
+// it rather than fail — LoadFile treats a missing file as the zero config and SaveFile
+// creates the directory.
+func TestPersistThemeCreatesAMissingConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "config.yaml")
+	p := &configThemePersister{path: path}
+	if err := p.PersistTheme("monokai"); err != nil {
+		t.Fatalf("PersistTheme: %v", err)
+	}
+	cfg, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatalf("re-read config: %v", err)
+	}
+	if cfg.Theme != "monokai" {
+		t.Errorf("theme = %q, want monokai", cfg.Theme)
+	}
+	// It round-trips through resolveTheme, which is the whole point of writing it.
+	theme, err := resolveTheme(cfg.Theme)
+	if err != nil || theme.Name != "monokai" {
+		t.Errorf("resolveTheme(persisted) = %q, %v; want monokai, nil", theme.Name, err)
+	}
+}
+
+// TestPersistThemeRefusesToClobberAnUnparseableConfig: if the file became invalid
+// while kubecom was running, writing would replace it with defaults — losing a
+// hand-written keymap to save a color choice. The write fails instead; the shell
+// toasts it and keeps the theme for the session (principle 3).
+func TestPersistThemeRefusesToClobberAnUnparseableConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	body := "keys: [oops\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	p := &configThemePersister{path: path}
+	if err := p.PersistTheme("monokai"); err == nil {
+		t.Error("an unparseable config should fail the write rather than be overwritten")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(data) != body {
+		t.Errorf("the config was rewritten: %q", string(data))
+	}
+}

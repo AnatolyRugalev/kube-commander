@@ -53,6 +53,12 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `ctx.switch` | `C` | Switch cluster context |
 
+## theme
+
+| Action | Keys | Description |
+|--------|------|-------------|
+| `theme.switch` | `T` | Switch color theme |
+
 ## mouse
 
 | Action | Keys | Description |

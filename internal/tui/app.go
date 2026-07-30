@@ -566,6 +566,11 @@ type Model struct {
 	// switchContext. Unlike every other picker here it is not seeded from the
 	// cluster, so it stays usable when the current cluster is unreachable.
 	ctxPicker picker.Model
+	// themePicker offers the built-in color themes as choices (M4-12b-2); its
+	// selection is resolved back to a theme name through themeByLabel and applied with
+	// applyStyles. It is the only picker seeded from neither the cluster nor a file —
+	// the palettes are compiled in — so it works everywhere, always.
+	themePicker picker.Model
 	// portPicker offers a port-forward target's declared ports as choices
 	// (FB-pf-port-picker-b); its selection is stashed against mutateRes/mutateRef.
 	portPicker picker.Model
@@ -607,6 +612,14 @@ type Model struct {
 	// so neither is part of the Cluster bundle or of what a switch tears down.
 	ctxLister  ContextLister
 	ctxByLabel map[string]string
+
+	// themeByLabel maps each open theme-picker row back to its theme name (the
+	// resByLabel/ctxByLabel pattern again, D65). themePersister writes a picked theme
+	// back to config.yaml so the next launch opens on it (nil → the choice applies for
+	// the session only, M4-12b-2). Neither is cluster- or context-scoped: a theme is a
+	// property of the reader's terminal, so a context switch leaves both alone.
+	themeByLabel   map[string]string
+	themePersister ThemePersister
 
 	// ctxState re-resolves the per-context state (menu extras, last namespace, the
 	// state-file persister) for the context a switch lands on (M4-05). Like the two
@@ -961,6 +974,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.ctrPicker = picker.New(s, containerPickerKind)
 	m.portPicker = picker.New(s, portPickerKind)
 	m.ctxPicker = picker.New(s, contextPickerKind)
+	m.themePicker = picker.New(s, themePickerKind)
 	m.viewer = viewer.New(s, viewerKindDescribe)
 	m.modal = modal.New(s)
 	m.welcome = welcome.New(s)
@@ -971,6 +985,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
 	m.ctxPicker.SetTitle("Switch context")
+	m.themePicker.SetTitle("Switch theme")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
@@ -1162,6 +1177,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handlePortSelected(msg)
 		case contextPickerKind:
 			return m.handleContextSelected(msg)
+		case themePickerKind:
+			return m.handleThemeSelected(msg)
 		default:
 			return m.handleNamespaceSelected(msg)
 		}
@@ -1180,6 +1197,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case contextPickerKind:
 			m.ctxPicker.Hide()
 			m.ctxByLabel = nil
+		case themePickerKind:
+			m.themePicker.Hide()
+			m.themeByLabel = nil
 		default:
 			m.nsPicker.Hide()
 		}
@@ -1614,6 +1634,10 @@ func (m *Model) resetCluster() {
 	// so this is about the state, not the surface.)
 	m.ctxPicker.Hide()
 	m.ctxByLabel = nil
+	// The theme picker is deliberately *not* dismissed: alone among the pickers it
+	// shows neither cluster nor context data (the palettes are compiled in, M4-12b-2),
+	// so a switch says nothing about it and closing it would yank an overlay the
+	// reader opened for an unrelated reason.
 	m.forwardsPanel = false
 	m.forwardsSel = 0
 
@@ -1792,6 +1816,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.portPicker
 	case m.ctxPicker.Active():
 		return &m.ctxPicker
+	case m.themePicker.Active():
+		return &m.themePicker
 	}
 	return nil
 }
@@ -3596,7 +3622,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.themePicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3769,6 +3795,7 @@ func (m *Model) resize() {
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
 	m.ctxPicker.SetSize(m.width, bodyH)
+	m.themePicker.SetSize(m.width, bodyH)
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
@@ -3915,6 +3942,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openNamespacePicker()
 	case keymap.ActionContext:
 		return m.openContextPicker()
+	case keymap.ActionTheme:
+		return m.openThemePicker()
 	case keymap.ActionResources:
 		return m.openResourcePicker()
 	case keymap.ActionForwards:
@@ -4129,6 +4158,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
 	case m.ctxPicker.Active():
 		body = overlayCenter(body, m.ctxPicker.View(), m.width, m.bodyHeight())
+	case m.themePicker.Active():
+		body = overlayCenter(body, m.themePicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	case m.forwardsPanel:

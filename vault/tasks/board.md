@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-30 — M4-12b-1 landed the live restyle every component now joins (D171), leaving M4-12b-2 (the theme picker + write-back) as the last M4 item. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-30 — M4-12b-2 landed the theme picker and its config write-back (D172), which closes M4; the next milestone (M5, release) needs expanding into leg-sized slices. Five human-tasks open: one **blocking** (the CRD error text, blocking CRD-01) and four advisory dogfoods. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M4-12b-2** Theme picker + write-back (the gesture on top of 12b-1)
-      status: in-progress | owner: claude-opus | added: 2026-07-30 | claimed: 2026-07-30
-      notes: Depends on M4-12b-1. A `theme.switch` action opening the M2-08c picker over `styles.Themes()` (marking the active one, as the context picker marks the current context, D158), the pick calling the 12b-1 fan-out (`applyStyles`) for the live repaint, and the name written back to `config.yaml` through `Config.SaveFile` (M2-11a/D89) so the next launch opens on it. The write-back must not clobber a hand-edited config: `LoadFile`, set `Theme`, save — never a fresh `&Config{Theme: name}` (that would delete the user's `keys:` section). Any save also loses the file's comments, which is worth a README line. Ticks the themes exit criterion and closes M4.
+_(none)_
 
 ## Blocked
 
@@ -253,11 +251,15 @@ reach it, exactly as M4-04a preceded M4-04b. Restyling is the larger and riskier
 eleven components cache a `styles.Styles` and three of them *derive* from it at
 construction, so a plain field assignment is a silent half-restyle.
 
-_(none — the last M4 item, M4-12b-2, is In Progress above.)_
+_(none — M4 is **feature-complete** (2026-07-30): every slice M4-01…M4-12b-2 is landed
+and every exit criterion in [`../milestones/M4-capabilities.md`](../milestones/M4-capabilities.md)
+is ticked but the context switch, which waits on its two-cluster dogfood human-task (D79).)_
 
 _Remaining M5 items to be expanded when that milestone opens. See the milestone file for scope._
 
 ## Done
+
+- [x] **M4-12b-2** Theme picker + write-back — `T` picks a theme, `applyStyles` repaints it live and the name is written back to `config.yaml` load-modify-save; closes M4 — done 2026-07-30 (D172)
 
 - [x] **M4-12b-1** Live restyle mechanism — `SetStyles` on all eleven components plus the `applyStyles` fan-out; three re-derive rather than assign, and nothing calls it yet — done 2026-07-30 (D171)
 

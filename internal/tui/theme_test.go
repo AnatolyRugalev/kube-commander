@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -127,6 +130,16 @@ var themeSurfaces = []struct {
 		m.searchView.AppendHit(searchHit("Service", "services", "web", "api"))
 		return m
 	}},
+	{"theme picker overlay", func(t *testing.T, opts ...Option) Model {
+		// Seeded with fixed rows rather than through openThemePicker: the marker names
+		// the theme the shell is rendering in, so the real opener would put it on a
+		// different row in the launch-themed and restyled builds and the comparison
+		// would fail on glyphs instead of colors.
+		m := sizedWith(t, opts...)
+		m.themePicker.SetItems([]string{"* default", "  monokai", "  solarized-dark"})
+		m.themePicker.Show()
+		return m
+	}},
 	{"logs view", func(t *testing.T, opts ...Option) Model {
 		m := sizedWith(t, opts...)
 		m.logsView.Show()
@@ -243,4 +256,292 @@ func stripANSI(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// fakeThemePersister is a hermetic ThemePersister: it records the names it was asked
+// to write and can be made to fail. The real one (cmd/kubecom's configThemePersister)
+// rewrites config.yaml, so the seam is what keeps the write-back testable without
+// touching the user's config (D18).
+type fakeThemePersister struct {
+	names []string
+	err   error
+}
+
+func (f *fakeThemePersister) PersistTheme(name string) error {
+	f.names = append(f.names, name)
+	return f.err
+}
+
+// themeLabelFor reads the open picker's row for a theme back out through the label
+// map, which is the only thing a pick can resolve through — the picker's SelectedMsg
+// carries a label, not a theme (D65).
+func themeLabelFor(t *testing.T, m Model, theme string) string {
+	t.Helper()
+	for label, name := range m.themeByLabel {
+		if name == theme {
+			return label
+		}
+	}
+	t.Fatalf("no picker row maps to theme %q (rows: %v)", theme, m.themeByLabel)
+	return ""
+}
+
+// themeCmdMsgs runs a theme-pick batch and returns the messages its sub-commands
+// produced *quickly*. The batch also carries the notice's auto-clear tick, which
+// blocks for errorDisplay, so each sub-command runs with a short timeout and only the
+// instant ones (the write-back) are collected — the copiedClipboard precedent.
+func themeCmdMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	var out []tea.Msg
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func(c tea.Cmd) { ch <- c() }(c)
+		select {
+		case m := <-ch:
+			if m != nil { // a successful write-back reports nothing
+				out = append(out, m)
+			}
+		case <-time.After(200 * time.Millisecond):
+			// the blocking auto-clear tick — skip it and try the next sub-command.
+		}
+	}
+	return out
+}
+
+// TestThemeKeyOpensThePickerOverTheRegistry drives the gesture through the real key
+// path (D11 — the binding is registry-resolved, never matched raw): `T` opens the
+// picker with one row per built-in, seeded synchronously since the palettes are
+// compiled in (no seam, no Cmd, nothing to wait for), and composited over the browse
+// body like every other overlay (D95).
+func TestThemeKeyOpensThePickerOverTheRegistry(t *testing.T) {
+	m := sizedWith(t)
+
+	m, cmd := press(t, m, tea.Key{Code: 'T', Text: "T"})
+	if !m.themePicker.Active() {
+		t.Fatal("theme.switch should open the theme picker")
+	}
+	if cmd != nil {
+		t.Error("the theme picker needs no async load: the registry is compiled in")
+	}
+	if got, want := len(m.themeByLabel), len(styles.Themes()); got != want {
+		t.Errorf("picker rows = %d, want %d (%v)", got, want, m.themeByLabel)
+	}
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, "Switch theme") {
+		t.Errorf("the open picker should be composited over the browse body:\n%s", view)
+	}
+	for _, name := range styles.ThemeNames() {
+		if !strings.Contains(view, name) {
+			t.Errorf("theme %q missing from the picker:\n%s", name, view)
+		}
+	}
+}
+
+// TestThemePickerMarksTheRenderingTheme is the D158 rule applied to themes: the marker
+// names the palette on screen *now*, not the one the shell launched with, so a reader
+// who has already switched once sees where they are. Getting it wrong is invisible at
+// launch (they agree) and wrong from the first pick onward.
+func TestThemePickerMarksTheRenderingTheme(t *testing.T) {
+	m := sizedWith(t, WithTheme(styles.MonokaiTheme()))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+
+	if got := themeLabelFor(t, m, "monokai"); !strings.HasPrefix(got, "* ") {
+		t.Errorf("the rendering theme should be marked, got %q", got)
+	}
+	if got := themeLabelFor(t, m, styles.DefaultTheme().Name); strings.HasPrefix(got, "* ") {
+		t.Errorf("only the rendering theme may be marked, got %q", got)
+	}
+
+	// After a switch the marker moves with the shell, not with the launch option.
+	next, _ = m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "solarized-dark")})
+	next, _ = next.(Model).openThemePicker()
+	m = next.(Model)
+	if got := themeLabelFor(t, m, "solarized-dark"); !strings.HasPrefix(got, "* ") {
+		t.Errorf("the marker did not follow the switch, got %q", got)
+	}
+}
+
+// TestThemePickRepaintsAndPersists is the headline invariant of M4-12b-2: a picked
+// theme reaches the screen through the M4-12b-1 fan-out *and* is written back, so the
+// next launch opens on it. The repaint is asserted against the launch-time path — the
+// picked shell must render exactly like one built with that theme (the M4-12b-1
+// oracle) — because "the view changed" cannot tell a complete restyle from a partial
+// one. The write runs off the update loop, so nothing is persisted until the Cmd does.
+func TestThemePickRepaintsAndPersists(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+
+	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = next.(Model)
+	if m.themePicker.Active() || m.themeByLabel != nil {
+		t.Error("the pick should close the picker and drop its label map")
+	}
+	if got := m.styles.Theme.Name; got != "monokai" {
+		t.Fatalf("the shell's styles were not repointed: %q", got)
+	}
+	if !m.status.HasNotice() {
+		t.Error("a switch should say which theme it landed on")
+	}
+	// The launch-time oracle (M4-12b-1): a shell built with the theme, carrying the
+	// same status-bar notice, must render byte-identically to the switched one. The
+	// notice has to be set on the reference too — it is the one thing the pick changes
+	// besides the palette, and comparing without it would only prove the bars differ.
+	want := sizedWith(t, WithTheme(styles.MonokaiTheme()))
+	want.surfaceNotice("theme monokai")
+	if got := m.View().Content; got != want.View().Content {
+		t.Errorf("a picked theme must render like one built at launch — a component was left behind:\ngot:\n%q\nwant:\n%q", got, want.View().Content)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("the config was written on the update loop: %v", fp.names)
+	}
+	if cmd == nil {
+		t.Fatal("the pick should issue the write-back (and its notice) as a Cmd")
+	}
+	if msgs := themeCmdMsgs(t, cmd); len(msgs) != 0 {
+		t.Errorf("a successful write-back should produce no message, got %v", msgs)
+	}
+	if len(fp.names) != 1 || fp.names[0] != "monokai" {
+		t.Errorf("PersistTheme calls = %v, want [monokai]", fp.names)
+	}
+}
+
+// TestThemePickOfTheRenderingThemeIsANoOp: the marked row is choosable rather than
+// hidden (D158's rule), so choosing it must cost nothing — no repaint, and above all
+// no config write, since a picker opened to *look* at the theme list would otherwise
+// rewrite the user's config on the way out.
+func TestThemePickOfTheRenderingThemeIsANoOp(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithTheme(styles.MonokaiTheme()), WithThemePersister(fp))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+	before := m.View().Content
+
+	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = next.(Model)
+	if cmd != nil {
+		t.Error("re-picking the rendering theme should issue no work")
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("re-picking the rendering theme wrote the config: %v", fp.names)
+	}
+	if m.themePicker.Active() {
+		t.Error("the pick should still close the picker")
+	}
+	if got := m.View().Content; got == before {
+		t.Error("the picker should have closed, so the view must differ") // sanity, not the point
+	}
+	if got := m.styles.Theme.Name; got != "monokai" {
+		t.Errorf("the theme changed: %q", got)
+	}
+}
+
+// TestThemeSwitchWithoutAPersisterStillRepaints: unlike every other picker in the
+// shell, this gesture is never inert. The seam only buys *persistence*, so a build
+// with no config file to write (or a launcher that wires none) still switches themes
+// for the session rather than doing nothing.
+func TestThemeSwitchWithoutAPersisterStillRepaints(t *testing.T) {
+	m := sizedWith(t)
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+
+	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = next.(Model)
+	if got := m.styles.Theme.Name; got != "monokai" {
+		t.Fatalf("the theme did not apply without a persister: %q", got)
+	}
+	if cmd == nil {
+		t.Error("the notice's auto-clear tick is still expected")
+	}
+	if !m.status.HasNotice() {
+		t.Error("the switch should still be announced")
+	}
+}
+
+// TestThemeWriteBackFailureKeepsTheTheme is the principle-3 half: an unwritable config
+// (read-only file, vanished directory) must not undo the repaint the reader already
+// sees. The failure is toasted — and logged, like every surfaced error (D159) — while
+// the session keeps the theme.
+func TestThemeWriteBackFailureKeepsTheTheme(t *testing.T) {
+	fp := &fakeThemePersister{err: errors.New("permission denied")}
+	m := sizedWith(t, WithThemePersister(fp))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+
+	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = next.(Model)
+	msgs := themeCmdMsgs(t, cmd)
+	if len(msgs) != 1 {
+		t.Fatalf("a failed write-back should produce one message, got %v", msgs)
+	}
+	e, ok := msgs[0].(ErrorMsg)
+	if !ok {
+		t.Fatalf("write-back failure produced %T, want ErrorMsg", msgs[0])
+	}
+	if !strings.Contains(e.Message(), "permission denied") {
+		t.Errorf("the toast should carry the write failure, got %q", e.Message())
+	}
+	next, _ = m.Update(e) // routed like the shell routes any ErrorMsg (D74)
+	m = next.(Model)
+	if !m.status.HasError() {
+		t.Error("a failed write-back should surface a toast")
+	}
+	if got := m.styles.Theme.Name; got != "monokai" {
+		t.Errorf("a failed write-back must not revert the applied theme: %q", got)
+	}
+}
+
+// TestThemePickerCancelClosesWithoutSwitching: esc out of the picker leaves both the
+// palette and the config alone (the picker's clear-then-close, D65/M2-08b).
+func TestThemePickerCancelClosesWithoutSwitching(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+
+	next, _ = m.Update(picker.CancelledMsg{Kind: themePickerKind})
+	m = next.(Model)
+	if m.themePicker.Active() || m.themeByLabel != nil {
+		t.Error("cancelling should close the picker and drop its label map")
+	}
+	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
+		t.Errorf("cancelling changed the theme: %q", got)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("cancelling wrote the config: %v", fp.names)
+	}
+}
+
+// TestThemeSwitchSurvivesAContextSwitch pins the one interaction between this leg and
+// the switcher line: a theme is a property of the reader's terminal, not of the
+// cluster, so the cluster teardown (M4-03/D156) must not repaint the shell back to the
+// launch palette — nor drop the persister that would record the next pick.
+func TestThemeSwitchSurvivesAContextSwitch(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	next, _ := m.openThemePicker()
+	m = next.(Model)
+	next, _ = m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = next.(Model)
+
+	m.resetCluster()
+	if got := m.styles.Theme.Name; got != "monokai" {
+		t.Errorf("a cluster teardown reverted the theme: %q", got)
+	}
+	if m.themePersister == nil {
+		t.Error("a cluster teardown dropped the theme persister")
+	}
 }

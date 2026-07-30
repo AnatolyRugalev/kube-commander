@@ -151,6 +151,9 @@ func runTUI(opts runOptions) error {
 		tui.WithVersion(version.Version),
 		tui.WithMenuExtras(menuExtras),
 		tui.WithTheme(theme),
+		// The write side of the same field: a theme picked in the UI is written back
+		// to this config file, so the next launch resolves it above (M4-12b-2).
+		tui.WithThemePersister(&configThemePersister{path: path}),
 		tui.WithStartupError(startupErr),
 		// The same file logger setupLogging installed as the slog default — the shell
 		// records every error it toasts there, so a failure the 5s toast outlived is
@@ -430,4 +433,35 @@ type statePersister struct {
 func (p *statePersister) PersistNamespace(ns string) error {
 	p.state.LastNamespace = ns
 	return p.state.SaveFile(p.path)
+}
+
+// configThemePersister is the launcher's theme-persistence seam (tui.ThemePersister):
+// it records a theme picked in the UI as the `theme:` field of the user's config, so
+// the next launch resolves it through resolveTheme (M4-12b-2). It is bound to the
+// resolved config path at construction, so the tui package stays storage-agnostic —
+// the same shape statePersister has for the namespace.
+type configThemePersister struct {
+	path string
+}
+
+// PersistTheme rewrites the config with theme: <name>, keeping every other setting.
+//
+// It **re-reads the file** rather than holding the config loaded at startup, for two
+// reasons: SaveFile marshals the whole struct, so anything not in the value written is
+// deleted — a stale in-memory copy would silently revert an edit made since launch,
+// and a fresh &config.Config{Theme: name} would delete the user's `keys:` section
+// outright. A load failure (the file became unparseable while kubecom ran) aborts the
+// write instead of overwriting it with defaults: losing a theme choice is recoverable,
+// losing a hand-written keymap is not.
+//
+// What no save can preserve is the file's *comments and formatting* — sigs.k8s.io/yaml
+// marshals a struct, not a document — so a hand-edited config comes back canonicalized.
+// That is documented in the README beside the picker.
+func (p *configThemePersister) PersistTheme(name string) error {
+	cfg, err := config.LoadFile(p.path)
+	if err != nil {
+		return fmt.Errorf("reading config before writing the theme: %w", err)
+	}
+	cfg.Theme = name
+	return cfg.SaveFile(p.path)
 }

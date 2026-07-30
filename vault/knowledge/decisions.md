@@ -4414,3 +4414,34 @@ sixteen component fields at a new `styles.Styles`, and each component now has a
    is expressible as the other — an `Option` cannot restyle a component that does not
    exist yet, and a fan-out cannot reach a constructor — so they are not to be
    collapsed into one mechanism, and both are load-bearing.
+
+## D172 — A theme is user preference, not cluster state: the picker is never inert, the write-back is load-modify-save (2026-07-30, M4-12b-2)
+
+`theme.switch` (`T`) opens a picker over `styles.Themes()`, applies the pick through
+D171's `applyStyles`, and writes the name back to `config.yaml` through a
+`tui.ThemePersister` the launcher implements. What a future leg must not contradict:
+
+1. **The gesture works with no seam wired; only *persistence* needs one.** Every other
+   picker in the shell is inert without its seam (no lister → `ns.switch` opens
+   nothing), because it would otherwise show an empty modal. The theme registry is
+   compiled in, so there is nothing to be unavailable: a nil `ThemePersister` costs the
+   choice its memory, never the repaint. Do not "fix" this into the inert-without-a-seam
+   pattern the other pickers follow.
+2. **A config write-back is `LoadFile` → set one field → `SaveFile`.** `SaveFile`
+   marshals the whole struct, so writing anything less than the file's current contents
+   deletes the rest of it — a fresh `&config.Config{Theme: name}` would drop the user's
+   `keys:` section. The read also has to happen *at write time*, not at launch: a config
+   held from startup is stale the moment the user edits the file. And an unparseable
+   config **fails the write** instead of being replaced with defaults — losing a colour
+   choice is recoverable, losing a hand-written keymap is not. Any future setting
+   persisted from the UI follows this same shape.
+3. **No save preserves comments or formatting.** `sigs.k8s.io/yaml` marshals a struct,
+   not a document, so a written-back config comes back canonicalized. That is a
+   documented tradeoff (README), not a bug to fix by hand-patching YAML text; if
+   round-trip fidelity is ever wanted it is a deliberate switch to a node-level YAML
+   library, decided on its own.
+4. **A theme belongs to the reader's terminal, not to the cluster or the context.** It
+   is therefore not part of the `Cluster` bundle (D155 pt 2) and `resetCluster` neither
+   repaints nor dismisses the theme picker — the one picker a context switch leaves
+   open, because it shows nothing the switch invalidates. It is also not per-context
+   state (D163): there is one `theme:` for the user, not one per kubeconfig context.

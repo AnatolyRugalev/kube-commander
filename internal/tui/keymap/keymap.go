@@ -52,7 +52,15 @@ const (
 	// over the contexts the kubeconfig declares, whose pick tears the current
 	// cluster down and reconnects to the chosen one (M4-04a). It is app-global like
 	// ns.switch and, like it, is inert without the seam that feeds it.
-	ActionContext     Action = "ctx.switch"
+	ActionContext Action = "ctx.switch"
+	// ActionTheme opens the color-theme switcher (M4-12b-2): a modal picker over the
+	// built-in palettes whose pick repaints the running shell (Model.applyStyles,
+	// D171) and is written back to config.yaml so the next launch opens on it. It is
+	// app-global like ctx.switch and ns.switch, and — unlike them — never inert: the
+	// themes it offers are compiled in, so it needs no cluster and no seam. Only the
+	// write-back needs one, and a missing persister costs the choice its persistence,
+	// not the gesture.
+	ActionTheme       Action = "theme.switch"
 	ActionToggleMouse Action = "mouse.toggle"
 	ActionSort        Action = "sort.column"
 	ActionClearSort   Action = "sort.clear"
@@ -221,6 +229,7 @@ var actionMeta = []struct {
 	{ActionNamespace, "Switch namespace"},
 	{ActionResources, "Switch resource (command palette)"},
 	{ActionContext, "Switch cluster context"},
+	{ActionTheme, "Switch color theme"},
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
@@ -307,7 +316,14 @@ var defaultBindings = map[Action][]string{
 	// `C` is the mnemonic **C**ontext, free in the browse context, not a reserved
 	// nav chord (D10), and sits with the other capital-letter app-global gestures
 	// (`M` mouse, `F` forwards, `X` stop-all). Lowercase `c` is secret.copy.
-	ActionContext:     {"C"},
+	ActionContext: {"C"},
+	// The theme switcher takes `T` for the same reasons the context switcher takes
+	// `C`: its picker has no always-open text field (its filter is opt-in, `/`), so
+	// it needs none of the ctrl+<letter> keys the search surfaces do; `T` is the
+	// mnemonic **T**heme, free in the browse context, not a reserved nav chord (D10),
+	// and it joins the capital-letter app-global family (`C` context, `M` mouse,
+	// `F` forwards, `X` stop-all, `P` pods). Lowercase `t` is logs.timestamps.
+	ActionTheme:       {"T"},
 	ActionToggleMouse: {"M"},
 	ActionSort:        {"s"},
 	ActionClearSort:   {"S"},
