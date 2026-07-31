@@ -247,7 +247,7 @@ func TestReconcileMarksFailedGroupUnavailable(t *testing.T) {
 	}
 	m.Reconcile(kube.DiscoveryResult{
 		Resources: []kube.Resource{pods},
-		Failed:    []kube.FailedGroup{{GroupVersion: "networking.k8s.io/v1"}},
+		Failed:    []kube.FailedGroup{{Group: "networking.k8s.io", Version: "v1"}},
 	})
 
 	ii := findItem(m, "ingresses")

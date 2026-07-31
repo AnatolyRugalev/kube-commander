@@ -418,18 +418,18 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	}
 
 	// Index the discovered resources by GVR (twin lookup) and collect the groups
-	// that failed discovery (the mark-unavailable signal). Failures are per
-	// group/version; we key on the group so a seed item pinned to a version that
-	// differs from the failed one is still recognised as unreachable.
+	// that failed discovery (the mark-unavailable signal). A failure names a group
+	// and, when the server said so, a version; we key on the group so a seed item
+	// pinned to a version that differs from the failed one is still recognised as
+	// unreachable — and so a failure known only at group granularity (D187) marks
+	// its kinds too.
 	twin := make(map[schema.GroupVersionResource]kube.Resource, len(result.Resources))
 	for _, r := range result.Resources {
 		twin[r.GVR] = r
 	}
 	failedGroups := make(map[string]bool, len(result.Failed))
 	for _, f := range result.Failed {
-		if gv, err := schema.ParseGroupVersion(f.GroupVersion); err == nil {
-			failedGroups[gv.Group] = true
-		}
+		failedGroups[f.Group] = true
 	}
 
 	// Reconcile the seed items in place, preserving their order and title.

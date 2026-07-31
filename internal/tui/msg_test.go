@@ -89,7 +89,7 @@ func TestDiscoveryPumpReady(t *testing.T) {
 	ch := make(chan kube.DiscoveryResult, 1)
 	res := kube.DiscoveryResult{
 		Resources: []kube.Resource{{GVK: schema.GroupVersionKind{Kind: "Pod", Version: "v1"}}},
-		Failed:    []kube.FailedGroup{{GroupVersion: "metrics.k8s.io/v1beta1", Err: errors.New("down")}},
+		Failed:    []kube.FailedGroup{{Group: "metrics.k8s.io", Version: "v1beta1", Err: errors.New("down")}},
 	}
 	ch <- res
 
@@ -101,7 +101,7 @@ func TestDiscoveryPumpReady(t *testing.T) {
 	if len(got.Result.Resources) != 1 || got.Result.Resources[0].GVK.Kind != "Pod" {
 		t.Errorf("resources not carried: %+v", got.Result.Resources)
 	}
-	if len(got.Result.Failed) != 1 || got.Result.Failed[0].GroupVersion != "metrics.k8s.io/v1beta1" {
+	if len(got.Result.Failed) != 1 || got.Result.Failed[0].GroupVersion() != "metrics.k8s.io/v1beta1" {
 		t.Errorf("failed groups not carried: %+v", got.Result.Failed)
 	}
 }

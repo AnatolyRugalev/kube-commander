@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -40,7 +41,10 @@ import (
 // test. metrics.k8s.io is not an arbitrary choice: an unreachable metrics-server
 // is the single most common cause of a partially-failing discovery in the wild,
 // and it is the one that motivated the fault isolation (#87).
-const brokenAPIServiceGV = "metrics.k8s.io/v1beta1"
+const (
+	brokenAPIServiceGroup = "metrics.k8s.io"
+	brokenAPIServiceGV    = brokenAPIServiceGroup + "/v1beta1"
+)
 
 // apiServicesGVR addresses the aggregation layer's own registry, which is how a
 // test registers an API group that is served by nothing.
@@ -93,10 +97,13 @@ func requireResource(t *testing.T, resources []Resource, group, resource string)
 	}
 }
 
-// failedGroup returns the recorded failure for gv, if discovery isolated one.
-func failedGroup(failed []FailedGroup, gv string) (FailedGroup, bool) {
+// failedGroup returns the recorded failure for an API group, if discovery
+// isolated one. It keys on the group rather than the group/version because a
+// broken group's version is not always knowable — see the assertion in
+// TestEnvtestBrokenAPIGroupIsIsolated and D187.
+func failedGroup(failed []FailedGroup, group string) (FailedGroup, bool) {
 	for _, f := range failed {
-		if f.GroupVersion == gv {
+		if f.Group == group {
 			return f, true
 		}
 	}
@@ -176,24 +183,35 @@ func TestEnvtestBrokenAPIGroupIsIsolated(t *testing.T) {
 		t.Errorf("healthy resource set shrank from %d to %d when one group broke", len(base.Resources), len(res.Resources))
 	}
 
-	// …and a tripwire for the reporting half, which this test found broken.
+	// …and the reporting half, which this test found broken and DISC-01 fixed.
 	//
-	// DiscoveryResult.Failed is supposed to name the group that failed so the TUI
-	// can say so (and, since DIAG-01, log it). It is empty here, and on every
-	// modern cluster: the apiserver answers *aggregated* discovery, which reports a
-	// down group as one entry with no versions plus a "stale GroupVersion" marker
-	// carried in a side channel — and the on-disk cached client kubecom reads
-	// through (M1-04) is not an AggregatedDiscoveryInterface, so client-go's
-	// ServerPreferredResources falls back to walking ServerGroups() and the stale
-	// group, having no versions to walk, vanishes without an error. Isolation
-	// therefore works while the *reason* is unreportable. Tracked as DISC-01.
+	// DiscoveryResult.Failed must *name* the group that failed, so the menu can mark
+	// its kinds unavailable and DIAG-01 can log which group it was. Until D187 it was
+	// empty here and on every modern cluster: the apiserver answers *aggregated*
+	// discovery, which reports a down group as one entry with no versions plus a
+	// "stale GroupVersion" marker carried in a side channel client-go hands only to an
+	// AggregatedDiscoveryInterface — which the on-disk cached client kubecom reads
+	// through (M1-04) is not, so ServerPreferredResources fell back to walking
+	// ServerGroups(), found no version to fetch under the broken group, and returned
+	// no error at all. Isolation worked while the reason was unreportable.
 	//
-	// This assertion pins the defect rather than the fix, so it fails the moment
-	// DISC-01 lands: the fixing leg replaces it with the positive assertion —
-	// failedGroup(res.Failed, brokenAPIServiceGV) is present, with a non-nil cause.
-	if f, ok := failedGroup(res.Failed, brokenAPIServiceGV); ok {
-		t.Errorf("DISC-01 appears fixed: %s now reports as failed (%v) — "+
-			"replace this tripwire with the positive assertion", brokenAPIServiceGV, f.Err)
+	// The fix reads the same group list for groups the server serves no version of.
+	// Only the group is knowable — the version was dropped before any cached client
+	// saw it — so this asserts the group, not brokenAPIServiceGV. This assertion is
+	// the whole point of running against a live apiserver: no fake produces the
+	// aggregated shape, which is exactly why the defect survived eleven days of them.
+	f, ok := failedGroup(res.Failed, brokenAPIServiceGroup)
+	if !ok {
+		t.Fatalf("broken group %s is isolated but not named: Failed = %v (DISC-01 regressed)",
+			brokenAPIServiceGroup, res.Failed)
+	}
+	if !errors.Is(f.Err, ErrGroupServesNoVersion) {
+		t.Errorf("Failed[%s].Err = %v, want ErrGroupServesNoVersion", brokenAPIServiceGroup, f.Err)
+	}
+	// Isolation is still the criterion: exactly the broken group is named, and no
+	// healthy group is dragged in with it.
+	if len(res.Failed) != 1 {
+		t.Errorf("Failed = %v, want only %s", res.Failed, brokenAPIServiceGroup)
 	}
 }
 

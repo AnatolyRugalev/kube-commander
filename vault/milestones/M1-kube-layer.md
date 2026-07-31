@@ -46,8 +46,10 @@ all in-process via client-go, fault-tolerant, and fast to start.
       kind in place, and a **denied** resource (a real pods-only RBAC user) fails only
       its own call, as `KindForbidden`, while discovery still returns the full menu.
       The criterion is isolation and isolation holds; what the same test found broken
-      is the *reporting* — `DiscoveryResult.Failed` never names the culprit on an
-      aggregated-discovery cluster — which is its own bug, **DISC-01** (D186 pt 2)._
+      was the *reporting* — `DiscoveryResult.Failed` never named the culprit on an
+      aggregated-discovery cluster — tracked as **DISC-01** and **fixed 2026-07-31**
+      (D187): the pass now reports every group the server serves no version of, and
+      the test's tripwire is the positive assertion that the broken group is named._
 - [x] Logs stream, describe, and YAML-get return correct output in-process.
       _(M1-07a: **YAML-get** done — `Clients.GetYAML` renders any resource (built-in or CRD) as kubectl-identical `get -o yaml` through the dynamic client, managedFields stripped, `sigs.k8s.io/yaml` (`internal/kube/yaml.go`, D41). M1-07b: **describe** done — `Clients.Describe` renders `kubectl describe`-identical output in-process by reusing kubectl's own describe generators (built-in describer by GroupKind + generic-unstructured fallback for CRDs) (`internal/kube/describe.go`, D42). M1-07c: **logs stream** done — `Clients.Logs` streams a pod container's logs onto a bounded `LogEvent` channel via the typed clientset `pods/log` subresource, `LogOptions` mirroring `kubectl logs` flags, opened in-goroutine so it never blocks first paint (`internal/kube/logs.go`, D43). M1-07d: **reconnecting/resuming follow logs** done — a `Follow` stream now survives a transient transport drop à la watch (D34): it forces server-side timestamps on the wire, reconnects with `SinceTime` at the last-seen line's second, and dedups the lines the server re-serves for that (second-granular) second; clean EOF stops, a reconnect failure is transient (silent backoff+retry, bounded by ctx). Timestamps stripped before delivery unless `opts.Timestamps` (D44). **M1-07 viewers complete.**)_
 - [x] Port-forward runs in a background goroutine and can be stopped.

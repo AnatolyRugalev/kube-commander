@@ -1548,7 +1548,7 @@ func (m Model) logDiscovery(r kube.DiscoveryResult) {
 		return
 	}
 	for _, f := range r.Failed {
-		m.logger.Warn("discovery group unavailable", "groupVersion", f.GroupVersion, "error", f.Err)
+		m.logger.Warn("discovery group unavailable", "groupVersion", f.GroupVersion(), "error", f.Err)
 	}
 }
 

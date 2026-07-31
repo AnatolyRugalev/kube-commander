@@ -971,10 +971,10 @@ func TestSearchEmptyScopeDegrades(t *testing.T) {
 	// Every group holding a curated kind failed discovery, so each curated seed row is
 	// marked unavailable and the search scope comes out empty.
 	m.menu.Reconcile(kube.DiscoveryResult{Failed: []kube.FailedGroup{
-		{GroupVersion: "v1"},
-		{GroupVersion: "apps/v1"},
-		{GroupVersion: "batch/v1"},
-		{GroupVersion: "networking.k8s.io/v1"},
+		{Group: "", Version: "v1"},
+		{Group: "apps", Version: "v1"},
+		{Group: "batch", Version: "v1"},
+		{Group: "networking.k8s.io", Version: "v1"},
 	}})
 	if len(m.searchResources()) != 0 {
 		t.Fatalf("every curated group failed discovery, so the scope should be empty: %v", m.searchResources())

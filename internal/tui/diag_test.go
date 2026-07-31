@@ -134,8 +134,9 @@ func TestDiscoveryFailuresAreLogged(t *testing.T) {
 			Verbs:      metav1.Verbs{"list"},
 		}},
 		Failed: []kube.FailedGroup{{
-			GroupVersion: "metrics.k8s.io/v1beta1",
-			Err:          errors.New("service unavailable"),
+			Group:   "metrics.k8s.io",
+			Version: "v1beta1",
+			Err:     errors.New("service unavailable"),
 		}},
 	})
 
@@ -158,7 +159,7 @@ func TestTotalDiscoveryFailureIsLoggedAsAnError(t *testing.T) {
 
 	m.logDiscovery(kube.DiscoveryResult{
 		Err:    errors.New("connection refused"),
-		Failed: []kube.FailedGroup{{GroupVersion: "metrics.k8s.io/v1beta1", Err: errors.New("noise")}},
+		Failed: []kube.FailedGroup{{Group: "metrics.k8s.io", Version: "v1beta1", Err: errors.New("noise")}},
 	})
 
 	got := buf.String()
@@ -190,7 +191,7 @@ func TestDiscoveryReadyLogsThroughUpdate(t *testing.T) {
 	m, buf := logSink(t)
 
 	m.Update(DiscoveryReadyMsg{Result: kube.DiscoveryResult{
-		Failed: []kube.FailedGroup{{GroupVersion: "external-secrets.io/v1", Err: errors.New("the server could not find the requested resource")}},
+		Failed: []kube.FailedGroup{{Group: "external-secrets.io", Version: "v1", Err: errors.New("the server could not find the requested resource")}},
 	}})
 
 	if got := buf.String(); !strings.Contains(got, "external-secrets.io/v1") {

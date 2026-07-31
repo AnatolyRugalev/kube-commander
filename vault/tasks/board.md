@@ -3,20 +3,17 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M5 still has no agent-performable work left, but the board is no longer empty: M1-INT was un-deferred (envtest runs in this sandbox after all, D186) and split, its first slice landed the live isolation proof, and the same run found **DISC-01** — a broken API group is isolated but never named. Eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — DISC-01 is fixed (D187), so a broken API group is now named as well as isolated and the remaining unblocked work is the three envtest slices M1-INT-b/c/d; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **DISC-01** A broken API group is isolated but never *named*
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
-      notes: The reporting bug M1-INT-a found live (D186 pt 2). Fix it and replace the
-      tripwire in `TestEnvtestBrokenAPIGroupIsIsolated` with the positive assertion.
+_(none)_
 
 ## Blocked
 
 - [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
       status: blocked | owner: — | added: 2026-07-29
-      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` (the error text). See the DIAG line in the Backlog.
+      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` (the error text). See the DIAG line in the Backlog. Worth re-requesting the log *after* DISC-01 (D187): if the group half-fails, the file now carries a `discovery group unavailable` warning naming it, which the reporter's original run could not have produced.
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
       status: blocked | owner: — | added: 2026-07-30
@@ -43,20 +40,9 @@ not — `setup-envtest use 1.31.x` downloads and `TestEnvtestSmoke` passes in th
 in ~6 s, so an envtest leg is agent-verifiable after all. It was three unrelated surfaces
 behind one line, so it splits D52-style; take them in order, each is its own leg:
 
-- [ ] **DISC-01** A broken API group is isolated but never *named* — `DiscoveryResult.Failed` is empty on every aggregated-discovery cluster
-      status: todo | owner: — | added: 2026-07-31
-      notes: Found live by M1-INT-a (D186 pt 2). A down aggregated group comes back from a
-      modern apiserver as a group with **no versions** plus a stale-GroupVersion marker in a
-      side channel client-go hands only to an `AggregatedDiscoveryInterface`; the on-disk
-      cached client (M1-04) is not one, so `ServerPreferredResources` walks `ServerGroups()`,
-      finds nothing under the broken group and returns no error. Consequences: the TUI cannot
-      say which group is unavailable, and DIAG-01's per-group failure logging never fires.
-      Not recoverable inside `discoverResources` — the information is already gone — so the
-      pass must read through a client implementing `GroupsAndMaybeResources` (client-go's
-      **memory** cache does), which trades against D8's zero-round-trip warm start; decide and
-      record which side wins. `TestEnvtestBrokenAPIGroupIsIsolated` holds a **tripwire** that
-      fails when this is fixed: replace it with the positive assertion in the same leg. Also
-      re-check CRD-01 against this — a CRD whose group half-fails may be the same silence.
+DISC-01 is done (D187) — it was the one item in this line that changed behavior rather
+than adding coverage; the three envtest slices remain and are independent of each other.
+
 - [ ] **M1-INT-b** envtest: watch reconnect/resync against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: The hermetic suite covers 410 Gone → re-List with a fake (M1-05b/D34). Live, the
@@ -324,6 +310,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **DISC-01** A broken API group is now named, not just isolated — `DiscoveryResult.Failed` reports any group the server serves no version of, which is the only trace an aggregated apiserver leaves in the cached group list; proven live by turning M1-INT-a's tripwire into its positive assertion — done 2026-07-31 (D187)
 
 - [x] **M1-INT-a** envtest: a denied/broken API group is isolated, proven against a live apiserver — a real aggregated APIService broken on purpose and a real pods-only RBAC user; ticks M1's last `[~]` criterion, un-defers M1-INT (envtest runs in the sandbox in 12 s, D186 pt 1) and found DISC-01 — done 2026-07-31 (D186)
 

@@ -4919,3 +4919,41 @@ Two constraints, both found by actually running envtest rather than reasoning ab
    read through a client that implements `GroupsAndMaybeResources` (client-go's memory cache
    does; the disk cache does not), and any such change trades against D8's promise that a
    warm start reconciles the menu with no network round-trip.
+
+## D187 — A broken API group is named from the group list, not from a different discovery client (2026-07-31, DISC-01)
+
+Supersedes the *mechanism* clause of **D186** pt 2, which said the fix "must read
+through a client that implements `GroupsAndMaybeResources`". It does not, and it must not:
+that client is the memory cache, and adopting it would spend D8's warm start (a network
+round trip on every discovery pass) to buy a version number nobody uses.
+
+1. **A group the server lists with no versions *is* a broken group, and that is what
+   `DiscoveryResult.Failed` reports.** Aggregated discovery marks a failing group/version
+   "stale"; client-go drops the stale version while splitting the response and hands the
+   cause to an `AggregatedDiscoveryInterface` only. What survives into the plain group list —
+   and therefore into the on-disk cache — is a group entry with an **empty `Versions`
+   slice**. `discoverResources` reads it back (`versionlessGroups`) and records the group.
+   D186 pt 2 was right that the *cause* is gone by then and wrong that nothing is left: the
+   group's own emptiness is the evidence. A healthy group always carries a version (proven
+   live: the baseline pass in `TestEnvtestBrokenAPIGroupIsIsolated` reports zero failures),
+   and the legacy discovery path keeps a broken group's versions and fails per version, so
+   the two paths never double-report and neither invents a failure.
+2. **A failure names a group; a version is optional.** `FailedGroup` is `{Group, Version,
+   Err}` with `Version` empty when only the group is knowable, rendered by
+   `FailedGroup.GroupVersion()`. The group is the load-bearing half — both consumers (the
+   menu's unavailable-marking, DIAG-01's log line) key on it, and the menu already
+   *discarded* the version. A future leg must not reintroduce a bare `GroupVersion string`:
+   putting a groupless name in it makes `ParseGroupVersion` read `metrics.k8s.io` as a
+   *version* of the core group and marks core kinds unavailable.
+3. **The discovery pass may read the group list, and only the group list.** It is the same
+   document `ServerPreferredResources` just read, so on the cached client it costs no round
+   trip and D8 holds; a failure to read it degrades to reporting nothing rather than to a
+   failed pass. Widening the pass's dependency beyond `ServerPreferredResources` +
+   `ServerGroups` (the `resourceDiscoverer` interface) is what would break D8 — that is the
+   line D186 pt 2 was reaching for.
+4. **This kind of claim is verified against a live apiserver, not a fake.** Fakes are what
+   hid the defect for eleven days: they return the shape the test wrote. The hermetic tests
+   here pin the parsing; `TestEnvtestBrokenAPIGroupIsIsolated` is what proves a real
+   apiserver produces the shape, and it was watched fail (`Failed = []`) with the fix
+   removed. Any future change to how discovery failures are detected must be re-proven the
+   same way (envtest is available — D186 pt 1).

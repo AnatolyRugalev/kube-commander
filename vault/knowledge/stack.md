@@ -277,6 +277,25 @@ nothing useful; attach is the way.)
     ServiceNotFound` within a second or two; `ServerResourcesForGroupVersion` on the
     broken GV is the reliable signal that the breakage has landed (poll on it, after
     `Clients.Invalidate()`, before asserting anything).
+  - **How a broken group is actually detected** (DISC-01, D187): not from the
+    preferred-resources error — there is none on this path — but from `ServerGroups()`,
+    where the broken group survives with an **empty `Versions` slice**. Useful map of
+    what each call says about `metrics.k8s.io/v1beta1` while its backing service is
+    missing, all against the same live plane:
+
+    | call | result |
+    | --- | --- |
+    | `APIService` status | `Available=False  ServiceNotFound` |
+    | `ServerGroups()` | group present, `Versions: []` ← the detectable signal |
+    | `ServerResourcesForGroupVersion(gv)` | `stale GroupVersion discovery` |
+    | raw `DiscoveryClient.ServerGroupsAndResources()` | `*ErrGroupDiscoveryFailed` |
+    | cached `ServerPreferredResources()` (what kubecom calls) | lists, `err=<nil>` |
+
+    Both cached clients drop the failure, for different reasons: the **disk** cache is
+    not an `AggregatedDiscoveryInterface` at all, and what it persists is the *split*
+    group list, so it could not become one; the **memory** cache is one, but it costs a
+    network round trip per pass (against D8). The group list is the cheap, cached,
+    already-fetched artifact — hence D187.
   - **A restricted user** comes from `env.AddUser(envtest.User{Name, Groups}, nil)`
     → `user.Config()`, with the grant written as ordinary ClusterRole +
     ClusterRoleBinding through the admin clientset. The RBAC authorizer reads
