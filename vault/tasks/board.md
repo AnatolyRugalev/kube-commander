@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-c was split by verb group into c-1…c-4 and c-1 (Delete) is claimed; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-c was split into c-1…c-4 and c-1 (Delete) is done, leaving c-2/c-3/c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-c-1** envtest: Delete against a live apiserver
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+_(none)_
 
 ## Blocked
 
@@ -61,13 +60,8 @@ by *what the server adds over the fake* rather than by verb count — the fake d
 applies whatever it is handed to the whole tracked object, so each slice is a different way
 that is not what a real apiserver does:
 
-- [ ] **M1-INT-c-1** envtest: Delete against a live apiserver
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
-      notes: The `DeleteOptions` half. The fake **discards DeleteOptions entirely**, so the UID
-      precondition and the propagation policy are unit-tested only as a pure struct builder
-      (`TestWithUIDPrecondition`) and have never reached a server. The load-bearing case is the
-      TUI race the precondition exists for: delete-and-recreate under the same name, then delete
-      from the stale row → must be a Conflict, not a lost object.
+M1-INT-c-1 is done (2026-07-31); c-2/c-3/c-4 are independent of each other and of it.
+
 - [ ] **M1-INT-c-2** envtest: Scale against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: The **subresource** half. `Scale` patches `scale`, which a real server routes to a
@@ -343,6 +337,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-c-1** Delete's `DeleteOptions` reach a live apiserver — a stale row whose object was deleted and recreated under the same name is refused with a real Conflict (`KindConflict`) and the replacement survives, while the same race with the UID dropped destroys it; foreground propagation is proven by the deletionTimestamp + `foregroundDeletion` finalizer a GC-less plane leaves behind, and both the precondition and the cluster-scoped addressing were watched fail — done 2026-07-31 (M1-INT-c split into c-1…c-4)
 
 - [x] **M1-INT-b-2** A real 410/Expired forces the re-List — etcd compaction stales the resourceVersion a live watch is holding during its reconnect gap, and the loop answers with a fresh List + RESET carrying the pod written while it was disconnected; needed the plane configured two ways (short compaction *and* the watch cache off, which is the trap: the cache masks compaction and grows rather than evicts), and the expiry is asserted as a precondition so an unexpired revision cannot pass the test vacuously — done 2026-07-31 (D34 proven live)
 

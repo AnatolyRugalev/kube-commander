@@ -342,6 +342,30 @@ nothing useful; attach is the way.)
     test vacuous in the most confusing way available — the loop simply *resumes*, which is
     correct behavior for the situation it is actually in, so the failure looks like a
     watch-loop bug rather than an unmet premise.
+  - **`DeleteOptions` only exist on a real server** (M1-INT-c-1). The fake dynamic
+    client discards them wholesale, so nothing kubecom puts in them — the UID
+    precondition, the propagation policy — means anything until an apiserver reads it.
+    Two facts from doing so:
+    - A **failed UID precondition is a 409 Conflict**, message *"Precondition failed:
+      UID in precondition: …, UID in object meta: …"*, which `Classify` already maps to
+      `KindConflict`. Staging the race it guards needs no timing: delete the object and
+      recreate it under the same name through the typed client, then act from the stale
+      ref. Assert the survivor's UID too — a refusal that let the object die anyway
+      would still produce the error.
+    - **A foreground delete never completes on an envtest plane**, because envtest runs
+      no controller-manager and therefore no garbage collector. The object keeps its
+      `deletionTimestamp` and its `foregroundDeletion` finalizer for the life of the
+      plane. That is what makes the policy *observable* (it is the only DeleteOption
+      with visible server-side state), and it is a trap for any later test that deletes
+      foreground and then waits for the object to disappear.
+  - **One plane per test function is the rule, not one per assertion** (M1-INT-c-1).
+    `startControlPlane`'s per-test isolation exists for tests that wreck cluster-global
+    state (an APIService, cluster RBAC) or need the plane configured; an action test
+    only creates and destroys objects, so it can run its cases as `t.Run` subtests over
+    one plane with distinct object names — ~5 s total instead of ~5 s each. Take the
+    `Resource` the actions address from a real `discoverFresh` pass rather than building
+    one inline: it is the value the menu hands the action at runtime, so a wrong GVR or
+    `Namespaced` flag fails the test instead of being papered over by the stand-in.
   - **A restricted user** comes from `env.AddUser(envtest.User{Name, Groups}, nil)`
     → `user.Config()`, with the grant written as ordinary ClusterRole +
     ClusterRoleBinding through the admin clientset. The RBAC authorizer reads

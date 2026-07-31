@@ -60,9 +60,13 @@ all in-process via client-go, fault-tolerant, and fast to start.
       envtest layer is **no longer deferred** (D186 pt 1): it now covers group
       isolation (M1-INT-a) and **both** watch-reconnect branches against a live
       apiserver — resume after a real transport drop (M1-INT-b-1) and re-List
-      after a real 410/Expired (M1-INT-b-2). The action set (M1-INT-c) and a CI
-      job (M1-INT-d) remain as coverage-deepening backlog items, not milestone
-      gates._
+      after a real 410/Expired (M1-INT-b-2). The action set is being covered slice
+      by slice: **M1-INT-c-1** proved `Delete`'s `DeleteOptions` against a live
+      server — the UID precondition refuses a stale row with a real Conflict, and
+      the propagation policy lands — which the fake dynamic client cannot show at
+      all, since it discards those options. The remaining action slices
+      (M1-INT-c-2/c-3/c-4) and a CI job (M1-INT-d) are coverage-deepening backlog
+      items, not milestone gates._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._

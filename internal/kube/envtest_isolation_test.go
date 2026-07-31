@@ -79,14 +79,22 @@ func discoverFresh(ctx context.Context, c *Clients) DiscoveryResult {
 	return <-c.StartDiscovery(ctx)
 }
 
-// hasResource reports whether a discovery pass surfaced the given group/resource.
-func hasResource(resources []Resource, group, resource string) bool {
+// findResource returns the discovered Resource for a group/resource, if the pass
+// surfaced one. It is the lookup the action tests address objects through
+// (requireDiscoveredResource), so they act on the same value the menu would.
+func findResource(resources []Resource, group, resource string) (Resource, bool) {
 	for _, r := range resources {
 		if r.GVR.Group == group && r.GVR.Resource == resource {
-			return true
+			return r, true
 		}
 	}
-	return false
+	return Resource{}, false
+}
+
+// hasResource reports whether a discovery pass surfaced the given group/resource.
+func hasResource(resources []Resource, group, resource string) bool {
+	_, ok := findResource(resources, group, resource)
+	return ok
 }
 
 // requireResource fails the test unless the resource is in the discovered set.
