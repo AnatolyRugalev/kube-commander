@@ -7,7 +7,10 @@ _Last updated: 2026-07-31 — M5 still has no agent-performable work left, but t
 
 ## In Progress
 
-_(none)_
+- [ ] **DISC-01** A broken API group is isolated but never *named*
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
+      notes: The reporting bug M1-INT-a found live (D186 pt 2). Fix it and replace the
+      tripwire in `TestEnvtestBrokenAPIGroupIsIsolated` with the positive assertion.
 
 ## Blocked
 
