@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-c-3 (the merge-patch actions) is done and yielded D188, leaving c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-c-4 (Update's optimistic concurrency) is done and yielded D189, closing M1-INT-c and leaving M1-INT-d as the only unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
-      notes: The one the board note has always named: a real stale `resourceVersion` → a real
-      Conflict. The fake enforces no optimistic concurrency at all, so the guarantee the Edit
-      flow rests on (a concurrent change is refused, never clobbered, D129) is currently
-      untested end to end.
+_(none)_
 
 ## Blocked
 
@@ -65,7 +60,8 @@ by *what the server adds over the fake* rather than by verb count — the fake d
 applies whatever it is handed to the whole tracked object, so each slice is a different way
 that is not what a real apiserver does:
 
-M1-INT-c-1, c-2 and c-3 are done (2026-07-31); c-4 is independent of all three.
+All four c slices are done (2026-07-31), so **M1-INT-c is closed** — the action set has
+live-apiserver evidence end to end. What is left in this line is CI.
 
 - [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
       status: todo | owner: — | added: 2026-07-31
@@ -323,6 +319,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-c-4** `Update`'s optimistic concurrency against a live apiserver — a stale `resourceVersion` is a real Conflict and the concurrent write survives, while the same buffer without the field overwrites unconditionally and loses it; found that the buffer's `metadata.uid` is a precondition too, so a deleted object is a Conflict rather than the NotFound the doc comment claimed, and that an edited `status` is discarded while the spec in the same PUT lands — closes M1-INT-c — done 2026-07-31 (D189)
 
 - [x] **M1-INT-c-3** The five merge-patch actions against a live apiserver — a rollout restart stamps `restartedAt` beside the annotations already on the pod template and bumps `metadata.generation` (Deployment, StatefulSet, DaemonSet), a real Node cordons/uncordons and a real CronJob suspends/resumes; found that a wrong-kind patch is dropped with a warning and a 200, so `Suspend` on a Deployment silently succeeds and the UI's kind gating is correctness, not polish — done 2026-07-31 (D188)
 

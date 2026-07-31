@@ -70,9 +70,12 @@ all in-process via client-go, fault-tolerant, and fast to start.
       the fake instead succeeds; **M1-INT-c-3** proved the five merge-patch
       actions (RolloutRestart / Cordon / Uncordon / Suspend / Resume) against
       three real schemas, and found that a wrong-kind patch is a silent no-op
-      rather than an error, which makes the UI's kind gating correctness (D188).
-      The remaining action slice (M1-INT-c-4) and a CI job (M1-INT-d) are
-      coverage-deepening backlog items, not milestone gates._
+      rather than an error, which makes the UI's kind gating correctness (D188);
+      **M1-INT-c-4** closed the action set by proving `Update`'s optimistic
+      concurrency — a stale `resourceVersion` is a real Conflict and a buffer
+      without one clobbers unconditionally, which is what makes the buffer's
+      metadata load-bearing (D189). A CI job (M1-INT-d) is the last
+      coverage-deepening backlog item, not a milestone gate._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._

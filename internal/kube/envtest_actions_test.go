@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/yaml"
 )
 
 // M1-INT-c-1: "Delete", against a live apiserver.
@@ -576,6 +577,299 @@ func TestEnvtestMergePatchActionsAgainstLiveAPIServer(t *testing.T) {
 			t.Errorf("Classify(%v) = %v, want %v", err, got, KindNotFound)
 		}
 	})
+}
+
+// M1-INT-c-4: `Update` — the Edit write-back — against a live apiserver.
+//
+// Update is the only action that sends a whole object rather than a patch, and
+// the reason it is safe is a field it never looks at: the edited buffer still
+// carries `metadata.resourceVersion` (GetYAML strips only managedFields), so the
+// PUT is conditional and a concurrent change is refused instead of clobbered.
+// That is the whole of D129's promise to the Edit flow, and **the fake dynamic
+// client enforces no optimistic concurrency at all** — its tracker replaces the
+// object whatever resourceVersion it is handed, so the hermetic suite
+// (apply_test.go) can prove the parse, the identity guard and the addressing, and
+// is structurally unable to prove the guarantee the flow rests on.
+//
+// So the load-bearing subtest stages the race the guarantee exists for — buffer
+// fetched, another actor writes, buffer applied — and asserts a Conflict *and*
+// that the other actor's write survived. The subtest after it is its negative
+// control and the more alarming half: the same race with `resourceVersion`
+// removed from the buffer **succeeds**, and the concurrent write is gone. An
+// unconditional PUT is a legal request, not an error, which is what makes the
+// field's presence in the buffer load-bearing rather than incidental (D189).
+//
+// Two more things only a server shows, both about a PUT of an object the user
+// hand-edited:
+//
+//   - The object is **validated as a whole**. Editing a Deployment's immutable
+//     `spec.selector` is a 422 (`KindInvalid`); the fake stores it.
+//   - `status` is a **subresource**, so the status the user edited in the buffer
+//     is silently discarded while the spec in the same PUT lands. The fake has no
+//     subresources and would store both.
+//
+// One control plane for the whole function, per the c-1 rule; each subtest uses
+// its own object name.
+
+// TestEnvtestUpdateAgainstLiveAPIServer exercises Clients.Update against a real
+// kube-apiserver, with each Resource taken from a real discovery pass — the value
+// the Edit flow hands the action at runtime.
+func TestEnvtestUpdateAgainstLiveAPIServer(t *testing.T) {
+	_, cfg := startControlPlane(t)
+	c := clientsFor(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	discovered := discoverFresh(ctx, c)
+	configMaps := requireDiscoveredResource(t, discovered.Resources, "", "configmaps")
+	deployments := requireDiscoveredResource(t, discovered.Resources, "apps", "deployments")
+
+	t.Run("an edit round-trips through the server", func(t *testing.T) {
+		ref := createConfigMap(ctx, t, c, "roundtrip")
+
+		edited := editBuffer(ctx, t, c, configMaps, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "hello", "data", "greeting")
+		})
+		if err := c.Update(ctx, configMaps, ref, edited); err != nil {
+			t.Fatalf("update configmap: %v", err)
+		}
+
+		cm, err := getConfigMap(ctx, c, ref.Name)
+		if err != nil {
+			t.Fatalf("get configmap after update: %v", err)
+		}
+		if cm.Data["greeting"] != "hello" {
+			t.Errorf("data = %v, want greeting=hello", cm.Data)
+		}
+	})
+
+	// The point of the whole slice: the buffer's resourceVersion makes the PUT
+	// conditional, so an object that moved under the editor is refused rather than
+	// overwritten with a view of the world that is now old.
+	t.Run("a stale resourceVersion is refused, not clobbered", func(t *testing.T) {
+		ref := createConfigMap(ctx, t, c, "race")
+
+		// What the user has open in $EDITOR, fetched before the concurrent write.
+		edited := editBuffer(ctx, t, c, configMaps, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "mine", "data", "editor")
+		})
+
+		// The other actor lands first, through the typed client — so the setup never
+		// depends on the code under test.
+		setConfigMapKey(ctx, t, c, ref.Name, "controller", "theirs")
+
+		err := c.Update(ctx, configMaps, ref, edited)
+		if err == nil {
+			t.Fatal("update from a stale buffer succeeded; the resourceVersion never reached the server")
+		}
+		if got := Classify(err); got != KindConflict {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindConflict)
+		}
+
+		// The refusal is only worth anything if the write it protected survived.
+		cm, err := getConfigMap(ctx, c, ref.Name)
+		if err != nil {
+			t.Fatalf("get configmap after the refused update: %v", err)
+		}
+		if cm.Data["controller"] != "theirs" {
+			t.Errorf("data = %v, want the concurrent write (controller=theirs) intact", cm.Data)
+		}
+		if _, ok := cm.Data["editor"]; ok {
+			t.Errorf("data = %v, want the refused edit not to have landed", cm.Data)
+		}
+	})
+
+	// The negative control for the subtest above, and the reason the buffer's
+	// resourceVersion is a correctness requirement rather than an artifact of how
+	// GetYAML renders (D189): an unconditional PUT is a perfectly legal request,
+	// so a buffer without the field silently wins the race it should have lost.
+	t.Run("a buffer with no resourceVersion overwrites unconditionally", func(t *testing.T) {
+		ref := createConfigMap(ctx, t, c, "control")
+
+		edited := editBuffer(ctx, t, c, configMaps, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "mine", "data", "editor")
+			unstructured.RemoveNestedField(obj.Object, "metadata", "resourceVersion")
+		})
+		setConfigMapKey(ctx, t, c, ref.Name, "controller", "theirs")
+
+		if err := c.Update(ctx, configMaps, ref, edited); err != nil {
+			t.Fatalf("update without a resourceVersion: %v", err)
+		}
+
+		cm, err := getConfigMap(ctx, c, ref.Name)
+		if err != nil {
+			t.Fatalf("get configmap after the unconditional update: %v", err)
+		}
+		if cm.Data["editor"] != "mine" {
+			t.Errorf("data = %v, want the unconditional edit to have landed", cm.Data)
+		}
+		if _, ok := cm.Data["controller"]; ok {
+			t.Errorf("data = %v, want the concurrent write clobbered — that is what the missing resourceVersion means", cm.Data)
+		}
+	})
+
+	// A PUT is validated as a whole object, unlike a merge patch of two keys: the
+	// user can edit anything in the buffer, including fields the API refuses to
+	// change after creation. That refusal has to reach them (#86), not be swallowed.
+	t.Run("an edit of an immutable field is refused", func(t *testing.T) {
+		ref := createDeployment(ctx, t, c, "immutable", 1)
+
+		// Selector *and* template labels, so the object is internally consistent and
+		// the only thing wrong with it is that spec.selector may not change.
+		edited := editBuffer(ctx, t, c, deployments, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "other", "spec", "selector", "matchLabels", "app")
+			setNested(t, obj, "other", "spec", "template", "metadata", "labels", "app")
+		})
+
+		err := c.Update(ctx, deployments, ref, edited)
+		if err == nil {
+			t.Fatal("update of an immutable selector succeeded")
+		}
+		if got := Classify(err); got != KindInvalid {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindInvalid)
+		}
+
+		d, err := c.Clientset.AppsV1().Deployments("default").Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get deployment after the refused update: %v", err)
+		}
+		if got := d.Spec.Selector.MatchLabels["app"]; got != ref.Name {
+			t.Errorf("spec.selector.matchLabels[app] = %q, want %q — the refused edit landed anyway", got, ref.Name)
+		}
+	})
+
+	// status is a subresource on Deployment, so the half of the buffer the user
+	// cannot usefully edit is dropped while the rest of the same PUT applies. The
+	// action reports success either way, which is correct and worth pinning: an
+	// edit that only touched status is a no-op the UI must not present otherwise.
+	t.Run("an edited status is discarded and the spec in the same PUT lands", func(t *testing.T) {
+		ref := createDeployment(ctx, t, c, "statusedit", 1)
+
+		edited := editBuffer(ctx, t, c, deployments, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, int64(9), "status", "replicas")
+			setNested(t, obj, int64(2), "spec", "replicas")
+		})
+		if err := c.Update(ctx, deployments, ref, edited); err != nil {
+			t.Fatalf("update deployment: %v", err)
+		}
+
+		d, err := c.Clientset.AppsV1().Deployments("default").Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get deployment after update: %v", err)
+		}
+		if d.Spec.Replicas == nil || *d.Spec.Replicas != 2 {
+			t.Errorf("spec.replicas = %v, want 2 — the spec half of the PUT did not land", d.Spec.Replicas)
+		}
+		if d.Status.Replicas != 0 {
+			t.Errorf("status.replicas = %d, want 0 — the edited status reached the object", d.Status.Replicas)
+		}
+	})
+
+	// The #86 contract for this action, and the one answer a real server gives that
+	// the doc comment did not predict: the buffer carries `metadata.uid`, and an
+	// apiserver reads a UID on an update as a **precondition**. So an object deleted
+	// while the editor was open is a Conflict — same kind as the stale-buffer race,
+	// which is the right thing for the user to be told (your row is out of date) but
+	// not the NotFound the code assumed.
+	t.Run("a buffer for a deleted object is a Conflict, not a NotFound", func(t *testing.T) {
+		ref := createConfigMap(ctx, t, c, "vanished")
+
+		edited := editBuffer(ctx, t, c, configMaps, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "mine", "data", "editor")
+		})
+		deleteConfigMap(ctx, t, c, ref.Name)
+
+		err := c.Update(ctx, configMaps, ref, edited)
+		if err == nil {
+			t.Fatal("update of a deleted object succeeded; a PUT must not recreate it")
+		}
+		if got := Classify(err); got != KindConflict {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindConflict)
+		}
+		if _, err := getConfigMap(ctx, c, ref.Name); !apierrors.IsNotFound(err) {
+			t.Fatalf("after the refused update, get returned %v, want NotFound — the PUT recreated the object", err)
+		}
+	})
+
+	// The control for the subtest above: with the uid edited out of the buffer there
+	// is no precondition left, and the same request is the plain NotFound. That is
+	// what says the Conflict above came from the uid and not from the deletion, and
+	// it is the degraded-buffer path in its own right (principle 3) — a PUT still
+	// never recreates the object.
+	t.Run("without the uid, the same buffer is a NotFound", func(t *testing.T) {
+		ref := createConfigMap(ctx, t, c, "unidentified")
+
+		edited := editBuffer(ctx, t, c, configMaps, ref, func(obj *unstructured.Unstructured) {
+			setNested(t, obj, "mine", "data", "editor")
+			unstructured.RemoveNestedField(obj.Object, "metadata", "uid")
+		})
+		deleteConfigMap(ctx, t, c, ref.Name)
+
+		err := c.Update(ctx, configMaps, ref, edited)
+		if err == nil {
+			t.Fatal("update of a deleted object succeeded; a PUT must not recreate it")
+		}
+		if got := Classify(err); got != KindNotFound {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindNotFound)
+		}
+	})
+}
+
+// editBuffer is the $EDITOR round trip a test needs: fetch the object exactly as
+// the Edit flow does (GetYAML — so the buffer carries whatever that renders,
+// resourceVersion included), apply fn the way a user's edit would, and render it
+// back to YAML. The render is sigs.k8s.io/yaml directly rather than the package's
+// own marshalYAML, so the buffer under test is not produced by the code the test
+// is checking.
+func editBuffer(ctx context.Context, t *testing.T, c *Clients, r Resource, ref ObjectRef, fn func(*unstructured.Unstructured)) []byte {
+	t.Helper()
+	buf, err := c.GetYAML(ctx, r, ref)
+	if err != nil {
+		t.Fatalf("get yaml for %s %q: %v", r.GVR.Resource, ref.Name, err)
+	}
+	jsonBytes, err := yaml.YAMLToJSON([]byte(buf))
+	if err != nil {
+		t.Fatalf("parse the fetched buffer: %v", err)
+	}
+	obj := &unstructured.Unstructured{}
+	if err := obj.UnmarshalJSON(jsonBytes); err != nil {
+		t.Fatalf("decode the fetched buffer: %v", err)
+	}
+	fn(obj)
+	edited, err := yaml.Marshal(obj.Object)
+	if err != nil {
+		t.Fatalf("render the edited buffer: %v", err)
+	}
+	return edited
+}
+
+// setNested writes a value into an unstructured object, failing the test if the
+// path runs through something that is not a map — the edit a user makes in a
+// buffer, with the error checking Go requires of it.
+func setNested(t *testing.T, obj *unstructured.Unstructured, value any, fields ...string) {
+	t.Helper()
+	if err := unstructured.SetNestedField(obj.Object, value, fields...); err != nil {
+		t.Fatalf("set %v: %v", fields, err)
+	}
+}
+
+// setConfigMapKey is the concurrent writer in the staged Edit race: it changes the
+// object through the typed client while a buffer for it is open, which is what
+// moves the resourceVersion out from under that buffer.
+func setConfigMapKey(ctx context.Context, t *testing.T, c *Clients, name, key, value string) {
+	t.Helper()
+	cm, err := c.Clientset.CoreV1().ConfigMaps("default").Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get configmap %s: %v", name, err)
+	}
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+	cm.Data[key] = value
+	if _, err := c.Clientset.CoreV1().ConfigMaps("default").Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("concurrent update of configmap %s: %v", name, err)
+	}
 }
 
 // siblingAnnotation is a pod-template annotation set before a rollout restart, so

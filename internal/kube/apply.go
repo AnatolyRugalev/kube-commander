@@ -22,9 +22,18 @@ import (
 // only managedFields, not resourceVersion), so the Update gets optimistic
 // concurrency for free: if the object changed on the server since it was fetched,
 // the Update fails with a Conflict rather than silently clobbering the newer
-// version — exactly what `kubectl edit` reports. A Conflict, a NotFound (object
-// gone since it was opened), or a server validation error is wrapped and surfaces
-// to the caller to display (#86); nothing panics (principle 3).
+// version — exactly what `kubectl edit` reports. A buffer without that field is a
+// legal *unconditional* PUT that wins the race it should have lost, so its
+// presence is load-bearing, not cosmetic (D189).
+//
+// The buffer's metadata.uid is load-bearing the same way: the apiserver reads a
+// UID on an update as a precondition, so an object deleted while the editor was
+// open is refused as a **Conflict** — not the NotFound you would expect — and a
+// PUT never recreates it. Either Conflict, a server validation error (an edit of
+// an immutable field is a 422), or a NotFound is wrapped and surfaces to the
+// caller to display (#86); nothing panics (principle 3). Editing a subresource
+// (status on a workload) is not an error and not a write: the server discards it
+// and applies the rest of the same PUT.
 //
 // Identity is guarded, not editable: the edited object's name must match the ref
 // (an edit updates *this* object — it is not a rename), and for a namespaced

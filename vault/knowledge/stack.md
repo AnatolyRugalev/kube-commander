@@ -399,6 +399,26 @@ nothing useful; attach is the way.)
     own `metadata` would set an annotation and roll nothing. Assert the bump, and assert
     a pre-existing sibling annotation survives — real pod templates carry
     sidecar-injection and config-hash annotations there.
+  - **A PUT is conditional only because the buffer carries the metadata** (M1-INT-c-4).
+    The fake dynamic client enforces **no optimistic concurrency at all** — its tracker
+    replaces the object whatever `resourceVersion` it is handed — so the guarantee the
+    Edit flow rests on (D129/D189) is only observable against a server:
+    - **A stale `resourceVersion` is a 409 Conflict** (`KindConflict`); **an absent one
+      is a legal unconditional overwrite** that returns 200 and destroys the concurrent
+      write. So "the update succeeded" proves nothing about concurrency — the negative
+      control (strip the field, watch the race be lost silently) is what does.
+    - **`metadata.uid` on an update is a precondition too.** An object deleted while the
+      buffer was open is a **Conflict**, not the NotFound you would expect: *"Operation
+      cannot be fulfilled … StorageError: invalid object, Code: 4 … Precondition failed:
+      UID in precondition: …, UID in object meta:"*. Remove the uid from the buffer and
+      the same request is a plain NotFound (asserted for ConfigMap; a few kinds allow
+      create-on-update, so do not generalize "a PUT never creates" without checking).
+    - **`status` is a subresource, so an edited status is silently discarded** while the
+      spec in the *same* PUT lands, 200 either way. The fake has no subresources and
+      would store both, letting a hermetic test "prove" a status edit worked.
+    - **An immutable field is a 422** (`KindInvalid`): editing a Deployment's
+      `spec.selector` is refused whole-object, unlike a merge patch of two keys, because
+      a PUT is validated as an entire object.
   - **One plane per test function is the rule, not one per assertion** (M1-INT-c-1).
     `startControlPlane`'s per-test isolation exists for tests that wreck cluster-global
     state (an APIService, cluster RBAC) or need the plane configured; an action test

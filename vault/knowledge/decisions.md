@@ -4984,3 +4984,38 @@ schema lacks the field. The user sees a confirmation for an operation that never
    a direct key with `rowActionApplies` — and a third (a command palette, a batch
    "apply to every selected row", a scripted action) must check it too. The predicate is
    the guard; the menu is only one thing that consults it.
+
+## D189 — The edit buffer is the server's object minus managedFields, and nothing else: `resourceVersion` and `uid` are preconditions, not noise (2026-07-31, M1-INT-c-4)
+
+Proven live against a real 1.31 apiserver. `Update` (the Edit write-back, D129) is a PUT,
+and everything that makes it *safe* is metadata the code never reads — it survives into the
+buffer only because `GetYAML` strips managedFields and leaves the rest alone:
+
+- **With `metadata.resourceVersion`:** a concurrent write lands first → the PUT is a **409
+  Conflict** (`KindConflict`) and the other actor's change is intact.
+- **Without it:** the very same request is a **legal unconditional overwrite** — 200, and
+  the concurrent write is gone. The server does not object; there is nothing to classify.
+- **With `metadata.uid`:** an object deleted while the editor was open is refused as a
+  **Conflict** (`Precondition failed: UID in precondition: …, UID in object meta:`), and the
+  PUT does not recreate it.
+- **Without the uid:** the same request is a plain `KindNotFound`.
+
+1. **`GetYAML` strips managedFields and nothing else.** A future leg must not "tidy" the
+   buffer before `$EDITOR` — not `resourceVersion`, `uid`, `creationTimestamp`,
+   `generation`, or `status`. It reads as a courtesy (kubectl-like cleanliness, a smaller
+   diff to review) and the first two of those are load-bearing: dropping `resourceVersion`
+   silently converts Edit's refusal into a clobber, which is exactly the failure D129 exists
+   to prevent, and no test that only checks "the edit applied" would notice.
+2. **A Conflict from Edit is the answer, not a retry signal.** `Update` must not re-fetch
+   and re-apply on Conflict — the buffer the user saved was written against a world that
+   moved, so the resolution is theirs (re-open the object), same as `kubectl edit`. An
+   automatic merge/retry would reintroduce the clobber by another route.
+3. **Two different situations both surface as `KindConflict`** — a stale `resourceVersion`
+   and a deleted object — so UI copy for an edit conflict must say "your buffer is out of
+   date; re-open the object", never "someone else changed this object". `KindNotFound` from
+   an edit means the buffer had no uid, which is the degraded path, not the common one.
+4. **A status-only edit is a no-op the server reports as success.** `status` is a
+   subresource on the workloads: the server discards the edited status and applies the rest
+   of the same PUT, returning 200. Same shape as D188 — a leg that adds an "applied"
+   confirmation must not claim more than the server did, and no-change detection (D129 pt 3)
+   compares bytes, so it does not catch this.
