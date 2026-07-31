@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-c-4 (Update's optimistic concurrency) is done and yielded D189, closing M1-INT-c and leaving M1-INT-d as the only unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-d put the envtest suite in CI (D190), which closes the M1-INT line and empties the Backlog: **no unblocked work remains**, both open board items are blocked on the eleven open human-tasks (two blocking — the CRD error text → CRD-01, the first release tag → M5-11 — nine advisory). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
-      notes: D66's other half and the last item in the M1-INT line. Nine gated tests exist
-      that nothing runs unless a leg remembers to. Keep it off the `make check` gate
-      (D17/D18) — a separate job, so a control-plane download failure never reads as a code
-      failure. Fix the `setup-envtest`-not-on-`PATH` breakage in `make test-envtest` here
-      rather than working around it a fifth time.
+_(none)_
 
 ## Blocked
 
@@ -36,40 +30,11 @@ _Last updated: 2026-07-31 — M1-INT-c-4 (Update's optimistic concurrency) is do
 _(none — M0 complete)_
 
 ### M1 — Kube layer
-_M1 is feature-complete (D66); M1-04b was retired as obsolete (D81), so only the
-deferred envtest item remains — not a blocker._
-
-**M1-INT was un-deferred and split on pickup (2026-07-31).** The deferral rested on a
-premise that is no longer true: D18/D66 assumed control-plane binaries are "fragile in
-sandboxed agent environments", so the item was parked for a human or a CI job. They are
-not — `setup-envtest use 1.31.x` downloads and `TestEnvtestSmoke` passes in this sandbox
-in ~6 s, so an envtest leg is agent-verifiable after all. It was three unrelated surfaces
-behind one line, so it splits D52-style; take them in order, each is its own leg:
-
-DISC-01 is done (D187) — it was the one item in this line that changed behavior rather
-than adding coverage; the three envtest slices remain and are independent of each other.
-
-**M1-INT-b was split on pickup (2026-07-31)** into **b-1** (transport drop) and **b-2**
-(expired resourceVersion), because its two halves need different machinery, not different
-assertions: a drop is produced *between* client and server (a proxy the test can kill) and
-proves the **resume** path, while an expiry can only be produced *by* the server and — as
-probed on a live 1.31 plane — does not happen by itself: a watch from `resourceVersion=1`
-replays every event and never 410s, because nothing has compacted etcd yet. So b-2 needs a
-control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
-`startControlPlane` that takes options, which b-1 does not.
-
-**M1-INT-b is closed** — b-1 (2026-07-31) and b-2 (2026-07-31) landed both branches of the
-reconnect against a live apiserver, so what is left in this line is the action set and CI.
-
-**M1-INT-c was split on pickup (2026-07-31)**, as its own note predicted, into four slices
-by *what the server adds over the fake* rather than by verb count — the fake dynamic client
-applies whatever it is handed to the whole tracked object, so each slice is a different way
-that is not what a real apiserver does:
-
-All four c slices are done (2026-07-31), so **M1-INT-c is closed** — the action set has
-live-apiserver evidence end to end. What is left in this line is CI.
-
-_(M1-INT-d is in **In Progress** above — it is the last item in this line.)_
+_(none — M1 is **done** (D66; M1-04b retired as obsolete, D81), and the **M1-INT envtest
+line is closed** as of M1-INT-d (2026-07-31): the un-deferral (D186), discovery isolation
++ DISC-01 (D187), both watch-reconnect branches (b-1/b-2), the whole action set
+(c-1…c-4, D188/D189) and a CI job that runs the gated suite on every push (D190). The
+per-slice history is in `vault/journal/`.)_
 
 ### M2 — Core TUI
 _(none — M2 is **done** (2026-07-29): every exit criterion in
@@ -320,6 +285,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-d** The gated envtest suite runs in CI — its own workflow on every push/PR, never the `make check` gate a release tag rides on; `make test-envtest` fixed to find `setup-envtest` off `PATH`, and a hermetic guard ties gate constant ↔ recipe ↔ workflow because a skipped suite is a green one — closes the M1-INT line — done 2026-07-31 (D190)
 
 - [x] **M1-INT-c-4** `Update`'s optimistic concurrency against a live apiserver — a stale `resourceVersion` is a real Conflict and the concurrent write survives, while the same buffer without the field overwrites unconditionally and loses it; found that the buffer's `metadata.uid` is a precondition too, so a deleted object is a Conflict rather than the NotFound the doc comment claimed, and that an edited `status` is discarded while the spec in the same PUT lands — closes M1-INT-c — done 2026-07-31 (D189)
 

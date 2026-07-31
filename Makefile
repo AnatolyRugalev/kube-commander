@@ -24,11 +24,30 @@ keys-doc:
 
 # Opt-in envtest integration tests (D18): stand up a real kube-apiserver + etcd.
 # Not part of `check` — needs control-plane binaries fetched via setup-envtest.
-#   go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+# CI runs this target in its own workflow (.github/workflows/envtest.yml), never
+# as part of the `make check` gate: a failed control-plane download is not a code
+# failure (D190). Locally:
+#   go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
 ENVTEST_K8S_VERSION ?= 1.31.x
+# setup-envtest is a tool, not a module dependency, so it is wherever `go install`
+# put it — which is on PATH only if GOPATH/bin is. Look there too rather than
+# failing at a command substitution.
+SETUP_ENVTEST ?= $(shell command -v setup-envtest 2>/dev/null || printf '%s/bin/setup-envtest' "$$(go env GOPATH)")
 test-envtest:
-	KUBEBUILDER_ASSETS="$$(setup-envtest use -p path $(ENVTEST_K8S_VERSION))" \
-		KUBECOM_TEST_ENVTEST=1 go test ./internal/kube/... -count=1
+	@set -e; \
+	if [ -n "$$KUBEBUILDER_ASSETS" ]; then \
+		echo "using KUBEBUILDER_ASSETS=$$KUBEBUILDER_ASSETS"; \
+	elif [ -x "$(SETUP_ENVTEST)" ]; then \
+		KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use -p path $(ENVTEST_K8S_VERSION))"; \
+		export KUBEBUILDER_ASSETS; \
+		echo "using KUBEBUILDER_ASSETS=$$KUBEBUILDER_ASSETS"; \
+	else \
+		echo "make: setup-envtest not found (looked on PATH and at $(SETUP_ENVTEST))." >&2; \
+		echo "  go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19" >&2; \
+		echo "or set KUBEBUILDER_ASSETS to a control-plane binary directory." >&2; \
+		exit 1; \
+	fi; \
+	KUBECOM_TEST_ENVTEST=1 go test ./internal/kube/... -count=1
 
 # Record the README screencast (docs/screencast.gif) from the committed tape.
 # Not part of `check`: it needs vhs (https://github.com/charmbracelet/vhs), a real

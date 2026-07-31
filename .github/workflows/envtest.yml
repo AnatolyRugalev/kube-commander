@@ -1,0 +1,69 @@
+# envtest: run the opt-in integration suite (D18) against a real kube-apiserver
+# + etcd, so the nine gated `TestEnvtest*` tests stop depending on an agent
+# remembering to run them locally (M1-INT-d, D66).
+#
+# Deliberately **not** part of ci.yml's `make check` (D17/D18):
+#
+#   • `make check` must mean the same thing in CI as it does in a sandbox —
+#     hermetic, no downloads. This job downloads a control plane, so its red is a
+#     different kind of red, and it says so by being a separate check.
+#   • release.yml calls ci.yml as the gate for a `v*` tag (D173 pt 1). Folding
+#     envtest in there would let a failed control-plane *download* block a release
+#     of a tree with nothing wrong with it — the one push that cannot be retried.
+#
+# Linux only, on purpose: these tests exercise apiserver behavior, not
+# OS-specific code. `make check` already runs the matrix D7 asks for.
+name: envtest
+
+on:
+  push:
+    branches: [v1, main]
+  pull_request:
+    branches: [v1, main]
+  # Lets a human re-run the suite on demand (a control-plane download is the one
+  # step here that can fail for reasons unrelated to the code).
+  workflow_dispatch:
+
+concurrency:
+  group: envtest-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # setup-envtest, pinned exactly rather than to `@release-0.19` (its branch
+  # head, which moves) or `@latest` (a newer module line than
+  # controller-runtime v0.19.4). This pseudo-version *is* release-0.19's head;
+  # bump it together with controller-runtime, never on its own.
+  SETUP_ENVTEST_VERSION: v0.0.0-20250308055145-5fe7bb3edc86
+  # Control-plane version to fetch. Keep in sync with the Makefile's
+  # ENVTEST_K8S_VERSION default.
+  ENVTEST_K8S_VERSION: 1.31.x
+
+jobs:
+  envtest:
+    name: make test-envtest
+    runs-on: ubuntu-latest
+    # A hung apiserver would otherwise sit on the runner's default 6 hours; the
+    # whole suite is ~45 s.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Single source of truth for the Go floor: the go.mod directive (D23).
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Install setup-envtest
+        run: |
+          go install "sigs.k8s.io/controller-runtime/tools/setup-envtest@${SETUP_ENVTEST_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # The target fetches the control-plane binaries itself and sets the gate;
+      # everything about how the suite runs lives in the Makefile so CI and a
+      # local leg run the identical command (guarded by TestEnvtestSuiteRunsInCI).
+      - name: make test-envtest
+        run: make test-envtest

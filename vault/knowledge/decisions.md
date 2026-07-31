@@ -5019,3 +5019,29 @@ buffer only because `GetYAML` strips managedFields and leaves the rest alone:
    of the same PUT, returning 200. Same shape as D188 — a leg that adds an "applied"
    confirmation must not claim more than the server did, and no-change detection (D129 pt 3)
    compares bytes, so it does not catch this.
+
+## D190 — The envtest suite runs in its own workflow; `make check` stays hermetic and is never gated on a control-plane download (2026-07-31, M1-INT-d)
+
+The gated suite (`KUBECOM_TEST_ENVTEST=1`, D18) now runs on every push and PR from
+[`.github/workflows/envtest.yml`](../../.github/workflows/envtest.yml). Where it runs is
+the constraint, not that it runs:
+
+1. **Not in ci.yml, and not in `make check`.** ci.yml is what release.yml calls as the
+   gate for a `v*` tag (D173 pt 1), so an envtest job inside it would let a failed
+   *download* of a control plane block the release of a tree with nothing wrong with it —
+   the one push that cannot be retried. And D17's "green" must keep meaning the same
+   hermetic thing in CI as in a sandbox: `make check` does no network I/O beyond the module
+   cache. A leg that wants envtest coverage enforced adds it to the envtest workflow, never
+   to the gate.
+2. **The suite skipping is a green run, so the wiring needs its own guard.** `go test
+   ./internal/kube/...` with the gate unset passes with every `TestEnvtest*` skipped:
+   drop `KUBECOM_TEST_ENVTEST=1` from the Makefile recipe or rename the constant on the Go
+   side and CI reports success over a suite that ran nothing. `TestEnvtestSuiteRunsInCI`
+   (hermetic, in `make check`) ties the constant, the recipe and the workflow together, and
+   must be kept in step with any change to how the suite is invoked. Every *other* failure
+   here is loud: a failed download exits non-zero, a wrong `KUBEBUILDER_ASSETS` fails
+   `env.Start()`.
+3. **`make test-envtest` is the single invocation.** CI runs the target rather than its own
+   `go test` line, so a local leg and a CI run cannot drift. Tool and control-plane versions
+   are pinned exactly (`SETUP_ENVTEST_VERSION`, `ENVTEST_K8S_VERSION`), like golangci-lint
+   and goreleaser; bump `setup-envtest` together with `controller-runtime`, never alone.

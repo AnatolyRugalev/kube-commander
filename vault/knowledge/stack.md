@@ -260,7 +260,9 @@ nothing useful; attach is the way.)
     ```
 
     Pin the tool to `@release-0.19` to match controller-runtime v0.19.4; `@latest`
-    pulls a newer module line. Binaries land in
+    pulls a newer module line. `@release-0.19` is a *branch*, so it re-resolves on
+    every install — CI pins the pseudo-version it points at instead
+    (`v0.0.0-20250308055145-5fe7bb3edc86`, M1-INT-d/D190). Binaries land in
     `~/.local/share/kubebuilder-envtest/k8s/1.31.0-linux-amd64`. A whole control
     plane starts in ~4 s, so a test per plane is affordable — and preferable, since
     these tests break cluster-global state on purpose (`startControlPlane` in
@@ -419,6 +421,27 @@ nothing useful; attach is the way.)
     - **An immutable field is a 422** (`KindInvalid`): editing a Deployment's
       `spec.selector` is refused whole-object, unlike a merge patch of two keys, because
       a PUT is validated as an entire object.
+  - **It runs in CI** as of M1-INT-d (D190): `.github/workflows/envtest.yml`, its own
+    check, ubuntu-only, ~2 min including the download. Two things to know before
+    touching that wiring:
+    - **A skipped gated suite is a green suite.** `go test ./internal/kube/...` with
+      `KUBECOM_TEST_ENVTEST` unset exits 0 with every `TestEnvtest*` skipped, so the
+      whole job can silently stop testing anything. `TestEnvtestSuiteRunsInCI`
+      (hermetic, runs in `make check`) is the guard: gate constant ↔ Makefile recipe ↔
+      a workflow that runs `make test-envtest` on push, and not ci.yml.
+    - **`setup-envtest` lives wherever `go install` put it**, which is on `PATH` only if
+      `$(go env GOPATH)/bin` is — a sandbox can have the *assets* on disk and no tool on
+      `PATH`. `make test-envtest` now honours a preset `KUBEBUILDER_ASSETS`, falls back to
+      `$(go env GOPATH)/bin/setup-envtest`, and fails with instructions instead of feeding
+      an empty command substitution into the environment (which surfaced as an
+      unrelated-looking `env.Start()` error).
+  - **Parsing a workflow file in a guard test: the `on:` key is not `"on"`.**
+    `sigs.k8s.io/yaml` converts YAML→JSON with YAML 1.1 semantics, where the bare word
+    `on` is the **boolean true** — so a GitHub workflow's trigger block arrives under the
+    key `"true"` (`json:"true"` on the struct field). Every other key is literal. Two
+    guards read workflows this way (`TestReleaseWorkflowPinsGoreleaser`,
+    `TestEnvtestSuiteRunsInCI`); a third that silently found no `"on"` key would pass
+    vacuously.
   - **One plane per test function is the rule, not one per assertion** (M1-INT-c-1).
     `startControlPlane`'s per-test isolation exists for tests that wreck cluster-global
     state (an APIService, cluster RBAC) or need the plane configured; an action test

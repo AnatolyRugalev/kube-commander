@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `done` (2026-07-31) — every exit criterion is ticked: M1-INT-a proved the last one, group isolation, against a live envtest apiserver (D186), and the remaining envtest slices (M1-INT-b/c/d) deepen coverage rather than gate the milestone. See the journal for the per-leg history.
+**Status:** `done` (2026-07-31) — every exit criterion is ticked and the M1-INT envtest line is closed: live coverage for discovery isolation, both watch-reconnect branches and the whole action set, running in CI from M1-INT-d. See the journal for the per-leg history.
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal
@@ -74,8 +74,9 @@ all in-process via client-go, fault-tolerant, and fast to start.
       **M1-INT-c-4** closed the action set by proving `Update`'s optimistic
       concurrency — a stale `resourceVersion` is a real Conflict and a buffer
       without one clobbers unconditionally, which is what makes the buffer's
-      metadata load-bearing (D189). A CI job (M1-INT-d) is the last
-      coverage-deepening backlog item, not a milestone gate._
+      metadata load-bearing (D189). **M1-INT-d** closed the line: the gated suite
+      runs on every push from its own workflow, deliberately outside the `make
+      check` gate a release tag is verified with (D190)._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._
