@@ -67,9 +67,12 @@ all in-process via client-go, fault-tolerant, and fast to start.
       all, since it discards those options; **M1-INT-c-2** proved `Scale` reaches
       the real `scale` **subresource** (Deployment and StatefulSet write through,
       zero included) and that a kind without one — DaemonSet — is refused, where
-      the fake instead succeeds. The remaining action slices (M1-INT-c-3/c-4) and
-      a CI job (M1-INT-d) are coverage-deepening backlog items, not milestone
-      gates._
+      the fake instead succeeds; **M1-INT-c-3** proved the five merge-patch
+      actions (RolloutRestart / Cordon / Uncordon / Suspend / Resume) against
+      three real schemas, and found that a wrong-kind patch is a silent no-op
+      rather than an error, which makes the UI's kind gating correctness (D188).
+      The remaining action slice (M1-INT-c-4) and a CI job (M1-INT-d) are
+      coverage-deepening backlog items, not milestone gates._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._

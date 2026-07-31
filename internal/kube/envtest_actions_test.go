@@ -6,10 +6,12 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // M1-INT-c-1: "Delete", against a live apiserver.
@@ -320,6 +322,351 @@ func TestEnvtestScaleAgainstLiveAPIServer(t *testing.T) {
 		}
 		requireReplicas(ctx, t, c, fresh.Name, 4)
 	})
+}
+
+// M1-INT-c-3: the merge-patch actions, against a live apiserver.
+//
+// RolloutRestart, Cordon, Uncordon, Suspend and Resume are one wire format — an
+// RFC 7386 merge patch of a two-key body — sent at three different schemas. The
+// hermetic suite (actions_test.go) drives all five through the fake dynamic
+// client, which merges whatever JSON it is handed into the tracked object and
+// **validates nothing**: no schema, no field types, no notion of whether the kind
+// it is patching has the field at all. So everything the fake can prove is that
+// the bytes were built correctly, which the pure patch-builder tests already prove
+// more directly.
+//
+// What a real server adds is what it *does* with a patch the fake would simply
+// store, and the two answers are not symmetric — that asymmetry is the slice:
+//
+//   - A **known field with the wrong type** is refused (422 Invalid). The server
+//     validates the fields it knows, so a builder that quoted its bool fails loudly
+//     rather than writing a string into spec.unschedulable.
+//   - An **unknown field** is *not* refused. It is dropped with a warning and a
+//     200, so a merge-patch action aimed at a kind that does not have the field
+//     does nothing, silently and successfully. The kind gating in the row-action
+//     registry (D107) is the only thing standing between the user and that no-op —
+//     see D188.
+//
+// The first is the premise of the second: without it, "the server dropped it" and
+// "the server validates nothing" are the same observation, and D188 would rest on
+// a server that simply never checks anything.
+//
+// Two more things only a server shows: the pod-template annotation patch adds
+// restartedAt without disturbing its siblings *and* bumps `metadata.generation`
+// (the change a controller observes — the restart itself), and "set the field to
+// an explicit false" lands differently per schema, because `NodeSpec.Unschedulable`
+// is a bool with `omitempty` and `CronJobSpec.Suspend` is a `*bool`.
+//
+// One control plane for the whole function, per the c-1 rule; each subtest uses
+// its own object name and the cordon subtests use their own node.
+
+// TestEnvtestMergePatchActionsAgainstLiveAPIServer exercises the five merge-patch
+// actions against a real kube-apiserver, with each Resource taken from a real
+// discovery pass — the value the menu hands the action at runtime.
+func TestEnvtestMergePatchActionsAgainstLiveAPIServer(t *testing.T) {
+	_, cfg := startControlPlane(t)
+	c := clientsFor(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	discovered := discoverFresh(ctx, c)
+	deployments := requireDiscoveredResource(t, discovered.Resources, "apps", "deployments")
+	statefulSets := requireDiscoveredResource(t, discovered.Resources, "apps", "statefulsets")
+	daemonSets := requireDiscoveredResource(t, discovered.Resources, "apps", "daemonsets")
+	nodes := requireDiscoveredResource(t, discovered.Resources, "", "nodes")
+	cronJobs := requireDiscoveredResource(t, discovered.Resources, "batch", "cronjobs")
+
+	// The restart is not the annotation; it is the generation bump the annotation
+	// causes. And the patch has to *add* to the annotation map rather than replace
+	// it, or a restart would silently drop whatever else was annotated on the pod
+	// template — which on a real deployment is where sidecar injectors, checksum
+	// annotations and config-hash triggers live.
+	t.Run("a rollout restart stamps restartedAt beside the annotations already there", func(t *testing.T) {
+		ref := createDeployment(ctx, t, c, "restart", 1)
+		before := setTemplateAnnotation(ctx, t, c, ref.Name, siblingAnnotation, "ops")
+
+		if err := c.RolloutRestart(ctx, deployments, ref); err != nil {
+			t.Fatalf("rollout restart: %v", err)
+		}
+
+		d, err := c.Clientset.AppsV1().Deployments("default").Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get deployment: %v", err)
+		}
+		stamp, ok := d.Spec.Template.Annotations[restartedAtAnnotation]
+		if !ok {
+			t.Fatalf("pod template annotations = %v, want %q", d.Spec.Template.Annotations, restartedAtAnnotation)
+		}
+		if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+			t.Errorf("restartedAt = %q, not RFC 3339: %v", stamp, err)
+		}
+		if got := d.Spec.Template.Annotations[siblingAnnotation]; got != "ops" {
+			t.Errorf("sibling annotation %s = %q, want %q — the patch replaced the annotation map",
+				siblingAnnotation, got, "ops")
+		}
+		// What actually restarts the pods: the template changed, so the
+		// controller sees a new generation to roll out to.
+		if d.Generation <= before {
+			t.Errorf("generation = %d after restart, was %d — the pod template did not change, so nothing rolls",
+				d.Generation, before)
+		}
+	})
+
+	// The same patch at two more schemas, which is the reason it is a merge patch
+	// on an unstructured object and not a typed strategic-merge: the pod template
+	// sits at the same path in every workload kind, CRDs included, so one code
+	// path covers all of them with no per-kind wiring.
+	t.Run("the same patch restarts a statefulset and a daemonset", func(t *testing.T) {
+		for _, w := range []struct {
+			name string
+			r    Resource
+			ref  ObjectRef
+		}{
+			{"statefulset", statefulSets, createStatefulSet(ctx, t, c, "restart-ss", 1)},
+			{"daemonset", daemonSets, createDaemonSet(ctx, t, c, "restart-ds")},
+		} {
+			if err := c.RolloutRestart(ctx, w.r, w.ref); err != nil {
+				t.Fatalf("rollout restart %s: %v", w.name, err)
+			}
+			u, err := c.Dynamic.Resource(w.r.GVR).Namespace("default").Get(ctx, w.ref.Name, metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("get %s: %v", w.name, err)
+			}
+			stamp, found, err := unstructured.NestedString(u.Object,
+				"spec", "template", "metadata", "annotations", restartedAtAnnotation)
+			if err != nil || !found {
+				t.Errorf("%s restartedAt: found=%v err=%v, want the annotation set", w.name, found, err)
+			} else if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+				t.Errorf("%s restartedAt = %q, not RFC 3339", w.name, stamp)
+			}
+		}
+	})
+
+	// Cordon/uncordon on a real Node, and the place where "set it to an explicit
+	// false" meets a typed schema: NodeSpec.Unschedulable is a plain bool with
+	// omitempty, so the server round-trips false by *dropping the key*. The
+	// action's doc comment used to claim the field stays present; it does not, and
+	// it does not matter — absent and false read identically to the scheduler.
+	// The fake keeps the key, so only a server can show this.
+	t.Run("cordon and uncordon toggle a real node", func(t *testing.T) {
+		ref := createNode(ctx, t, c, "cordoned")
+
+		if err := c.Cordon(ctx, nodes, ref); err != nil {
+			t.Fatalf("cordon: %v", err)
+		}
+		unschedulable, found, err := liveNodeUnschedulable(ctx, t, c, nodes, ref.Name)
+		if err != nil {
+			t.Fatalf("spec.unschedulable is not a bool after cordon: %v", err)
+		}
+		if !found || !unschedulable {
+			t.Errorf("after cordon: unschedulable=%v found=%v, want true", unschedulable, found)
+		}
+
+		if err := c.Uncordon(ctx, nodes, ref); err != nil {
+			t.Fatalf("uncordon: %v", err)
+		}
+		unschedulable, _, err = liveNodeUnschedulable(ctx, t, c, nodes, ref.Name)
+		if err != nil {
+			t.Fatalf("spec.unschedulable is not a bool after uncordon: %v", err)
+		}
+		if unschedulable {
+			t.Error("after uncordon: unschedulable=true, want false")
+		}
+		// Read it typed as well: this is the assertion that survives whichever
+		// way the server chose to serialize the false.
+		n, err := c.Clientset.CoreV1().Nodes().Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get node: %v", err)
+		}
+		if n.Spec.Unschedulable {
+			t.Error("typed node is still unschedulable after uncordon")
+		}
+	})
+
+	// The same explicit-false at a schema that keeps it: CronJobSpec.Suspend is a
+	// *bool, so a resumed CronJob carries `suspend: false` rather than nothing.
+	// Both spellings mean "not suspended" — what matters is that neither action
+	// needs to know which one it will get, because both are merge patches of the
+	// same shape.
+	t.Run("suspend and resume toggle a real cronjob", func(t *testing.T) {
+		ref := createCronJob(ctx, t, c, "nightly")
+
+		if err := c.Suspend(ctx, cronJobs, ref); err != nil {
+			t.Fatalf("suspend: %v", err)
+		}
+		if suspended := liveCronJobSuspended(ctx, t, c, ref.Name); suspended == nil || !*suspended {
+			t.Errorf("after suspend: spec.suspend = %v, want true", suspended)
+		}
+
+		if err := c.Resume(ctx, cronJobs, ref); err != nil {
+			t.Fatalf("resume: %v", err)
+		}
+		if suspended := liveCronJobSuspended(ctx, t, c, ref.Name); suspended == nil || *suspended {
+			t.Errorf("after resume: spec.suspend = %v, want false", suspended)
+		}
+	})
+
+	// The premise of the subtest after this one: a field the schema *knows* is
+	// type-checked, and a wrong type is refused with a 422 the caller can display
+	// (#86). The hermetic suite already catches a builder that quotes its bool (it
+	// asserts the exact bytes), so this is not about catching that bug — it is
+	// about establishing that the server validates at all, which is what makes the
+	// silent no-op below a fact about *unknown fields* rather than about a server
+	// that checks nothing.
+	t.Run("a known field with the wrong type is refused", func(t *testing.T) {
+		ref := createNode(ctx, t, c, "typechecked")
+
+		_, err := c.resourceInterface(nodes, "").Patch(ctx, ref.Name, types.MergePatchType,
+			[]byte(`{"spec":{"unschedulable":"true"}}`), metav1.PatchOptions{})
+		if err == nil {
+			t.Fatal("a string in spec.unschedulable was accepted; the field is not type-checked after all")
+		}
+		if got := Classify(err); got != KindInvalid {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindInvalid)
+		}
+
+		// And the value the action actually sends is accepted, at the same field
+		// through the same path — so the refusal above is about the type and not
+		// about the request.
+		if err := c.Cordon(ctx, nodes, ref); err != nil {
+			t.Fatalf("cordon after the refused patch: %v", err)
+		}
+	})
+
+	// The other half of the asymmetry, and the reason D188 exists: an *unknown*
+	// field is not refused, it is dropped — warning, 200, nothing changed. So a
+	// merge-patch action pointed at the wrong kind reports success and does
+	// nothing, which is indistinguishable from success at the UI. The fake cannot
+	// show this either way: it has no schema, so it adds spec.suspend to the
+	// Deployment and lets the object claim to be suspended.
+	t.Run("the wrong kind is a silent no-op, not an error", func(t *testing.T) {
+		ref := createDeployment(ctx, t, c, "not-a-cronjob", 1)
+		before, err := c.Clientset.AppsV1().Deployments("default").Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get deployment: %v", err)
+		}
+
+		if err := c.Suspend(ctx, deployments, ref); err != nil {
+			t.Fatalf("suspending a deployment returned %v; if the server started refusing "+
+				"unknown fields, D188's premise is gone and the UI gating is no longer the only guard", err)
+		}
+
+		after, err := c.Dynamic.Resource(deployments.GVR).Namespace("default").
+			Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get deployment: %v", err)
+		}
+		if _, found, _ := unstructured.NestedBool(after.Object, "spec", "suspend"); found {
+			t.Error("the dropped field landed on the deployment anyway")
+		}
+		if got := after.GetResourceVersion(); got != before.ResourceVersion {
+			t.Errorf("resourceVersion = %s, was %s — the no-op patch changed the object", got, before.ResourceVersion)
+		}
+	})
+
+	// The #86 contract for this action group: a row can be stale by the time the
+	// keypress lands, and the action must surface that rather than swallow it.
+	t.Run("a stale row surfaces NotFound", func(t *testing.T) {
+		err := c.Cordon(ctx, nodes, ObjectRef{Name: "never-existed"})
+		if err == nil {
+			t.Fatal("cordoning a missing node succeeded")
+		}
+		if got := Classify(err); got != KindNotFound {
+			t.Errorf("Classify(%v) = %v, want %v", err, got, KindNotFound)
+		}
+	})
+}
+
+// siblingAnnotation is a pod-template annotation set before a rollout restart, so
+// a patch that replaced the annotation map instead of merging into it is visible
+// as this key going missing. Real clusters keep sidecar-injection and config-hash
+// annotations here.
+const siblingAnnotation = "kubecom.test/owner"
+
+// setTemplateAnnotation adds a pod-template annotation to a Deployment through the
+// typed client — the *other* actor, so the setup never depends on the code under
+// test — and returns the object's generation afterwards, which the restart must
+// then bump.
+func setTemplateAnnotation(ctx context.Context, t *testing.T, c *Clients, name, key, value string) int64 {
+	t.Helper()
+	d, err := c.Clientset.AppsV1().Deployments("default").Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get deployment %s: %v", name, err)
+	}
+	if d.Spec.Template.Annotations == nil {
+		d.Spec.Template.Annotations = map[string]string{}
+	}
+	d.Spec.Template.Annotations[key] = value
+	updated, err := c.Clientset.AppsV1().Deployments("default").Update(ctx, d, metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("annotate deployment %s: %v", name, err)
+	}
+	return updated.Generation
+}
+
+// createNode writes a cluster-scoped Node and returns the ObjectRef a table row
+// would carry. No kubelet ever registers on an envtest plane, so the node stays
+// NotReady — which is irrelevant here: spec.unschedulable is desired state and is
+// all Cordon sets.
+func createNode(ctx context.Context, t *testing.T, c *Clients, name string) ObjectRef {
+	t.Helper()
+	n, err := c.Clientset.CoreV1().Nodes().Create(ctx, &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("create node %s: %v", name, err)
+	}
+	return ObjectRef{Name: n.Name, UID: string(n.UID)}
+}
+
+// liveNodeUnschedulable reads spec.unschedulable off the *unstructured* node — the
+// same view the table renders from — and reports whether the key is present at
+// all, because the server drops it when it is false (omitempty). A non-nil error
+// means the value is not a bool, which is the failure a quoted patch would cause.
+func liveNodeUnschedulable(ctx context.Context, t *testing.T, c *Clients, r Resource, name string) (bool, bool, error) {
+	t.Helper()
+	n, err := c.Dynamic.Resource(r.GVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get node %s: %v", name, err)
+	}
+	return unstructured.NestedBool(n.Object, "spec", "unschedulable")
+}
+
+// createCronJob writes the minimum CronJob the apiserver accepts and returns its
+// ObjectRef. Nothing schedules on an envtest plane, so no Job is ever created —
+// spec.suspend is desired state, and all Suspend/Resume set.
+func createCronJob(ctx context.Context, t *testing.T, c *Clients, name string) ObjectRef {
+	t.Helper()
+	cj, err := c.Clientset.BatchV1().CronJobs("default").Create(ctx, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "*/5 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RestartPolicy: corev1.RestartPolicyOnFailure,
+						Containers:    []corev1.Container{{Name: "app", Image: "busybox"}},
+					},
+				}},
+			},
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("create cronjob %s: %v", name, err)
+	}
+	return ObjectRef{Namespace: cj.Namespace, Name: cj.Name, UID: string(cj.UID)}
+}
+
+// liveCronJobSuspended reads spec.suspend typed, where it is a *bool — so nil (unset),
+// false and true are three distinguishable states, unlike the node's flag.
+func liveCronJobSuspended(ctx context.Context, t *testing.T, c *Clients, name string) *bool {
+	t.Helper()
+	cj, err := c.Clientset.BatchV1().CronJobs("default").Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get cronjob %s: %v", name, err)
+	}
+	return cj.Spec.Suspend
 }
 
 // scaleSiblingField is a Deployment spec field outside the Scale schema, set at

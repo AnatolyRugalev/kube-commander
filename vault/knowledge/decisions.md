@@ -4957,3 +4957,30 @@ round trip on every discovery pass) to buy a version number nobody uses.
    apiserver produces the shape, and it was watched fail (`Failed = []`) with the fix
    removed. Any future change to how discovery failures are detected must be re-proven the
    same way (envtest is available — D186 pt 1).
+
+## D188 — A merge-patch action is only correct because the UI gated it: the server does not refuse a wrong-kind patch (2026-07-31, M1-INT-c-3)
+
+Proven live against a real 1.31 apiserver: `Suspend` on a **Deployment** returns `nil`.
+The apiserver logs `unknown field "spec.suspend"`, drops it, and answers 200 with the
+object unchanged (same `resourceVersion`). This is not a quirk of one field — an RFC 7386
+merge patch is decoded leniently, so **every** merge-patch action (RolloutRestart, Cordon,
+Uncordon, Suspend, Resume) reports success and does nothing when it lands on a kind whose
+schema lacks the field. The user sees a confirmation for an operation that never happened.
+
+1. **Applicability is decided before the request, never by the error.** The kind-keyed
+   registry of D107 (`rowActions` + `kindIn(…)`) is load-bearing *correctness*, not
+   polish: it is the only thing that stops the no-op above. A future leg must not widen an
+   action's applicability, drop the predicate, or offer these actions on an unknown/CRD
+   kind on the theory that "the server will reject it if it doesn't apply". It will not.
+2. **The server does validate what it knows, which is why this is specifically about
+   unknown fields.** A *known* field with the wrong type is a 422 (`KindInvalid`). So the
+   failure mode is narrow and permanent: schema-shaped patches at the wrong schema.
+3. **A test that proves a merge patch was refused must read the object back.** An error
+   check alone cannot distinguish "refused" from "accepted and discarded" — and the fake
+   dynamic client, which has no schema at all, will happily store the dropped field and
+   let the object claim the operation worked.
+4. **Anything that makes an action reachable by a new route inherits this.** Both
+   current routes already check the predicate — the menu filters with `rowActionTitles`,
+   a direct key with `rowActionApplies` — and a third (a command palette, a batch
+   "apply to every selected row", a scripted action) must check it too. The predicate is
+   the guard; the menu is only one thing that consults it.

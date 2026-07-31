@@ -376,6 +376,29 @@ nothing useful; attach is the way.)
       a warning, not rejected**: the apiserver logs `unknown field "spec.replicas"` and
       returns 200. So an assertion that a bad patch "fails" must read the object back
       and check the field is absent, not just check the error.
+  - **A merge patch is validated per field, and "unknown" is not an error**
+    (M1-INT-c-3). A real apiserver type-checks a field its schema *knows* — a string
+    in `spec.unschedulable` is a **422 Invalid** (`Classify` → `KindInvalid`), message
+    *"json: cannot unmarshal string into Go struct field NodeSpec.spec.unschedulable
+    of type bool"* — but a field it does **not** know is dropped with a warning and a
+    **200**, unchanged `resourceVersion` included (the c-2 finding, now confirmed for a
+    whole action: `Suspend` on a Deployment returns nil and does nothing). So a
+    merge-patch action pointed at the wrong kind is a silent success, and the only
+    guard is the kind gating in the UI registry (D107/D188).
+  - **"Set the flag to an explicit false" lands differently per schema**
+    (M1-INT-c-3). `NodeSpec.Unschedulable` is a `bool` with `omitempty`, so after an
+    uncordon the key is **gone** from the stored object — `NestedBool(…, "spec",
+    "unschedulable")` returns `found=false`, and any test asserting "present and false"
+    fails against a server while passing against the fake. `CronJobSpec.Suspend` is a
+    `*bool`, so a resumed CronJob really does carry `suspend: false`. Both mean the same
+    thing to the controller; assert the *meaning* (read it typed) rather than the
+    key's presence.
+  - **A rollout restart is the generation bump, not the annotation** (M1-INT-c-3).
+    Patching `spec.template.metadata.annotations` bumps `metadata.generation`, which is
+    what a controller observes; a patch that stamped the same annotation on the object's
+    own `metadata` would set an annotation and roll nothing. Assert the bump, and assert
+    a pre-existing sibling annotation survives — real pod templates carry
+    sidecar-injection and config-hash annotations there.
   - **One plane per test function is the rule, not one per assertion** (M1-INT-c-1).
     `startControlPlane`'s per-test isolation exists for tests that wreck cluster-global
     state (an APIService, cluster RBAC) or need the plane configured; an action test

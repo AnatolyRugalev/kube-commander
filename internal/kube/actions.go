@@ -141,11 +141,14 @@ func (c *Clients) Cordon(ctx context.Context, r Resource, ref ObjectRef) error {
 }
 
 // Uncordon reverses Cordon: it marks a node schedulable again by merge-patching
-// `spec.unschedulable` to false, matching `kubectl uncordon`. Setting the field to
-// the concrete value false (not null) is deliberate — a merge patch only removes a
-// key when the value is null, and an explicit false reads the same to the
-// scheduler while keeping the field present. Same generic dynamic-client path,
-// name check, wrapped errors, and idempotence as Cordon.
+// `spec.unschedulable` to false, matching `kubectl uncordon`. Sending the concrete
+// value false rather than null is deliberate — in a merge patch null means "delete
+// this key", which is a different request the schema need not accept, while false
+// is exactly what kubectl sends. What the server stores afterwards is its own
+// business: `NodeSpec.Unschedulable` is a bool with `omitempty`, so the key
+// disappears from the persisted object (proven live, M1-INT-c-3), and an absent
+// flag reads identically to the scheduler. Same generic dynamic-client path, name
+// check, wrapped errors, and idempotence as Cordon.
 func (c *Clients) Uncordon(ctx context.Context, r Resource, ref ObjectRef) error {
 	return c.setUnschedulable(ctx, r, ref, false)
 }
@@ -184,11 +187,12 @@ func (c *Clients) Suspend(ctx context.Context, r Resource, ref ObjectRef) error 
 
 // Resume reverses Suspend: it marks a CronJob active again by merge-patching
 // `spec.suspend` to false, matching `kubectl patch cronjob NAME -p
-// '{"spec":{"suspend":false}}'`. Setting the field to the concrete value false
-// (not null) is deliberate for the same reason as Uncordon — a merge patch only
-// removes a key when the value is null, and an explicit false keeps the field
-// present and reads identically to the controller. Same generic dynamic-client
-// path, name check, wrapped errors, and idempotence as Suspend.
+// '{"spec":{"suspend":false}}'`. Sending the concrete value false (not null) is
+// deliberate for the same reason as Uncordon. Here the field does survive the
+// round trip — `CronJobSpec.Suspend` is a `*bool`, so a resumed CronJob carries an
+// explicit `suspend: false` where an uncordoned Node carries nothing (both proven
+// live, M1-INT-c-3); neither action needs to know which it will get. Same generic
+// dynamic-client path, name check, wrapped errors, and idempotence as Suspend.
 func (c *Clients) Resume(ctx context.Context, r Resource, ref ObjectRef) error {
 	return c.setSuspend(ctx, r, ref, false)
 }

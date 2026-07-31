@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-c-2 (Scale) is done, leaving c-3/c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-c-3 (the merge-patch actions) is done and yielded D188, leaving c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
-      notes: RolloutRestart / Cordon / Uncordon / Suspend / Resume — one wire format
-      (RFC 7386) across four schemas the fake never validates: a real server type-checks
-      `spec.unschedulable`, `spec.suspend` and the pod-template annotation map, and a merge
-      patch that adds an annotation must leave the sibling annotations alone (the fake's
-      whole-object merge cannot distinguish that from a replace).
+_(none)_
 
 ## Blocked
 
@@ -66,7 +60,7 @@ by *what the server adds over the fake* rather than by verb count — the fake d
 applies whatever it is handed to the whole tracked object, so each slice is a different way
 that is not what a real apiserver does:
 
-M1-INT-c-1 and c-2 are done (2026-07-31); c-3/c-4 are independent of each other and of them.
+M1-INT-c-1, c-2 and c-3 are done (2026-07-31); c-4 is independent of all three.
 
 - [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
       status: todo | owner: — | added: 2026-07-31
@@ -330,6 +324,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-c-3** The five merge-patch actions against a live apiserver — a rollout restart stamps `restartedAt` beside the annotations already on the pod template and bumps `metadata.generation` (Deployment, StatefulSet, DaemonSet), a real Node cordons/uncordons and a real CronJob suspends/resumes; found that a wrong-kind patch is dropped with a warning and a 200, so `Suspend` on a Deployment silently succeeds and the UI's kind gating is correctness, not polish — done 2026-07-31 (D188)
 
 - [x] **M1-INT-c-2** Scale reaches a live `scale` subresource — a Deployment and a StatefulSet write through to `spec.replicas` (zero included) with a sibling spec field left alone, while a DaemonSet, which registers no `scale`, is refused with a real NotFound and keeps no invented `spec.replicas` — the one case where the fake dynamic client *succeeds* at what a server rejects, and the mutation (drop the subresource argument) that catches it — done 2026-07-31 (M1-INT-c-2)
 
