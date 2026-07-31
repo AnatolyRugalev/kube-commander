@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-c was split into c-1…c-4 and c-1 (Delete) is done, leaving c-2/c-3/c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-c-2 (Scale) is done, leaving c-3/c-4 and M1-INT-d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-c-2** envtest: Scale against a live apiserver
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
-      notes: The **subresource** half. `Scale` patches `scale`, which a real server routes to a
-      different endpoint with its own schema, while the fake patches the object body — so the
-      fake would pass on a patch a real apiserver rejects, and vice versa. Cover a Deployment
-      and a StatefulSet (different `spec.replicas` homes, one `scale` contract).
+_(none)_
 
 ## Blocked
 
@@ -65,7 +60,7 @@ by *what the server adds over the fake* rather than by verb count — the fake d
 applies whatever it is handed to the whole tracked object, so each slice is a different way
 that is not what a real apiserver does:
 
-M1-INT-c-1 is done (2026-07-31); c-2/c-3/c-4 are independent of each other and of it.
+M1-INT-c-1 and c-2 are done (2026-07-31); c-3/c-4 are independent of each other and of them.
 
 - [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
       status: todo | owner: — | added: 2026-07-31
@@ -336,6 +331,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-c-2** Scale reaches a live `scale` subresource — a Deployment and a StatefulSet write through to `spec.replicas` (zero included) with a sibling spec field left alone, while a DaemonSet, which registers no `scale`, is refused with a real NotFound and keeps no invented `spec.replicas` — the one case where the fake dynamic client *succeeds* at what a server rejects, and the mutation (drop the subresource argument) that catches it — done 2026-07-31 (M1-INT-c-2)
 
 - [x] **M1-INT-c-1** Delete's `DeleteOptions` reach a live apiserver — a stale row whose object was deleted and recreated under the same name is refused with a real Conflict (`KindConflict`) and the replacement survives, while the same race with the UID dropped destroys it; foreground propagation is proven by the deletionTimestamp + `foregroundDeletion` finalizer a GC-less plane leaves behind, and both the precondition and the cluster-scoped addressing were watched fail — done 2026-07-31 (M1-INT-c split into c-1…c-4)
 

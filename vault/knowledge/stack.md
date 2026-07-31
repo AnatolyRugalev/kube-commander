@@ -358,6 +358,24 @@ nothing useful; attach is the way.)
       plane. That is what makes the policy *observable* (it is the only DeleteOption
       with visible server-side state), and it is a trap for any later test that deletes
       foreground and then waits for the object to disappear.
+  - **A subresource is a different endpoint, and the fake has no notion of one**
+    (M1-INT-c-2). The fake dynamic client applies whatever patch it is handed to the
+    whole tracked object and ignores the subresource argument entirely, so a hermetic
+    test can prove the *wire format* of a subresource patch and nothing about where it
+    lands. Two consequences when the same call meets a real apiserver:
+    - **Scaling a kind that has no `scale` subresource is a 404**, not a silently
+      applied field. `apps/v1` registers `scale` for Deployment / ReplicaSet /
+      StatefulSet / ReplicationController but **not for DaemonSet** (one pod per node
+      by definition). Under the fake the same call succeeds and grows a `spec.replicas`
+      the kind does not have; the server has no route and answers NotFound. That
+      disagreement — the fake permitting what a server refuses — is the only reliable
+      discriminator for "did this patch go to the subresource?", because for the kinds
+      that *do* scale, `{"spec":{"replicas":N}}` against the object body sets the same
+      field and passes either way.
+    - A merge patch carrying a field the typed schema does not have is **dropped with
+      a warning, not rejected**: the apiserver logs `unknown field "spec.replicas"` and
+      returns 200. So an assertion that a bad patch "fails" must read the object back
+      and check the field is absent, not just check the error.
   - **One plane per test function is the rule, not one per assertion** (M1-INT-c-1).
     `startControlPlane`'s per-test isolation exists for tests that wreck cluster-global
     state (an APIService, cluster RBAC) or need the plane configured; an action test

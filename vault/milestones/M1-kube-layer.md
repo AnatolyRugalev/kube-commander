@@ -64,9 +64,12 @@ all in-process via client-go, fault-tolerant, and fast to start.
       by slice: **M1-INT-c-1** proved `Delete`'s `DeleteOptions` against a live
       server — the UID precondition refuses a stale row with a real Conflict, and
       the propagation policy lands — which the fake dynamic client cannot show at
-      all, since it discards those options. The remaining action slices
-      (M1-INT-c-2/c-3/c-4) and a CI job (M1-INT-d) are coverage-deepening backlog
-      items, not milestone gates._
+      all, since it discards those options; **M1-INT-c-2** proved `Scale` reaches
+      the real `scale` **subresource** (Deployment and StatefulSet write through,
+      zero included) and that a kind without one — DaemonSet — is refused, where
+      the fake instead succeeds. The remaining action slices (M1-INT-c-3/c-4) and
+      a CI job (M1-INT-d) are coverage-deepening backlog items, not milestone
+      gates._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._
