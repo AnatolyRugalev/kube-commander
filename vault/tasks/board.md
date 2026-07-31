@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-b was split on pickup and b-1 is done (a watch resumes across a real transport drop), leaving M1-INT-b-2/c/d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-b is closed (b-2 proved a real 410/Expired forces the re-List), leaving M1-INT-c/d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+_(none)_
 
 ## Blocked
 
@@ -53,18 +52,9 @@ replays every event and never 410s, because nothing has compacted etcd yet. So b
 control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
 `startControlPlane` that takes options, which b-1 does not.
 
-M1-INT-b-1 is done (2026-07-31); b-2 is the remaining half.
+**M1-INT-b is closed** — b-1 (2026-07-31) and b-2 (2026-07-31) landed both branches of the
+reconnect against a live apiserver, so what is left in this line is the action set and CI.
 
-- [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
-      notes: The other half of what the hermetic 410 test (M1-05b/D34) can only assume: that
-      a real apiserver produces the `Expired`/410 shape `watchStatusError` maps to
-      `*errExpired`. Probed: it does **not** occur on a stock envtest plane — watching from
-      `resourceVersion=1` after 150 writes replayed all 150 events, so the RV window is
-      etcd's revision history, not the watch cache. Start the plane with a short
-      `--etcd-compaction-interval` (`env.ControlPlane.GetAPIServer().Configure().Append(…)`),
-      hold an RV, write past it, wait out two compaction cycles, then watch from it. Requires
-      giving `startControlPlane` an options parameter.
 - [ ] **M1-INT-c** envtest: the action set against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: Delete/Scale/RolloutRestart/Cordon/Uncordon/Suspend/Resume + `Update`'s optimistic
@@ -326,6 +316,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-b-2** A real 410/Expired forces the re-List — etcd compaction stales the resourceVersion a live watch is holding during its reconnect gap, and the loop answers with a fresh List + RESET carrying the pod written while it was disconnected; needed the plane configured two ways (short compaction *and* the watch cache off, which is the trap: the cache masks compaction and grows rather than evicts), and the expiry is asserted as a precondition so an unexpired revision cannot pass the test vacuously — done 2026-07-31 (D34 proven live)
 
 - [x] **M1-INT-b-1** A watch survives a real transport drop — a killable TCP proxy in front of a live apiserver cuts the wire mid-stream and the loop reconnects, **resumes** from its resourceVersion (no re-List, no second RESET) and still delivers the pod created while it was disconnected; guarded against passing vacuously by counting re-dials, and watched fail both ways (no drop → no reconnect; forced re-List → RESET) — done 2026-07-31 (D34 proven live)
 

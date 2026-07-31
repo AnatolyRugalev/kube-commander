@@ -58,9 +58,11 @@ all in-process via client-go, fault-tolerant, and fast to start.
       default, envtest opt-in (D18). _Hermetic fake-client coverage is in place
       for discovery, watch reconnect (410/Gone → re-List), and every action. The
       envtest layer is **no longer deferred** (D186 pt 1): it now covers group
-      isolation (M1-INT-a) and watch resume after a real transport drop
-      (M1-INT-b-1); a live expiry (M1-INT-b-2) and the action set (M1-INT-c)
-      remain as coverage-deepening backlog items, not milestone gates._
+      isolation (M1-INT-a) and **both** watch-reconnect branches against a live
+      apiserver — resume after a real transport drop (M1-INT-b-1) and re-List
+      after a real 410/Expired (M1-INT-b-2). The action set (M1-INT-c) and a CI
+      job (M1-INT-d) remain as coverage-deepening backlog items, not milestone
+      gates._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._

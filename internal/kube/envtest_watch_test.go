@@ -2,6 +2,9 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/url"
@@ -11,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 )
 
@@ -34,6 +38,46 @@ import (
 // the cursor and re-render everything. Cheap reconnects are the point of resuming.
 //
 // Opt-in behind requireEnvtest (D18); not part of `make check`.
+
+// M1-INT-b-2: "an expired resourceVersion forces a re-List", against a live apiserver.
+//
+// This is b-1's other half. b-1 proved the cheap recovery — a cut wire resumes from
+// the last resourceVersion and costs no RESET. This proves the expensive one, which
+// the loop must take when resuming is no longer possible: when the server can no
+// longer replay from that resourceVersion it answers 410 Gone / Expired, and the only
+// correct recovery is a fresh List and a RESET (see errExpired). Take the wrong branch
+// here and kubecom resumes into a stream the server has already refused: the table
+// silently stops updating, or — worse — the loop paces its way through a permanent
+// error nobody sees.
+//
+// The hermetic test (watch_test.go, M1-05b/D34) drives that branch from a fake whose
+// ERROR event the test itself wrote, so it can only prove watchLoop reacts to the
+// shape kubecom *believes* an apiserver sends. Only a real server can prove the shape.
+//
+// Producing a real one is the whole difficulty, and it needs the plane configured
+// (see the two flags below): left to itself, envtest never expires anything. Both
+// tests share the killable proxy and the small helpers that follow.
+//
+// Opt-in behind requireEnvtest (D18); not part of `make check`.
+
+const (
+	// compactionInterval is how often the apiserver compacts etcd's revision
+	// history. The default is 5m, which is why nothing expires inside a test: the
+	// revision a watch holds stays replayable for longer than the plane lives.
+	// Compaction drops everything below the revision seen one cycle earlier, so an
+	// interval this short expires a held resourceVersion ~300 ms after the next
+	// write — comfortably inside watchRetryBackoff, which is what lets the test
+	// stale the loop's resourceVersion during a single reconnect gap.
+	compactionInterval = "100ms"
+	// watchCacheDisabled turns off the apiserver's in-memory watch cache so the
+	// watch is served from etcd, where compaction is what bounds history. With the
+	// cache on, the cache's own window bounds it instead — and that window cannot
+	// be shrunk from a flag in any usable way: it starts at 100 events and *grows*
+	// when it fills within 75 s, so the natural test (write past it) enlarges it
+	// rather than evicting. Both paths answer an out-of-window watch with the same
+	// 410/Expired status; this one is reachable in a second instead of minutes.
+	watchCacheDisabled = "false"
+)
 
 // killableProxy is a raw TCP proxy that can drop every connection it is currently
 // carrying. Raw TCP (not an HTTP proxy) so the client's TLS session terminates at
@@ -219,4 +263,189 @@ func TestEnvtestWatchResumesAfterTransportDrop(t *testing.T) {
 			t.Logf("ignoring %s %v while waiting for the resumed delta", ev.Type, rowNames(ev))
 		}
 	}
+}
+
+// firstWatchEventFrom opens a Table watch on pods from resourceVersion rv, reads the
+// single first event and closes the stream again. It is how the test observes what
+// the *server* answers for a given resourceVersion, independently of watchLoop —
+// which is what turns "the loop re-listed" into "the loop re-listed because the
+// server refused the resourceVersion it held".
+func firstWatchEventFrom(ctx context.Context, t *testing.T, c *Clients, rv string) (metav1.WatchEvent, error) {
+	t.Helper()
+	pods := res("", "v1", "Pod", "pods", true)
+	client, err := c.restClientForGV(pods.GVR.GroupVersion())
+	if err != nil {
+		return metav1.WatchEvent{}, err
+	}
+	stream, err := openTableWatch(ctx, client, pods.GVR, true, "default", metav1.ListOptions{}, rv)
+	if err != nil {
+		return metav1.WatchEvent{}, err
+	}
+	defer func() { _ = stream.Close() }()
+	var we metav1.WatchEvent
+	if err := json.NewDecoder(stream).Decode(&we); err != nil {
+		return metav1.WatchEvent{}, err
+	}
+	return we, nil
+}
+
+// podsResourceVersion lists pods in `default` and returns the list's
+// resourceVersion — the exact point a watch would resume from (getTableRV is what
+// watchLoop itself uses to establish that baseline).
+func podsResourceVersion(ctx context.Context, t *testing.T, c *Clients) string {
+	t.Helper()
+	pods := res("", "v1", "Pod", "pods", true)
+	client, err := c.restClientForGV(pods.GVR.GroupVersion())
+	if err != nil {
+		t.Fatalf("rest client for pods: %v", err)
+	}
+	_, rv, err := getTableRV(ctx, client, pods.GVR, true, "default", metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list pods: %v", err)
+	}
+	return rv
+}
+
+// waitUntilExpired blocks until the server refuses a watch from rv with 410/Expired,
+// writing a pod between attempts so etcd's revision keeps moving (compaction only
+// ever drops history *below* a revision it has already seen, so a quiet cluster
+// never expires anything). It fails the test if that does not happen in time —
+// deliberately, because an unexpired resourceVersion makes the assertion that
+// follows vacuous: the loop would simply resume, which is b-1's behavior, not this
+// test's. Returns the status error the server produced.
+func waitUntilExpired(ctx context.Context, t *testing.T, c *Clients, rv string, within time.Duration) error {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for i := 0; ; i++ {
+		we, err := firstWatchEventFrom(ctx, t, c, rv)
+		switch {
+		case err != nil:
+			t.Logf("probing rv %s: %v", rv, err)
+		case watch.EventType(we.Type) == watch.Error:
+			werr := watchStatusError(we.Object.Raw)
+			var exp *errExpired
+			if !errors.As(werr, &exp) {
+				t.Fatalf("watch from rv %s failed with %v, want a 410/Expired the loop maps to *errExpired", rv, werr)
+			}
+			return werr
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("resourceVersion %s was still replayable after %s of compaction: "+
+				"the plane is not expiring anything, so this test cannot prove the re-List path", rv, within)
+		}
+		createPod(ctx, t, c, fmt.Sprintf("compaction-churn-%d", i))
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestEnvtestExpiredResourceVersionForcesReList stales the resourceVersion a live
+// watch is holding — by cutting its connection and letting etcd compaction pass the
+// held revision during the reconnect gap — and asserts the loop notices it cannot
+// resume and re-syncs with a fresh List + RESET carrying everything it missed.
+func TestEnvtestExpiredResourceVersionForcesReList(t *testing.T) {
+	_, cfg := startControlPlane(t,
+		withAPIServerFlag("etcd-compaction-interval", compactionInterval),
+		withAPIServerFlag("watch-cache", watchCacheDisabled),
+	)
+	admin := clientsFor(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	// Same proxied setup as b-1: the watcher's wire can be cut, the writer's cannot.
+	apiURL, err := url.Parse(cfg.Host)
+	if err != nil {
+		t.Fatalf("parse control plane host %q: %v", cfg.Host, err)
+	}
+	proxy := startKillableProxy(t, apiURL.Host)
+	proxiedCfg := rest.CopyConfig(cfg)
+	proxiedCfg.Host = "https://" + proxy.addr()
+	proxiedCfg.ServerName = apiURL.Hostname()
+	watcher := clientsFor(t, proxiedCfg)
+
+	pods := res("", "v1", "Pod", "pods", true)
+	ch, err := watcher.Watch(ctx, pods, "default", metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("start watch: %v", err)
+	}
+
+	if ev := nextEvent(t, ch, time.Minute, "the initial RESET"); ev.Type != WatchReset {
+		t.Fatalf("first event = %s (err %v), want RESET", ev.Type, ev.Err)
+	}
+
+	// A live delta first, so the loop is demonstrably streaming and its held
+	// resourceVersion is the one this pod's event carried.
+	createPod(ctx, t, admin, "before-outage")
+	if ev := nextEvent(t, ch, 30*time.Second, "the pre-outage ADDED"); ev.Type != WatchAdded ||
+		len(ev.Rows) != 1 || ev.Rows[0].Object.Name != "before-outage" {
+		t.Fatalf("pre-outage event = %s %v (err %v), want ADDED [before-outage]", ev.Type, rowNames(ev), ev.Err)
+	}
+
+	// heldRV is taken after that delta, so it is at least the loop's own
+	// resourceVersion. Compaction drops a contiguous prefix of history, so proving
+	// heldRV expired proves the loop's (equal or older) one expired too.
+	heldRV := podsResourceVersion(ctx, t, admin)
+
+	// Cut the wire. The stream ends with an EOF, which is *not* an expiry, so the
+	// loop keeps its resourceVersion and will try to resume from it in
+	// watchRetryBackoff. That gap is the window this test needs.
+	dialsBefore := proxy.dialCount()
+	proxy.dropAll()
+	createPod(ctx, t, admin, "during-outage")
+
+	// Stale the held resourceVersion before the loop gets to reuse it.
+	expiry := waitUntilExpired(ctx, t, admin, heldRV, watchRetryBackoff)
+	t.Logf("server refuses rv %s: %v", heldRV, expiry)
+
+	// The loop now reconnects into a resourceVersion the server will not replay.
+	// The only correct answer is a fresh List and a RESET holding the whole current
+	// set — including the pod written while it was disconnected.
+	// The re-sync costs one backoff plus the List, so ~4 s; the margin is for a
+	// loaded machine, not for the loop to find its way there.
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatalf("no RESET after the resourceVersion expired, within 60s")
+		}
+		ev := nextEvent(t, ch, time.Until(deadline), "the post-expiry RESET — a silent channel here "+
+			"is a loop re-opening a watch the server has already refused, which is the failure "+
+			"mode a user experiences as a table that stopped updating")
+		switch {
+		case ev.Type == WatchAdded && len(ev.Rows) == 1 && ev.Rows[0].Object.Name == "during-outage":
+			t.Fatalf("the loop resumed from an expired resourceVersion: got ADDED [during-outage] " +
+				"instead of a RESET, so the re-List branch was not taken")
+		case ev.Type == WatchError:
+			// Tolerated: reconnecting can report a transient failure. It must still
+			// end in the RESET this loop is waiting for.
+			t.Logf("transient watch error while re-syncing: %v", ev.Err)
+		case ev.Type == WatchReset:
+			names := rowNames(ev)
+			for _, want := range []string{"before-outage", "during-outage"} {
+				if !contains(names, want) {
+					t.Errorf("post-expiry RESET rows = %v, missing %q: a re-List that loses rows "+
+						"is worse than no re-List at all", names, want)
+				}
+			}
+			if len(ev.Columns) == 0 {
+				t.Errorf("post-expiry RESET carried no columns; a consumer replacing its row set needs them")
+			}
+			if got := proxy.dialCount(); got <= dialsBefore {
+				t.Errorf("proxy dials = %d, was %d before the drop: the RESET arrived without a "+
+					"reconnect, so this test proved nothing", got, dialsBefore)
+			}
+			return
+		default:
+			t.Logf("ignoring %s %v while waiting for the re-sync", ev.Type, rowNames(ev))
+		}
+	}
+}
+
+// contains reports whether names holds want.
+func contains(names []string, want string) bool {
+	for _, n := range names {
+		if n == want {
+			return true
+		}
+	}
+	return false
 }

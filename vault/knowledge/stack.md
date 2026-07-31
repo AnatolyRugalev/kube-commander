@@ -312,10 +312,36 @@ nothing useful; attach is the way.)
     watching pods from `resourceVersion=1` does not 410 — not immediately, and not after
     150 writes push the revision far past it (all 150 events replay). The window that
     matters is etcd's revision history, not the watch cache's size, and nothing compacts
-    etcd on a short-lived test plane (`--etcd-compaction-interval` defaults to 5m). A
-    test that needs a real `Expired`/410 must start the plane with a short compaction
-    interval — `env.ControlPlane.GetAPIServer().Configure().Append(…)` before
-    `env.Start()` — and wait out two cycles.
+    etcd on a short-lived test plane (`--etcd-compaction-interval` defaults to 5m).
+  - **How to make a real apiserver produce a 410/Expired inside a test** (M1-INT-b-2).
+    Two flags on `startControlPlane(t, withAPIServerFlag(…))`, and **both** are needed:
+
+    ```
+    withAPIServerFlag("etcd-compaction-interval", "100ms")  // history is bounded at all
+    withAPIServerFlag("watch-cache", "false")               // …and *that* bound is the one in force
+    ```
+
+    Compaction alone is not enough, and the reason is the trap: with the watch cache on,
+    the apiserver answers the watch from memory, so etcd's compaction is invisible and the
+    watch replays happily from a revision etcd no longer holds. The cache's own window is
+    what bounds history then — and it cannot be shrunk into test range, because it starts
+    at 100 events and **grows** whenever it fills within 75 s. Writing past it therefore
+    enlarges it instead of evicting (which is exactly what the 150-event probe above
+    measured). Both paths answer an out-of-window watch with the same 410/`Reason:
+    Expired` status, so serving from etcd is a faithful shortcut, not a different code
+    path in the client.
+    With those flags a held resourceVersion becomes unreplayable **~300 ms** after the
+    next write — fast enough to stale a live watch inside one `watchRetryBackoff` gap.
+    Compaction only drops history below a revision it has already seen, so keep writing
+    while waiting: a quiet cluster never expires anything.
+  - **Prove the expiry happened before asserting the reaction** (M1-INT-b-2). Open a
+    throwaway watch from the held resourceVersion and read one event
+    (`firstWatchEventFrom`): a `Status` with `Reason: Expired`, code 410, message *"The
+    resourceVersion for the provided watch is too old."*, which `watchStatusError` maps to
+    `*errExpired`. Without that precondition check, an unexpired revision makes the whole
+    test vacuous in the most confusing way available — the loop simply *resumes*, which is
+    correct behavior for the situation it is actually in, so the failure looks like a
+    watch-loop bug rather than an unmet premise.
   - **A restricted user** comes from `env.AddUser(envtest.User{Name, Groups}, nil)`
     → `user.Config()`, with the grant written as ordinary ClusterRole +
     ClusterRoleBinding through the admin clientset. The RBAC authorizer reads

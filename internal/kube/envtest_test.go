@@ -38,21 +38,42 @@ func requireEnvtest(t *testing.T) {
 	}
 }
 
+// controlPlaneOption tweaks the envtest.Environment before it is started. Some
+// behaviors only exist on a plane configured to produce them (a watch expiry
+// needs etcd compaction to actually run), and every such knob is a
+// kube-apiserver flag that must be set *before* env.Start().
+type controlPlaneOption func(*envtest.Environment)
+
+// withAPIServerFlag appends a kube-apiserver command-line flag to the plane the
+// calling test starts. Flags are appended, not replaced, so envtest's own
+// defaults (certs, ports, service account keys) stay intact — an unknown flag
+// makes the apiserver refuse to start, which surfaces as a failed env.Start().
+func withAPIServerFlag(flag string, values ...string) controlPlaneOption {
+	return func(env *envtest.Environment) {
+		env.ControlPlane.GetAPIServer().Configure().Append(flag, values...)
+	}
+}
+
 // startControlPlane stands up a real kube-apiserver + etcd for the calling test
 // and returns the environment (needed for envtest.Environment.AddUser, which is
 // how a test gets a *restricted* client) together with the admin *rest.Config.
 // It skips the test when the gate is off and registers the teardown, so it is
 // the single bootstrap every envtest-backed test in this package starts from.
+// opts configure the apiserver before it starts (see withAPIServerFlag).
 //
 // Each test gets its own control plane rather than sharing one via TestMain:
 // startup is ~5 s, and these tests mutate cluster-global state (an APIService,
 // cluster-scoped RBAC) whose whole point is to break or restrict discovery — a
-// shared plane would leak that breakage into every other test.
-func startControlPlane(t *testing.T) (*envtest.Environment, *rest.Config) {
+// shared plane would leak that breakage into every other test. Per-test options
+// make sharing wrong for a second reason: the planes are no longer identical.
+func startControlPlane(t *testing.T, opts ...controlPlaneOption) (*envtest.Environment, *rest.Config) {
 	t.Helper()
 	requireEnvtest(t)
 
 	env := &envtest.Environment{}
+	for _, opt := range opts {
+		opt(env)
+	}
 	cfg, err := env.Start()
 	if err != nil {
 		t.Fatalf("start envtest control plane: %v", err)
