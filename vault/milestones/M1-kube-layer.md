@@ -1,6 +1,6 @@
 # M1 — Kube Layer (in-process)
 
-**Status:** `feature-complete` (2026-07-20) — all in-process feature work (M1-00…M1-09) and the fake-based test suite are done; the remaining restricted-RBAC isolation test needs envtest, deferred to a tracked backlog item (D66). See the journal for the per-leg history.
+**Status:** `done` (2026-07-31) — every exit criterion is ticked: M1-INT-a proved the last one, group isolation, against a live envtest apiserver (D186), and the remaining envtest slices (M1-INT-b/c/d) deepen coverage rather than gate the milestone. See the journal for the per-leg history.
 **Phase:** REWRITE_PLAN Phase 1
 
 ## Goal
@@ -36,10 +36,18 @@ all in-process via client-go, fault-tolerant, and fast to start.
       Dashboard-sectioned list with no group-open interaction (D77), and the
       non-blocking cold-start intent is already met by seed + async discovery + the
       on-disk cache — so there is nothing left to defer without an unwanted UI change.)_
-- [~] A denied/broken API group is isolated. _Per-group fault isolation is
-      implemented and unit-covered (a failing group degrades only itself); the
-      **restricted-RBAC integration test** needs a live apiserver, so it is
-      deferred to the envtest backlog item (D66)._
+- [x] A denied/broken API group is isolated. _Unit-covered since M1-03 and, as of
+      **M1-INT-a** (2026-07-31, D186), proven against a live apiserver — the deferral
+      to a human/CI (D66) turned out to rest on a false premise, envtest runs in the
+      agent sandbox in 12 s. Both halves are now live-tested in
+      `internal/kube/envtest_isolation_test.go`: a **broken** group (an aggregated
+      `v1beta1.metrics.k8s.io` APIService whose backing service is missing — the
+      metrics-server outage of #87) leaves `DiscoveryResult.Err` nil and every healthy
+      kind in place, and a **denied** resource (a real pods-only RBAC user) fails only
+      its own call, as `KindForbidden`, while discovery still returns the full menu.
+      The criterion is isolation and isolation holds; what the same test found broken
+      is the *reporting* — `DiscoveryResult.Failed` never names the culprit on an
+      aggregated-discovery cluster — which is its own bug, **DISC-01** (D186 pt 2)._
 - [x] Logs stream, describe, and YAML-get return correct output in-process.
       _(M1-07a: **YAML-get** done — `Clients.GetYAML` renders any resource (built-in or CRD) as kubectl-identical `get -o yaml` through the dynamic client, managedFields stripped, `sigs.k8s.io/yaml` (`internal/kube/yaml.go`, D41). M1-07b: **describe** done — `Clients.Describe` renders `kubectl describe`-identical output in-process by reusing kubectl's own describe generators (built-in describer by GroupKind + generic-unstructured fallback for CRDs) (`internal/kube/describe.go`, D42). M1-07c: **logs stream** done — `Clients.Logs` streams a pod container's logs onto a bounded `LogEvent` channel via the typed clientset `pods/log` subresource, `LogOptions` mirroring `kubectl logs` flags, opened in-goroutine so it never blocks first paint (`internal/kube/logs.go`, D43). M1-07d: **reconnecting/resuming follow logs** done — a `Follow` stream now survives a transient transport drop à la watch (D34): it forces server-side timestamps on the wire, reconnects with `SinceTime` at the last-seen line's second, and dedups the lines the server re-serves for that (second-granular) second; clean EOF stops, a reconnect failure is transient (silent backoff+retry, bounded by ctx). Timestamps stripped before delivery unless `opts.Timestamps` (D44). **M1-07 viewers complete.**)_
 - [x] Port-forward runs in a background goroutine and can be stopped.

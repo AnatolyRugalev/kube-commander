@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
@@ -37,11 +38,18 @@ func requireEnvtest(t *testing.T) {
 	}
 }
 
-// TestEnvtestSmoke is the M1-00 harness proof: it stands up a real control
-// plane, talks to it with a client-go clientset, and asserts the API server is
-// serving. Later M1 legs reuse this bootstrap to integration-test discovery,
-// watch reconnect, and the action set against a live apiserver.
-func TestEnvtestSmoke(t *testing.T) {
+// startControlPlane stands up a real kube-apiserver + etcd for the calling test
+// and returns the environment (needed for envtest.Environment.AddUser, which is
+// how a test gets a *restricted* client) together with the admin *rest.Config.
+// It skips the test when the gate is off and registers the teardown, so it is
+// the single bootstrap every envtest-backed test in this package starts from.
+//
+// Each test gets its own control plane rather than sharing one via TestMain:
+// startup is ~5 s, and these tests mutate cluster-global state (an APIService,
+// cluster-scoped RBAC) whose whole point is to break or restrict discovery — a
+// shared plane would leak that breakage into every other test.
+func startControlPlane(t *testing.T) (*envtest.Environment, *rest.Config) {
+	t.Helper()
 	requireEnvtest(t)
 
 	env := &envtest.Environment{}
@@ -54,6 +62,15 @@ func TestEnvtestSmoke(t *testing.T) {
 			t.Errorf("stop envtest control plane: %v", err)
 		}
 	})
+	return env, cfg
+}
+
+// TestEnvtestSmoke is the M1-00 harness proof: it stands up a real control
+// plane, talks to it with a client-go clientset, and asserts the API server is
+// serving. Later M1 legs reuse this bootstrap to integration-test discovery,
+// watch reconnect, and the action set against a live apiserver.
+func TestEnvtestSmoke(t *testing.T) {
+	_, cfg := startControlPlane(t)
 
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {

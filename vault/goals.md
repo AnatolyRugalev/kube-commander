@@ -156,7 +156,10 @@ text is preserved in that bullet's annotation._
       (10 of the 11 issues in the REWRITE_PLAN table are resolved in code with named
       evidence: #68 (in-process client-go), #76 (discovery + dynamic Table path), #87
       (fault-isolating discovery — one bad group cannot break the load,
-      `TestDiscoverResourcesGroupFaultIsolation`), #86 (no panics, degrade), #88 (new
+      `TestDiscoverResourcesGroupFaultIsolation`, and since M1-INT-a/D186 also against a real
+      apiserver with a real broken aggregated API, `TestEnvtestBrokenAPIGroupIsIsolated`;
+      that run found the isolation sound but the *reporting* of which group failed silently
+      lost — DISC-01, which does not reopen #87), #86 (no panics, degrade), #88 (new
       toolchain), #84 (logs for pod-owning kinds), #83 (workload actions), #89 (secret
       viewer), #80 (context switcher — mechanism), #85 (column sort). **#28** (CD to
       distributors) is the outstanding one: M5-06/07/08. **M5-10 checked the tracker**

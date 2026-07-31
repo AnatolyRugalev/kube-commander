@@ -249,6 +249,41 @@ nothing useful; attach is the way.)
   - Deps that arrived with it: `k8s.io/client-go` + `k8s.io/apimachinery` v0.31.4,
     `sigs.k8s.io/controller-runtime` v0.19.4 (the release paired with client-go
     v0.31). These are the kube layer's foundation for M1-01+.
+  - **It works in the agent sandbox** (M1-INT-a, D186 pt 1 — the D18/D66 assumption
+    that it would not is what deferred M1-INT for ten days). Recipe, ~90 s cold:
+
+    ```
+    go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19
+    export PATH=$(go env GOPATH)/bin:$PATH
+    make test-envtest        # or: KUBEBUILDER_ASSETS="$(setup-envtest use -p path 1.31.x)" \
+                             #     KUBECOM_TEST_ENVTEST=1 go test ./internal/kube/...
+    ```
+
+    Pin the tool to `@release-0.19` to match controller-runtime v0.19.4; `@latest`
+    pulls a newer module line. Binaries land in
+    `~/.local/share/kubebuilder-envtest/k8s/1.31.0-linux-amd64`. A whole control
+    plane starts in ~4 s, so a test per plane is affordable — and preferable, since
+    these tests break cluster-global state on purpose (`startControlPlane` in
+    `envtest_test.go` is the shared bootstrap).
+  - **What a live apiserver catches that a fake cannot** (M1-INT-a): a fake
+    discovery client returns whatever shape the test wrote, so it can only confirm
+    that `discoverResources` handles `*ErrGroupDiscoveryFailed` — never that a real
+    server produces one. It does not. Registering an `APIService` whose backing
+    Service is missing (`v1beta1.metrics.k8s.io` → `kube-system/metrics-server`, the
+    metrics-server outage of #87) makes the group genuinely fail, and on this path
+    `ServerPreferredResources` returns **no error**, because aggregated discovery
+    reports the group with zero versions and the disk-cached client drops the stale
+    marker (D186 pt 2, DISC-01). The APIService is `Available=False
+    ServiceNotFound` within a second or two; `ServerResourcesForGroupVersion` on the
+    broken GV is the reliable signal that the breakage has landed (poll on it, after
+    `Clients.Invalidate()`, before asserting anything).
+  - **A restricted user** comes from `env.AddUser(envtest.User{Name, Groups}, nil)`
+    → `user.Config()`, with the grant written as ordinary ClusterRole +
+    ClusterRoleBinding through the admin clientset. The RBAC authorizer reads
+    through an informer, so poll the *allowed* call until it succeeds before
+    asserting the denied one. Discovery is unaffected by RBAC (`system:discovery` is
+    bound to `system:authenticated`), which is the point: a denied kind stays on the
+    menu and fails per call with `KindForbidden`.
 - **teatest** for TUI model tests.
 
 ## Config

@@ -4887,3 +4887,35 @@ config is silently wrong rather than rejected. What a future leg must not silent
    published artifact that stays editable, so a future leg must not "fix" it by rewriting
    history or by hardcoding `GORELEASER_PREVIOUS_TAG` into the workflow, which would then be
    wrong for every subsequent release.
+
+## D186 — envtest runs in the sandbox, so live-apiserver evidence is an agent's job; and aggregated discovery hides which group failed (2026-07-31, M1-INT-a)
+
+Two constraints, both found by actually running envtest rather than reasoning about it.
+
+1. **The envtest deferral premise is dead.** D18 and D66 parked the integration tests on the
+   grounds that control-plane binaries are "fragile in sandboxed agent environments", which
+   made M1-INT a human's or a CI job's. They are not fragile here: `go install
+   sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.19` plus `setup-envtest use
+   1.31.x` downloads 1.31.0 through the agent proxy, and the three gated tests stand up a
+   real apiserver + etcd and pass in **12 s total**. So a future leg must **not** re-defer an
+   envtest item on the fragility argument, and a claim that needs a live apiserver is
+   verifiable here rather than a human task (D79) — a live *cluster* with real workloads, a
+   real terminal, or credentials still is not. What stays true from D18: the gate
+   (`KUBECOM_TEST_ENVTEST=1`) and envtest's absence from `make check` (D17), because the
+   binaries are a download `go test ./...` must never depend on.
+2. **`DiscoveryResult.Failed` is empty on any aggregated-discovery cluster, and a fix must
+   change the discovery client, not the parsing.** Modern apiservers answer
+   `apidiscovery.k8s.io` aggregated discovery, where a down group (an APIService whose
+   backing service is gone) comes back as a group entry with **no versions**, its failure
+   carried in a separate stale-GroupVersion map. client-go surfaces that map only to callers
+   that are an `AggregatedDiscoveryInterface`; the **on-disk cached** client kubecom reads
+   through (M1-04) is not one, so `ServerPreferredResources` falls back to walking
+   `ServerGroups()`, finds no versions under the broken group, and returns **no error at
+   all**. Isolation still holds — the menu keeps every healthy kind, which is the M1 exit
+   criterion and is now proven live — but the `Failed` list that exists to name the culprit,
+   and the DIAG-01 logging built on it, are dead in the real path. Tracked as **DISC-01**.
+   The constraint for whoever fixes it: the information is unavailable *by the time
+   `discoverResources` sees it*, so no amount of post-processing recovers it — the pass must
+   read through a client that implements `GroupsAndMaybeResources` (client-go's memory cache
+   does; the disk cache does not), and any such change trades against D8's promise that a
+   warm start reconciles the menu with no network round-trip.
