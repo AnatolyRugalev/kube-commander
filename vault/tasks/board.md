@@ -7,7 +7,12 @@ _Last updated: 2026-07-31 — M1-INT-c-3 (the merge-patch actions) is done and y
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+      notes: The one the board note has always named: a real stale `resourceVersion` → a real
+      Conflict. The fake enforces no optimistic concurrency at all, so the guarantee the Edit
+      flow rests on (a concurrent change is refused, never clobbered, D129) is currently
+      untested end to end.
 
 ## Blocked
 
@@ -62,12 +67,6 @@ that is not what a real apiserver does:
 
 M1-INT-c-1, c-2 and c-3 are done (2026-07-31); c-4 is independent of all three.
 
-- [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
-      status: todo | owner: — | added: 2026-07-31
-      notes: The one the board note has always named: a real stale `resourceVersion` → a real
-      Conflict. The fake enforces no optimistic concurrency at all, so the guarantee the Edit
-      flow rests on (a concurrent change is refused, never clobbered, D129) is currently
-      untested end to end.
 - [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
       status: todo | owner: — | added: 2026-07-31
       notes: D66's other half. `make test-envtest` exists; what is missing is a job that runs
