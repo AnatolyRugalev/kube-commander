@@ -7,7 +7,13 @@ _Last updated: 2026-07-31 — M1-INT-c-4 (Update's optimistic concurrency) is do
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+      notes: D66's other half and the last item in the M1-INT line. Nine gated tests exist
+      that nothing runs unless a leg remembers to. Keep it off the `make check` gate
+      (D17/D18) — a separate job, so a control-plane download failure never reads as a code
+      failure. Fix the `setup-envtest`-not-on-`PATH` breakage in `make test-envtest` here
+      rather than working around it a fifth time.
 
 ## Blocked
 
@@ -63,12 +69,7 @@ that is not what a real apiserver does:
 All four c slices are done (2026-07-31), so **M1-INT-c is closed** — the action set has
 live-apiserver evidence end to end. What is left in this line is CI.
 
-- [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
-      status: todo | owner: — | added: 2026-07-31
-      notes: D66's other half. `make test-envtest` exists; what is missing is a job that runs
-      it, so the suite does not rot between the legs that remember it. Keep it off the
-      `make check` gate (D17/D18) — a separate job, so a control-plane download failure never
-      reads as a code failure.
+_(M1-INT-d is in **In Progress** above — it is the last item in this line.)_
 
 ### M2 — Core TUI
 _(none — M2 is **done** (2026-07-29): every exit criterion in
