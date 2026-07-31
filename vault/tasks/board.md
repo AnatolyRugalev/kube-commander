@@ -7,7 +7,12 @@ _Last updated: 2026-07-31 — M1-INT-c was split into c-1…c-4 and c-1 (Delete)
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-c-2** envtest: Scale against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+      notes: The **subresource** half. `Scale` patches `scale`, which a real server routes to a
+      different endpoint with its own schema, while the fake patches the object body — so the
+      fake would pass on a patch a real apiserver rejects, and vice versa. Cover a Deployment
+      and a StatefulSet (different `spec.replicas` homes, one `scale` contract).
 
 ## Blocked
 
@@ -62,12 +67,6 @@ that is not what a real apiserver does:
 
 M1-INT-c-1 is done (2026-07-31); c-2/c-3/c-4 are independent of each other and of it.
 
-- [ ] **M1-INT-c-2** envtest: Scale against a live apiserver
-      status: todo | owner: — | added: 2026-07-31
-      notes: The **subresource** half. `Scale` patches `scale`, which a real server routes to a
-      different endpoint with its own schema, while the fake patches the object body — so the
-      fake would pass on a patch a real apiserver rejects, and vice versa. Cover a Deployment
-      and a StatefulSet (different `spec.replicas` homes, one `scale` contract).
 - [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: RolloutRestart / Cordon / Uncordon / Suspend / Resume — one wire format
