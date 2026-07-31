@@ -7,7 +7,9 @@ _Last updated: 2026-07-30 — M5-10's pre-flight landed (D185), so **the board h
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-a** envtest: a denied/broken API group is isolated against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
+      notes: First slice of the split M1-INT. Closes the one `[~]` M1 exit criterion.
 
 ## Blocked
 
@@ -32,9 +34,31 @@ _(none — M0 complete)_
 ### M1 — Kube layer
 _M1 is feature-complete (D66); M1-04b was retired as obsolete (D81), so only the
 deferred envtest item remains — not a blocker._
-- [ ] **M1-INT** envtest integration tests (opt-in `KUBECOM_TEST_ENVTEST=1`): restricted-RBAC group isolation, watch reconnect/resync, action set against a live apiserver
-      status: deferred | owner: — | added: 2026-07-20
-      notes: D66 — fake-client coverage is the autonomous-loop bar; these need control-plane binaries (fragile in cloud, D18), so a human runs them locally or a dedicated CI job with `setup-envtest` does. Not an M1 blocker.
+
+**M1-INT was un-deferred and split on pickup (2026-07-31).** The deferral rested on a
+premise that is no longer true: D18/D66 assumed control-plane binaries are "fragile in
+sandboxed agent environments", so the item was parked for a human or a CI job. They are
+not — `setup-envtest use 1.31.x` downloads and `TestEnvtestSmoke` passes in this sandbox
+in ~6 s, so an envtest leg is agent-verifiable after all. It was three unrelated surfaces
+behind one line, so it splits D52-style; take them in order, each is its own leg:
+
+- [ ] **M1-INT-b** envtest: watch reconnect/resync against a live apiserver
+      status: todo | owner: — | added: 2026-07-31
+      notes: The hermetic suite covers 410 Gone → re-List with a fake (M1-05b/D34). Live, the
+      thing to prove is what a fake cannot serve: a real `resourceVersion` too old after a
+      compaction, and a genuine transport drop mid-stream. Expect to need writes against the
+      live apiserver to move the RV forward.
+- [ ] **M1-INT-c** envtest: the action set against a live apiserver
+      status: todo | owner: — | added: 2026-07-31
+      notes: Delete/Scale/RolloutRestart/Cordon/Uncordon/Suspend/Resume + `Update`'s optimistic
+      concurrency (a real stale `resourceVersion` → a real Conflict, which is exactly the case
+      a fake dynamic client does not enforce). Likely needs splitting again by verb group.
+- [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
+      status: todo | owner: — | added: 2026-07-31
+      notes: D66's other half. `make test-envtest` exists; what is missing is a job that runs
+      it, so the suite does not rot between the legs that remember it. Keep it off the
+      `make check` gate (D17/D18) — a separate job, so a control-plane download failure never
+      reads as a code failure.
 
 ### M2 — Core TUI
 _(none — M2 is **done** (2026-07-29): every exit criterion in
