@@ -7,7 +7,9 @@ _Last updated: 2026-07-31 — DISC-01 is fixed (D187), so a broken API group is 
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-b-1** envtest: watch resumes from its resourceVersion after a transport drop
+      status: in-progress | owner: claude-opus | added: 2026-07-31
+      notes: See the M1 Backlog section for the split of M1-INT-b and what b-1 must prove.
 
 ## Blocked
 
@@ -43,12 +45,33 @@ behind one line, so it splits D52-style; take them in order, each is its own leg
 DISC-01 is done (D187) — it was the one item in this line that changed behavior rather
 than adding coverage; the three envtest slices remain and are independent of each other.
 
-- [ ] **M1-INT-b** envtest: watch reconnect/resync against a live apiserver
+**M1-INT-b was split on pickup (2026-07-31)** into **b-1** (transport drop) and **b-2**
+(expired resourceVersion), because its two halves need different machinery, not different
+assertions: a drop is produced *between* client and server (a proxy the test can kill) and
+proves the **resume** path, while an expiry can only be produced *by* the server and — as
+probed on a live 1.31 plane — does not happen by itself: a watch from `resourceVersion=1`
+replays every event and never 410s, because nothing has compacted etcd yet. So b-2 needs a
+control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
+`startControlPlane` that takes options, which b-1 does not.
+
+- [ ] **M1-INT-b-1** envtest: watch resumes from its resourceVersion after a transport drop
+      status: in-progress | owner: claude-opus | added: 2026-07-31
+      notes: The half a fake cannot serve: kill the TCP connection under a live Table watch
+      and prove the loop reconnects, **resumes** from the last resourceVersion (no re-List,
+      no second RESET — a RESET here would make the TUI rebuild its whole table) and still
+      delivers the deltas that happened while it was down. Needs a killable TCP proxy in
+      front of the apiserver, and a non-vacuity guard that the connection really was
+      re-dialed.
+- [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
       status: todo | owner: — | added: 2026-07-31
-      notes: The hermetic suite covers 410 Gone → re-List with a fake (M1-05b/D34). Live, the
-      thing to prove is what a fake cannot serve: a real `resourceVersion` too old after a
-      compaction, and a genuine transport drop mid-stream. Expect to need writes against the
-      live apiserver to move the RV forward.
+      notes: The other half of what the hermetic 410 test (M1-05b/D34) can only assume: that
+      a real apiserver produces the `Expired`/410 shape `watchStatusError` maps to
+      `*errExpired`. Probed: it does **not** occur on a stock envtest plane — watching from
+      `resourceVersion=1` after 150 writes replayed all 150 events, so the RV window is
+      etcd's revision history, not the watch cache. Start the plane with a short
+      `--etcd-compaction-interval` (`env.ControlPlane.GetAPIServer().Configure().Append(…)`),
+      hold an RV, write past it, wait out two compaction cycles, then watch from it. Requires
+      giving `startControlPlane` an options parameter.
 - [ ] **M1-INT-c** envtest: the action set against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: Delete/Scale/RolloutRestart/Cordon/Uncordon/Suspend/Resume + `Update`'s optimistic
