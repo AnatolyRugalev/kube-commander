@@ -7,7 +7,8 @@ _Last updated: 2026-07-31 — M1-INT-b was split on pickup and b-1 is done (a wa
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
 
 ## Blocked
 
@@ -55,7 +56,7 @@ control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
 M1-INT-b-1 is done (2026-07-31); b-2 is the remaining half.
 
 - [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
-      status: todo | owner: — | added: 2026-07-31
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
       notes: The other half of what the hermetic 410 test (M1-05b/D34) can only assume: that
       a real apiserver produces the `Expired`/410 shape `watchStatusError` maps to
       `*errExpired`. Probed: it does **not** occur on a stock envtest plane — watching from
