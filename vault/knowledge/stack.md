@@ -296,6 +296,26 @@ nothing useful; attach is the way.)
     group list, so it could not become one; the **memory** cache is one, but it costs a
     network round trip per pass (against D8). The group list is the cheap, cached,
     already-fetched artifact — hence D187.
+  - **Breaking the transport, not the server** (M1-INT-b-1): to prove the watch loop's
+    *resume* path against a live apiserver you need a failure the server never
+    produces — a dead connection. `startKillableProxy` in `envtest_watch_test.go` is a
+    raw TCP proxy on loopback that forwards to `cfg.Host` and can `dropAll()` its live
+    connections; point a copy of the config at it (`rest.CopyConfig`, `Host =
+    "https://"+proxy.addr()`, and carry `ServerName` over from the real host so the
+    apiserver's serving cert still verifies — the proxy is a pipe, not a MITM). Raw TCP
+    keeps TLS end-to-end, so nothing about the client's behavior changes except that the
+    wire can be cut. Two rules learned: write through a **direct** client (never the
+    proxied one) so cluster changes during the outage are unaffected by it, and **count
+    dials** — without asserting the connection was re-established, a test like this
+    passes just as happily when the drop silently did nothing.
+  - **A stock envtest plane does not expire a resourceVersion** (probed for M1-INT-b-2):
+    watching pods from `resourceVersion=1` does not 410 — not immediately, and not after
+    150 writes push the revision far past it (all 150 events replay). The window that
+    matters is etcd's revision history, not the watch cache's size, and nothing compacts
+    etcd on a short-lived test plane (`--etcd-compaction-interval` defaults to 5m). A
+    test that needs a real `Expired`/410 must start the plane with a short compaction
+    interval — `env.ControlPlane.GetAPIServer().Configure().Append(…)` before
+    `env.Start()` — and wait out two cycles.
   - **A restricted user** comes from `env.AddUser(envtest.User{Name, Groups}, nil)`
     → `user.Config()`, with the grant written as ordinary ClusterRole +
     ClusterRoleBinding through the admin clientset. The RBAC authorizer reads

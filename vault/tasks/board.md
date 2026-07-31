@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — DISC-01 is fixed (D187), so a broken API group is now named as well as isolated and the remaining unblocked work is the three envtest slices M1-INT-b/c/d; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-b was split on pickup and b-1 is done (a watch resumes across a real transport drop), leaving M1-INT-b-2/c/d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **M1-INT-b-1** envtest: watch resumes from its resourceVersion after a transport drop
-      status: in-progress | owner: claude-opus | added: 2026-07-31
-      notes: See the M1 Backlog section for the split of M1-INT-b and what b-1 must prove.
+_(none)_
 
 ## Blocked
 
@@ -54,14 +52,8 @@ replays every event and never 410s, because nothing has compacted etcd yet. So b
 control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
 `startControlPlane` that takes options, which b-1 does not.
 
-- [ ] **M1-INT-b-1** envtest: watch resumes from its resourceVersion after a transport drop
-      status: in-progress | owner: claude-opus | added: 2026-07-31
-      notes: The half a fake cannot serve: kill the TCP connection under a live Table watch
-      and prove the loop reconnects, **resumes** from the last resourceVersion (no re-List,
-      no second RESET — a RESET here would make the TUI rebuild its whole table) and still
-      delivers the deltas that happened while it was down. Needs a killable TCP proxy in
-      front of the apiserver, and a non-vacuity guard that the connection really was
-      re-dialed.
+M1-INT-b-1 is done (2026-07-31); b-2 is the remaining half.
+
 - [ ] **M1-INT-b-2** envtest: an expired resourceVersion forces a re-List (410 → RESET)
       status: todo | owner: — | added: 2026-07-31
       notes: The other half of what the hermetic 410 test (M1-05b/D34) can only assume: that
@@ -333,6 +325,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M1-INT-b-1** A watch survives a real transport drop — a killable TCP proxy in front of a live apiserver cuts the wire mid-stream and the loop reconnects, **resumes** from its resourceVersion (no re-List, no second RESET) and still delivers the pod created while it was disconnected; guarded against passing vacuously by counting re-dials, and watched fail both ways (no drop → no reconnect; forced re-List → RESET) — done 2026-07-31 (D34 proven live)
 
 - [x] **DISC-01** A broken API group is now named, not just isolated — `DiscoveryResult.Failed` reports any group the server serves no version of, which is the only trace an aggregated apiserver leaves in the cached group list; proven live by turning M1-INT-a's tripwire into its positive assertion — done 2026-07-31 (D187)
 

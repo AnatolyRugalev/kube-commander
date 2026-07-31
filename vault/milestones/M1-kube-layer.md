@@ -56,8 +56,11 @@ all in-process via client-go, fault-tolerant, and fast to start.
       _(M1-08: `Clients.PortForward(ctx, ref, ports)` forwards local ports to a pod in a background goroutine over an SPDY dialer to the pod's `portforward` subresource (`spdy.RoundTripperFor(c.Config)` + `spdy.NewDialer`), the in-process `kubectl port-forward` (D2). Returns a channel-based `PortForward` handle — `Ready`/`Done`/`Err`/`Ports`/`Stop` (idempotent `sync.Once`) — with the result handed off through a channel close, no mutex (principle 1); ctx cancellation stops it à la Logs/Watch (`internal/kube/portforward.go`, D45). Lifecycle (ready→ports→stop, fatal-error, ctx-cancel, factory-error, idempotent Stop) covered by an injected-factory + fakeForwarder hermetic test, `-race` clean; a live forward is envtest territory.)_
 - [x] Tests cover discovery, watch reconnect, and the action set — fakes by
       default, envtest opt-in (D18). _Hermetic fake-client coverage is in place
-      for discovery, watch reconnect (410/Gone → re-List), and every action;
-      the envtest layer beyond the smoke test is deferred (D66)._
+      for discovery, watch reconnect (410/Gone → re-List), and every action. The
+      envtest layer is **no longer deferred** (D186 pt 1): it now covers group
+      isolation (M1-INT-a) and watch resume after a real transport drop
+      (M1-INT-b-1); a live expiry (M1-INT-b-2) and the action set (M1-INT-c)
+      remain as coverage-deepening backlog items, not milestone gates._
 - [x] Zero TUI imports in `internal/kube`. _Verified 2026-07-20: no
       bubbletea/lipgloss/bubbles/`internal/tui` import anywhere under
       `internal/kube`._
