@@ -7,7 +7,13 @@ _Last updated: 2026-07-31 — M1-INT-c-2 (Scale) is done, leaving c-3/c-4 and M1
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
+      notes: RolloutRestart / Cordon / Uncordon / Suspend / Resume — one wire format
+      (RFC 7386) across four schemas the fake never validates: a real server type-checks
+      `spec.unschedulable`, `spec.suspend` and the pod-template annotation map, and a merge
+      patch that adds an annotation must leave the sibling annotations alone (the fake's
+      whole-object merge cannot distinguish that from a replace).
 
 ## Blocked
 
@@ -62,13 +68,6 @@ that is not what a real apiserver does:
 
 M1-INT-c-1 and c-2 are done (2026-07-31); c-3/c-4 are independent of each other and of them.
 
-- [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
-      status: todo | owner: — | added: 2026-07-31
-      notes: RolloutRestart / Cordon / Uncordon / Suspend / Resume — one wire format
-      (RFC 7386) across four schemas the fake never validates: a real server type-checks
-      `spec.unschedulable`, `spec.suspend` and the pod-template annotation map, and a merge
-      patch that adds an annotation must leave the sibling annotations alone (the fake's
-      whole-object merge cannot distinguish that from a replace).
 - [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
       status: todo | owner: — | added: 2026-07-31
       notes: The one the board note has always named: a real stale `resourceVersion` → a real
