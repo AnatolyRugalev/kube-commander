@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-b is closed (b-2 proved a real 410/Expired forces the re-List), leaving M1-INT-c/d as the unblocked work; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
+_Last updated: 2026-07-31 — M1-INT-c was split by verb group into c-1…c-4 and c-1 (Delete) is claimed; eleven human-tasks open, two **blocking** (the CRD error text → CRD-01, the first release tag → M5-11), nine advisory. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **M1-INT-c-1** envtest: Delete against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31 | claimed: 2026-07-31
 
 ## Blocked
 
@@ -55,11 +56,37 @@ control-plane flag (`--etcd-compaction-interval`, default 5m) and therefore a
 **M1-INT-b is closed** — b-1 (2026-07-31) and b-2 (2026-07-31) landed both branches of the
 reconnect against a live apiserver, so what is left in this line is the action set and CI.
 
-- [ ] **M1-INT-c** envtest: the action set against a live apiserver
+**M1-INT-c was split on pickup (2026-07-31)**, as its own note predicted, into four slices
+by *what the server adds over the fake* rather than by verb count — the fake dynamic client
+applies whatever it is handed to the whole tracked object, so each slice is a different way
+that is not what a real apiserver does:
+
+- [ ] **M1-INT-c-1** envtest: Delete against a live apiserver
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-31
+      notes: The `DeleteOptions` half. The fake **discards DeleteOptions entirely**, so the UID
+      precondition and the propagation policy are unit-tested only as a pure struct builder
+      (`TestWithUIDPrecondition`) and have never reached a server. The load-bearing case is the
+      TUI race the precondition exists for: delete-and-recreate under the same name, then delete
+      from the stale row → must be a Conflict, not a lost object.
+- [ ] **M1-INT-c-2** envtest: Scale against a live apiserver
       status: todo | owner: — | added: 2026-07-31
-      notes: Delete/Scale/RolloutRestart/Cordon/Uncordon/Suspend/Resume + `Update`'s optimistic
-      concurrency (a real stale `resourceVersion` → a real Conflict, which is exactly the case
-      a fake dynamic client does not enforce). Likely needs splitting again by verb group.
+      notes: The **subresource** half. `Scale` patches `scale`, which a real server routes to a
+      different endpoint with its own schema, while the fake patches the object body — so the
+      fake would pass on a patch a real apiserver rejects, and vice versa. Cover a Deployment
+      and a StatefulSet (different `spec.replicas` homes, one `scale` contract).
+- [ ] **M1-INT-c-3** envtest: the merge-patch actions against a live apiserver
+      status: todo | owner: — | added: 2026-07-31
+      notes: RolloutRestart / Cordon / Uncordon / Suspend / Resume — one wire format
+      (RFC 7386) across four schemas the fake never validates: a real server type-checks
+      `spec.unschedulable`, `spec.suspend` and the pod-template annotation map, and a merge
+      patch that adds an annotation must leave the sibling annotations alone (the fake's
+      whole-object merge cannot distinguish that from a replace).
+- [ ] **M1-INT-c-4** envtest: `Update`'s optimistic concurrency against a live apiserver
+      status: todo | owner: — | added: 2026-07-31
+      notes: The one the board note has always named: a real stale `resourceVersion` → a real
+      Conflict. The fake enforces no optimistic concurrency at all, so the guarantee the Edit
+      flow rests on (a concurrent change is refused, never clobbered, D129) is currently
+      untested end to end.
 - [ ] **M1-INT-d** Run the envtest suite in CI (`setup-envtest` job)
       status: todo | owner: — | added: 2026-07-31
       notes: D66's other half. `make test-envtest` exists; what is missing is a job that runs
