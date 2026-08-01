@@ -5112,3 +5112,44 @@ is now:
 Unchanged and load-bearing: flag-splitting (`EDITOR="code -w"`) and the property that an
 aborted edit never mutates. The no-editor path is one more branch that returns before any
 write.
+
+## D193 — A pinned kind is recorded state, not authored config; the two files meet at `AddExtras` (2026-08-01, CRD-PIN-01)
+
+From feedback `2026-08-01-custom-resources-pinning`: a kind you reach for once should stay
+in the menu for that context. The feedback names the design question outright — the
+user-authored `menus/<context>.yaml` (D83) or the kubecom-recorded
+`StateDir()/<context>.yaml` (D90/D163) — because those two files exist precisely to hold
+different things. The answer:
+
+1. **Pins live in the state file** (`State.PinnedResources`), never in the menu file. The
+   line D90 drew is *who writes it*: the menu file is hand-authored and may carry comments
+   and ordering kubecom must never clobber, while the state file is kubecom's to rewrite on
+   every change. A pin is recorded *for* you by a keypress, so it is state by that
+   definition. The corollary is binding: **no leg may make kubecom write
+   `menus/<context>.yaml`.** A user's file stays a user's file.
+2. **Both files feed the same merge.** A pin and a hand-written entry are both
+   `config.MenuResource` and both reach the menu through `menu.AddExtras`, so a pinned CRD
+   renders the same row, in the same section, deduped against seed and discovery by the
+   same GVR key (D57/D83). There is no second menu-merge path to keep in step, and no
+   "pinned" row style to diverge — a future slice that needs to *distinguish* a pinned row
+   (CRD-PIN-03 must, to know what may be unpinned) adds provenance to the menu Item, not a
+   parallel merge.
+3. **Where they collide, the authored entry wins.** The hand-written one was deliberate;
+   the pin was automatic. The launcher's `mergeMenuExtras` puts authored first and drops a
+   pin with the same GVR, so the authored section/title is what renders. This is redundant
+   with `AddExtras`'s own dedupe on purpose: the precedence between the two files is then
+   an explicit, tested property of the launcher rather than an accident of scan order.
+4. **The merge happens on the launch path *and* the context-switch path**, both inside the
+   launcher (`contextStateLoader.LoadContextState`). Per D163 a switch rebuilds the menu
+   from the `ContextState` it is handed, so a merge that existed only at launch would show
+   the departed context's pins — the exact bug D163 exists to prevent. Any future
+   per-context menu input must be merged in both places or in neither.
+5. **The GVR is the pin's identity.** `Pin` is idempotent by group/version/resource and
+   `Unpin` is keyed by it, matching what the menu dedupes on; two spellings of one kind can
+   never become two rows. `v1` and `v1beta1` of the same resource are *different* pins,
+   because they are different resources to the API.
+6. **A malformed pin is loud, in both files.** One validator (`validateMenuResources`)
+   backs `MenuConfig` and `State.PinnedResources`: version and resource are required,
+   because they are the minimum the dynamic client can address. The launcher already
+   degrades a bad state file to the zero state with a log warning (principle 3), so an
+   unaddressable pin costs the remembered namespace but never the launch.

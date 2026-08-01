@@ -171,3 +171,103 @@ func TestStateSaveFileReplacesAtomicallyWithoutLeftoverTemp(t *testing.T) {
 		t.Errorf("dir entries = %v, want only [ctx.yaml]", names)
 	}
 }
+
+// TestStatePinnedResourcesRoundTrip proves a pinned kind survives Save → Load with
+// every field intact — the property CRD-PIN-02's write gesture depends on, since a
+// pin that lost its Namespaced flag would list a namespaced CRD cluster-wide.
+func TestStatePinnedResourcesRoundTrip(t *testing.T) {
+	in := &State{
+		LastNamespace: "kube-system",
+		PinnedResources: []MenuResource{{
+			Group: "hub.traefik.io", Version: "v1alpha1", Resource: "aigateways",
+			Kind: "AIGateway", Namespaced: true,
+		}},
+	}
+	var buf bytes.Buffer
+	if err := in.Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out, err := LoadState(&buf)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(out.PinnedResources) != 1 || out.PinnedResources[0] != in.PinnedResources[0] {
+		t.Fatalf("PinnedResources = %+v, want %+v", out.PinnedResources, in.PinnedResources)
+	}
+	if out.LastNamespace != "kube-system" {
+		t.Errorf("LastNamespace = %q, want kube-system", out.LastNamespace)
+	}
+}
+
+// TestStateNoPinsStaysEmpty proves the new field is omitted entirely when nothing is
+// pinned, so an existing state file gains no key until the user pins something.
+func TestStateNoPinsStaysEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (&State{}).Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if strings.Contains(buf.String(), "pinnedResources") {
+		t.Errorf("empty state emitted %q, want no pinnedResources key", buf.String())
+	}
+}
+
+// TestLoadStateRejectsUnaddressablePin proves a pin the kube layer could not address
+// (no resource) fails the load exactly as the same entry in the authored menu file
+// does — one validation for both files.
+func TestLoadStateRejectsUnaddressablePin(t *testing.T) {
+	_, err := LoadState(strings.NewReader("pinnedResources:\n  - version: v1\n"))
+	if err == nil {
+		t.Fatal("a pin with no resource should fail the load")
+	}
+	if !strings.Contains(err.Error(), "resource is required") {
+		t.Errorf("error = %v, want it to name the missing field", err)
+	}
+}
+
+// TestStatePinIsIdempotentByGVR proves pinning the same kind twice adds one row and
+// reports the second as a no-op — the menu dedupes on the GVR, so the store must too.
+func TestStatePinIsIdempotentByGVR(t *testing.T) {
+	s := &State{}
+	r := MenuResource{Group: "g", Version: "v1", Resource: "widgets", Kind: "Widget"}
+	if !s.Pin(r) {
+		t.Fatal("first Pin should report a change")
+	}
+	// Same GVR, different display hints: still the same resource, still one row.
+	if s.Pin(MenuResource{Group: "g", Version: "v1", Resource: "widgets", Title: "Other"}) {
+		t.Error("re-pinning the same GVR should report no change")
+	}
+	if len(s.PinnedResources) != 1 || s.PinnedResources[0] != r {
+		t.Fatalf("PinnedResources = %+v, want the first entry only", s.PinnedResources)
+	}
+	// A different version is a different resource to the API, so it is a new pin.
+	if !s.Pin(MenuResource{Group: "g", Version: "v1beta1", Resource: "widgets"}) {
+		t.Error("a different version should pin as its own entry")
+	}
+	if len(s.PinnedResources) != 2 {
+		t.Fatalf("PinnedResources = %+v, want 2 entries", s.PinnedResources)
+	}
+}
+
+// TestStateUnpin proves the removal half: an unpinned GVR goes away, the others keep
+// their order, and unpinning something that was never pinned reports no change (so
+// the caller writes no file).
+func TestStateUnpin(t *testing.T) {
+	s := &State{PinnedResources: []MenuResource{
+		{Group: "g", Version: "v1", Resource: "widgets"},
+		{Group: "h", Version: "v1", Resource: "gadgets"},
+		{Version: "v1", Resource: "configmaps"},
+	}}
+	if !s.Unpin("h", "v1", "gadgets") {
+		t.Fatal("Unpin of a pinned GVR should report a change")
+	}
+	if len(s.PinnedResources) != 2 ||
+		s.PinnedResources[0].Resource != "widgets" || s.PinnedResources[1].Resource != "configmaps" {
+		t.Fatalf("PinnedResources = %+v, want widgets then configmaps", s.PinnedResources)
+	}
+	if s.Unpin("h", "v1", "gadgets") {
+		t.Error("Unpin of an absent GVR should report no change")
+	}
+	if !s.Unpin("", "v1", "configmaps") {
+		t.Error("the core group ('') must be unpinnable, not treated as a wildcard")
+	}
+}

@@ -160,12 +160,21 @@ func parseMenu(data []byte) (*MenuConfig, error) {
 // are the minimum needed to list/watch generically, so a missing one is a hard
 // error (loud, like UnmarshalStrict on an unknown field).
 func (m *MenuConfig) validate() error {
-	for i, r := range m.Resources {
+	return validateMenuResources("menu resources", m.Resources)
+}
+
+// validateMenuResources is the shared check for every list of MenuResource,
+// wherever it was decoded from — the authored menus/<context>.yaml (MenuConfig) or
+// the pins kubecom records in the per-context state file (State.PinnedResources,
+// D193). field names the offending list in the error so the message says which file
+// to look at.
+func validateMenuResources(field string, rs []MenuResource) error {
+	for i, r := range rs {
 		if strings.TrimSpace(r.Version) == "" {
-			return fmt.Errorf("config: menu resources[%d]: version is required", i)
+			return fmt.Errorf("config: %s[%d]: version is required", field, i)
 		}
 		if strings.TrimSpace(r.Resource) == "" {
-			return fmt.Errorf("config: menu resources[%d]: resource is required", i)
+			return fmt.Errorf("config: %s[%d]: resource is required", field, i)
 		}
 	}
 	return nil

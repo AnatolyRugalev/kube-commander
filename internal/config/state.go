@@ -23,6 +23,50 @@ type State struct {
 	// as the initial watch scope on the next launch ("" = all namespaces). The
 	// wiring leg (M2-11b-2) lets an explicit -n flag override it for that run.
 	LastNamespace string `json:"lastNamespace,omitempty"`
+
+	// PinnedResources are the resource kinds the user reached for on this context and
+	// kept — chiefly CRDs, which are too numerous to list in full and unreachable when
+	// listed not at all (CRD-PIN-01/D193). They are folded into the menu exactly as the
+	// authored menus/<context>.yaml entries are, so a pin and a hand-written entry
+	// render the same row; the authored file wins where both name a GVR. They live here
+	// rather than in that file because kubecom writes them *for* you as you work, and
+	// this is the file kubecom may rewrite freely (D90).
+	PinnedResources []MenuResource `json:"pinnedResources,omitempty"`
+}
+
+// Pin adds r to the context's pinned kinds, returning false when the GVR is already
+// pinned (no duplicate row, no needless write). It is the model half of the pin
+// gesture: the caller persists with SaveFile only when this returns true.
+func (s *State) Pin(r MenuResource) bool {
+	for i := range s.PinnedResources {
+		if sameGVR(s.PinnedResources[i], r) {
+			return false
+		}
+	}
+	s.PinnedResources = append(s.PinnedResources, r)
+	return true
+}
+
+// Unpin removes the pinned kind with this group/version/resource, returning false
+// when nothing was pinned for it. The key is the GVR rather than the whole entry so
+// a row can be unpinned from what the menu knows about it, without reconstructing
+// the display hints the pin was stored with.
+func (s *State) Unpin(group, version, resource string) bool {
+	for i := range s.PinnedResources {
+		p := s.PinnedResources[i]
+		if p.Group == group && p.Version == version && p.Resource == resource {
+			s.PinnedResources = append(s.PinnedResources[:i], s.PinnedResources[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// sameGVR reports whether two menu entries address the same API resource — the
+// identity the menu itself dedupes on (menu.AddExtras keys off the GVR), so pins
+// agree with it rather than treating two spellings of one kind as two rows.
+func sameGVR(a, b MenuResource) bool {
+	return a.Group == b.Group && a.Version == b.Version && a.Resource == b.Resource
 }
 
 // StateDir returns the directory holding the per-context state files:
@@ -83,6 +127,14 @@ func parseState(data []byte) (*State, error) {
 		if err := yaml.UnmarshalStrict(data, &s); err != nil {
 			return nil, fmt.Errorf("config: parsing state YAML: %w", err)
 		}
+	}
+	// Pinned kinds are validated exactly as the authored menu file's entries are: a
+	// pin the kube layer could not address is a broken row, whichever file it came
+	// from. The launcher degrades a state-file error to the zero state and logs it
+	// (principle 3), so an unaddressable pin costs the recorded namespace but never
+	// the launch.
+	if err := validateMenuResources("state pinnedResources", s.PinnedResources); err != nil {
+		return nil, err
 	}
 	return &s, nil
 }

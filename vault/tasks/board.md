@@ -3,20 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-01 — EDIT-01 drained the first of the five 2026-08-01 feedback items (D192, editor auto-detection at startup); four remain and still preempt the board (D69), with `2026-08-01-custom-resources-pinning` next. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-01 — CRD-PIN-01 drained the custom-resources-pinning feedback into the four-slice CRD-PIN line and landed the store (D193); three 2026-08-01 feedback items remain and still preempt the board (D69), with `2026-08-01-command-palette-unification` next. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: Feedback `2026-08-01-custom-resources-pinning` (D69), first slice of the
-      CRD-PIN line below. Settle the design question the feedback names — pinned kinds in
-      the user-authored `menus/<context>.yaml` or in the kubecom-recorded
-      `StateDir()/<context>.yaml` (D90/D163) — record it as a decision, then land the store
-      half: the state field, its pin/unpin helpers, and the launcher merge that folds pins
-      into the same `menu.AddExtras` path the authored extras already take, on **both** the
-      launch and the context-switch path. Mechanism before gesture (D52); the key that pins
-      is CRD-PIN-02.
+_(none)_
 
 ## Blocked
 
@@ -255,8 +246,8 @@ CRDs and is deliberately not CRD-01's degradation half (D191 pt 1 keeps them apa
 Triaged into four slices, bottom-up (D52): the store, then the gesture that writes it, then
 the gesture that removes it, then the discoverability that makes "reach for it once" true.
 
-- [ ] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — **in
-      progress** above.
+- [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
+      2026-08-01 (D193)
 - [ ] **CRD-PIN-02** `p` on a resource row/search hit pins that kind for the context
       status: todo | owner: — | added: 2026-08-01
       notes: The write gesture. A new `pin.toggle` action (D10/D11 — a named action, never a
@@ -266,6 +257,8 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       folds the new entry into the live menu with `menu.AddExtras` so the row appears without
       a relaunch. Pinning an already-pinned or already-listed kind is a no-op with a notice,
       not a duplicate row. Needs the kind's `Namespaced` flag from discovery, not a guess.
+      **Carries the README section** for pinning — CRD-PIN-01 deliberately left it out, since
+      there was no gesture yet and the state file is documented as kubecom-managed (D68).
 - [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
       status: todo | owner: — | added: 2026-08-01
       notes: The removal half the feedback insists must be as easy as the adding ("a key on
@@ -359,6 +352,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CRD-PIN-01** A pinned resource kind is recorded per-context state (`State.PinnedResources`), never the user-authored `menus/<context>.yaml`, and the launcher merges pins behind the authored entries into the one list the menu already folds in — on the launch path *and* the context-switch path, so a switch shows the new context's pins — with pin/unpin keyed by GVR and one validator shared by both files; triaged the feedback into the CRD-PIN line — feedback `2026-08-01-custom-resources-pinning` — done 2026-08-01 (D193)
 
 - [x] **EDIT-01** The editor is resolved once at startup over `KUBE_EDITOR → EDITOR → VISUAL → first of nvim/vim/nano/vi on PATH` and the choice is logged, so a user learns which editor they get before pressing `e`; a box with none of the four launches anyway and reports `no editor found; set $EDITOR` instead of suspending — feedback `2026-08-01-editor-autodetect` — done 2026-08-01 (D192)
 

@@ -483,3 +483,93 @@ func TestPersistThemeRefusesToClobberAnUnparseableConfig(t *testing.T) {
 		t.Errorf("the config was rewritten: %q", string(data))
 	}
 }
+
+// TestMergeMenuExtrasAppendsPins proves the context's pinned kinds join the authored
+// menu entries in one list, behind them — the single list the shell hands to
+// menu.AddExtras (CRD-PIN-01/D193).
+func TestMergeMenuExtrasAppendsPins(t *testing.T) {
+	authored := []config.MenuResource{{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}}
+	pinned := []config.MenuResource{{Group: "hub.traefik.io", Version: "v1alpha1", Resource: "aigateways"}}
+	got := mergeMenuExtras(authored, pinned)
+	if len(got) != 2 || got[0] != authored[0] || got[1] != pinned[0] {
+		t.Fatalf("merged = %+v, want authored then pinned", got)
+	}
+}
+
+// TestMergeMenuExtrasAuthoredWinsOnGVR proves a hand-written entry beats a pin naming
+// the same resource: the authored file is the deliberate one, so its section/title is
+// what renders, and the kind is never listed twice.
+func TestMergeMenuExtrasAuthoredWinsOnGVR(t *testing.T) {
+	authored := []config.MenuResource{{
+		Group: "g", Version: "v1", Resource: "widgets", Title: "Authored", Section: "Workloads",
+	}}
+	pinned := []config.MenuResource{{Group: "g", Version: "v1", Resource: "widgets", Title: "Pinned"}}
+	got := mergeMenuExtras(authored, pinned)
+	if len(got) != 1 || got[0].Title != "Authored" || got[0].Section != "Workloads" {
+		t.Fatalf("merged = %+v, want only the authored entry", got)
+	}
+}
+
+// TestMergeMenuExtrasDoesNotAliasAuthored proves the merge never appends into the
+// caller's backing array: the loaded menu-file slice must not be mutated by a pin.
+func TestMergeMenuExtrasDoesNotAliasAuthored(t *testing.T) {
+	authored := make([]config.MenuResource, 1, 4) // spare capacity: append would write in place.
+	authored[0] = config.MenuResource{Group: "g", Version: "v1", Resource: "widgets"}
+	pinned := []config.MenuResource{{Group: "h", Version: "v1", Resource: "gadgets"}}
+	got := mergeMenuExtras(authored, pinned)
+	if len(authored) != 1 || cap(authored) < 4 {
+		t.Fatalf("authored slice header changed: %+v", authored)
+	}
+	if &got[0] == &authored[0] {
+		t.Error("merged list aliases the authored slice's array")
+	}
+	if len(authored[:cap(authored)][1:2]) != 1 || authored[:cap(authored)][1].Resource != "" {
+		t.Errorf("merge wrote into the authored slice's spare capacity: %+v", authored[:cap(authored)])
+	}
+}
+
+// TestMergeMenuExtrasNoPinsIsIdentity proves the common case (nothing pinned) hands
+// the authored list straight through, so the pre-CRD-PIN behaviour is unchanged.
+func TestMergeMenuExtrasNoPinsIsIdentity(t *testing.T) {
+	authored := []config.MenuResource{{Group: "g", Version: "v1", Resource: "widgets"}}
+	if got := mergeMenuExtras(authored, nil); len(got) != 1 || got[0] != authored[0] {
+		t.Fatalf("merged = %+v, want the authored list unchanged", got)
+	}
+	if got := mergeMenuExtras(nil, nil); got != nil {
+		t.Fatalf("merged = %+v, want nil", got)
+	}
+}
+
+// TestLoadContextStateMergesPinsForTheSwitchedContext proves a context switch lands on
+// the *new* context's pins: the ContextState menu extras carry that context's authored
+// entries and its pinned kinds, which is what the post-switch menu rebuild folds in
+// (D163). This is the path a pin would silently miss if only launch merged.
+func TestLoadContextStateMergesPinsForTheSwitchedContext(t *testing.T) {
+	const ctx = "staging"
+	writeMenuFile(t, ctx, `resources:
+  - group: cert-manager.io
+    version: v1
+    resource: certificates
+`)
+	writeStateFile(t, ctx, `lastNamespace: apps
+pinnedResources:
+  - group: hub.traefik.io
+    version: v1alpha1
+    resource: aigateways
+    kind: AIGateway
+    namespaced: true
+`)
+	st := contextStateLoader{}.LoadContextState(ctx)
+	if st.Namespace != "apps" {
+		t.Errorf("Namespace = %q, want apps", st.Namespace)
+	}
+	if len(st.MenuExtras) != 2 {
+		t.Fatalf("MenuExtras = %+v, want the authored entry and the pin", st.MenuExtras)
+	}
+	if st.MenuExtras[0].Resource != "certificates" || st.MenuExtras[1].Resource != "aigateways" {
+		t.Errorf("MenuExtras = %+v, want certificates then aigateways", st.MenuExtras)
+	}
+	if !st.MenuExtras[1].Namespaced {
+		t.Error("the pin lost its Namespaced flag on the way to the menu")
+	}
+}

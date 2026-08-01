@@ -150,6 +150,10 @@ func runTUI(opts runOptions) error {
 	if statePath != "" {
 		persister = &statePersister{path: statePath, state: state}
 	}
+	// The kinds pinned on this context join the authored menu entries (CRD-PIN-01/D193):
+	// one merged list goes into the menu, so a pinned CRD and a hand-written one render
+	// the same row through the same menu.AddExtras path.
+	menuExtras = mergeMenuExtras(menuExtras, state.PinnedResources)
 
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
@@ -290,7 +294,13 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 		extras = nil // degrade to the built-in default menu, as launch does.
 	}
 	state, statePath := loadState(name)
-	st := tui.ContextState{MenuExtras: extras, Namespace: state.LastNamespace}
+	// Same merge as the launch path (CRD-PIN-01/D193) — a switch must land on the new
+	// context's pins, not the departing context's, and the menu extras carried in
+	// ContextState are what the post-switch menu rebuild folds in (D163).
+	st := tui.ContextState{
+		MenuExtras: mergeMenuExtras(extras, state.PinnedResources),
+		Namespace:  state.LastNamespace,
+	}
 	if statePath != "" {
 		// Guarded so the interface field stays a true nil when the state path is
 		// unresolvable — a typed nil pointer in it would read as "persistence wired"
@@ -319,6 +329,38 @@ func loadMenuExtras(context string) ([]config.MenuResource, error) {
 		return nil, err
 	}
 	return mc.Resources, nil
+}
+
+// mergeMenuExtras folds the context's pinned kinds (State.PinnedResources, D193) in
+// behind its authored menu entries (menus/<context>.yaml, D83) — the single list the
+// shell hands to menu.AddExtras. Authored entries come first and win: where both name
+// the same GVR, the hand-written entry keeps its section/title, because that one was
+// deliberately written while the pin was recorded automatically. The dedupe is
+// deliberately redundant with AddExtras's own GVR dedupe — it is what makes the
+// precedence between the two files explicit and testable here, rather than an
+// accident of which list happens to be scanned first.
+//
+// It never returns the caller's backing array: appending pins to the authored slice
+// in place would let a later append mutate what the menu file loaded.
+func mergeMenuExtras(authored, pinned []config.MenuResource) []config.MenuResource {
+	if len(pinned) == 0 {
+		return authored
+	}
+	out := make([]config.MenuResource, 0, len(authored)+len(pinned))
+	out = append(out, authored...)
+	for _, p := range pinned {
+		dup := false
+		for _, a := range authored {
+			if a.Group == p.Group && a.Version == p.Version && a.Resource == p.Resource {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // maybeMigrate runs the one-shot legacy-config migration on first start (M2-12b).
