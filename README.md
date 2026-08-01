@@ -127,7 +127,8 @@ runs, since that state lives beside the config in the (throwaway) container.
 Two limits worth knowing before you reach them. The image is distroless — the
 binary, a CA bundle and nothing else — so a kubeconfig using an **exec credential
 plugin** (`aws`, `gcloud`, `kubelogin`, …) will not authenticate inside it, and
-the **Edit** action has no `$EDITOR` to suspend into. Both work fine with the
+the **Edit** action has no editor to suspend into (there is no `vi` in the image
+for the startup detection below to find). Both work fine with the
 native binary. Exec-into-a-pod and port-forwarding do work, the latter with the
 usual `-p` mapping since the forward binds inside the container.
 
@@ -303,13 +304,22 @@ no previous log, and the cluster says so in the status bar. `Esc` with no filter
 centered viewer — only logs stream, so only logs get their own screen.
 
 An object's **YAML** is not a viewer at all. Press `e` (`res.edit`) and kubecom opens the
-YAML in your own `$EDITOR` (`$KUBE_EDITOR` first, else `$EDITOR`, else `vi`; flags work, so
-`EDITOR="code -w"` is fine), suspending the TUI the way `kubectl edit` does and restoring it
+YAML in your own editor, suspending the TUI the way `kubectl edit` does and restoring it
 when you quit. Close without changing anything and nothing is sent — reading the YAML is
 just an edit you did not make. Save a change and it is applied through the API, with the
 server's own validation and a conflict check, so a stale buffer is refused rather than
 allowed to clobber someone else's write. Viewing and editing YAML are deliberately one
 gesture rather than two keys.
+
+Which editor that is gets settled **once, at startup**, so you find out before you press
+`e` rather than at the moment you wanted to change something: `$KUBE_EDITOR`, else
+`$EDITOR`, else `$VISUAL`, else the first of `nvim`, `vim`, `nano`, `vi` found on your
+`PATH`. Flags work, so `EDITOR="code -w"` is fine, and a variable you set is always taken
+as-is — detection only runs when all three are empty. The choice is written to the log
+file (`kubecom.log`, below), and on the rare box with none of the four installed kubecom
+still launches and says so instead of failing at `e`. This differs from `kubectl` in one
+place on purpose: `$VISUAL` is consulted too, since the Unix convention reserves it for
+full-screen editors, which is exactly this case.
 
 The other subcommands report information and exit:
 

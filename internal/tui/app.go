@@ -643,6 +643,13 @@ type Model struct {
 	// a discarding logger so every call site can log unconditionally.
 	logger *slog.Logger
 
+	// editorArgv is the editor the launcher resolved once at startup (ResolveEditor →
+	// WithEditorArgv, EDIT-01). It sits here rather than on Cluster because it is
+	// per-process, not per-cluster: a context switch changes nothing about which
+	// editor is installed. Empty → the Edit action reports errNoEditor instead of
+	// suspending, so an unresolved editor can never blank the terminal.
+	editorArgv []string
+
 	// Cluster holds every seam bound to the cluster kubecom is currently on — the
 	// watch/discovery clients, the viewer sources, the mutating action set (M4-02).
 	// It is embedded, so the shell reads them unqualified (m.watcher, m.deleter, …)

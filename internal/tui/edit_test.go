@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
@@ -32,11 +34,14 @@ func (f *fakeEditor) Update(_ context.Context, _ kube.Resource, ref kube.ObjectR
 }
 
 // podEditModel drills into a pods table so an edit test has a concrete selected Pod row,
-// with the given options wired (an editor + a YAML getter for a live edit).
+// with the given options wired (an editor + a YAML getter for a live edit). A resolved
+// editor argv is seeded first so the flow tests never depend on the runner's environment
+// or PATH (EDIT-01); a caller that wants the unresolved case passes WithEditorArgv(nil),
+// which wins because options apply in order.
 func podEditModel(t *testing.T, opts ...Option) Model {
 	t.Helper()
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
-	m := sizedWith(t, append([]Option{WithWatcher(fw)}, opts...)...)
+	m := sizedWith(t, append([]Option{WithWatcher(fw), WithEditorArgv([]string{"fake-editor"})}, opts...)...)
 	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
 	m = next.(Model)
 	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
@@ -59,28 +64,89 @@ func withEditorSim(t *testing.T, edited string, simErr error) {
 	t.Cleanup(func() { runEditor = prev })
 }
 
-// TestResolveEditorArgv covers the editor precedence and flag-splitting: KUBE_EDITOR wins
-// over EDITOR, EDITOR is the fallback, the vi default applies when both are empty, and a
-// value with flags splits into command + args.
+// fakePath returns an exec.LookPath-shaped func that finds exactly the named binaries, so
+// the PATH half of the precedence table is drivable without depending on what the runner
+// happens to have installed (EDIT-01).
+func fakePath(present ...string) func(string) (string, error) {
+	return func(name string) (string, error) {
+		if slices.Contains(present, name) {
+			return "/usr/bin/" + name, nil
+		}
+		return "", exec.ErrNotFound
+	}
+}
+
+// TestResolveEditorArgv covers the full editor precedence (EDIT-01): KUBE_EDITOR wins over
+// EDITOR wins over VISUAL; with all three empty the first of nvim/vim/nano/vi present on
+// PATH is chosen, in that order; a set variable is never second-guessed against PATH; and a
+// value with flags still splits into command + args.
 func TestResolveEditorArgv(t *testing.T) {
 	cases := []struct {
 		name       string
 		kubeEditor string
 		editor     string
+		visual     string
+		path       []string
 		want       []string
+		wantErr    bool
 	}{
-		{"kube-editor wins", "code -w", "vim", []string{"code", "-w"}},
-		{"editor fallback", "", "vim", []string{"vim"}},
-		{"vi default", "", "", []string{"vi"}},
-		{"flags split", "", "subl -n -w", []string{"subl", "-n", "-w"}},
-		{"blank editor ignored", "", "   ", []string{"vi"}},
+		{name: "kube-editor wins", kubeEditor: "code -w", editor: "vim", visual: "emacs", want: []string{"code", "-w"}},
+		{name: "editor beats visual", editor: "vim", visual: "emacs", want: []string{"vim"}},
+		{name: "visual is consulted last", visual: "emacs", want: []string{"emacs"}},
+		{name: "flags split", editor: "subl -n -w", want: []string{"subl", "-n", "-w"}},
+		{name: "blank variables ignored", kubeEditor: "  ", editor: "", visual: " \t ", path: []string{"vi"}, want: []string{"vi"}},
+
+		// PATH detection: candidate order, not PATH order.
+		{name: "nvim preferred", path: []string{"vi", "nano", "vim", "nvim"}, want: []string{"nvim"}},
+		{name: "vim over nano", path: []string{"vi", "nano", "vim"}, want: []string{"vim"}},
+		{name: "nano over bare vi", path: []string{"vi", "nano"}, want: []string{"nano"}},
+		{name: "vi last resort", path: []string{"vi"}, want: []string{"vi"}},
+		{name: "the reported host: vim but no vi", path: []string{"vim"}, want: []string{"vim"}},
+		{name: "nothing installed", wantErr: true},
+
+		// A set variable is the user's explicit choice: it is taken even when the named
+		// binary is absent and a candidate is present, so detection can never override it.
+		{name: "set variable beats a present candidate", editor: "myed", path: []string{"nvim"}, want: []string{"myed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveEditorArgv(tc.kubeEditor, tc.editor); !slices.Equal(got, tc.want) {
-				t.Fatalf("resolveEditorArgv(%q,%q) = %v, want %v", tc.kubeEditor, tc.editor, got, tc.want)
+			got, err := resolveEditorArgv(tc.kubeEditor, tc.editor, tc.visual, fakePath(tc.path...))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("resolveEditorArgv(...) = %v, want an error", got)
+				}
+				if got != nil {
+					t.Fatalf("an unresolved editor must yield no argv, got %v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveEditorArgv(...) unexpected error: %v", err)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("resolveEditorArgv(%q,%q,%q) = %v, want %v", tc.kubeEditor, tc.editor, tc.visual, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestEditWithoutResolvedEditorNeverSuspends proves the no-editor-on-the-box case degrades
+// where it should (EDIT-01): the fetch still happens, but the flow reports the actionable
+// "set $EDITOR" message as a toast instead of returning a tea.Exec — so the terminal is
+// never blanked for a binary nobody chose, and nothing is applied.
+func TestEditWithoutResolvedEditorNeverSuspends(t *testing.T) {
+	e := &fakeEditor{}
+	m := podEditModel(t, WithEditorArgv(nil), WithEditor(e), WithYAMLGetter(&fakeYAMLGetter{yaml: "kind: Pod\n"}))
+	next, cmd := m.handleEditFetched(editFetchedMsg{res: m.current, ref: kube.ObjectRef{Namespace: "default", Name: "web-1"}, content: "kind: Pod\n"})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("an unresolved editor should surface a status-bar toast command")
+	}
+	if e.calls != 0 {
+		t.Fatalf("an unresolved editor must never apply: got %d Update calls", e.calls)
+	}
+	if view := m.View().Content; !strings.Contains(view, "set $EDITOR") {
+		t.Fatalf("expected the actionable no-editor message on screen, got:\n%s", view)
 	}
 }
 

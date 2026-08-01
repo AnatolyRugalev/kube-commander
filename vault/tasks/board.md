@@ -3,19 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-01 — HT-dogfood-0801 closed the three human tasks the 2026-08-01 dogfood finished (D191), which unblocks and re-scopes **CRD-01** (the `ExternalSecret` error is cluster-side — a conversion webhook — so the leg is legible degradation, not a client fix); five feedback items arrived the same day and preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-01 — EDIT-01 drained the first of the five 2026-08-01 feedback items (D192, editor auto-detection at startup); four remain and still preempt the board (D69), with `2026-08-01-custom-resources-pinning` next. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **EDIT-01** Auto-detect an installed editor at startup instead of falling through to `vi`
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: Feedback `2026-08-01-editor-autodetect` (D69). Full precedence
-      `KUBE_EDITOR → EDITOR → VISUAL → first on PATH of nvim/vim/nano/vi`; resolve **at
-      startup** and log the choice (D159) so the user learns which editor they will get
-      before pressing `e`; `resolveEditorArgv` stays pure (inject an `exec.LookPath`-shaped
-      func); flag-splitting and "an aborted edit never mutates" must not move. Unblocks the
-      open human task `2026-07-24-edit-live-cluster-dogfood`, which failed at step 1 because
-      the host had no `$EDITOR` and no `vi`.
+_(none)_
 
 ## Blocked
 
@@ -319,6 +311,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **EDIT-01** The editor is resolved once at startup over `KUBE_EDITOR → EDITOR → VISUAL → first of nvim/vim/nano/vi on PATH` and the choice is logged, so a user learns which editor they get before pressing `e`; a box with none of the four launches anyway and reports `no editor found; set $EDITOR` instead of suspending — feedback `2026-08-01-editor-autodetect` — done 2026-08-01 (D192)
 
 - [x] **HT-dogfood-0801** Closed the three human tasks the 2026-08-01 dogfood session finished — the `ExternalSecret` failure is not reproducible and is cluster-side (a conversion webhook), so CRD-01 is re-scoped from a client fix to legible degradation and unblocked; the logs throughput pass measured ~1,900 lines/sec with no degradation, which confirms D162 rather than retiring it; fuzzy search closed as "no problem found", not "verified" — done 2026-08-01 (D191)
 

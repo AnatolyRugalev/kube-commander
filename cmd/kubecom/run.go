@@ -121,6 +121,24 @@ func runTUI(opts runOptions) error {
 		}
 	}
 
+	// Resolve the editor once, here, rather than at `e`-press time (EDIT-01/D192): it
+	// is what lets the choice be logged, so a user learns which editor they will get
+	// *before* they press `e` on a live object instead of discovering a broken fallback
+	// at the moment they wanted to change something. A box with none of the candidates
+	// installed degrades like every other startup fault — the launch proceeds, the shell
+	// is edit-inert with an actionable message, and it takes the last startup-toast slot
+	// (behind migration, menu and theme, all of which are larger events).
+	editorArgv, editorErr := tui.ResolveEditor()
+	if editorErr != nil {
+		slog.Warn("editor", "error", editorErr)
+		if startupErr == nil {
+			e := tui.NewErrorMsg("editor", editorErr)
+			startupErr = &e
+		}
+	} else {
+		slog.Info("editor", "argv", editorArgv)
+	}
+
 	// Resolve the initial watch scope and the namespace-persistence seam from the
 	// per-context state store (D90/M2-11b-2). An explicit -n wins for this run and
 	// does not touch the stored state (D91); with no -n, restore the last namespace
@@ -155,6 +173,9 @@ func runTUI(opts runOptions) error {
 		// to this config file, so the next launch resolves it above (M4-12b-2).
 		tui.WithThemePersister(&configThemePersister{path: path}),
 		tui.WithStartupError(startupErr),
+		// The editor resolved (and logged) above — per-process, so it is wired here
+		// beside the other per-launch state rather than inside the cluster bundle.
+		tui.WithEditorArgv(editorArgv),
 		// The same file logger setupLogging installed as the slog default — the shell
 		// records every error it toasts there, so a failure the 5s toast outlived is
 		// still diagnosable afterwards (D159). Wired here rather than read as a global

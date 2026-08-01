@@ -23,7 +23,14 @@ of `KUBE_EDITOR` → `EDITOR` → `VISUAL` → first of `nvim`/`vim`/`nano`/`vi`
 as `../feedback/2026-08-01-editor-autodetect.md`. That fix is **not a precondition** for
 this dogfood — setting `EDITOR` unblocks it today.
 
-Re-run with `EDITOR` set (`set -x EDITOR nvim`) and work steps 1–5 as written.
+**Landed 2026-08-01 as EDIT-01/D192**, so the re-run needs no `EDITOR` at all: on that
+host kubecom now resolves `nvim` (or `vim`) at startup and writes the choice to
+`~/.cache/kubecom/kubecom.log` — `grep editor` there *before* pressing `e` and you will
+see which one you are about to get. Step 1 below is therefore also the check that
+detection picked the editor you expected. Setting `EDITOR` explicitly still wins and is
+still a fine way to run the dogfood.
+
+Re-run and work steps 1–5 as written.
 
 ## What's needed
 

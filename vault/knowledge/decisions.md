@@ -5075,3 +5075,40 @@ one settles is written down here rather than left to the deleted file:
    fix works", never "the fix was unnecessary", and D162's append-don't-rejoin constraint
    stands unweakened for the next streaming surface. What is still unmeasured is buffer
    *depth*: the run did not sit on the stream long enough to bound a multi-hour tail.
+
+## D192 — The editor is resolved once at startup, and PATH detection is the last resort (2026-08-01, EDIT-01)
+
+From feedback `2026-08-01-editor-autodetect`: with no editor variable set, kubecom fell
+straight through to `vi`, and a modern Arch host has `/usr/bin/vim` but no `vi` symlink —
+so `e` dead-ended on a machine with two perfectly good editors installed. The resolution
+is now:
+
+1. **Precedence is `KUBE_EDITOR` → `EDITOR` → `VISUAL` → first of `nvim`, `vim`, `nano`,
+   `vi` on `PATH`.** `VISUAL` is a **deliberate divergence from kubectl** (which consults
+   only the first two): the Unix convention reserves it for full-screen editors, which is
+   exactly this case. It is the *only* addition to kubectl's variable list — a later leg
+   may not keep growing it.
+2. **A set variable is never second-guessed.** PATH detection runs only when all three are
+   empty. A variable naming a missing binary still fails at launch, where the error names
+   what the user actually asked for; silently substituting a different editor would be
+   worse than the failure.
+3. **The candidate order prefers editors whose presence implies a choice.** `nvim`/`vim`
+   are installed deliberately; `nano` ships in Arch's `base` and says little, but still
+   beats bare `vi` as the "you can always exit it" fallback. This is consistent with
+   kubecom being a vim-friendly tool (`goals.md`) — handing a vim user nano on a box with
+   both would be the more annoying error.
+4. **Resolution happens once, at startup, in the launcher — not at `e`-press time.** That
+   is what lets the choice be logged (D159), so a user learns which editor they will get
+   *before* they press `e` on a live object. A box with none of the candidates degrades
+   like every other startup fault (principle 3): the launch proceeds, the choice takes the
+   last startup-toast slot, and the Edit action reports `no editor found; set $EDITOR`
+   instead of suspending — an unresolved editor may **never** blank the terminal.
+5. **`resolveEditorArgv` stays pure**: the `exec.LookPath`-shaped lookup is injected, so
+   the whole precedence table is unit-testable against a fake PATH. A future leg adding a
+   candidate or a variable adds a table row, not an environment-dependent test. The argv
+   lives on `Model`, not on the `Cluster` bundle — it is per-process, and a context switch
+   changes nothing about which editor is installed.
+
+Unchanged and load-bearing: flag-splitting (`EDITOR="code -w"`) and the property that an
+aborted edit never mutates. The no-editor path is one more branch that returns before any
+write.

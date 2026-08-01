@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -53,29 +54,59 @@ func WithEditor(e Editor) Option {
 	return func(m *Model) { m.editor = e }
 }
 
-// defaultEditor is the editor launched when neither KUBE_EDITOR nor EDITOR is set. vi is
-// the lowest-common-denominator editor present on virtually every Unix system, matching
-// kubectl's own fallback.
-var defaultEditor = "vi"
+// editorCandidates is the PATH probe order used when KUBE_EDITOR, EDITOR and VISUAL are
+// all unset (EDIT-01/D192). It prefers editors whose *presence implies a choice*: nvim and
+// vim are installed deliberately, whereas nano ships in Arch's `base` and says little — but
+// nano still sits ahead of bare vi as the "you can always exit it" fallback. vi stays last
+// so the historical kubectl behaviour survives on the systems that actually have it.
+var editorCandidates = []string{"nvim", "vim", "nano", "vi"}
 
-// lookupEditor resolves the editor argv to launch, preferring KUBE_EDITOR over EDITOR
-// (kubectl's precedence) and falling back to vi. It is a package var so tests can drive
-// the flow without depending on the runner's environment. The value is split on spaces so
-// an editor with flags (e.g. `code -w`, `subl -w`) works.
-var lookupEditor = func() []string {
-	return resolveEditorArgv(os.Getenv("KUBE_EDITOR"), os.Getenv("EDITOR"))
+// errNoEditor is what an empty environment on a box with none of editorCandidates yields.
+// It is reported at startup (so the user learns before pressing `e`) and again as the toast
+// if the Edit action is taken anyway — never as a failed exec of a binary nobody chose.
+var errNoEditor = errors.New("no editor found; set $EDITOR (looked for " + strings.Join(editorCandidates, ", ") + ")")
+
+// ResolveEditor resolves the editor argv from the process environment and PATH. Call it
+// **once at startup** (cmd/kubecom) and hand the result to WithEditorArgv: resolving early
+// is what lets the launcher log the chosen editor (D159), so a user finds out which editor
+// they will get before they press `e` on a live object rather than at the moment they
+// wanted to change something.
+func ResolveEditor() ([]string, error) {
+	return resolveEditorArgv(os.Getenv("KUBE_EDITOR"), os.Getenv("EDITOR"), os.Getenv("VISUAL"), exec.LookPath)
 }
 
-// resolveEditorArgv picks the editor argv from KUBE_EDITOR then EDITOR then the vi
-// fallback, splitting the chosen value into command + flags. Pure so the precedence and
-// flag-splitting are unit-testable without touching the environment.
-func resolveEditorArgv(kubeEditor, editor string) []string {
-	for _, e := range []string{kubeEditor, editor} {
+// resolveEditorArgv picks the editor argv from KUBE_EDITOR, then EDITOR, then VISUAL, then
+// the first of editorCandidates present on PATH, splitting a chosen *variable* into command
+// + flags so `code -w` works. lookPath is injected (exec.LookPath in production) rather than
+// called directly, which keeps the whole precedence table unit-testable against a fake PATH
+// without touching the environment; the function stays pure given it.
+//
+// VISUAL is a deliberate divergence from kubectl, which consults only KUBE_EDITOR and
+// EDITOR: the Unix convention reserves VISUAL for full-screen editors, which is exactly
+// this case. It is the only addition to kubectl's variable list (D192).
+//
+// PATH detection applies only when all three variables are empty — a set variable is the
+// user's explicit choice and is never second-guessed, even if it names a missing binary
+// (that failure belongs to the editor launch, where its message is accurate).
+func resolveEditorArgv(kubeEditor, editor, visual string, lookPath func(string) (string, error)) ([]string, error) {
+	for _, e := range []string{kubeEditor, editor, visual} {
 		if fields := strings.Fields(e); len(fields) > 0 {
-			return fields
+			return fields, nil
 		}
 	}
-	return []string{defaultEditor}
+	for _, c := range editorCandidates {
+		if _, err := lookPath(c); err == nil {
+			return []string{c}, nil
+		}
+	}
+	return nil, errNoEditor
+}
+
+// WithEditorArgv wires the editor argv the launcher resolved at startup (ResolveEditor).
+// Without it the Edit action still fetches, but reports errNoEditor instead of suspending —
+// so a shell built without a resolved editor can never blank the terminal for one.
+func WithEditorArgv(argv []string) Option {
+	return func(m *Model) { m.editorArgv = argv }
 }
 
 // runEditor launches the resolved editor over file with the suspended terminal's
@@ -141,12 +172,18 @@ func (m Model) handleEditFetched(msg editFetchedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, m.surfaceError(NewErrorMsg("edit "+label, msg.err))
 	}
+	// No editor resolved at startup: toast the actionable message instead of suspending
+	// into a binary nobody chose (EDIT-01). Nothing is written, so this joins the other
+	// aborted-edit paths in never mutating.
+	if len(m.editorArgv) == 0 {
+		return m, m.surfaceError(NewErrorMsg("edit "+label, errNoEditor))
+	}
 	cmd := &editCommand{
 		editor:     m.editor,
 		res:        msg.res,
 		ref:        msg.ref,
 		content:    msg.content,
-		editorArgv: lookupEditor(),
+		editorArgv: m.editorArgv,
 	}
 	callback := func(err error) tea.Msg {
 		return editDoneMsg{label: label, changed: cmd.changed, err: err}
