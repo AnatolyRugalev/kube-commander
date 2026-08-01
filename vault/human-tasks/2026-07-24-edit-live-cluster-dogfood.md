@@ -18,11 +18,10 @@ user's editor is neovim. `exec.Command` failed, which **degraded correctly**: an
 toast, no apply, no mutation. So this is not a bug in the edit flow, and none of steps
 2–5 below were exercised.
 
-It is arguably a first-run UX finding, and the decision is a human's: the `vi` fallback
-is deliberate (edit.go:56 matches kubectl's own precedence), but a user with a perfectly
-good editor installed still hits a dead end. If you want it changed, the shape would be
-`KUBE_EDITOR` → `EDITOR` → `VISUAL` → first of `nvim`/`vim`/`nano`/`vi` present on PATH,
-and it belongs in `../feedback/` as your call, not the agent's.
+It is a first-run UX finding, and the maintainer has since decided it: startup detection
+of `KUBE_EDITOR` → `EDITOR` → `VISUAL` → first of `nvim`/`vim`/`nano`/`vi` on PATH, filed
+as `../feedback/2026-08-01-editor-autodetect.md`. That fix is **not a precondition** for
+this dogfood — setting `EDITOR` unblocks it today.
 
 Re-run with `EDITOR` set (`set -x EDITOR nvim`) and work steps 1–5 as written.
 
