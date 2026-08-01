@@ -7,7 +7,15 @@ _Last updated: 2026-08-01 — HT-dogfood-0801 closed the three human tasks the 2
 
 ## In Progress
 
-_(none)_
+- [ ] **EDIT-01** Auto-detect an installed editor at startup instead of falling through to `vi`
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+      notes: Feedback `2026-08-01-editor-autodetect` (D69). Full precedence
+      `KUBE_EDITOR → EDITOR → VISUAL → first on PATH of nvim/vim/nano/vi`; resolve **at
+      startup** and log the choice (D159) so the user learns which editor they will get
+      before pressing `e`; `resolveEditorArgv` stays pure (inject an `exec.LookPath`-shaped
+      func); flag-splitting and "an aborted edit never mutates" must not move. Unblocks the
+      open human task `2026-07-24-edit-live-cluster-dogfood`, which failed at step 1 because
+      the host had no `$EDITOR` and no `vi`.
 
 ## Blocked
 
