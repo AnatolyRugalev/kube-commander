@@ -7,7 +7,9 @@ _Last updated: 2026-08-01 — CRD-PIN-01 drained the custom-resources-pinning fe
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-01
+      notes: First slice of the PAL line below (see the section for the triage).
 
 ## Blocked
 
@@ -275,6 +277,60 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       command-palette feedback (`2026-08-01-command-palette-unification`), which wants the
       same picker to become `:resource` in a general palette, so **sequence this after the
       palette shell lands** or the two will fight over the same surface.
+
+### Command palette (PAL — feedback-driven)
+Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
+a value opens its **own** modal picker on its own key (`ctrl+n` namespace, `:` resource, `C`
+context, `T` theme, `a` actions), each with its own opt-in `/` filter, so muscle memory does
+not transfer between them. The ask is **one place you type to make anything happen** — `:`
+opens a palette, you fuzzy-match a verb, and the verb's argument list narrows in the same
+surface, with the row-scoped actions (logs, edit, describe, port-forward, delete) offered
+there too so `:` answers "what can I do right now?" without memorising the keymap.
+
+Triaged into five slices, shallow-to-deep: the typing behaviour every surface needs first,
+then the palette surface, then arguments, then row context, then the old keys become sugar.
+The letter keys keep working throughout — PAL-05 is the only slice that changes what they
+*are*, and it is last on purpose (D194 pt 4).
+
+- [ ] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+      notes: The specific pain the feedback names, and the substrate for the rest — the
+      palette is a picker over verbs, so its typing behaviour has to be the picker's. The
+      filter field opens with the picker instead of on `/`, and the visible list is **ranked**
+      by `internal/kube`'s existing matcher (substring above subsequence, D152 pt 3/D153)
+      rather than an unordered `strings.Contains` — one matcher for cluster search and every
+      picker, which is what the feedback asks for. The port picker is the exception (its `p`
+      and `0` gestures carry text, FB-pf-local-port/D139).
+- [ ] **PAL-02** The palette shell: `:` opens a verb list
+      status: todo | owner: — | added: 2026-08-01
+      notes: `:` stops opening the resource picker directly and opens the palette: a picker
+      whose items are **verbs** (the registered app-global actions, by their `Describe()`
+      text), fuzzy-ranked by PAL-01's matcher, `enter` running the chosen one through the
+      same action dispatch a key does (D11 — the palette resolves to an Action, it does not
+      call handlers). Verbs that need an argument (`:namespace`, `:resource`) open their
+      existing picker for now; PAL-03 folds that into one surface. `:resource` must stay
+      reachable in this slice or the slice regresses the binary (D68).
+- [ ] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface
+      status: todo | owner: — | added: 2026-08-01
+      notes: The palette line becomes `<verb> <argument>`: completing a verb and typing a
+      space swaps the item list for that verb's values, still in the same modal, so the whole
+      interaction is one uninterrupted line of typing. This is the slice that actually
+      retires the separate namespace/resource pickers as *surfaces* (the picker component
+      stays — it is what the palette is built from).
+- [ ] **PAL-04** Contextual verbs for the selected row
+      status: todo | owner: — | added: 2026-08-01
+      notes: With a table row selected, the palette also offers the row-scoped actions
+      (logs, describe, edit, port-forward, delete…). The action picker (`a`) already computes
+      exactly this set per row — reuse that source, do not grow a second list that can drift
+      from it. Verbs that are unavailable for the row must not be offered.
+- [ ] **PAL-05** The shortcut keys become sugar for a pre-typed palette line
+      status: todo | owner: — | added: 2026-08-01
+      notes: The one slice that changes what the existing keys *are*: `ctrl+n` becomes
+      `:namespace `, `C` `:context `, `T` `:theme `, `a` the row-verb palette — pre-typed
+      lines in the one surface rather than five separate modals. Last on purpose: until
+      PAL-03/04 land, the shortcuts are the *only* way to reach those values, so converting
+      them earlier would remove function to add uniformity. Decide then whether any key is
+      retired outright; the default is that all of them stay (D194 pt 4).
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
