@@ -331,8 +331,8 @@ func TestThemeKeyOpensThePickerOverTheRegistry(t *testing.T) {
 	if !m.themePicker.Active() {
 		t.Fatal("theme.switch should open the theme picker")
 	}
-	if cmd != nil {
-		t.Error("the theme picker needs no async load: the registry is compiled in")
+	if msgs := pickerMsgs(cmd); len(msgs) != 0 {
+		t.Errorf("the theme picker needs no async load: the registry is compiled in, got %v", msgs)
 	}
 	if got, want := len(m.themeByLabel), len(styles.Themes()); got != want {
 		t.Errorf("picker rows = %d, want %d (%v)", got, want, m.themeByLabel)

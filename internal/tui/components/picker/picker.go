@@ -9,6 +9,12 @@
 // filtering is a later slice (M2-08b); the namespace-list plumbing and the app-shell
 // wiring are M2-08c.
 //
+// Since PAL-01 the filter is **open from the moment the picker is shown** and the
+// visible list is ranked by `kube.NameMatcher` — the cluster search's own matcher —
+// so every picker narrows as you type, with the same substring-above-subsequence
+// ordering the search view has (D194). A picker that must keep text-carrying
+// gestures of its own opts out with WithOptInFilter.
+//
 // It wraps bubbles/list for cursor and pagination management (and, later, its native
 // filter) but drives it entirely through keymap.Actions — it never matches a raw key
 // (D11): the root model resolves a KeyMsg to an Action and hands the Action to Update.
@@ -22,6 +28,7 @@ package picker
 
 import (
 	"io"
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
@@ -29,6 +36,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -106,18 +114,39 @@ type Model struct {
 	filter    textinput.Model // the incremental filter field (shown only while filtering)
 	filtering bool            // whether the filter field is open and capturing text
 
+	// optInFilter keeps the filter closed until app.filter (`/`) opens it, instead of
+	// opening it with the picker (PAL-01/D194 pt 3). Only a picker carrying
+	// text-producing gestures of its own wants this.
+	optInFilter bool
+
 	active bool // whether the picker is shown (captures input) — "" View when false
 	width  int  // full screen width  (the modal is centered within it)
 	height int  // full screen height
 }
 
+// Option tunes a picker at construction. The zero set is the type-to-filter picker
+// every value-choosing surface wants; an Option is for the exception.
+type Option func(*Model)
+
+// WithOptInFilter builds a picker whose filter field stays closed until app.filter
+// (`/`) opens it — the pre-PAL-01 behaviour.
+//
+// It exists for one case and should stay rare: a picker that binds text-producing
+// keys to gestures of its own cannot also swallow every text key into a query field
+// (D140 pt 1). The port picker is the case — `p` prompts for a local port and `0`
+// asks the OS to pick one (FB-pf-local-port/D139) — and a future picker should
+// prefer giving up such a gesture over opting out of type-to-filter, since the
+// uniform typing behaviour is the point of the palette line (D194 pt 3).
+func WithOptInFilter() Option { return func(m *Model) { m.optInFilter = true } }
+
 // New builds a picker of the given kind (also its default title) rendered through
 // the shared styles. It starts hidden and empty; the caller seeds it with SetItems
-// and reveals it with Show. The list's own chrome and key bindings — including its
-// native filter — stay disabled: the picker runs its own incremental filter over an
-// owned textinput (M2-08b) so it fully controls input and appearance, and no
-// hard-coded list key leaks into the view (D11).
-func New(s styles.Styles, kind string) Model {
+// and reveals it with Show, which also opens the filter field unless WithOptInFilter
+// was passed. The list's own chrome and key bindings — including its native filter —
+// stay disabled: the picker runs its own incremental filter over an owned textinput
+// (M2-08b) so it fully controls input and appearance, and no hard-coded list key
+// leaks into the view (D11).
+func New(s styles.Styles, kind string, opts ...Option) Model {
 	l := list.New(nil, itemDelegate{styles: s}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -128,13 +157,17 @@ func New(s styles.Styles, kind string) Model {
 
 	fi := textinput.New()
 	fi.Prompt = "/ "
-	return Model{
+	m := Model{
 		styles: s,
 		list:   l,
 		kind:   kind,
 		title:  strings.ToUpper(kind[:1]) + kind[1:],
 		filter: fi,
 	}
+	for _, opt := range opts {
+		opt(&m)
+	}
+	return m
 }
 
 // SetStyles repaints the picker through s, replacing the palette it was built with
@@ -164,16 +197,44 @@ func (m *Model) SetItems(values []string) {
 	m.applyFilter()
 }
 
-// applyFilter rebuilds the visible list from the unfiltered set, keeping only the
-// values whose lowercased text contains the (lowercased) filter query, and resets the
-// cursor to the top. An empty query shows everything.
+// applyFilter rebuilds the visible list from the unfiltered set, keeping the values
+// that match the filter query and ordering them best-match-first, cursor reset to the
+// top. An empty query shows everything **in the caller's order** — SetItems order is
+// meaningful (the namespace sentinel is pinned first, the context picker marks the
+// current context) and there is nothing to rank against, so it is left alone.
+//
+// Matching and ranking are kube.NameMatcher's, the cluster search's own matcher
+// (D194 pt 1): a contiguous match first and, failing that, the needle as a
+// subsequence, with every contiguous match scoring above every scattered one
+// (D152 pt 3/D153). So typing `ksys` reaches `kube-system` while an exact hit can
+// never be pushed below a scattered one — the property the search view relies on,
+// now the same one keystroke for keystroke in every picker.
+//
+// The sort is stable, so values the matcher scores equally keep the caller's order.
 func (m *Model) applyFilter() {
-	q := strings.ToLower(m.filter.Value())
-	var items []list.Item
-	for _, v := range m.all {
-		if q == "" || strings.Contains(strings.ToLower(v), q) {
+	items := make([]list.Item, 0, len(m.all))
+	if strings.TrimSpace(m.filter.Value()) == "" {
+		for _, v := range m.all {
 			items = append(items, item(v))
 		}
+		m.list.SetItems(items)
+		m.list.Select(0)
+		return
+	}
+	matcher := kube.NewNameMatcher(m.filter.Value())
+	type hit struct {
+		value string
+		score int
+	}
+	hits := make([]hit, 0, len(m.all))
+	for _, v := range m.all {
+		if score, _, ok := matcher.Match(v); ok {
+			hits = append(hits, hit{value: v, score: score})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
+	for _, h := range hits {
+		items = append(items, item(h.value))
 	}
 	m.list.SetItems(items)
 	m.list.Select(0)
@@ -194,9 +255,22 @@ func (m *Model) syncListSize() {
 	m.filter.SetWidth(iw)
 }
 
-// Show reveals the picker (it then captures input until Hide). Hide dismisses it and
-// closes any open filter so it reopens clean next time.
-func (m *Model) Show() { m.active = true }
+// Show reveals the picker (it then captures input until Hide) and — unless the
+// picker was built WithOptInFilter — opens and focuses the filter field, so the
+// next thing typed narrows the list instead of being discarded (PAL-01/D194 pt 2).
+// The returned cmd is the cursor blink; a caller that has none of its own can
+// return it directly. Hide dismisses the picker and closes the filter so it reopens
+// clean next time.
+func (m *Model) Show() tea.Cmd {
+	m.active = true
+	if m.optInFilter || m.filtering {
+		return nil
+	}
+	m.filtering = true
+	m.syncListSize()
+	return m.filter.Focus()
+}
+
 func (m *Model) Hide() {
 	m.active = false
 	m.closeFilter()
@@ -260,11 +334,22 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		kind := m.kind
 		return m, func() tea.Msg { return SelectedMsg{Kind: kind, Value: v} }
 	case keymap.ActionBack:
-		// While filtering, back closes the filter and restores the full list rather
-		// than dismissing the picker — one esc clears the filter, a second cancels.
+		// One esc clears the filter, a second cancels the picker. What "clears" means
+		// differs by mode: an opt-in filter closes (returning to the plain list it was
+		// opened from), while a type-to-filter picker only empties the query — closing
+		// its field would leave a picker that no longer does the one thing PAL-01 gave
+		// it, until it was dismissed and reopened. An already-empty query falls through
+		// to the cancel below, so esc-esc dismisses in both modes.
 		if m.filtering {
-			m.closeFilter()
-			return m, nil
+			if m.optInFilter {
+				m.closeFilter()
+				return m, nil
+			}
+			if m.filter.Value() != "" {
+				m.filter.Reset()
+				m.applyFilter()
+				return m, nil
+			}
 		}
 		kind := m.kind
 		return m, func() tea.Msg { return CancelledMsg{Kind: kind} }

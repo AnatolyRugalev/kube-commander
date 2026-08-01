@@ -5153,3 +5153,42 @@ different things. The answer:
    because they are the minimum the dynamic client can address. The launcher already
    degrades a bad state file to the zero state with a log warning (principle 3), so an
    unaddressable pin costs the remembered namespace but never the launch.
+
+## D194 — One fuzzy matcher; a picker filters as you type; `:` is the palette's key and the letter keys stay (2026-08-01, PAL-01)
+
+From feedback `2026-08-01-command-palette-unification`, which asked for one surface you
+type into and explicitly asked that the keybinding consequences be recorded, since the
+target model supersedes one-key-per-picker. PAL-01 is the first of five slices (see the
+board's PAL section); this decision is what the remaining four must not contradict.
+
+1. **kubecom has exactly one fuzzy matcher.** `kube.NameMatcher` — the cluster search's —
+   is exported and is what every ranked list uses: the search view, every modal picker
+   since PAL-01, and the palette's verb list when it lands. A surface that wants "fuzzy"
+   uses it or extends it; **no leg adds a second matcher**, however local its need looks.
+   Two matchers means the same characters rank differently one keystroke apart, and the
+   invariant the search relies on — every contiguous match above every scattered one
+   (D152 pt 3/D153) — would then be true in one surface and false in the next. Its
+   corollary: the band gap is now load-bearing for the palette too, so nothing may flatten
+   it to "just sort by score" without re-deciding it here.
+2. **A picker filters as you type.** The filter field opens with the picker, not on `/`,
+   and the visible list is ranked rather than merely narrowed. The cost is the one D140 pt
+   1 already priced for the search and logs fields: with a text field always open, **every
+   text-carrying key types** — `j`/`k` no longer navigate a picker, the arrows do, and `/`
+   types a `/` (which OpenShift-style context names can legitimately contain, so it must
+   not be swallowed). A future picker gesture must therefore be a no-text chord, exactly as
+   `ctrl+r`/`ctrl+p` are in the logs view. `esc` empties a non-empty query and cancels an
+   empty one, so esc-esc still dismisses.
+3. **`WithOptInFilter` is the exception, and stays rare.** A picker that binds
+   text-producing keys to gestures of its own cannot also swallow every text key. The port
+   picker is the only case (`p` local port, `0` free local port — FB-pf-local-port/D139).
+   A new picker should give up such a gesture rather than opt out: uniform typing is the
+   whole point of the line, and an exception is invisible to the reader until it surprises
+   them.
+4. **`:` is the palette's key, and the existing shortcuts are kept, not retired.**
+   `resources.switch` already owns `:` and already calls itself a command palette
+   (keymap.go), so PAL-02 widens what `:` opens rather than moving any key. `ctrl+n`, `C`,
+   `T` and `a` remain bound; PAL-05 re-expresses them as pre-typed palette lines
+   (`:namespace `, `:context `, …) and that is the *only* slice allowed to change what they
+   do. Until it lands they are the sole route to those values, so an earlier slice that
+   retired one would remove function in the name of uniformity. Retiring any of them
+   afterwards is a separate decision, not a consequence of this one.

@@ -185,9 +185,20 @@ the menu is hidden, focus lives on the table; re-show it to pick a different
 resource.
 
 Press `:` (`resources.switch`, rebindable) to open the resource command palette — a
-pop-up list of every browsable resource kind. Type `/` to filter it by substring and
-press Enter to switch the table to that kind. This is the pane-free way to change the
-browsed resource, so you can work with the left menu hidden.
+pop-up list of every browsable resource kind. Just type to narrow it and press Enter
+to switch the table to that kind. This is the pane-free way to change the browsed
+resource, so you can work with the left menu hidden.
+
+**Every pop-up picker filters as you type** — the resource palette, the namespace
+switcher (`Ctrl+n`), the context switcher (`C`), the theme switcher (`T`), the actions
+menu (`a`) and the container picker. There is no filter key to press first: the
+matching is the same one cluster search uses, so a typo-free abbreviation finds its
+value (`ksys` → `kube-system`) and exact matches always rank above fuzzy ones. `Esc`
+clears the query, a second `Esc` closes the picker, and Enter picks the highlighted
+row. Because the picker is always taking text, use the **arrow keys** rather than
+`j`/`k` to move within one (`j` types a `j`). The one exception is the port picker,
+where `p` and `0` are gestures of their own: it keeps the older behaviour of pressing
+`/` before filtering.
 
 Press `Ctrl+s` (`search.cluster`, rebindable) to search the whole cluster instead of
 one table: type a query and matching objects stream in **across kinds** (Pods,

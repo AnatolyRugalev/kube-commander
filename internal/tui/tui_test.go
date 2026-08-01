@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
 	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,33 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
+
+// pickerMsgs runs a picker-opening command and returns the messages that are not the
+// filter field's cursor blink. Opening a picker focuses its filter field (PAL-01), so
+// every open now batches a cursor.BlinkMsg with whatever async work it kicked off;
+// a test that wants the async result — or wants to assert there was none — has to
+// look past the blink rather than at the raw command.
+func pickerMsgs(cmd tea.Cmd) []tea.Msg {
+	var out []tea.Msg
+	for _, msg := range drainMsgs(cmd) {
+		if _, ok := msg.(cursor.BlinkMsg); ok {
+			continue
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
+// pickerMsg returns the single non-blink message a picker-opening command produced,
+// failing the test if there is not exactly one.
+func pickerMsg(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	msgs := pickerMsgs(cmd)
+	if len(msgs) != 1 {
+		t.Fatalf("picker command produced %d non-blink messages, want 1: %v", len(msgs), msgs)
+	}
+	return msgs[0]
+}
 
 // sized returns the model after a WindowSizeMsg so View renders (it draws nothing
 // until sized) and the sequencer/help are wired.
@@ -853,9 +881,9 @@ func TestNamespaceSwitchOpensAndSeeds(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("opening the picker should issue a namespace list command")
 	}
-	lm, ok := cmd().(namespacesLoadedMsg)
+	lm, ok := pickerMsg(t, cmd).(namespacesLoadedMsg)
 	if !ok {
-		t.Fatalf("list command produced %T, want namespacesLoadedMsg", cmd())
+		t.Fatalf("list command produced %T, want namespacesLoadedMsg", pickerMsg(t, cmd))
 	}
 	next, _ := m.Update(lm)
 	m = next.(Model)
@@ -887,7 +915,7 @@ func TestNamespaceListErrorClosesPicker(t *testing.T) {
 	fl := &fakeLister{err: context.DeadlineExceeded}
 	m := sizedWith(t, WithNamespaceLister(fl))
 	m, cmd := press(t, m, ctrlN)
-	next, errCmd := m.Update(cmd()) // deliver namespacesLoadedMsg{err:…}
+	next, errCmd := m.Update(pickerMsg(t, cmd)) // deliver namespacesLoadedMsg{err:…}
 	m = next.(Model)
 	if m.nsPicker.Active() {
 		t.Fatal("a failed list should close the picker")
@@ -917,13 +945,13 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 
 	// Open + seed the picker.
 	m, cmd := press(t, m, ctrlN)
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
-	// Open the filter and narrow to "monitoring".
-	m, _ = press(t, m, tea.Key{Code: '/', Text: "/"})
+	// The filter is open the moment the picker is (PAL-01) — no `/` first: typing
+	// narrows straight away.
 	if !m.nsPicker.Filtering() {
-		t.Fatal("app.filter should open the picker filter")
+		t.Fatal("opening the picker should open its filter")
 	}
 	for _, r := range "mon" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
@@ -1006,8 +1034,8 @@ func TestResourcePaletteOpensAndSeeds(t *testing.T) {
 	if !m.resPicker.Active() {
 		t.Fatal("resources.switch should open the resource palette")
 	}
-	if cmd != nil {
-		t.Fatalf("opening the palette should issue no command, got %T", cmd())
+	if msgs := pickerMsgs(cmd); len(msgs) != 0 {
+		t.Fatalf("opening the palette should issue no command beyond the filter blink, got %v", msgs)
 	}
 	if got, want := m.resPicker.Len(), availableResourceCount(m); got != want {
 		t.Fatalf("palette seeded with %d entries, want %d (available resource rows)", got, want)
@@ -1044,17 +1072,22 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 		t.Fatal("menu.toggle should hide the menu")
 	}
 
-	// Open the palette and filter to the unique kind "CronJob" (query "cron").
+	// Open the palette and filter to "CronJob" (query "cron"). The filter is open with
+	// the palette (PAL-01), so the query starts on the first keystroke; the fuzzy
+	// fallback may add scattered matches below, but the contiguous one ranks first
+	// (D194 pt 1), so the cursor lands on CronJob.
 	m, _ = press(t, m, colon)
-	m, _ = press(t, m, tea.Key{Code: '/', Text: "/"})
 	if !m.resPicker.Filtering() {
-		t.Fatal("app.filter should open the palette filter")
+		t.Fatal("opening the palette should open its filter")
 	}
 	for _, r := range "cron" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
 	}
-	if got := m.resPicker.Len(); got != 1 {
-		t.Fatalf("filter to 'cron' left %d items, want 1 (CronJob)", got)
+	if got := m.resPicker.Len(); got == 0 {
+		t.Fatal("filter to 'cron' left no items, want CronJob at least")
+	}
+	if v, _ := m.resPicker.Selected(); v != "CronJob" {
+		t.Fatalf("filter to 'cron' selected %q, want CronJob (the contiguous match)", v)
 	}
 
 	// Drill in (enter → nav.drillIn) selects the filtered value, stamped with the
@@ -1150,8 +1183,8 @@ func TestMenuSeamOpensNamespacePicker(t *testing.T) {
 	if openCmd == nil {
 		t.Fatal("opening the picker should issue a namespace list command")
 	}
-	if _, ok := openCmd().(namespacesLoadedMsg); !ok {
-		t.Fatalf("list command produced %T, want namespacesLoadedMsg", openCmd())
+	if _, ok := pickerMsg(t, openCmd).(namespacesLoadedMsg); !ok {
+		t.Fatalf("list command produced %T, want namespacesLoadedMsg", pickerMsg(t, openCmd))
 	}
 }
 
@@ -1294,26 +1327,38 @@ func menuSeamNamespace(t *testing.T, m Model) string {
 	return ""
 }
 
-// TestNamespacePickerCapturesInput proves the open picker captures navigation: a
-// nav key does not reach the panes underneath (the menu cursor stays put).
+// TestNamespacePickerCapturesInput proves the open picker captures input: neither a
+// nav key nor a letter reaches the panes underneath (the menu cursor stays put). It
+// also pins the PAL-01 split — with the filter open from the start, a text-carrying
+// key types into the query and only a no-text key navigates (D194 pt 2/D140 pt 1),
+// so `j` filters where the arrow moves.
 func TestNamespacePickerCapturesInput(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
 	m, cmd := press(t, m, ctrlN)
-	next, _ := m.Update(cmd())
+	next, _ := m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("menu should start at cursor 0, got %d", m.menu.Cursor())
 	}
 	// nav.down while the picker is open moves the picker cursor, not the menu. The
 	// picker starts on the pinned all-namespaces sentinel (row 0), so one step lands
-	// on the first concrete namespace.
-	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	// on the first concrete namespace. It has to be the arrow: `j` carries text.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture nav.down; menu moved to %d", m.menu.Cursor())
 	}
 	if v, _ := m.nsPicker.Selected(); v != "default" {
 		t.Fatalf("nav.down should move the picker cursor to default, got %q", v)
+	}
+	// A vim letter now types into the always-open query instead of navigating: the
+	// menu still must not move, and the list narrows to the values matching "k".
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	if m.menu.Cursor() != 0 {
+		t.Fatalf("picker should capture a letter too; menu moved to %d", m.menu.Cursor())
+	}
+	if v, _ := m.nsPicker.Selected(); v != "kube-system" {
+		t.Fatalf("typing 'k' should filter to kube-system, got %q", v)
 	}
 }
 
@@ -2935,8 +2980,8 @@ func TestLogsMultiContainerOpensPicker(t *testing.T) {
 	if s.calls != 0 {
 		t.Fatal("no stream should start before a container is picked")
 	}
-	if follow != nil {
-		t.Fatal("opening the picker issues no follow-on command")
+	if msgs := pickerMsgs(follow); len(msgs) != 0 {
+		t.Fatalf("opening the picker issues no follow-on command, got %v", msgs)
 	}
 	if m.ctrPicker.Len() != 2 {
 		t.Fatalf("the picker should list 2 containers, got %d", m.ctrPicker.Len())

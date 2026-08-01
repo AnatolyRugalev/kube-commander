@@ -113,7 +113,7 @@ func TestConnectFailureLeavesTheCurrentClusterUntouched(t *testing.T) {
 
 	next, cmd := m.switchContext("prod")
 	m = next.(Model)
-	next, cmd = m.Update(cmd())
+	next, cmd = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	if cmd == nil || !m.status.HasError() {
@@ -147,7 +147,7 @@ func TestClusterConnectedResetsSwapsAndRediscovers(t *testing.T) {
 
 	next, cmd := m.switchContext("prod")
 	m = next.(Model)
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	if oldFW.ctxs[0].Err() == nil {
@@ -269,7 +269,7 @@ func TestContextKeyOpensThePickerAndListsOffTheUpdateLoop(t *testing.T) {
 		t.Errorf("the kubeconfig was read on the update loop (%d calls)", fl.calls)
 	}
 
-	next, _ := m.Update(cmd())
+	next, _ := m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 	if fl.calls != 1 {
 		t.Errorf("Contexts called %d times, want 1", fl.calls)
@@ -295,7 +295,7 @@ func TestContextPickerMarksTheShellsContextNotTheKubeconfigs(t *testing.T) {
 	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
 
 	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(cmd())
+	next, _ = next.(Model).Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
@@ -324,7 +324,7 @@ func TestContextPickRoutesIntoSwitchContext(t *testing.T) {
 	m := sizedWith(t, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
 
 	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(cmd())
+	next, _ = next.(Model).Update(pickerMsg(t, cmd))
 	m = next.(Model)
 	label := pickerLabelFor(t, m, "dev")
 
@@ -354,7 +354,7 @@ func TestPickingTheCurrentContextCostsNothing(t *testing.T) {
 	m := browsingModel(t, fw, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
 
 	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(cmd())
+	next, _ = next.(Model).Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	next, cmd = m.Update(picker.SelectedMsg{Kind: contextPickerKind, Value: pickerLabelFor(t, m, "prod")})
@@ -392,7 +392,7 @@ func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := sizedWith(t, WithContextLister(tc.lister), WithContext("prod"))
 			next, cmd := m.openContextPicker()
-			next, cmd = next.(Model).Update(cmd())
+			next, cmd = next.(Model).Update(pickerMsg(t, cmd))
 			m = next.(Model)
 			if m.ctxPicker.Active() {
 				t.Error("the picker should close rather than sit empty")
@@ -404,7 +404,7 @@ func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
 				// An error toast arrives as its own ErrorMsg; a notice is written
 				// straight onto the status bar (its Cmd is only the auto-clear
 				// timer, which would sleep out the display window if run here).
-				next, _ = m.Update(cmd())
+				next, _ = m.Update(pickerMsg(t, cmd))
 				m = next.(Model)
 			}
 			if got := m.status.HasError(); got != tc.wantErr {
@@ -444,7 +444,7 @@ func TestLateContextListIsDropped(t *testing.T) {
 		t.Fatal("nav.back should close the context picker")
 	}
 
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 	if m.ctxPicker.Active() {
 		t.Error("a list landing after dismissal must not reopen the picker")
@@ -511,7 +511,7 @@ func TestSwitchRebindsPerContextState(t *testing.T) {
 
 	next, cmd := m.switchContext("prod")
 	m = next.(Model)
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	if len(fs.names) != 1 || fs.names[0] != "prod" {
@@ -575,7 +575,7 @@ func TestContextStateLoadsOffTheUpdateLoopAndOnlyOnSuccess(t *testing.T) {
 		t.Errorf("the state load ran on the update loop: %v", fs.names)
 	}
 
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 	if len(fs.names) != 0 {
 		t.Errorf("a failed connect must not resolve the new context's state: %v", fs.names)
@@ -601,7 +601,7 @@ func TestSwitchWithoutStateLoaderKeepsLaunchState(t *testing.T) {
 
 	next, cmd := m.switchContext("prod")
 	m = next.(Model)
-	next, _ = m.Update(cmd())
+	next, _ = m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
 
 	if !menuHasResource(m, "issuers") {

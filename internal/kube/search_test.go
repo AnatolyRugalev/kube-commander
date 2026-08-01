@@ -494,7 +494,7 @@ func equal(a, b []string) bool {
 // --- name matching / scoring (SEARCH-04c-2a, SEARCH-04c-2b) ---
 
 func TestNameMatcherMatchKinds(t *testing.T) {
-	m := newNameMatcher("API")
+	m := NewNameMatcher("API")
 	for _, tc := range []struct {
 		name          string
 		want          bool
@@ -510,7 +510,7 @@ func TestNameMatcherMatchKinds(t *testing.T) {
 		{name: "ap", want: false},    // needle not exhausted
 		{name: "", want: false},      // an unnamed object is not a result
 	} {
-		_, scattered, ok := m.match(tc.name)
+		_, scattered, ok := m.Match(tc.name)
 		if ok != tc.want {
 			t.Errorf("match(%q) ok = %v, want %v", tc.name, ok, tc.want)
 			continue
@@ -523,9 +523,9 @@ func TestNameMatcherMatchKinds(t *testing.T) {
 
 // mscore is the score of a name that is expected to match — for the tests that
 // only compare rankings and do not care how the match was found.
-func mscore(t *testing.T, m nameMatcher, name string) int {
+func mscore(t *testing.T, m NameMatcher, name string) int {
 	t.Helper()
-	s, _, ok := m.match(name)
+	s, _, ok := m.Match(name)
 	if !ok {
 		t.Fatalf("expected %q to match", name)
 	}
@@ -533,9 +533,9 @@ func mscore(t *testing.T, m nameMatcher, name string) int {
 }
 
 func TestNameMatcherEmptyNeedleMatchesEverythingUnranked(t *testing.T) {
-	m := newNameMatcher("")
+	m := NewNameMatcher("")
 	for _, n := range []string{"api-0", "nginx", "zzz"} {
-		score, scattered, ok := m.match(n)
+		score, scattered, ok := m.Match(n)
 		if !ok {
 			t.Fatalf("empty needle should match %q", n)
 		}
@@ -549,7 +549,7 @@ func TestNameMatcherEmptyNeedleMatchesEverythingUnranked(t *testing.T) {
 		}
 	}
 	// The one thing the empty needle must still reject.
-	if _, _, ok := m.match(""); ok {
+	if _, _, ok := m.Match(""); ok {
 		t.Error("an unnamed object must not match even the empty needle")
 	}
 }
@@ -557,7 +557,7 @@ func TestNameMatcherEmptyNeedleMatchesEverythingUnranked(t *testing.T) {
 // The ordering this leg exists for: a prefix beats a separator-boundary match,
 // which beats a match buried inside a word.
 func TestNameMatcherRanksByMatchPosition(t *testing.T) {
-	m := newNameMatcher("api")
+	m := NewNameMatcher("api")
 	names := []string{"legacyapi", "my-api", "api-server"}
 	scores := make([]int, len(names))
 	for i, n := range names {
@@ -571,7 +571,7 @@ func TestNameMatcherRanksByMatchPosition(t *testing.T) {
 // Two names that match in the same position are separated by how much name there
 // is around the match — the tighter one wins.
 func TestNameMatcherPrefersTighterName(t *testing.T) {
-	m := newNameMatcher("api")
+	m := NewNameMatcher("api")
 	short := mscore(t, m, "api-0")
 	long := mscore(t, m, "api-0-abcdefghijklmnop")
 	if short <= long {
@@ -582,7 +582,7 @@ func TestNameMatcherPrefersTighterName(t *testing.T) {
 // The best occurrence wins, not the first: a name that matches badly early and
 // well later scores as the good match.
 func TestNameMatcherTakesBestOccurrence(t *testing.T) {
-	m := newNameMatcher("api")
+	m := NewNameMatcher("api")
 	best := mscore(t, m, "xapiy-api-0")
 	buried := mscore(t, m, "xapiy-zzz-0")
 	if best <= buried {
@@ -594,7 +594,7 @@ func TestNameMatcherTakesBestOccurrence(t *testing.T) {
 // substring score must still beat the *best* possible scattered one, so no fuzzy
 // near-miss can ever be ranked into the middle of the exact matches.
 func TestScoreBandsDoNotOverlap(t *testing.T) {
-	m := newNameMatcher("api")
+	m := NewNameMatcher("api")
 	worstSubstring := mscore(t, m, "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzapizzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 	// The best a scattered match can do: at the very start of the shortest
 	// possible name that is not a substring match.
@@ -615,7 +615,7 @@ func TestScoreBandsDoNotOverlap(t *testing.T) {
 // `api-server` is the match, the same six characters strewn across a long name is
 // the noise.
 func TestScatteredMatchesRankByTightness(t *testing.T) {
-	m := newNameMatcher("apisrv")
+	m := NewNameMatcher("apisrv")
 	tight := mscore(t, m, "api-srv")
 	loose := mscore(t, m, "api-server")
 	spread := mscore(t, m, "a-pod-in-some-random-vault")
@@ -637,7 +637,7 @@ func TestScatteredMatchesRankByTightness(t *testing.T) {
 // name of the same shape that genuinely has no tight window anywhere. Drop the
 // backtrack and this ordering inverts.
 func TestScatteredMatchPrefersTheTightestWindow(t *testing.T) {
-	m := newNameMatcher("abc")
+	m := NewNameMatcher("abc")
 	filler := strings.Repeat("z", 20)
 	// Forward-greedy takes a(0), b(21), c(last); the backtrack finds the trailing
 	// `ab.c` — no contiguous `abc` anywhere, so this stays in the scattered band.

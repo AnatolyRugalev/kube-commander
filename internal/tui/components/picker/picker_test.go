@@ -17,6 +17,15 @@ func newTestModel(values ...string) Model {
 	return m
 }
 
+// newOptInModel builds the one picker shape that still waits for `/` (the port
+// picker's, WithOptInFilter).
+func newOptInModel(values ...string) Model {
+	m := New(styles.Default(), "port", WithOptInFilter())
+	m.SetSize(80, 24)
+	m.SetItems(values)
+	return m
+}
+
 // msgFrom runs a command (if any) and returns the message it produced, or nil.
 func msgFrom(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
@@ -151,15 +160,76 @@ func typeFilter(m Model, s string) Model {
 	return m
 }
 
+// TestShowOpensTheFilter is PAL-01's headline property: the field is open the moment
+// the picker is, so the next keystroke narrows the list instead of being discarded —
+// no `/` first, in any picker but the opt-in one.
+func TestShowOpensTheFilter(t *testing.T) {
+	m := newTestModel("default", "kube-system")
+	if m.Filtering() {
+		t.Fatal("a hidden picker should not be filtering")
+	}
+	m.Show()
+	if !m.Filtering() {
+		t.Fatal("Show() should open the filter field")
+	}
+	m = typeFilter(m, "sys")
+	if got := m.Len(); got != 1 {
+		t.Fatalf("typing straight into a shown picker left %d items, want 1", got)
+	}
+
+	// The opt-in picker keeps the old behaviour: shown, but not capturing text until
+	// app.filter opens the field.
+	p := newOptInModel("8080 http", "9090 metrics")
+	p.Show()
+	if p.Filtering() {
+		t.Fatal("WithOptInFilter picker should not start filtering")
+	}
+	p = typeFilter(p, "http")
+	if got := p.Len(); got != 2 {
+		t.Fatalf("an opt-in picker should ignore text before `/`: Len() = %d, want 2", got)
+	}
+	p, _ = p.Update(keymap.ActionFilter)
+	if !p.Filtering() {
+		t.Fatal("app.filter should open the opt-in filter field")
+	}
+	p = typeFilter(p, "http")
+	if got := p.Len(); got != 1 {
+		t.Fatalf("opt-in filter narrowed to %d items, want 1", got)
+	}
+}
+
+// TestFilterRanksMatches pins the ordering PAL-01 inherits from the cluster search's
+// matcher (D194 pt 1): a contiguous match always outranks a scattered one, however
+// well the scattered one is positioned, and the cursor starts on the best match.
+func TestFilterRanksMatches(t *testing.T) {
+	// "kube-system" contains "sys" outright; "s-y-s" is only a subsequence of the
+	// other two, so both must sort below it whatever order they were seeded in.
+	m := newTestModel("some-yaml-service", "kube-system", "sync-yes-status")
+	m.Show()
+	m = typeFilter(m, "sys")
+	if got := m.Len(); got != 3 {
+		t.Fatalf("fuzzy filter matched %d values, want 3", got)
+	}
+	if v, _ := m.Selected(); v != "kube-system" {
+		t.Fatalf("best match = %q, want kube-system (the only contiguous match)", v)
+	}
+	// The fuzzy half is what makes an abbreviation reach its value at all.
+	m2 := newTestModel("default", "kube-system", "monitoring")
+	m2.Show()
+	m2 = typeFilter(m2, "ksys")
+	if got := m2.Len(); got != 1 {
+		t.Fatalf("abbreviation 'ksys' matched %d values, want 1", got)
+	}
+	if v, _ := m2.Selected(); v != "kube-system" {
+		t.Fatalf("'ksys' selected %q, want kube-system", v)
+	}
+}
+
 func TestFilterOpensAndNarrows(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public", "monitoring")
 	m.Show()
-	if m.Filtering() {
-		t.Fatal("picker should not start filtering")
-	}
-	m, _ = m.Update(keymap.ActionFilter)
 	if !m.Filtering() {
-		t.Fatal("app.filter should open the filter field")
+		t.Fatal("Show() should open the filter field")
 	}
 	m = typeFilter(m, "kube")
 	if got := m.Len(); got != 2 {
@@ -171,7 +241,6 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 	// The filter matches case-insensitively on a substring anywhere in the value.
 	m2 := newTestModel("default", "kube-system", "monitoring")
 	m2.Show()
-	m2, _ = m2.Update(keymap.ActionFilter)
 	m2 = typeFilter(m2, "SYS")
 	if got := m2.Len(); got != 1 {
 		t.Fatalf("case-insensitive 'SYS' Len() = %d, want 1", got)
@@ -181,33 +250,50 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 func TestFilterBackClearsThenCancels(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public")
 	m.Show()
-	m, _ = m.Update(keymap.ActionFilter)
 	m = typeFilter(m, "public")
 	if got := m.Len(); got != 1 {
 		t.Fatalf("filtered Len() = %d, want 1", got)
 	}
-	// First back clears the filter (does not cancel the picker) and restores all.
+	// First back empties the query (does not cancel the picker) and restores all. The
+	// field stays open — a type-to-filter picker that stopped filtering after one esc
+	// would be a different picker until it was dismissed and reopened.
 	m, cmd := m.Update(keymap.ActionBack)
 	if msg := msgFrom(cmd); msg != nil {
-		t.Fatalf("back while filtering emitted %T, want none", msg)
+		t.Fatalf("back with a query emitted %T, want none", msg)
 	}
-	if m.Filtering() {
-		t.Fatal("back while filtering should close the filter")
+	if !m.Filtering() {
+		t.Fatal("back should clear the query, not close a type-to-filter field")
 	}
 	if got := m.Len(); got != 3 {
 		t.Fatalf("after clearing filter, Len() = %d, want 3 (all restored)", got)
 	}
-	// Second back now cancels the picker.
+	// Second back — the query is now empty — cancels the picker.
 	_, cmd = m.Update(keymap.ActionBack)
 	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
 		t.Fatalf("back after clear produced %T, want CancelledMsg", msgFrom(cmd))
+	}
+
+	// The opt-in picker keeps its own shape: back closes the field, then cancels.
+	p := newOptInModel("8080 http", "9090 metrics")
+	p.Show()
+	p, _ = p.Update(keymap.ActionFilter)
+	p = typeFilter(p, "http")
+	p, cmd = p.Update(keymap.ActionBack)
+	if msg := msgFrom(cmd); msg != nil {
+		t.Fatalf("opt-in back while filtering emitted %T, want none", msg)
+	}
+	if p.Filtering() {
+		t.Fatal("opt-in back while filtering should close the filter")
+	}
+	_, cmd = p.Update(keymap.ActionBack)
+	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
+		t.Fatalf("opt-in back after clear produced %T, want CancelledMsg", msgFrom(cmd))
 	}
 }
 
 func TestFilterDrillInSelectsFilteredValue(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public")
 	m.Show()
-	m, _ = m.Update(keymap.ActionFilter)
 	m = typeFilter(m, "system")
 	_, cmd := m.Update(keymap.ActionDrillIn)
 	sel, ok := msgFrom(cmd).(SelectedMsg)
@@ -222,7 +308,6 @@ func TestFilterDrillInSelectsFilteredValue(t *testing.T) {
 func TestFilterNoMatchDrillInNoMsg(t *testing.T) {
 	m := newTestModel("default", "kube-system")
 	m.Show()
-	m, _ = m.Update(keymap.ActionFilter)
 	m = typeFilter(m, "zzz")
 	if got := m.Len(); got != 0 {
 		t.Fatalf("no-match filter Len() = %d, want 0", got)
@@ -236,7 +321,6 @@ func TestFilterNoMatchDrillInNoMsg(t *testing.T) {
 func TestFilterViewShowsInputLine(t *testing.T) {
 	m := newTestModel("default", "kube-system")
 	m.Show()
-	m, _ = m.Update(keymap.ActionFilter)
 	m = typeFilter(m, "kube")
 	v := m.View()
 	if !strings.Contains(v, "/") {
@@ -251,11 +335,17 @@ func TestFilterViewShowsInputLine(t *testing.T) {
 }
 
 func TestUpdateFilterInertWhenNotFiltering(t *testing.T) {
+	// Hidden picker: UpdateFilter is inert whatever the mode.
 	m := newTestModel("default", "kube-system")
-	m.Show()
-	// No filter open: raw keys are ignored and the list is untouched.
 	m = typeFilter(m, "kube")
 	if got := m.Len(); got != 2 {
+		t.Fatalf("UpdateFilter changed the list while hidden: Len() = %d, want 2", got)
+	}
+	// Shown opt-in picker with no filter open: raw keys are ignored too.
+	p := newOptInModel("default", "kube-system")
+	p.Show()
+	p = typeFilter(p, "kube")
+	if got := p.Len(); got != 2 {
 		t.Fatalf("UpdateFilter changed the list while not filtering: Len() = %d, want 2", got)
 	}
 }
@@ -263,7 +353,6 @@ func TestUpdateFilterInertWhenNotFiltering(t *testing.T) {
 func TestHideClosesFilter(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public")
 	m.Show()
-	m, _ = m.Update(keymap.ActionFilter)
 	m = typeFilter(m, "public")
 	m.Hide()
 	if m.Filtering() {

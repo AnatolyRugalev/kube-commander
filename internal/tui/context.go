@@ -245,12 +245,12 @@ func (m Model) openContextPicker() (tea.Model, tea.Cmd) {
 	}
 	m.ctxPicker.SetItems(nil)
 	m.ctxByLabel = nil
-	m.ctxPicker.Show()
+	show := m.ctxPicker.Show()
 	lister := m.ctxLister
-	return m, func() tea.Msg {
+	return m, tea.Batch(show, func() tea.Msg {
 		cs, err := lister.Contexts()
 		return contextsLoadedMsg{contexts: cs, err: err}
-	}
+	})
 }
 
 // handleContextsLoaded seeds the open picker with the listed contexts. A listing

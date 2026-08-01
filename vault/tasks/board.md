@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-01 — CRD-PIN-01 drained the custom-resources-pinning feedback into the four-slice CRD-PIN line and landed the store (D193); three 2026-08-01 feedback items remain and still preempt the board (D69), with `2026-08-01-command-palette-unification` next. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-01 — PAL-01 drained the command-palette feedback into the five-slice PAL line and landed type-to-filter pickers on the one shared matcher (D194); two 2026-08-01 feedback items remain and still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-01
-      notes: First slice of the PAL line below (see the section for the triage).
+_(none)_
 
 ## Blocked
 
@@ -292,15 +290,8 @@ then the palette surface, then arguments, then row context, then the old keys be
 The letter keys keep working throughout — PAL-05 is the only slice that changes what they
 *are*, and it is last on purpose (D194 pt 4).
 
-- [ ] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: The specific pain the feedback names, and the substrate for the rest — the
-      palette is a picker over verbs, so its typing behaviour has to be the picker's. The
-      filter field opens with the picker instead of on `/`, and the visible list is **ranked**
-      by `internal/kube`'s existing matcher (substring above subsequence, D152 pt 3/D153)
-      rather than an unordered `strings.Contains` — one matcher for cluster search and every
-      picker, which is what the feedback asks for. The port picker is the exception (its `p`
-      and `0` gestures carry text, FB-pf-local-port/D139).
+- [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
+      — done 2026-08-01 (D194)
 - [ ] **PAL-02** The palette shell: `:` opens a verb list
       status: todo | owner: — | added: 2026-08-01
       notes: `:` stops opening the resource picker directly and opens the palette: a picker

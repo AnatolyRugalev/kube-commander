@@ -985,7 +985,11 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.resPicker = picker.New(s, "resource")
 	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
-	m.portPicker = picker.New(s, portPickerKind)
+	// The port picker is the one picker that does not filter as you type (D194 pt 3):
+	// its own `p` (local-port prompt) and `0` (let the OS pick) gestures carry text,
+	// and an always-open query field swallows every text-carrying key (D140 pt 1), so
+	// it keeps the opt-in `/` filter every picker had before PAL-01.
+	m.portPicker = picker.New(s, portPickerKind, picker.WithOptInFilter())
 	m.ctxPicker = picker.New(s, contextPickerKind)
 	m.themePicker = picker.New(s, themePickerKind)
 	m.viewer = viewer.New(s, viewerKindDescribe)
@@ -1717,12 +1721,12 @@ func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.nsPicker.SetItems(nil)
-	m.nsPicker.Show()
+	show := m.nsPicker.Show()
 	lister := m.nsLister
-	return m, func() tea.Msg {
+	return m, tea.Batch(show, func() tea.Msg {
 		ns, err := lister.Namespaces(context.Background())
 		return namespacesLoadedMsg{namespaces: ns, err: err}
-	}
+	})
 }
 
 // namespaceAllItem is the sentinel entry pinned at the top of the namespace picker.
@@ -1890,8 +1894,7 @@ func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
 	}
 	m.resByLabel = byLabel
 	m.resPicker.SetItems(labels)
-	m.resPicker.Show()
-	return m, nil
+	return m, m.resPicker.Show()
 }
 
 // handleResourceSelected applies a resource picked from the command palette: it closes
@@ -1935,8 +1938,7 @@ func (m Model) openActionsMenu() (tea.Model, tea.Cmd) {
 	}
 	m.actByLabel = byTitle
 	m.actPicker.SetItems(titles)
-	m.actPicker.Show()
-	return m, nil
+	return m, m.actPicker.Show()
 }
 
 // handleActionSelected applies an action picked from the actions menu: it closes the
@@ -3319,8 +3321,7 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (tea.Model, tea.C
 		m.ctrByLabel = byLabel
 		m.ctrPicker.SetTitle(msg.purpose.pickerTitle())
 		m.ctrPicker.SetItems(labels)
-		m.ctrPicker.Show()
-		return m, nil
+		return m, m.ctrPicker.Show()
 	}
 }
 

@@ -197,8 +197,8 @@ func TestExecMultiContainerOpensPicker(t *testing.T) {
 	if m.ctrPurpose != ctrPurposeExec {
 		t.Fatal("the open picker should carry the exec purpose so the pick routes to exec")
 	}
-	if follow != nil {
-		t.Fatal("opening the picker issues no follow-on command")
+	if msgs := pickerMsgs(follow); len(msgs) != 0 {
+		t.Fatalf("opening the picker issues no follow-on command, got %v", msgs)
 	}
 	if f.calls != 0 {
 		t.Fatal("no exec should start before a container is picked")

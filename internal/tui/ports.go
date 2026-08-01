@@ -125,8 +125,7 @@ func (m Model) handlePortsLoaded(msg portsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.mutateRef = msg.ref
 	m.pfPorts = msg.ports
 	m.portPicker.SetItems(portPickerItems(msg.ports))
-	m.portPicker.Show()
-	return m, nil
+	return m, m.portPicker.Show()
 }
 
 // handlePortSelected acts on the port the user picked: it closes the picker and starts

@@ -170,21 +170,30 @@ const (
 	gapPenaltyWeight   = 2    // scattered: gaps outweigh the start offset, so tightness wins
 )
 
-// nameMatcher matches and scores object names against the Name half of one
-// SearchQuery. It is built once per search and used from every kind's goroutine —
-// it holds only the prepared needle and never mutates, so sharing it is safe.
+// NameMatcher matches and scores a name against one query string — the Name half
+// of a SearchQuery for the cluster search, and the typed query for every modal
+// picker (PAL-01). It is built once per search and used from every kind's
+// goroutine — it holds only the prepared needle and never mutates, so sharing it
+// is safe.
 //
 // It is a type rather than a function because the needle wants preparing exactly
 // once (lower-casing it per row, over every object in a wide cluster sweep, is the
 // kind of waste a search feels), and because the two matchers below want one
 // prepared needle between them.
-type nameMatcher struct {
+//
+// It is exported so there is exactly **one** fuzzy matcher in kubecom (D194 pt 1):
+// a picker that grew its own would rank the same characters differently from the
+// search view a keypress away, and the band-gap invariant below (D152 pt 3/D153)
+// would then hold in one surface and not the other. Callers outside the cluster
+// search use it purely as a ranker: the needle is what the reader typed, the name
+// is whatever the row displays.
+type NameMatcher struct {
 	needle string // already lower-cased; "" matches everything
 }
 
-// newNameMatcher prepares a matcher for the (raw, any-case) query name.
-func newNameMatcher(name string) nameMatcher {
-	return nameMatcher{needle: strings.ToLower(name)}
+// NewNameMatcher prepares a matcher for the (raw, any-case) query name.
+func NewNameMatcher(name string) NameMatcher {
+	return NameMatcher{needle: strings.ToLower(name)}
 }
 
 // match reports whether name matches the query, how well, and whether the match
@@ -212,7 +221,7 @@ func newNameMatcher(name string) nameMatcher {
 // in practice, so this is the same as character-wise; a needle with multi-byte
 // runes could in principle match across a rune boundary in the subsequence pass,
 // which produces a junk hit in the lowest band and is bounded by the budget.
-func (m nameMatcher) match(name string) (score int, scattered, ok bool) {
+func (m NameMatcher) Match(name string) (score int, scattered, ok bool) {
 	// The name check comes first, and stays first: an unnamed row is not a result
 	// even for the empty needle that otherwise matches everything.
 	if name == "" {
@@ -233,7 +242,7 @@ func (m nameMatcher) match(name string) (score int, scattered, ok bool) {
 
 // substringScore scores the best contiguous occurrence of the needle in hay
 // (already lower-cased), or reports that there is none.
-func (m nameMatcher) substringScore(hay string) (int, bool) {
+func (m NameMatcher) substringScore(hay string) (int, bool) {
 	best, found := 0, false
 	for off := 0; off <= len(hay)-len(m.needle); {
 		i := strings.Index(hay[off:], m.needle)
@@ -278,7 +287,7 @@ func (m nameMatcher) substringScore(hay string) (int, bool) {
 // gapPenaltyWeight*n in gaps, so the tightest window always scores best and there
 // is no need to score both candidates and take the max (which is what the
 // contiguous pass does over its occurrences).
-func (m nameMatcher) scatteredScore(hay string) (int, bool) {
+func (m NameMatcher) scatteredScore(hay string) (int, bool) {
 	end, n := -1, 0
 	for i := 0; i < len(hay) && n < len(m.needle); i++ {
 		if hay[i] == m.needle[n] {
@@ -509,7 +518,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		matcher := newNameMatcher(query.Name)
+		matcher := NewNameMatcher(query.Name)
 		// One ListOptions for the whole fan-out: the selector is the same for
 		// every kind, and it is the server that applies it, so a selector narrows
 		// the rows on the wire instead of being filtered out after arriving.
@@ -560,7 +569,7 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					return
 				}
 				for _, row := range tbl.Rows {
-					score, isScattered, ok := matcher.match(row.Object.Name)
+					score, isScattered, ok := matcher.Match(row.Object.Name)
 					if !ok {
 						continue
 					}

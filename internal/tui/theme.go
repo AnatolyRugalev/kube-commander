@@ -108,8 +108,7 @@ func (m Model) openThemePicker() (tea.Model, tea.Cmd) {
 	labels, byLabel := themePickerItems(styles.Themes(), m.styles.Theme.Name)
 	m.themeByLabel = byLabel
 	m.themePicker.SetItems(labels)
-	m.themePicker.Show()
-	return m, nil
+	return m, m.themePicker.Show()
 }
 
 // themePickerItems renders one picker row per built-in theme and the map resolving a
