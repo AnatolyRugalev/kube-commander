@@ -7,7 +7,12 @@ _Last updated: 2026-07-31 — M1-INT-d put the envtest suite in CI (D190), which
 
 ## In Progress
 
-_(none)_
+- [ ] **HT-dogfood-0801** Close the three human tasks the 2026-08-01 dogfood session finished
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+      notes: `2026-07-25-logs-view-throughput-dogfood`, `2026-07-28-fuzzy-search-quality-dogfood`
+      and `2026-07-29-external-secrets-crd-error-log` all carry `Status: done` with a `## Result`.
+      Fold each result in, re-scope CRD-01 (the error is cluster-side — nothing to fix in the
+      client), and delete the three files (D79).
 
 ## Blocked
 
