@@ -146,6 +146,17 @@ nothing useful; attach is the way.)
   and only adds restartedAt without clobbering sibling annotations. No UID guard:
   `PatchOptions` carries no preconditions and these actions are idempotent.
   06c cordon+drain / 06d cronjob-suspend build on this.
+- **A CRD's conversion webhook can fail a LIST, and it is not a client problem**
+  (2026-08-01, HT-dogfood-0801/D191). A CRD with more than one *served* version and
+  `spec.conversion.strategy: Webhook` makes every LIST of that kind pass through the
+  webhook: if it is down, unreachable or serving a bad cert, the **apiserver** returns the
+  error, identically to `kubectl get`. This is the diagnosis of the `ExternalSecret` report
+  that CRD-01 was raised for — a fresh chart (only `v1` served, `strategy: None`) lists fine
+  from the same code. So when a whole kind errors on open and sibling kinds in the same
+  group do too, read the CRD before the client:
+  `kubectl get crd <name> -o jsonpath='{.spec.conversion.strategy}{"\n"}{range
+  .spec.versions[*]}{.name}{" served="}{.served}{"\n"}{end}'`. Note DISC-01/D187 only covers
+  *discovery* failing for a group; a conversion failure is per-LIST and shows up later.
 - **client-go/tools/remotecommand** — exec/attach (interactive; suspend + raw PTY).
 - **client-go/tools/portforward** + SPDY/websocket dialer — background port-forward.
 - **k8s.io/kubectl/pkg/describe** — in-process describe output.

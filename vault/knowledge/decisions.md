@@ -5045,3 +5045,33 @@ the constraint, not that it runs:
    `go test` line, so a local leg and a CI run cannot drift. Tool and control-plane versions
    are pinned exactly (`SETUP_ENVTEST_VERSION`, `ENVTEST_K8S_VERSION`), like golangci-lint
    and goreleaser; bump `setup-envtest` together with `controller-runtime`, never alone.
+
+## D191 — What the 2026-08-01 dogfood closures do and do not license (2026-08-01, HT-dogfood-0801)
+
+Three human tasks came back `done` in one session and all three closed *without* a change
+to the code. A closure with no diff is the easiest kind to over-read later, so what each
+one settles is written down here rather than left to the deleted file:
+
+1. **There is no client-side CRD bug, and CRD-01 is not one.** The `ExternalSecret` LIST
+   failure is **not reproducible**: a fresh external-secrets install lists normally and logs
+   nothing. The reporting cluster served `v1beta1` behind `spec.conversion.strategy:
+   Webhook`; the clean one serves only `v1` with `strategy: None`. A conversion webhook that
+   is down or serving a bad cert fails the LIST **in the apiserver**, equally for `kubectl`.
+   So no leg may write a fix to kubecom's CRD handling on the strength of CRD-01's original
+   title — that would be inventing a bug (D79). CRD-01 now means only: *say why a group's
+   LIST failed, legibly, on screen*. Re-open the diagnosis only against a cluster whose CRDs
+   still carry `strategy: Webhook`, where the log line is one reproduction away.
+2. **"No problem found" is not "verified".** The fuzzy-search pass exercised exactly one
+   case (an abbreviation, `strfrnt` → 6 true `storefront` hits, no junk tail). Every hit was
+   a true positive, so the ranking question — is the fuzzy tail noise you scroll past? — did
+   not arise, and short queries, the widened scopes (`ctrl+a`/`ctrl+w`) and the
+   exact-above-fuzzy band gap (D152 pt 3 / D153) were not probed. `searchScatteredShare =
+   limit/4` and the absence of a minimum needle length stay **open guesses**: a later leg may
+   not cite this closure as evidence for keeping them *or* for changing them.
+3. **The logs throughput measurement confirms D162; it does not retire it.** ~1,900
+   lines/sec with no degradation was measured on 2026-08-01, four days *after* LOGS-05b
+   landed the incremental render (D162, 2026-07-29) — and the task that pre-authorised that
+   render was raised on 2026-07-25, against the build without it. So the result reads "the
+   fix works", never "the fix was unnecessary", and D162's append-don't-rejoin constraint
+   stands unweakened for the next streaming surface. What is still unmeasured is buffer
+   *depth*: the run did not sit on the stream long enough to bound a multi-hour tail.

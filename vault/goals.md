@@ -40,10 +40,14 @@ text is preserved in that bullet's annotation._
       `additionalPrinterColumns` included (`internal/kube/table.go`, D33); discovery folds
       CRDs into the menu (`TestDiscoveryReadyReconcilesMenu`, with a CRD); CRD group
       list/watch param encoding fixed (D103); kinds without `watch` degrade to list-only
-      polling (D104). **Unticked on an open bug, not on missing evidence** — CRD-01: a real
-      `ExternalSecret` errors instead of listing. A box reading "any resource incl. CRDs"
-      cannot be ticked while a CRD is reported broken, whatever the tests say. Closes with
-      CRD-01, itself blocked on the human task for the error text.)
+      polling (D104). It was unticked on an open bug — CRD-01, a real `ExternalSecret`
+      erroring instead of listing — and **that bug is gone**: its human task came back *not
+      reproducible* on 2026-08-01, and the difference between the two clusters is a
+      conversion webhook, which fails the LIST in the apiserver and kills `kubectl` with it
+      (D191 pt 1). So no CRD is reported broken any more. Still unticked, on the narrower
+      claim now: nothing here has been driven against a CRD-heavy cluster by a human beyond
+      that one listing check, and the re-scoped CRD-01 — say *why* a group's LIST failed,
+      on screen — is what makes the degraded case legible rather than a vanishing toast.)
 - [ ] In-TUI logs and describe viewers; an object's YAML round-trips through your `$EDITOR`
       (no external pager required).
       (**Wording amended by M5-01b, 2026-07-30, D178.** It read "In-TUI logs, describe, and

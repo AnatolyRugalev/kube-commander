@@ -3,22 +3,13 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-07-31 — M1-INT-d put the envtest suite in CI (D190), which closes the M1-INT line and empties the Backlog: **no unblocked work remains**, both open board items are blocked on the eleven open human-tasks (two blocking — the CRD error text → CRD-01, the first release tag → M5-11 — nine advisory). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-01 — HT-dogfood-0801 closed the three human tasks the 2026-08-01 dogfood finished (D191), which unblocks and re-scopes **CRD-01** (the `ExternalSecret` error is cluster-side — a conversion webhook — so the leg is legible degradation, not a client fix); five feedback items arrived the same day and preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HT-dogfood-0801** Close the three human tasks the 2026-08-01 dogfood session finished
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: `2026-07-25-logs-view-throughput-dogfood`, `2026-07-28-fuzzy-search-quality-dogfood`
-      and `2026-07-29-external-secrets-crd-error-log` all carry `Status: done` with a `## Result`.
-      Fold each result in, re-scope CRD-01 (the error is cluster-side — nothing to fix in the
-      client), and delete the three files (D79).
+_(none)_
 
 ## Blocked
-
-- [ ] **CRD-01** Opening the `ExternalSecret` CRD errors out instead of listing it
-      status: blocked | owner: — | added: 2026-07-29
-      notes: Blocked on human task `2026-07-29-external-secrets-crd-error-log` (the error text). See the DIAG line in the Backlog. Worth re-requesting the log *after* DISC-01 (D187): if the group half-fails, the file now carries a `discovery group unavailable` warning naming it, which the reporter's original run could not have produced.
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
       status: blocked | owner: — | added: 2026-07-30
@@ -147,6 +138,15 @@ Both halves are done, so **the SEARCH line is closed**: the matcher falls back t
 subsequence matching under the band the score reserves for it, and the emit-time hit cap
 budgets scattered hits to a fraction of itself so fuzzy can never starve exact (D153).
 
+**The match-quality dogfood is closed** (2026-08-01, HT-dogfood-0801) as *no problem found*,
+which is narrower than "verified": `strfrnt` scoped to `shop` returned 6 hits, every one a real
+`storefront` object and no junk tail, so the abbreviation case the fallback exists for
+works. But every hit was a true positive, so there was no noise to rank — and short queries,
+the widened scopes and the band-gap invariant were not probed. `searchScatteredShare =
+limit/4` and the absence of a minimum needle length therefore remain **guesses**, not
+findings (D191 pt 2): they are not to be tuned on the strength of this pass, in either
+direction.
+
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
 mini-app** with real-time grep (feedback `2026-07-24-logs-dedicated-view-live-grep`):
@@ -185,8 +185,14 @@ re-joins, and the pump drains the log channel so a burst is one render instead o
 (D162). The measured cost of the 1000-line open LOGS-05a introduced went from ~131 ms to
 ~2 ms (`BenchmarkStreamLines*`). The residual cost is the viewport's own re-measure of
 every line it holds, which has no append API — hence the batching, and hence D162 pt 2 for
-whoever builds the next streaming surface. The standing throughput dogfood human-task is
-still the eyes-on half of this and is worth re-running now.
+whoever builds the next streaming surface.
+
+**The throughput dogfood is closed** (2026-08-01, HT-dogfood-0801): ~1,900 lines/sec from a
+busybox firehose, no degradation, the view responsive to keys throughout. Read it as the
+eyes-on confirmation of LOGS-05b/D162 rather than as "no fix was needed" — the task was
+raised on 2026-07-25 against the pre-D162 build and pre-authorised the incremental render
+*as* the fix, which then landed on 2026-07-29, four days before the measurement. Depth was
+not bounded (no multi-hour tail), and pts 2–5 of the task were not walked separately.
 
 **LOGS-06** (feedback `2026-07-29-logs-init-containers`, normal) is done and separate: the
 container picker only ever offered `spec.containers`, so an init container's logs — the
@@ -201,18 +207,33 @@ error"): opening the external-secrets `ExternalSecret` CRD errors out. The repor
 no error text — and it could not, because kubecom **had nowhere to put one**. Every
 runtime failure funnels through `surfaceError` into a 5-second, width-clipped status-bar
 toast and is then gone; the log file (`~/.cache/kubecom/kubecom.log`, documented in the
-README since M2-RUN) held only launcher warnings. So the CRD fix has a prerequisite: make
-the error obtainable. DIAG-01 does that, CRD-01 is the fix itself.
+README since M2-RUN) held only launcher warnings. So the CRD fix had a prerequisite: make
+the error obtainable. DIAG-01 did that; CRD-01 was to be the fix — and turned out to be
+something else (below).
 
 DIAG-01 is done: `surfaceError` — the shell's single error funnel — now logs before it
 toasts, and discovery's deliberately-silent failures (total and per-group) log too, so the
 file the README already documented finally holds the errors the user actually hit (D159).
-CRD-01 is in **Blocked** above, waiting on the human task for the error text: the sandbox
-has no cluster and no external-secrets CRDs, and the plausible causes (a conversion-webhook
-failure the apiserver reports on LIST, a Table-conversion 406, an RBAC 403 on that group, a
-decode edge case in a printer column) call for opposite fixes — one of which is "kubecom is
-right, degrade more legibly". Guessing between them would be inventing a bug. Check the
-sibling kinds (`SecretStore`, `PushSecret`) when it unblocks.
+**CRD-01 is re-scoped, not fixed** (2026-08-01, HT-dogfood-0801/D191). Its human task came
+back **not reproducible**: external-secrets installed fresh into the dogfood cluster lists
+normally, with nothing in `~/.cache/kubecom/kubecom.log`. The one variable the clean install
+removed is the conversion webhook — the fresh chart serves only `v1` with
+`spec.conversion.strategy: None`, while the reporting cluster served `v1beta1` *and* `v1`
+behind `strategy: Webhook`. A conversion webhook that is down or serving a bad cert makes
+the **apiserver** fail the LIST, which kills `kubectl` too. So there is no client bug, and a
+leg that "fixes" one would be inventing it (D79). What remains is the degradation path — the
+half DISC-01 (D187) landed in the log file, not yet on screen:
+
+- [ ] **CRD-01** A LIST that fails for the whole group says *why*, legibly, instead of a
+      5-second toast
+      status: todo | owner: — | added: 2026-07-29 | re-scoped: 2026-08-01
+      notes: When a kind's LIST fails on a cluster-side cause the user can act on — a
+      conversion webhook unavailable, a 406 on Table conversion, a 403 on the group — the
+      browse table should say so where the reader is looking, rather than surfacing the bare
+      error through the toast that DIAG-01 already logs. The empty-table-with-reason surface
+      is the leg; the wording is the point of it. Check the sibling kinds (`SecretStore`,
+      `PushSecret`) with it. **Not** a CRD-handling fix: no evidence of one exists, and D191
+      pt 1 says a future leg may not re-derive one from this line's title.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
@@ -290,6 +311,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **HT-dogfood-0801** Closed the three human tasks the 2026-08-01 dogfood session finished — the `ExternalSecret` failure is not reproducible and is cluster-side (a conversion webhook), so CRD-01 is re-scoped from a client fix to legible degradation and unblocked; the logs throughput pass measured ~1,900 lines/sec with no degradation, which confirms D162 rather than retiring it; fuzzy search closed as "no problem found", not "verified" — done 2026-08-01 (D191)
 
 - [x] **M1-INT-d** The gated envtest suite runs in CI — its own workflow on every push/PR, never the `make check` gate a release tag rides on; `make test-envtest` fixed to find `setup-envtest` off `PATH`, and a hermetic guard ties gate constant ↔ recipe ↔ workflow because a skipped suite is a green one — closes the M1-INT line — done 2026-07-31 (D190)
 
