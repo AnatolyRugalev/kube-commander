@@ -83,5 +83,17 @@ Not exercised, and each is a distinct claim the criterion actually makes:
 - **pt 6 (per-context namespace + menu memory, D163).** Not tried.
 
 The happy path working is real evidence, but the criterion claims the *transition* is
-clean — which is pts 3-6, not pt 2. Fixtures are all still in place; the remainder is
-about five minutes.
+clean — which is pts 3-6, not pt 2. The remainder is about five minutes.
+
+**Fixtures are preserved but the clusters are stopped** (2026-08-01, to free the machine).
+Everything above comes back with:
+
+```bash
+k3d cluster start kubecom-test kubecom-alt   # ~30s; contexts and objects intact
+```
+
+`k3d-kubecom-bogus` is a plain kubeconfig entry pointing at `https://127.0.0.1:1`, so it
+needs nothing — it is unreachable by construction whether or not anything is running.
+Also still in the test cluster for the other open dogfoods: `broken/crashloop` (2,305
+restarts, for the previous-logs stream question), `shop/firehose` (~1,900 lines/sec) and
+`shop/demo-secret` (external-secrets).
