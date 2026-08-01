@@ -4,7 +4,7 @@
 - By: DIAG-01
 - Priority: high
 - Blocks: CRD-01
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -47,3 +47,42 @@ Paste the log line(s) under `## Result` and set `Status: done` — the next leg 
 into a normal, unblocked leg and deletes this file. If the reproduction turns out to be
 cluster-side and there is nothing for kubecom to do, say so and delete the file; CRD-01
 gets closed with that note.
+
+## Result
+
+**Not reproducible.** 2026-08-01, external-secrets was installed fresh into the k3d
+dogfood cluster (`k3d-kubecom-test`) via the official Helm chart, with a real
+`SecretStore` (fake provider) and a real `ExternalSecret` (`shop/demo-secret`).
+Opening `ExternalSecret` in kubecom **listed normally — no error, no toast, and no
+`surfaced error` / `discovery failed` / `discovery group unavailable` line in
+`~/.cache/kubecom/kubecom.log`.** `kubectl get externalsecrets -A` worked at the same
+moment from the same context.
+
+The original reporting cluster is no longer reachable, so the error text this task asked
+for cannot be obtained. But the reproduction attempt is not a dead end, because of how
+the two installs differ:
+
+- The fresh chart's `externalsecrets.external-secrets.io` CRD serves **only `v1`**
+  (`v1beta1` present but `served=false`), and its **`spec.conversion.strategy` is
+  `None`**.
+- The reporting cluster predates that: it would have served `v1beta1` *and* `v1`, with
+  `strategy: Webhook` pointing at `external-secrets-webhook`.
+
+That is exactly the shape this task named as "the usual suspect", and it is the one
+variable the clean install removes. A conversion webhook that is down, unreachable, or
+serving a bad cert makes the apiserver fail the **LIST** — which is cluster-side, is
+equally fatal to `kubectl`, and is nothing kubecom can fix.
+
+### What this means for CRD-01
+
+CRD-01 should be **re-scoped, not fixed as a client bug**: there is no evidence of a
+defect in kubecom's CRD handling, and a fix aimed at one would be inventing a bug (D79).
+The useful remaining work is the degradation path — when a LIST fails because a group's
+conversion webhook is unavailable, kubecom should say *that*, legibly, rather than
+surfacing a bare error. Note DISC-01 (D187) already added a `discovery group
+unavailable` warning to the log file, which is the half of this that had landed by the
+time this task was written; the open half is what the *user* sees in the TUI.
+
+Re-open this task only if the failure recurs on a cluster whose external-secrets CRDs
+still carry `strategy: Webhook` — at which point the log line is one reproduction away
+and the diagnosis above becomes testable rather than inferred.

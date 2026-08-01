@@ -56,3 +56,32 @@ be exactly the green D79 forbids.
 Do the check, then EITHER set `Status: done` with a `## Result` (the next agent leg ticks
 the M4 context-switch exit criterion, folds the result in and deletes this file), OR delete
 it if nothing needs to flow back. Any bug goes in `../feedback/`.
+
+## Result
+
+**Partially verified 2026-08-01 — kept open; the M4 exit criterion should NOT be ticked
+from this alone.**
+
+Setup: `k3d-kubecom-test` (the seeded dogfood cluster) plus a second real cluster
+`k3d-kubecom-alt` holding objects that exist nowhere else (`alt-only/only-in-alt`), plus
+a deliberately unreachable `k3d-kubecom-bogus` pointing at `https://127.0.0.1:1`. All
+three are in the kubeconfig and remain there for the next attempt.
+
+- **pts 1-2 — passed.** `C` opens the picker and switching contexts works.
+
+Not exercised, and each is a distinct claim the criterion actually makes:
+
+- **pt 3 (nothing leaks).** A log stream / viewer / port-forward was not opened *before*
+  switching, so the teardown claim — overlays close, forwards stop, no stale rows flash
+  in from the departed cluster — is unverified. This is the check most likely to find a
+  real defect and the reason the fixtures above are worth keeping.
+- **pt 4 (same-context switch is a no-op, D157).** Not tried. A regression here would
+  silently tear down and rebuild a working cluster.
+- **pt 5 (unreachable context).** `k3d-kubecom-bogus` was staged for exactly this and not
+  used: one transient toast, stay put, rows still updating. This is what justifies
+  connect-before-teardown.
+- **pt 6 (per-context namespace + menu memory, D163).** Not tried.
+
+The happy path working is real evidence, but the criterion claims the *transition* is
+clean — which is pts 3-6, not pt 2. Fixtures are all still in place; the remainder is
+about five minutes.

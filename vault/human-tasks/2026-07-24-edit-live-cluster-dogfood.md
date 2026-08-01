@@ -8,6 +8,24 @@
   object's YAML now rides this same suspend. No board work is blocked.)
 - Status: open
 
+## Attempt 1 (2026-08-01) — did not get past launching the editor
+
+The dogfood session of 2026-08-01 reached this task and stopped at step 1: with
+`KUBE_EDITOR`, `EDITOR` and `VISUAL` all unset, `resolveEditorArgv`
+(`internal/tui/edit.go:72`) falls through to `defaultEditor = "vi"`, and the host had
+no `vi` — Arch's `vim` package installs `/usr/bin/vim` but no `vi` symlink, and the
+user's editor is neovim. `exec.Command` failed, which **degraded correctly**: an error
+toast, no apply, no mutation. So this is not a bug in the edit flow, and none of steps
+2–5 below were exercised.
+
+It is arguably a first-run UX finding, and the decision is a human's: the `vi` fallback
+is deliberate (edit.go:56 matches kubectl's own precedence), but a user with a perfectly
+good editor installed still hits a dead end. If you want it changed, the shape would be
+`KUBE_EDITOR` → `EDITOR` → `VISUAL` → first of `nvim`/`vim`/`nano`/`vi` present on PATH,
+and it belongs in `../feedback/` as your call, not the agent's.
+
+Re-run with `EDITOR` set (`set -x EDITOR nvim`) and work steps 1–5 as written.
+
 ## What's needed
 
 Run `kubecom` against a real cluster in a real terminal and exercise the Edit

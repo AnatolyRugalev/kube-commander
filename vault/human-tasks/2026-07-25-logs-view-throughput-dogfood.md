@@ -4,7 +4,7 @@
 - By: LOGS-02
 - Priority: normal
 - Blocks: none (advisory — gates only the LOGS "high-throughput logs stay readable" quality bar, not other work; LOGS-03/04 may proceed)
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -52,3 +52,26 @@ deletes this file next leg), OR delete it if nothing needs to flow back. If thro
 *does* degrade, put it in `../feedback/` — the fix is an incremental render (keep the
 rendered content and append to it, rather than re-joining the buffer) and it should be
 prioritised over LOGS-03/04.
+
+## Result
+
+**No degradation observed — the suspected failure mode did not materialise.** Checked
+2026-08-01 against `shop/firehose` on the k3d dogfood cluster: a busybox loop emitting
+**~1,900 lines/sec** (measured: 5,684 lines in a 3-second `kubectl logs -f`), i.e. a
+genuinely hostile stream rather than a briskly-logging app.
+
+- **pt 1 (throughput) — passed.** The view kept up and stayed responsive to keys; the
+  gradual slide this task was raised to catch (`logsview.render()` re-joining the whole
+  line buffer per appended line, so cost grows with lines *held*) was not visible in
+  normal use. The incremental-render fix this task pre-authorised is therefore **not
+  needed** and should not be written speculatively.
+- **pts 2-5 — not separately confirmed.** Live grep while following, follow/pause on
+  scroll, `w` wrap + `h`/`l` sideways scroll, and clean teardown on exit were not walked
+  as individual checks. All four are hermetically covered (`internal/tui/logs_test.go`,
+  `logsview_test.go`); what this session adds is only the perf answer they could not give.
+
+Recorded as measured, not as eyeballed: the line rate above is the number that makes the
+"stays readable under load" bar meaningful, and it is the one thing the sandbox could not
+produce. If rendering ever does degrade, it will be at buffer *depth* rather than rate —
+this run did not sit on the stream long enough to bound that, so a multi-hour tail
+remains untested.

@@ -50,4 +50,29 @@ press `Ctrl+P`.
 
 ## Result
 
-_(fill in — a leg will fold this into the journal / a decision and delete the file)_
+**Partially verified 2026-08-01 — kept open for one question.**
+
+Checked against `broken/crashloop` on the k3d dogfood cluster (a pod with **2,305**
+restarts, so no shortage of dead instances to read).
+
+- **pt 1 — passed.** `Ctrl+P` delivers the previous instance's log; the flip works.
+
+Still open, and the reason this file is not closed:
+
+- **pt 2 — UNANSWERED, and it is the one that matters.** Whether the stream *ends* was
+  not observed. kubecom requests `Follow` and `Previous` together and D177 pt 2 **bets**
+  the kubelet serves the terminated instance and closes at EOF, because the container
+  being read is not running (`internal/kube/logs.go`, `followLogStream`). That bet is
+  inference, never observation — the sandbox cannot produce a real kubelet. A stream that
+  instead hangs, arrives empty, or reconnects every ~2s means the bet is wrong and
+  `Previous` needs `Follow: false`.
+- **pt 4 — UNANSWERED.** The no-previous-instance toast (on a pod that never restarted)
+  was not triggered, so the apiserver's exact wording — and whether it survives a real
+  terminal width or clips to uselessness — is still unknown. Worth pasting verbatim from
+  `~/.cache/kubecom/kubecom.log` when it is.
+- **pts 3, 5 — not exercised.** The return flip, and whether keeping the `/` query across
+  `Ctrl+P` (D177 pt 3) is right or noise, were not judged.
+
+To finish: select the crash-looper, `L`, `Ctrl+P`, and **watch it for ~30 seconds** —
+does it settle, or keep reconnecting? Then the same on any healthy pod for pt 4. That is
+the whole remainder.
