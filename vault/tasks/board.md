@@ -7,7 +7,16 @@ _Last updated: 2026-08-01 — EDIT-01 drained the first of the five 2026-08-01 f
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+      notes: Feedback `2026-08-01-custom-resources-pinning` (D69), first slice of the
+      CRD-PIN line below. Settle the design question the feedback names — pinned kinds in
+      the user-authored `menus/<context>.yaml` or in the kubecom-recorded
+      `StateDir()/<context>.yaml` (D90/D163) — record it as a decision, then land the store
+      half: the state field, its pin/unpin helpers, and the launcher merge that folds pins
+      into the same `menu.AddExtras` path the authored extras already take, on **both** the
+      launch and the context-switch path. Mechanism before gesture (D52); the key that pins
+      is CRD-PIN-02.
 
 ## Blocked
 
@@ -234,6 +243,45 @@ half DISC-01 (D187) landed in the log file, not yet on screen:
       is the leg; the wording is the point of it. Check the sibling kinds (`SecretStore`,
       `PushSecret`) with it. **Not** a CRD-handling fix: no evidence of one exists, and D191
       pt 1 says a future leg may not re-derive one from this line's title.
+
+### Custom resources (CRD-PIN — feedback-driven)
+Raised by feedback `2026-08-01-custom-resources-pinning` ("custom resources are really hard
+to use"): a CRD-heavy cluster has hundreds of kinds, so listing them all makes the menu
+useless and listing none makes CRDs unreachable. The ask is that a kind you reach for
+**once** — via search or the picker — is **in your menu for that context** from then on,
+removable with a key on the menu row, stored per context. This is the *usability* half of
+CRDs and is deliberately not CRD-01's degradation half (D191 pt 1 keeps them apart).
+
+Triaged into four slices, bottom-up (D52): the store, then the gesture that writes it, then
+the gesture that removes it, then the discoverability that makes "reach for it once" true.
+
+- [ ] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — **in
+      progress** above.
+- [ ] **CRD-PIN-02** `p` on a resource row/search hit pins that kind for the context
+      status: todo | owner: — | added: 2026-08-01
+      notes: The write gesture. A new `pin.toggle` action (D10/D11 — a named action, never a
+      raw key) on the surfaces that can name a kind: the resource picker (`:`) and the menu
+      itself. It appends to `State.PinnedResources` through a persister seam shaped like
+      `statePersister`/`configThemePersister` (the tui package never touches disk), then
+      folds the new entry into the live menu with `menu.AddExtras` so the row appears without
+      a relaunch. Pinning an already-pinned or already-listed kind is a no-op with a notice,
+      not a duplicate row. Needs the kind's `Namespaced` flag from discovery, not a guess.
+- [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
+      status: todo | owner: — | added: 2026-08-01
+      notes: The removal half the feedback insists must be as easy as the adding ("a key on
+      the menu row, not a config-file edit"). Only a **pinned** row can be unpinned — a seed
+      row or a discovered row is not the user's to remove — so the menu Item needs to carry
+      where it came from, which is the one new piece of state this slice adds. Unpinning
+      removes the row unless discovery also lists the kind, in which case it reverts to a
+      plain discovered row rather than vanishing. Hint-bar text so the key is discoverable.
+- [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
+      status: todo | owner: — | added: 2026-08-01
+      notes: The premise the whole line rests on — "you reach for one *once*" — needs a
+      surface that lists **every discovered kind**, not just the menu's. The resource picker
+      is that surface; check what it lists today before building anything. Overlaps the
+      command-palette feedback (`2026-08-01-command-palette-unification`), which wants the
+      same picker to become `:resource` in a general palette, so **sequence this after the
+      palette shell lands** or the two will fight over the same surface.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
