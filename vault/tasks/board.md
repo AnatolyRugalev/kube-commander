@@ -7,7 +7,12 @@ _Last updated: 2026-08-01 — AUTH-01 drained the EKS/SSO feedback into the five
 
 ## In Progress
 
-_(none)_
+- [ ] **CTX-WARM-01** Triage the context-switch warmth feedback, and measure the switch
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+      notes: Feedback `2026-08-01-context-switch-keep-state` asks that switching back to a
+      context be instant. It pushes against M4-04a/D157's unconditional teardown, so this
+      leg resolves the tension in a decision, splits the ask into a CTX-WARM line, and does
+      the measurement half the submitter asked for **before** anything touches the teardown.
 
 ## Blocked
 
