@@ -5192,3 +5192,47 @@ board's PAL section); this decision is what the remaining four must not contradi
    do. Until it lands they are the sole route to those values, so an earlier slice that
    retired one would remove function in the name of uniformity. Retiring any of them
    afterwards is a separate decision, not a consequence of this one.
+
+## D195 — An exec credential plugin failure is its own error kind; kubecom may *offer* a remediation command but never runs one unasked (2026-08-01, AUTH-01)
+
+From feedback `2026-08-01-eks-sso-reauth`, which asked kubecom to notice an expired AWS SSO
+session and offer to run `aws sso login --profile x`. The submitter asked explicitly whether
+provider-specific auth handling reads as a non-goal. It does not — `vault/goals.md`'s
+non-goals are Windows, cloning k9s, mutation beyond the curated set, and multi-cluster/server
+mode — but it is close enough to the edge that the shape is fixed here rather than being
+settled slice by slice. AUTH-01 is the first of five slices (board's AUTH section); this is
+what the other four must not contradict.
+
+1. **A failed exec credential plugin is `KindExecPlugin`, not `KindUnreachable`.** client-go
+   runs the plugin inside `RoundTrip`, so its failure comes back wrapped in a `*url.Error`
+   and the pre-existing transport net caught it as "cluster unreachable" — a claim about a
+   cluster that was never contacted. `Classify` now checks for a plugin failure *before*
+   the transport net and *after* the apierrors switch, so a real server status always wins
+   and a 401 whose message merely quotes a plugin stays `KindUnauthorized`. No future kind
+   may be inserted between those two points without re-deciding this ordering.
+2. **The detection is text-matching, narrowly, and that is not a shortcut.** client-go
+   formats the plugin failure with `%v` (`getting credentials: %v`), so the underlying
+   `*exec.ExitError` does not survive in the wrap chain — there is no typed error and no
+   errors.As path. `ExecPluginFailed` therefore matches client-go's own two message shapes
+   (`exec: executable X not found`, `exec: executable X failed with exit code N`) and
+   deliberately does **not** match its third, default branch (`exec: %v`), which carries no
+   executable name. Anything unmatched stays an ordinary auth error. A leg that widens this
+   regexp must keep that property: guessing is worse than a generic error (the feedback's
+   own instruction).
+3. **The plugin's stderr is not in the error and has to be earned.** client-go streams it
+   to the process's `os.Stderr`, which under the alt-screen the user never sees, and exposes
+   no seam to capture it. So "why did it fail" — the SSO-expiry sentence the feedback wants
+   to match on — is unavailable from the failure alone; recovering it means kubecom
+   re-running the plugin itself as a diagnostic (AUTH-02). That re-run is read-only by
+   construction: it may only re-invoke the kubeconfig's own credential command, never a
+   command kubecom composed.
+4. **kubecom never runs an auth command the user did not just approve.** A remediation is
+   *offered* — one confirm prompt, per occurrence, naming the exact command — and is never
+   run implicitly, never on startup, never retried automatically. This holds even though the
+   plugin binary is one the kubeconfig already names.
+5. **A remediation is only offered when it can be substantiated from the kubeconfig.** The
+   command is composed from the `user.exec` stanza's own `args`/`env` (e.g. `--profile`,
+   `AWS_PROFILE`), never from a guess; when the needed detail is absent, kubecom shows the
+   plugin's failure and stops. The catalogue mapping plugin → remediation is a small
+   explicit table, **AWS SSO its only entry**, and it stays a table rather than becoming a
+   provider framework until a second provider actually lands.

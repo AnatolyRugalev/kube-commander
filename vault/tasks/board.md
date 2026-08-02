@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-01 — PAL-01 drained the command-palette feedback into the five-slice PAL line and landed type-to-filter pickers on the one shared matcher (D194); two 2026-08-01 feedback items remain and still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-01 — AUTH-01 drained the EKS/SSO feedback into the five-slice AUTH line and landed its provider-neutral first slice (D195); one 2026-08-01 feedback item remains, still gated by an open human task (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
-      status: in-progress | owner: claude-opus | added: 2026-08-01
-      notes: Feedback leg for `2026-08-01-eks-sso-reauth` — triage the new auth area into the
-      AUTH line and land its first (provider-neutral) slice.
+_(none)_
 
 ## Blocked
 
@@ -326,6 +323,54 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
       them earlier would remove function to add uniformity. Decide then whether any key is
       retired outright; the default is that all of them stay (D194 pt 4).
 
+### Credential-plugin auth (AUTH — feedback-driven, D195)
+Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a
+nameless auth failure, and the user is left to work out that the fix is `aws sso login
+--profile x` in another terminal. The ask is that kubecom notice the **exec credential
+plugin** failed, and offer to run the remediation. Provider-specific auth is **not** a
+non-goal (checked against `goals.md`, D195 preamble), but the shape is fixed up front:
+detect narrowly, offer — never run unasked — and only when the command can be
+substantiated from the kubeconfig's own `user.exec` stanza (D195 pt 4/5).
+
+Triaged into five slices, provider-neutral first, AWS last but one. AUTH-01…03 are all
+kube-layer; nothing reaches the screen until AUTH-04, and AUTH-05 is the only slice that
+runs anything.
+
+- [x] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
+      — done 2026-08-01 (D195)
+- [ ] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
+      status: todo | owner: — | added: 2026-08-01
+      notes: The blocker AUTH-01 found: client-go streams the plugin's stderr to the
+      process's `os.Stderr` (invisible under the alt-screen) and its error text carries only
+      the exit code, so *why* it failed is unavailable (D195 pt 3). Re-invoke the
+      `ExecPluginFor` stanza — exactly that command, never a composed one — with a timeout
+      and a captured stdout/stderr, and return the stderr text. Must not be interactive
+      (`Stdin` closed) and must not run during a normal launch: it is a diagnostic on an
+      already-failed request, not a pre-flight.
+- [ ] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
+      status: todo | owner: — | added: 2026-08-01
+      notes: The only provider-specific slice. Over AUTH-02's stderr, match the AWS CLI's own
+      SSO-expiry wording **narrowly**; resolve the profile from the stanza's `--profile` arg
+      or `AWS_PROFILE` env, and when neither is present return no remediation rather than a
+      guessed one (D195 pt 5). Shape it as one entry in a small `plugin → remediation` table,
+      not a provider framework — `gcloud`/`az` are future entries, not a design goal now.
+- [ ] **AUTH-04** Show the plugin failure legibly, with the remediation printed
+      status: todo | owner: — | added: 2026-08-01
+      notes: The first slice with a runtime surface, and the smallest thing that delivers
+      most of the feedback's value: on `KindExecPlugin`, say which command failed, show its
+      stderr, and **print** the suggested `aws sso login --profile x` without offering to run
+      it. Also fixes the misleading message AUTH-01's kind was created for — a plugin failure
+      previously read as "cluster unreachable". Needs a home bigger than a status-bar toast
+      (stderr is multi-line); check what the existing error surfaces can carry first.
+- [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
+      status: todo | owner: — | added: 2026-08-01
+      notes: The last slice, and the only one that executes anything. One confirm prompt per
+      occurrence naming the exact command (D195 pt 4), then the **existing** suspend — the
+      `$EDITOR`/exec one (`internal/tui/edit.go`, D125) — because `aws sso login` opens a
+      browser and prints a verification code; do not invent a second suspend. On return,
+      retry the failed request rather than the whole launch. Live-cluster only, so expect to
+      raise a human task for the dogfood rather than tick anything on a fake.
+
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
 into ordered, leg-sized slices (M4-PLAN, D52/D155). Two of M4's six scope bullets are
@@ -402,6 +447,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **AUTH-01** `kube.ExecPluginFor` names the exec credential plugin behind a context (stanza only, nothing executed) and `Classify` gained `KindExecPlugin`, so a failed `aws eks get-token` no longer reads as "cluster unreachable"; matched narrowly on client-go's own two message shapes because its `%v` formatting breaks the wrap chain, with a real server status still winning; triaged the feedback into the five-slice AUTH line — feedback `2026-08-01-eks-sso-reauth` — done 2026-08-01 (D195)
 
 - [x] **CRD-PIN-01** A pinned resource kind is recorded per-context state (`State.PinnedResources`), never the user-authored `menus/<context>.yaml`, and the launcher merges pins behind the authored entries into the one list the menu already folds in — on the launch path *and* the context-switch path, so a switch shows the new context's pins — with pin/unpin keyed by GVR and one validator shared by both files; triaged the feedback into the CRD-PIN line — feedback `2026-08-01-custom-resources-pinning` — done 2026-08-01 (D193)
 

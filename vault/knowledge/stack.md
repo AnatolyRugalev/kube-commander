@@ -172,6 +172,23 @@ nothing useful; attach is the way.)
   clientcmd (`client_config.go`) that **no clientcmd predicate matches** — so
   `RESTConfig` tags its errors with the `errBadContext` sentinel (dual-`%w`) and
   Classify keys off `errors.Is`, not clientcmd's wording.
+- **Exec credential plugins** (AUTH-01, D195, `internal/kube/authexec.go`): the
+  `user.exec` stanza client-go runs to mint credentials (`aws eks get-token`,
+  `gke-gcloud-auth-plugin`, `az`). `ExecPluginFor(cc)` reads the selected context's
+  stanza from the raw kubeconfig (command/args/env/apiVersion/installHint) — no
+  execution, no network; a context without one returns `nil, nil`.
+  **Three gotchas, all in `plugin/pkg/client/auth/exec/exec.go` (v0.31):**
+  (1) the plugin's **stderr goes to the process's `os.Stderr`** (`a.stderr` is set at
+  construction and has no seam) — under the alt-screen the user never sees it, and it is
+  *not* in the returned error, so recovering "why" needs a diagnostic re-run (AUTH-02);
+  (2) the failure is formatted `fmt.Errorf("getting credentials: %v", err)` — **`%v`, not
+  `%w`** — so the `*exec.ExitError` does not survive the chain and `errors.As` cannot see
+  it; text matching is the only route (`ExecPluginFailed`, matching client-go's
+  `wrapCmdRunErrorLocked` shapes `exec: executable X not found` / `… failed with exit code
+  N`, but not its nameless `exec: %v` default branch);
+  (3) it fails **inside `RoundTrip`**, so net/http wraps it in a `*url.Error` and it
+  classified as `KindUnreachable` until `KindExecPlugin` was added ahead of the transport
+  net — a cluster reported unreachable that was never contacted.
 
 ## Key API patterns
 - **Server-side Table watch gotchas** (all handled in M1-05b, `watch.go`, D34):

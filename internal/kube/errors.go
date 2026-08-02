@@ -63,6 +63,14 @@ const (
 	// or invalid — a construction-time configuration error, never a live-cluster
 	// one. The classic "panics on bad namespace/context" case (#86) lands here.
 	KindBadContext
+	// KindExecPlugin: the kubeconfig's exec credential plugin (`aws eks
+	// get-token`, `gcloud`, `az`, …) could not be run or exited non-zero, so no
+	// credential was ever minted and the request never reached the apiserver.
+	// Distinct from KindUnauthorized on purpose: the fix is on the user's
+	// machine — re-authenticate, or install the binary — not in the cluster
+	// (feedback `2026-08-01-eks-sso-reauth`). ExecPluginFailed recovers the
+	// detail; ExecPluginFor names the plugin from the kubeconfig.
+	KindExecPlugin
 )
 
 // String returns a stable, lowercase token for the kind (for logs and tests).
@@ -88,6 +96,8 @@ func (k ErrorKind) String() string {
 		return "unreachable"
 	case KindBadContext:
 		return "bad-context"
+	case KindExecPlugin:
+		return "exec-plugin"
 	default:
 		return "unknown"
 	}
@@ -139,6 +149,19 @@ func Classify(err error) ErrorKind {
 	// A lapsed caller deadline reads as a timeout.
 	if errors.Is(err, context.DeadlineExceeded) {
 		return KindTimeout
+	}
+
+	// An exec credential plugin that failed to run. Checked *before* the
+	// transport net below, because client-go's exec authenticator fails inside
+	// RoundTrip and net/http wraps the result in a *url.Error — so an unhandled
+	// plugin failure would otherwise read as "cluster unreachable" when the
+	// cluster was never contacted (feedback `2026-08-01-eks-sso-reauth`). Placed
+	// after the status switch so a real server status always wins.
+	if errors.Is(err, errExecPlugin) {
+		return KindExecPlugin
+	}
+	if _, ok := ExecPluginFailed(err); ok {
+		return KindExecPlugin
 	}
 
 	// Transport-level failures (dial refused, DNS, TLS) surface as *url.Error or
