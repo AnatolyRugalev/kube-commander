@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CTX-WARM-01 drained the last 2026-08-01 feedback i
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-02** The palette shell: `:` opens a verb list
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -293,7 +294,7 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 - [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
       — done 2026-08-01 (D194)
 - [ ] **PAL-02** The palette shell: `:` opens a verb list
-      status: todo | owner: — | added: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
       notes: `:` stops opening the resource picker directly and opens the palette: a picker
       whose items are **verbs** (the registered app-global actions, by their `Describe()`
       text), fuzzy-ranked by PAL-01's matcher, `enter` running the chosen one through the
