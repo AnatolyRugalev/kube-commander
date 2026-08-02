@@ -117,7 +117,8 @@ kind; the most-used actions also have a direct key; the rest are menu-only.
 | Widen search to all namespaces | `Ctrl+w` (`search.allNamespaces`) | search view only; searches every namespace and re-runs the current query, header *replaces* the namespace it names with `all namespaces` — a header carries one namespace scope, never two (SEARCH-04b/D150). Independent of the kind widen, so all four scope combinations are reachable; never changes the app's own namespace. `Ctrl+w` because `Ctrl+a` is spent and `Ctrl+n` is `ns.switch`: it reads as cluster-**w**ide. Off again on every fresh open |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
-| Resource palette | `:` (`resources.switch`) | |
+| Command palette | `:` (`app.palette`) | app-global verb list; type to narrow, `enter` runs the verb through the same dispatch its key uses (PAL-02/D197) |
+| Resource picker | `R` (`resources.switch`) | took `R` when the palette took `:`; also the palette's "Switch resource" verb (D197 pt 3) |
 | Context switcher | `:` ctx (M4) | |
 
 `a D y e d` and `L` don't collide with reserved nav keys (`d`/`D` are not in the

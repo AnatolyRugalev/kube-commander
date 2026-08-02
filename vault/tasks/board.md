@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CTX-WARM-01 drained the last 2026-08-01 feedback item into the four-slice CTX-WARM line, resolved its clash with the switch teardown in D196 and instrumented the switch; the feedback inbox is empty. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-02 landed the command palette on `:` (verbs from the action registry, dispatched like a key press, D197) and moved the resource picker to `R`. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-02** The palette shell: `:` opens a verb list
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -275,7 +274,9 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       is that surface; check what it lists today before building anything. Overlaps the
       command-palette feedback (`2026-08-01-command-palette-unification`), which wants the
       same picker to become `:resource` in a general palette, so **sequence this after the
-      palette shell lands** or the two will fight over the same surface.
+      palette shell lands** or the two will fight over the same surface — the shell landed
+      in PAL-02 (the picker is now the palette's "Switch resource" verb, and `R`), so this
+      is unblocked.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
@@ -293,15 +294,7 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 
 - [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
       — done 2026-08-01 (D194)
-- [ ] **PAL-02** The palette shell: `:` opens a verb list
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
-      notes: `:` stops opening the resource picker directly and opens the palette: a picker
-      whose items are **verbs** (the registered app-global actions, by their `Describe()`
-      text), fuzzy-ranked by PAL-01's matcher, `enter` running the chosen one through the
-      same action dispatch a key does (D11 — the palette resolves to an Action, it does not
-      call handlers). Verbs that need an argument (`:namespace`, `:resource`) open their
-      existing picker for now; PAL-03 folds that into one surface. `:resource` must stay
-      reachable in this slice or the slice regresses the binary (D68).
+- [x] **PAL-02** The palette shell: `:` opens a verb list — done 2026-08-02 (D197)
 - [ ] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface
       status: todo | owner: — | added: 2026-08-01
       notes: The palette line becomes `<verb> <argument>`: completing a verb and typing a
@@ -486,6 +479,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-02** `:` opens the command palette — one picker over the app's verbs, labelled by the action registry's own `Describe()` text and ranked by PAL-01's matcher, whose pick runs through the same `handleAction` a key press reaches (no palette-specific handler, so a verb and its key cannot diverge); `resources.switch` handed `:` over and took `R`, keeping a direct key because an unbound action vanishes from `?` and the generated doc — done 2026-08-02 (D197)
 
 - [x] **CTX-WARM-01** Resolved the "keep the previous cluster warm" feedback against M4-04a's teardown in D196 — the shell's teardown never weakens, any retention lives connector-side, caps at the previous context, and is gated on measurement — triaged it into the four-slice CTX-WARM line, and landed the measurement: a completed context switch now logs `connect`/`discovery`/`total` to the diagnostic log, with the open dogfood extended to ask for the numbers — feedback `2026-08-01-context-switch-keep-state` — done 2026-08-02 (D196)
 

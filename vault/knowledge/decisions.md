@@ -5279,3 +5279,36 @@ inherit one shape instead of each negotiating with the teardown.
    that would catch a leak, and running them against an already-changed teardown measures
    two moving parts (the submitter's own instruction). CTX-WARM-01 is deliberately outside
    that gate: it only observes.
+
+## D197 — The command palette is a picker over the action registry, and every registered action keeps a key of its own (2026-08-02, PAL-02)
+
+PAL-02 landed the palette shell: `:` opens a list of the app's verbs, you type to narrow
+it, and the pick runs the verb. Two things about it are constraints rather than
+implementation, because the three remaining PAL slices all build on this surface.
+
+1. **The palette resolves to an `Action` and dispatches it through the same entry point a
+   key press reaches.** `handleCommandSelected` ends in `handleAction`; it never calls
+   `openNamespacePicker` (or any other handler) directly. This is D11 applied to a second
+   input device: the palette is a *way in*, not a second implementation, so a verb and its
+   key cannot diverge — including when a handler grows a precondition. For the same reason
+   the palette's item list is the registry's own `Describe()` text, never a hand-written
+   label: a palette entry that could describe itself differently from `?` and
+   `docs/keybindings.md` would be a third source of truth about what kubecom does.
+2. **A verb is offered in the palette exactly when its key exists, and is inert exactly
+   when its key is inert.** `:` with no cluster still lists "Switch namespace", and picking
+   it does what `ctrl+n` does — nothing. The palette does not compute availability, because
+   for an app-global verb "available" is a property of the whole app that the reader can
+   already see, and a list that reshuffles between openings is harder to type into than one
+   that does not. PAL-04 is the deliberate exception and the only one: row-scoped verbs are
+   filtered by what applies to the *selected object*, from the actions menu's own per-row
+   source (never a second list that can drift from it).
+3. **`:` is `app.palette`; `resources.switch` moved to `R` rather than becoming
+   palette-only.** This supersedes D194 pt 4's assumption that PAL-02 would "widen what `:`
+   opens rather than moving any key" — it turned out `:` cannot be both without the palette
+   being a special case of the resource picker. Every registered action keeps **at least
+   one default binding** (`TestDefaultKeymapValid`): an unbound action renders as an em dash
+   in the generated doc and is dropped from the `?` overlay entirely (`FullHelp` skips
+   disabled bindings), so "reachable only through the palette" would quietly delete the
+   resource switch from both places a user looks. The rest of D194 pt 4 stands: `ctrl+n`,
+   `C`, `T` and `a` are unchanged, and PAL-05 remains the only slice allowed to re-express
+   a shortcut key.

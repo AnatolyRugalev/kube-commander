@@ -46,8 +46,18 @@ const (
 	ActionSearchPrev   Action = "app.searchPrev"
 	ActionHelp         Action = "app.help"
 	ActionQuit         Action = "app.quit"
-	ActionNamespace    Action = "ns.switch"
-	ActionResources    Action = "resources.switch"
+	// ActionPalette opens the command palette (PAL-02): one modal list of the
+	// app-global *verbs*, fuzzy-ranked like every other picker (D194 pt 1), whose
+	// pick runs the chosen verb through the same action dispatch a key press takes.
+	// It is the one gesture that needs no keymap knowledge — you type what you want
+	// to do — and it takes `:`, the key resources.switch held until this slice, since
+	// the resource switch is now one verb inside it rather than the only thing `:`
+	// could do. It is app-global and never inert: the verbs it lists are registered
+	// actions, so it opens with no cluster (the verbs that need one stay inert
+	// exactly as their keys are).
+	ActionPalette   Action = "app.palette"
+	ActionNamespace Action = "ns.switch"
+	ActionResources Action = "resources.switch"
 	// ActionContext opens the kubeconfig context switcher (M4-04b): a modal picker
 	// over the contexts the kubeconfig declares, whose pick tears the current
 	// cluster down and reconnects to the chosen one (M4-04a). It is app-global like
@@ -235,8 +245,9 @@ var actionMeta = []struct {
 	{ActionSearchPrev, "Previous match"},
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
+	{ActionPalette, "Command palette"},
 	{ActionNamespace, "Switch namespace"},
-	{ActionResources, "Switch resource (command palette)"},
+	{ActionResources, "Switch resource"},
 	{ActionContext, "Switch cluster context"},
 	{ActionTheme, "Switch color theme"},
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
@@ -316,7 +327,17 @@ var defaultBindings = map[Action][]string{
 	ActionHelp:         {"?"},
 	ActionQuit:         {"q", "ctrl+c"},
 	ActionNamespace:    {"ctrl+n"},
-	ActionResources:    {":"},
+	// `:` is the palette's key (D194 pt 2), not the resource picker's: the palette is
+	// the surface that answers "what do I want to do", and the resource switch is one
+	// verb inside it. So resources.switch hands `:` over and takes `R` — the mnemonic
+	// **R**esource, free in the browse context, not a reserved nav chord (D10), and it
+	// joins the capital-letter app-global family (`C` context, `T` theme, `M` mouse,
+	// `F` forwards, `P` pods). Lowercase `r` is secret.reveal. It keeps a direct key
+	// rather than becoming palette-only because every registered action has one
+	// (TestDefaultKeymapValid) and because PAL-05, not this slice, is where the
+	// shortcut keys are reconsidered (D194 pt 4).
+	ActionPalette:   {":"},
+	ActionResources: {"R"},
 	// The context switcher does *not* join the ctrl+<letter> family its sibling
 	// ns.switch belongs to, and the difference is not cosmetic: that family exists
 	// for gestures that must survive an always-open text field (search.cluster and

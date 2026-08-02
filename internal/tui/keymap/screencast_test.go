@@ -108,8 +108,14 @@ func TestScreencastTapeMatchesTheKeymap(t *testing.T) {
 // launch-and-quit clip: the README sells browsing, filtering, logs and describe,
 // so the tape must actually press those (the tour M5-09 specifies). Adding to the
 // tour is free; silently dropping one of these is not.
+//
+// The browse step is app.palette rather than resources.switch since PAL-02: the
+// tour still opens Pods by name, but it does so the way the README now describes
+// it — `:` then the verb — so the *key* the tape presses is the palette's. The
+// resource switch it runs is a pick inside that palette, which no keypress
+// annotation can name (the Enter that runs it is nav.drillIn).
 func TestScreencastTapeShowsTheHeadlineActions(t *testing.T) {
-	want := []Action{ActionResources, ActionFilter, ActionDrillIn, ActionLogs, ActionDescribe, ActionQuit}
+	want := []Action{ActionPalette, ActionFilter, ActionDrillIn, ActionLogs, ActionDescribe, ActionQuit}
 
 	pressed := map[string]bool{}
 	for _, k := range readTape(t) {

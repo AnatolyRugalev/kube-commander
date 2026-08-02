@@ -1007,8 +1007,14 @@ func TestNamespacePickerCancels(t *testing.T) {
 	}
 }
 
-// colon is the default resources.switch (command palette) key.
-var colon = tea.Key{Code: ':', Text: ":"}
+// colon is the default app.palette key; capitalR is the default resources.switch
+// key. They were the same key until PAL-02 handed `:` to the command palette and
+// moved the resource picker to `R` — so a test that wants the resource picker
+// presses `R`, and a test that wants the palette presses `:`.
+var (
+	colon    = tea.Key{Code: ':', Text: ":"}
+	capitalR = tea.Key{Code: 'R', Text: "R"}
+)
 
 // availableResourceCount is how many menu rows the resource command palette should
 // list: the available resource rows (the namespace seam and any unavailable row are
@@ -1024,13 +1030,13 @@ func availableResourceCount(m Model) int {
 	return n
 }
 
-// TestResourcePaletteOpensAndSeeds proves `:` (resources.switch) opens the resource
+// TestResourcePaletteOpensAndSeeds proves `R` (resources.switch) opens the resource
 // command palette seeded with the menu's available resource kinds — the pane-free
 // resource switch of FB-nav-resource-palette (D96 slice 2). It needs a watcher (the
 // palette only makes sense when a resource can be watched).
 func TestResourcePaletteOpensAndSeeds(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
-	m, cmd := press(t, m, colon)
+	m, cmd := press(t, m, capitalR)
 	if !m.resPicker.Active() {
 		t.Fatal("resources.switch should open the resource palette")
 	}
@@ -1046,10 +1052,10 @@ func TestResourcePaletteOpensAndSeeds(t *testing.T) {
 }
 
 // TestResourcePaletteInertWithoutWatcher proves a model with no watcher is
-// switch-inert: `:` opens nothing (there is no live table to switch).
+// switch-inert: `R` opens nothing (there is no live table to switch).
 func TestResourcePaletteInertWithoutWatcher(t *testing.T) {
 	m := sized(t) // no WithWatcher
-	m, cmd := press(t, m, colon)
+	m, cmd := press(t, m, capitalR)
 	if m.resPicker.Active() {
 		t.Fatal("resources.switch without a watcher should not open the palette")
 	}
@@ -1076,7 +1082,7 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 	// the palette (PAL-01), so the query starts on the first keystroke; the fuzzy
 	// fallback may add scattered matches below, but the contiguous one ranks first
 	// (D194 pt 1), so the cursor lands on CronJob.
-	m, _ = press(t, m, colon)
+	m, _ = press(t, m, capitalR)
 	if !m.resPicker.Filtering() {
 		t.Fatal("opening the palette should open its filter")
 	}
@@ -1125,7 +1131,7 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 func TestResourcePaletteCancels(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
-	m, _ = press(t, m, colon)
+	m, _ = press(t, m, capitalR)
 	if !m.resPicker.Active() {
 		t.Fatal("resources.switch should open the palette")
 	}

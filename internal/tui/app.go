@@ -561,6 +561,11 @@ type Model struct {
 	resPicker picker.Model
 	actPicker picker.Model
 	ctrPicker picker.Model
+	// cmdPicker is the command palette (PAL-02): a picker over the app's verbs rather
+	// than over cluster data, resolved back to a keymap.Action through cmdByLabel and
+	// dispatched through handleAction. Like the theme picker it is seeded from neither
+	// the cluster nor a file — the verb list is compiled in — so `:` opens it always.
+	cmdPicker picker.Model
 	// ctxPicker offers the kubeconfig's contexts as choices (M4-04b); its selection
 	// is resolved back to a context name through ctxByLabel and handed to
 	// switchContext. Unlike every other picker here it is not seeded from the
@@ -786,6 +791,13 @@ type Model struct {
 	// (D107); only the update loop touches it.
 	actByLabel map[string]rowAction
 
+	// cmdByLabel maps each entry of the command palette (cmdPicker) back to its
+	// keymap.Action, rebuilt each time the palette opens from the curated verb list
+	// (openPalette). The picker is generic over strings (D65), so the palette lists
+	// the actions' registry descriptions and this map resolves the picked one back to
+	// the Action handleAction runs; only the update loop touches it.
+	cmdByLabel map[string]keymap.Action
+
 	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
 	// modal.ConfirmedMsg carries only the modal's Kind (no payload in confirm mode,
 	// D88), so the resource + the row's ObjectRef (its UID guards the snapshot race,
@@ -991,6 +1003,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.resPicker = picker.New(s, "resource")
 	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
+	m.cmdPicker = picker.New(s, commandPickerKind)
 	// The port picker is the one picker that does not filter as you type (D194 pt 3):
 	// its own `p` (local-port prompt) and `0` (let the OS pick) gestures carry text,
 	// and an always-open query field swallows every text-carrying key (D140 pt 1), so
@@ -1005,6 +1018,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.logsView = logsview.New(s)
 	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
+	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
 	m.ctxPicker.SetTitle("Switch context")
@@ -1194,6 +1208,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleResourceSelected(msg)
 		case actionPickerKind:
 			return m.handleActionSelected(msg)
+		case commandPickerKind:
+			return m.handleCommandSelected(msg)
 		case containerPickerKind:
 			return m.handleContainerSelected(msg)
 		case portPickerKind:
@@ -1212,6 +1228,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resPicker.Hide()
 		case actionPickerKind:
 			m.actPicker.Hide()
+		case commandPickerKind:
+			m.cmdPicker.Hide()
+			m.cmdByLabel = nil
 		case containerPickerKind:
 			m.ctrPicker.Hide()
 			m.ctrByLabel = nil
@@ -1654,6 +1673,13 @@ func (m *Model) resetCluster() {
 	m.actPicker.Hide()
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
+	// The command palette lists verbs, not cluster data, so a switch does not make its
+	// rows wrong — but a verb picked *after* the switch would act on the new cluster
+	// while the reader opened the list against the old one, so it closes with the rest
+	// (the theme picker is the deliberate exception: nothing it offers is per-cluster
+	// in either direction).
+	m.cmdPicker.Hide()
+	m.cmdByLabel = nil
 	// The context picker holds kubeconfig data, not the departing cluster's, so it
 	// is dismissed for a different reason than the rest: its rows mark the context
 	// the shell is on, and a switch is exactly what makes that marker wrong. (In
@@ -1839,6 +1865,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.actPicker
 	case m.ctrPicker.Active():
 		return &m.ctrPicker
+	case m.cmdPicker.Active():
+		return &m.cmdPicker
 	case m.portPicker.Active():
 		return &m.portPicker
 	case m.ctxPicker.Active():
@@ -1858,8 +1886,9 @@ func (m *Model) activePicker() *picker.Model {
 const resourcePickerKind = "resource"
 
 // openResourcePicker opens the resource command palette (FB-nav-resource-palette,
-// D96's k9s `:`-style switch): a modal list of the browsable resource kinds, filtered
-// with `/` and confirmed with Enter to switch the table to that kind — a pane-free way
+// D96's k9s `:`-style switch, on `R` since the palette took `:` in PAL-02): a modal
+// list of the browsable resource kinds, ranked as you type (PAL-01) and confirmed
+// with Enter to switch the table to that kind — a pane-free way
 // to change the browsed resource that does not need the left menu shown (it is what
 // makes the toggled-off menu of D99 fully usable). The source list is the menu's own
 // current item set (so discovered CRDs and per-context extras are included), filtered
@@ -3646,7 +3675,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.themePicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.themePicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3817,6 +3846,7 @@ func (m *Model) resize() {
 	m.resPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
+	m.cmdPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
 	m.ctxPicker.SetSize(m.width, bodyH)
 	m.themePicker.SetSize(m.width, bodyH)
@@ -3970,6 +4000,10 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openThemePicker()
 	case keymap.ActionResources:
 		return m.openResourcePicker()
+	case keymap.ActionPalette:
+		// `:` opens the palette (PAL-02). Reached from a key only: the palette skips
+		// itself when it builds its list, so this can never be a pick recursing.
+		return m.openPalette()
 	case keymap.ActionForwards:
 		return m.openForwardsPanel()
 	case keymap.ActionFilter:
@@ -4179,6 +4213,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	case m.ctrPicker.Active():
 		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
+	case m.cmdPicker.Active():
+		body = overlayCenter(body, m.cmdPicker.View(), m.width, m.bodyHeight())
 	case m.portPicker.Active():
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
 	case m.ctxPicker.Active():

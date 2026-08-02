@@ -58,15 +58,19 @@ Enter
 Sleep 5s
 
 # ------------------------------------------------------- browse: open Pods ---
-# `:` is the resource palette — the pane-free way to switch what the table
-# browses. `/` filters the palette, Enter opens the highlighted kind.
-# kubecom-action: resources.switch
+# `:` is the command palette — one place you type what you want to do. Both lists
+# rank as you type (no `/` first, PAL-01), so the tour types the verb, Enters to
+# run it, then types the kind: `:` → "resource" → Pods.
+# kubecom-action: app.palette
 Type ":"
 Sleep 1500ms
-# kubecom-action: app.filter
-Type "/"
-Sleep 500ms
-# kubecom-input: narrow the resource palette to Pods
+# kubecom-input: narrow the palette to the resource switch
+Type "resource"
+Sleep 1200ms
+# kubecom-action: nav.drillIn
+Enter
+Sleep 1s
+# kubecom-input: narrow the resource picker to Pods
 Type "pods"
 Sleep 1500ms
 # kubecom-action: nav.drillIn

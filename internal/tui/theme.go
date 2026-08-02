@@ -50,6 +50,7 @@ func (m *Model) applyStyles(s styles.Styles) {
 	m.resPicker.SetStyles(s)
 	m.actPicker.SetStyles(s)
 	m.ctrPicker.SetStyles(s)
+	m.cmdPicker.SetStyles(s)
 	m.portPicker.SetStyles(s)
 	m.ctxPicker.SetStyles(s)
 	// Including the theme picker itself: the pick that triggers this restyle happens

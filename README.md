@@ -184,15 +184,25 @@ table then takes the full width — and press it again to bring the menu back. W
 the menu is hidden, focus lives on the table; re-show it to pick a different
 resource.
 
-Press `:` (`resources.switch`, rebindable) to open the resource command palette — a
-pop-up list of every browsable resource kind. Just type to narrow it and press Enter
-to switch the table to that kind. This is the pane-free way to change the browsed
-resource, so you can work with the left menu hidden.
+Press `:` (`app.palette`, rebindable) to open the **command palette** — one place to
+type what you want to do. It lists kubecom's app-wide verbs (switch resource, switch
+namespace, switch context, search the cluster, toggle the menu or the port-forward
+panel, change theme, quit…); type to narrow the list and press Enter to run the
+highlighted one. Each verb does exactly what its key does, so the palette is a way in
+rather than a second set of behaviour — and you never have to remember a key to reach
+any of them.
 
-**Every pop-up picker filters as you type** — the resource palette, the namespace
-switcher (`Ctrl+n`), the context switcher (`C`), the theme switcher (`T`), the actions
-menu (`a`) and the container picker. There is no filter key to press first: the
-matching is the same one cluster search uses, so a typo-free abbreviation finds its
+Press `R` (`resources.switch`, rebindable) to jump straight to the resource picker —
+a pop-up list of every browsable resource kind, also reachable as the palette's
+"Switch resource" verb. Just type to narrow it and press Enter to switch the table to
+that kind. This is the pane-free way to change the browsed resource, so you can work
+with the left menu hidden.
+
+**Every pop-up picker filters as you type** — the command palette, the resource
+picker, the namespace switcher (`Ctrl+n`), the context switcher (`C`), the theme
+switcher (`T`), the actions menu (`a`) and the container picker. There is no filter
+key to press first: the matching is the same one cluster search uses, so a
+typo-free abbreviation finds its
 value (`ksys` → `kube-system`) and exact matches always rank above fuzzy ones. `Esc`
 clears the query, a second `Esc` closes the picker, and Enter picks the highlighted
 row. Because the picker is always taking text, use the **arrow keys** rather than
