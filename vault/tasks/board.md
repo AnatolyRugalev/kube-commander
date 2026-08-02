@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — PAL-05a landed the shortcut-to-palette mechanism o
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -330,7 +331,7 @@ what changes is which surface they open, never whether they act.
 - [x] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
       — done 2026-08-02 (D207)
 - [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
-      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
       notes: The other synchronous verb, and the bigger one: `resPicker` carries the alias
       matching (D203) and has its own test file (`respicker_test.go`, 194 lines). Those tests
       do **not** get deleted with the picker — the behaviour they pin survives in the
