@@ -990,6 +990,125 @@ func TestDiscoveredTwinDoesNotDuplicateExtra(t *testing.T) {
 	}
 }
 
+// TestAddPinnedMarksTheRowsItInserts is CRD-PIN-03's foundation: a pin merges like
+// any other extra, but the row it *inserts* is marked so Unpin can tell it apart
+// from a row that would have been there anyway.
+func TestAddPinnedMarksTheRowsItInserts(t *testing.T) {
+	m := newTestModel()
+	seedLen := len(m.items)
+
+	m.AddPinned([]config.MenuResource{
+		{Version: "v1", Resource: "widgets", Kind: "Widget"}, // new: the pin is the reason
+		{Version: "v1", Resource: "pods", Kind: "Pod"},       // a seed row: nothing to insert
+	})
+
+	if len(m.items) != seedLen+1 {
+		t.Fatalf("item count = %d, want %d (one net add)", len(m.items), seedLen+1)
+	}
+	if i := findItem(m, "widgets"); i < 0 || !m.items[i].Pinned {
+		t.Errorf("the inserted row should be marked pinned: %+v", m.items[findItem(m, "widgets")])
+	}
+	if i := findItem(m, "pods"); i < 0 || m.items[i].Pinned {
+		t.Error("a pin over a seed row marks nothing — the seed row is not the pin's to remove")
+	}
+}
+
+// TestAddPinnedYieldsToAnAuthoredEntry is D193 pt 3 where it now lives: the authored
+// list goes in first and a pin naming the same GVR is skipped, so the hand-written
+// title and section render — and, being unmarked, that row is not unpinnable.
+func TestAddPinnedYieldsToAnAuthoredEntry(t *testing.T) {
+	m := newTestModel()
+	m.AddExtras([]config.MenuResource{
+		{Version: "v1", Resource: "widgets", Kind: "Widget", Title: "Authored", Section: "Workloads"},
+	})
+	m.AddPinned([]config.MenuResource{
+		{Version: "v1", Resource: "widgets", Kind: "Widget", Title: "Pinned"},
+	})
+
+	rows := 0
+	for _, it := range m.items {
+		if it.Resource.GVR.Resource == "widgets" {
+			rows++
+			if it.Title != "Authored" || it.Section != "Workloads" || it.Pinned {
+				t.Errorf("row = %+v, want the unmarked authored entry", it)
+			}
+		}
+	}
+	if rows != 1 {
+		t.Fatalf("widgets rows = %d, want 1", rows)
+	}
+}
+
+// TestUnpinRemovesAPinOnlyRow: with nothing else listing the kind, the pin was the
+// row's only reason to exist, so it goes — and the cursor stays on a real row rather
+// than off the end.
+func TestUnpinRemovesAPinOnlyRow(t *testing.T) {
+	m := newTestModel()
+	seedLen := len(m.items)
+	m.AddPinned([]config.MenuResource{{Version: "v1", Resource: "widgets", Kind: "Widget"}})
+	i := findItem(m, "widgets")
+	if i < 0 {
+		t.Fatal("the pinned row should be in the menu")
+	}
+	m.SelectItem(i)
+
+	if !m.Unpin(schema.GroupVersionResource{Version: "v1", Resource: "widgets"}) {
+		t.Fatal("Unpin should report it removed the row")
+	}
+	if findItem(m, "widgets") >= 0 || len(m.items) != seedLen {
+		t.Fatalf("item count = %d, want the seed back (%d)", len(m.items), seedLen)
+	}
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		t.Fatalf("cursor = %d, out of range after the removal", m.cursor)
+	}
+}
+
+// TestUnpinKeepsARowDiscoveryLists is the revert-to-a-discovered-row rule at the
+// component level: Reconcile marked the row discovered, so the unpin takes the
+// marker and leaves the row — and a second Unpin has nothing left to do.
+func TestUnpinKeepsARowDiscoveryLists(t *testing.T) {
+	m := newTestModel()
+	m.AddPinned([]config.MenuResource{{Version: "v1", Resource: "widgets", Kind: "Widget"}})
+	gvr := schema.GroupVersionResource{Version: "v1", Resource: "widgets"}
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{{
+		GVK: schema.GroupVersionKind{Version: "v1", Kind: "Widget"}, GVR: gvr,
+	}}})
+	before := len(m.items)
+
+	if m.Unpin(gvr) {
+		t.Error("a discovered row is not removed by an unpin")
+	}
+	i := findItem(m, "widgets")
+	if i < 0 || len(m.items) != before {
+		t.Fatalf("the row should still be listed: count %d, want %d", len(m.items), before)
+	}
+	if m.items[i].Pinned {
+		t.Error("the pin marker should be gone even though the row stayed")
+	}
+	if m.Unpin(gvr) {
+		t.Error("a second unpin has nothing to remove")
+	}
+}
+
+// TestUnpinLeavesUnmarkedRowsAlone is the guard that keeps a stray pin from deleting
+// the menu: a seed row, an authored entry or a purely discovered row was never put
+// there by a pin, so no unpin may take it away, whatever the state file said.
+func TestUnpinLeavesUnmarkedRowsAlone(t *testing.T) {
+	m := newTestModel()
+	m.AddExtras([]config.MenuResource{{Version: "v1", Resource: "widgets", Kind: "Widget"}})
+	before := len(m.items)
+
+	if m.Unpin(schema.GroupVersionResource{Version: "v1", Resource: "pods"}) {
+		t.Error("a seed row must not be removable by an unpin")
+	}
+	if m.Unpin(schema.GroupVersionResource{Version: "v1", Resource: "widgets"}) {
+		t.Error("an authored entry must not be removable by an unpin")
+	}
+	if len(m.items) != before || findItem(m, "pods") < 0 || findItem(m, "widgets") < 0 {
+		t.Fatalf("item count = %d, want %d — no row should have gone", len(m.items), before)
+	}
+}
+
 func TestAddExtrasEmptyIsNoOp(t *testing.T) {
 	m := newTestModel()
 	before := len(m.items)

@@ -80,6 +80,15 @@ const (
 // drill-in appears only in the menu context (opening the selected resource);
 // namespace, help and quit are always-relevant and shown in both browse contexts.
 //
+// The pin toggle (CRD-PIN-03) is hinted in the menu context only, directly after
+// drill-in — the menu is the surface it changes, and it is the one place a reader
+// can see what the key did. It earns the line by the D143 pt 1 test the logs display
+// toggles fail: nothing announces it. A menu row does not say it is pinned, and a
+// reader on a CRD-heavy cluster has no way to learn that the kind under the cursor
+// can be kept except by finding `*` in `?`. It is *not* added to the table context,
+// which already carries ten entries and elides first — the gesture works there, and
+// the hint is one focus-switch away.
+//
 // The search context is deliberately the short one. Its query field is always open
 // (D140 pt 1), so the root routes every text-producing key into it: `/` `n` `s` `a`
 // `?` and `q` all type a character there instead of firing their browse action, and a
@@ -124,7 +133,7 @@ const (
 // generated doc carry it and the hint line stays about the keys a reader needs to be
 // told about.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionNamespace, ActionHelp, ActionQuit},
+	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
 	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CRD-PIN-02 landed the pin gesture: `*` records the kind under the cursor in this context's state file and folds it into the live menu (D201). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CRD-PIN-03 made `*` a toggle: the same key unpins, and only a row a pin put there can go (D202). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -245,18 +244,7 @@ the gesture that removes it, then the discoverability that makes "reach for it o
 - [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
       2026-08-01 (D193)
 - [x] **CRD-PIN-02** `*` pins the kind under the cursor for this context — done 2026-08-02 (D201)
-- [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
-      status: todo | owner: — | added: 2026-08-01
-      notes: The removal half the feedback insists must be as easy as the adding ("a key on
-      the menu row, not a config-file edit"). Only a **pinned** row can be unpinned — a seed
-      row or a discovered row is not the user's to remove — so the menu Item needs to carry
-      where it came from, which is the one new piece of state this slice adds. Unpinning
-      removes the row unless discovery also lists the kind, in which case it reverts to a
-      plain discovered row rather than vanishing. Hint-bar text so the key is discoverable.
-      The gesture is already `menu.pin` on `*` (CRD-PIN-02/D201 pt 3): extend that action
-      and that key — do not add a second id — and the state side (`State.Unpin`, keyed by
-      GVR) has existed since CRD-PIN-01. The README's "unpinning isn't wired yet" paragraph
-      is this slice's to replace.
+- [x] **CRD-PIN-03** `*` on a pinned row unpins it — done 2026-08-02 (D202)
 - [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
       status: todo | owner: — | added: 2026-08-01
       notes: The premise the whole line rests on — "you reach for one *once*" — needs a
@@ -268,7 +256,9 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       in PAL-02 (the picker is now the palette's "Switch resource" verb, and `R`), so this
       is unblocked. Also decide here whether a kind can be pinned *from* the picker:
       CRD-PIN-02 left that surface alone because every picker filters as you type (D194), so
-      `*` types a `*` there — it needs a no-text chord or a palette verb, not a letter.
+      `*` types a `*` there — it needs a no-text chord or a palette verb, not a letter. With
+      CRD-PIN-03 landed the gesture is a toggle, so whatever surface answers this offers
+      both directions or neither (D202 pt 3). This is the last slice of the line.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs

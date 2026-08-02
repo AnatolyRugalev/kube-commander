@@ -466,6 +466,20 @@ func WithMenuExtras(extras []config.MenuResource) Option {
 	return func(m *Model) { m.menuExtras = extras }
 }
 
+// WithPinnedResources folds the kinds pinned for this context (State.PinnedResources,
+// D193) into the menu beside the authored entries — the same merge, one call later
+// (menu.AddPinned), which is what keeps the hand-written entry in front of a pin
+// naming the same GVR (D193 pt 3) without either list having to be pre-merged.
+//
+// The two lists arrive **separately** rather than merged because `*` toggles (D202):
+// only a pinned row may be unpinned, so the shell has to be able to tell a pin from
+// a hand-written entry at keypress time, and a merged list cannot say. Empty/nil
+// pins nothing; the launcher reads them from the context's state file and writes
+// them back through WithPinPersister.
+func WithPinnedResources(pins []config.MenuResource) Option {
+	return func(m *Model) { m.menuPinned = pins }
+}
+
 // WithLogger points the shell's diagnostic log at l — the file logger the launcher
 // set up (`~/.cache/kubecom/kubecom.log`), which is the only place a diagnostic can
 // go while the TUI owns the terminal. It records what the user only ever sees as a
@@ -646,6 +660,13 @@ type Model struct {
 	// per-context menu file that degraded to the default menu, kept visible rather
 	// than swallowed. Both nil by default (the plain default menu, no toast).
 	menuExtras []config.MenuResource
+	// menuPinned are the kinds pinned for the current context (WithPinnedResources →
+	// menu.AddPinned, folded in right after menuExtras). It is kept apart from
+	// menuExtras rather than merged into it because it is the *removable* half: `*`
+	// unpins a kind in this list and declines on one that is only in menuExtras
+	// (D202). Rebound on a context switch beside the pin persister, so the list and
+	// the file it is written back to always name the same context.
+	menuPinned []config.MenuResource
 	startupErr *ErrorMsg
 
 	// logger is the shell's diagnostic sink (WithLogger). It is never the user's
@@ -1039,6 +1060,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.ctxPicker.SetTitle("Switch context")
 	m.themePicker.SetTitle("Switch theme")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
+	m.menu.AddPinned(m.menuPinned) // then this context's pins, behind them (D193 pt 3 / D202)
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
 	m.syncHints()                      // menu starts focused → menu-context hints
@@ -1748,6 +1770,7 @@ func (m *Model) resetCluster() {
 	// context's, installed by the switch before this call (M4-05/D163).
 	m.menu = menu.New(m.styles)
 	m.menu.AddExtras(m.menuExtras)
+	m.menu.AddPinned(m.menuPinned) // the new context's pins, in the same order as construction
 	m.menu.SetNamespace("")
 	m.menu.Focus()
 	m.table = table.New(m.styles)

@@ -122,12 +122,27 @@ const (
 // under a header (D77); items sharing a section must be contiguous in the slice.
 // Kind marks a non-resource special row (ItemNamespace, the picker seam) — such a
 // row has no Resource/Section and is skipped by discovery Reconcile.
+//
+// Pinned and Discovered are the row's **provenance** (CRD-PIN-03): between them
+// they answer the one question Unpin has to ask — if the pin behind this row goes
+// away, is there any other reason for the row to exist? Neither is a display flag;
+// nothing renders differently because of them.
 type Item struct {
 	Resource  kube.Resource
 	Title     string
 	Section   string
 	Available bool
 	Kind      ItemKind
+	// Pinned marks a row that is listed *because* a pin says so: AddPinned inserted
+	// it. A pin that merely duplicates a row already present (a seed row, an authored
+	// extra, a kind discovery found) inserts nothing and marks nothing, so this flag
+	// means "the pin is the reason", not "a pin exists" — which is exactly what makes
+	// it safe for Unpin to delete the row it is set on.
+	Pinned bool
+	// Discovered marks a kind the discovery pass lists: either a row Reconcile
+	// matched to a discovered twin, or one it appended. A pinned row that is also
+	// discovered survives its unpin as a plain discovered row (CRD-PIN-03).
+	Discovered bool
 }
 
 // ResourceSelectedMsg is emitted when the user drills into the highlighted menu
@@ -283,7 +298,23 @@ func (m *Model) SelectItem(i int) { m.moveTo(i) }
 // appending a duplicate. The current selection is preserved by resolving it back to
 // its post-insert index, mirroring Reconcile. This is the component-level merge
 // (FB-menu-config-02); wiring the per-context file into the app is a later slice.
-func (m *Model) AddExtras(extras []config.MenuResource) {
+func (m *Model) AddExtras(extras []config.MenuResource) { m.addExtras(extras, false) }
+
+// AddPinned merges the kinds pinned for this context (State.PinnedResources, D193)
+// exactly as AddExtras merges the authored ones — same insertion, same GVR dedupe —
+// and marks the rows it *inserts* as Pinned so Unpin can tell which rows exist only
+// because of a pin (CRD-PIN-03).
+//
+// Call it after AddExtras, which is what gives the authored file precedence (D193
+// pt 3) without a merge step upstream: a pin naming a GVR the authored list already
+// placed is skipped here, so the authored row keeps its title and section — and,
+// being unmarked, is not something `*` may remove. The same dedupe makes a pin on a
+// seed row inert: the seed row stays, unmarked, and outlives the pin.
+func (m *Model) AddPinned(pins []config.MenuResource) { m.addExtras(pins, true) }
+
+// addExtras is the shared merge behind AddExtras/AddPinned; pinned tags the rows it
+// inserts (and only those) as Pinned.
+func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 	if len(extras) == 0 {
 		return
 	}
@@ -312,6 +343,7 @@ func (m *Model) AddExtras(extras []config.MenuResource) {
 		if seen[it.Resource.GVR] {
 			continue
 		}
+		it.Pinned = pinned
 		seen[it.Resource.GVR] = true
 		m.items = insertExtra(m.items, it)
 	}
@@ -384,6 +416,49 @@ func insertExtra(items []Item, it Item) []Item {
 	return out
 }
 
+// Unpin drops the pin behind the row for gvr and reports whether the row went with
+// it (CRD-PIN-03). It is the inverse of AddPinned and it is deliberately narrow:
+//
+//   - a row inserted by a pin that discovery does **not** list is removed — the pin
+//     was the only reason it was there;
+//   - a row inserted by a pin that discovery *does* list keeps its place and merely
+//     loses the marker: unpinning means "stop keeping this for me", not "hide a kind
+//     this cluster has" (the board's revert-to-a-discovered-row rule);
+//   - a row no pin inserted — a seed row, an authored entry (D193 pt 3), a purely
+//     discovered row — is left entirely alone, whatever the state file says. A pin
+//     recorded over such a row never rendered anything, so removing it must not
+//     remove a row either.
+//
+// The cursor follows the same rule the rest of the menu does — it keeps pointing at
+// a row, never at a gap: it steps back one when the removal happened at or before
+// it, and moveTo re-clamps and re-scrolls. The active marker is keyed by GVR
+// (SetActive), so a row removed while its table is open simply stops matching; the
+// table and its watch are the root model's business and are untouched here.
+func (m *Model) Unpin(gvr schema.GroupVersionResource) bool {
+	idx := -1
+	for i := range m.items {
+		if m.items[i].Kind == ItemResource && m.items[i].Pinned && m.items[i].Resource.GVR == gvr {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	if m.items[idx].Discovered {
+		m.items[idx].Pinned = false
+		return false
+	}
+	m.items = append(m.items[:idx], m.items[idx+1:]...)
+	cursor := m.cursor
+	if cursor >= idx {
+		cursor--
+	}
+	m.moveTo(cursor)
+	m.clampOffset()
+	return true
+}
+
 // Reconcile merges an async discovery result into the seed menu without
 // disturbing the current selection or scroll — the M2 risk item (D57). It:
 //
@@ -441,9 +516,13 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 		gvr := m.items[i].Resource.GVR
 		seen[gvr] = true
 		if d, ok := twin[gvr]; ok {
-			// A loaded twin: fill the discovery metadata and confirm availability.
+			// A loaded twin: fill the discovery metadata and confirm availability. The
+			// row is now backed by the cluster's own list, which is what lets an unpin
+			// leave it standing (CRD-PIN-03) — a pinned row that turns out to be
+			// discovered too is no longer held up by its pin alone.
 			m.items[i].Resource = d
 			m.items[i].Available = true
+			m.items[i].Discovered = true
 		} else if failedGroups[gvr.Group] {
 			m.items[i].Available = false
 		}
@@ -457,10 +536,11 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 			continue
 		}
 		m.items = append(m.items, Item{
-			Resource:  r,
-			Title:     r.GVK.Kind,
-			Section:   sectionCustom,
-			Available: true,
+			Resource:   r,
+			Title:      r.GVK.Kind,
+			Section:    sectionCustom,
+			Available:  true,
+			Discovered: true,
 		})
 	}
 

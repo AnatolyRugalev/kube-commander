@@ -190,18 +190,19 @@ const (
 	// "no y/n" part of D88/D115.
 	ActionConfirmAccept  Action = "confirm.accept"
 	ActionConfirmDecline Action = "confirm.decline"
-	// ActionPin records the kind you are pointing at as a **pinned** kind for the
-	// current kubeconfig context (CRD-PIN-02): it joins that context's menu from now
-	// on, whether or not discovery lists it, which is what makes a CRD you reached
-	// for once reachable again without hunting for it. It reads the kind from the
-	// surface that has one — the highlighted menu row, or the kind the table is
-	// browsing — and is inert where neither names a kind, or with no pin persister
-	// wired. It is a *toggle* in name because CRD-PIN-03 adds the unpin half to this
-	// same action and this same key: renaming a user-bindable action id later would
-	// break every keymap that had bound it. It is `menu.pin` rather than a `pin.*`
-	// id of its own because what it changes is the menu, and because the `?` overlay
-	// renders one column per action namespace — a namespace holding a single action
-	// costs a column on a surface that already has sixteen (D201).
+	// ActionPin toggles the kind you are pointing at as a **pinned** kind for the
+	// current kubeconfig context (CRD-PIN-02, CRD-PIN-03): pinned, it joins that
+	// context's menu from now on whether or not discovery lists it, which is what
+	// makes a CRD you reached for once reachable again without hunting for it;
+	// pressed again on that pin, it goes back out — one key, both directions, so the
+	// way to undo it is never a text editor. It reads the kind from the surface that
+	// has one — the highlighted menu row, or the kind the table is browsing — and is
+	// inert where neither names a kind, or with no pin persister wired. Only a kind
+	// *this* gesture pinned toggles off: a hand-written `menus/<context>.yaml` entry
+	// declines with a notice naming the file (D193 pt 3). It is `menu.pin` rather
+	// than a `pin.*` id of its own because what it changes is the menu, and because
+	// the `?` overlay renders one column per action namespace — a namespace holding a
+	// single action costs a column on a surface that already has sixteen (D201).
 	ActionPin Action = "menu.pin"
 )
 
@@ -289,7 +290,7 @@ var actionMeta = []struct {
 	{ActionSearchAllNamespaces, "Toggle searching all namespaces (cluster search)"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
-	{ActionPin, "Pin the selected kind to this context's menu"},
+	{ActionPin, "Pin/unpin the kind for this context"},
 }
 
 var registered = func() map[Action]string {

@@ -56,6 +56,12 @@ type ContextState struct {
 	// MenuExtras are the context's `menus/<context>.yaml` additions (D83), folded
 	// into the rebuilt seed menu exactly as WithMenuExtras folds them in at launch.
 	MenuExtras []config.MenuResource
+	// Pinned are the kinds pinned on this context (State.PinnedResources, D193),
+	// folded into the rebuilt menu behind MenuExtras exactly as WithPinnedResources
+	// folds them in at launch. Separate from MenuExtras because it is the removable
+	// half (D202) — and rebound here for the same reason Pinner is: the list `*`
+	// unpins from must name the same context as the file it is written back to.
+	Pinned []config.MenuResource
 	// Namespace is the scope the context was last left in (D90/D91), or "" for all
 	// namespaces — including when the context has no recorded state.
 	Namespace string
@@ -207,6 +213,7 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 	// loader wired the launch extras stay, which is the pre-M4-05 behaviour.
 	if m.ctxState != nil {
 		m.menuExtras = msg.state.MenuExtras
+		m.menuPinned = msg.state.Pinned // and the new context's pins, folded in behind them
 	}
 	m.resetCluster()
 	m.Cluster = msg.cluster

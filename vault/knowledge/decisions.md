@@ -5432,3 +5432,36 @@ the three choices a later slice must not silently reverse:
    surface — users bind it in `config.yaml` — so it is named for what the *action* will be
    once CRD-PIN-03 lands its unpin half, and that slice extends this id and this key rather
    than renaming either.
+
+## D202 — The pin key is a toggle, and the two menu-entry lists reach the shell unmerged (2026-08-02, CRD-PIN-03)
+
+D193 decided where a pin is stored, D201 the gesture that writes one. This is the
+gesture that takes one back out, and what had to change for it to be possible:
+
+1. **The authored list and the pinned list reach the shell separately.** They were
+   merged in the launcher into one `menuExtras` (D193 pt 2, `mergeMenuExtras`) and this
+   supersedes that: a merged list cannot say *which* entries the user may remove with a
+   key, and only a pin is removable. So `WithMenuExtras` / `ContextState.MenuExtras` carry
+   the hand-authored entries and `WithPinnedResources` / `ContextState.Pinned` the pins,
+   both rebound on a context switch. The precedence D193 pt 3 fixed is unchanged, and now
+   has exactly one implementation: `menu.AddExtras` first, `menu.AddPinned` second, the
+   GVR dedupe already there doing the work. Any third source of menu rows arrives as its
+   own list too, not folded into either of these.
+2. **A row may be removed only if the pin is the reason it exists.** `menu.Item` carries
+   provenance (`Pinned`, set when `AddPinned` *inserts* a row; `Discovered`, set by
+   `Reconcile`) and `Unpin` removes a row only when it is pinned and not discovered. A pin
+   naming a seed row, an authored entry or a discovered kind inserts nothing and marks
+   nothing, so removing that pin removes no row — a menu that can lose Pods to a stray
+   keypress is worse than one that cannot be pinned at all. Unpinning a kind discovery
+   also lists reverts the row to a plain discovered row: unpinning means "stop keeping
+   this for me", never "hide a kind this cluster has".
+3. **A gesture that writes user state must be reversible from the same surface.** `*`
+   pins and unpins; the reverse of an in-app gesture is never "edit a YAML file" — that
+   is what CRD-PIN-02 shipped and what this slice exists to close. It also fixes the shape
+   for the next such gesture: one action id, one key, both directions, and a decline with
+   a notice where the state is not the app's to change (a hand-written menu entry).
+4. **Provenance is not a display state.** Nothing renders differently because a row is
+   pinned. A marker would have to mean something on a seed row and a discovered row too,
+   and the menu's two visual states (cursor, active) are already the two a reader needs;
+   the status-bar notice is what confirms the gesture. A later slice wanting to *show*
+   pinned-ness decides that on its own evidence rather than inheriting it here.

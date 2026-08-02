@@ -436,18 +436,21 @@ is merged, never listed twice.
 A cluster with a lot of CRDs has more kinds than a menu can usefully list, so the
 ones *you* work with can be pinned: press `*` on a menu row — or on the table while
 you're browsing a kind — and kubecom keeps that kind in this context's menu from then
-on, whether or not discovery lists it. The status bar confirms what was pinned; a
-kind that's already an entry says so and nothing is written twice.
+on, whether or not discovery lists it. The status bar confirms what was pinned.
+
+`*` is a **toggle**: press it again on a kind you pinned and the pin goes away, with
+no file to edit. The row goes with it — unless discovery lists that kind too, in which
+case it stays as an ordinary discovered row, because unpinning means "stop keeping
+this for me", not "hide a kind this cluster has".
 
 Pins are recorded for you, so they live in the kubecom-managed state file
 (`~/.config/kubecom/state/<context>.yaml`, below) rather than in the menu file you
 hand-write — pressing `*` never rewrites `menus/<context>.yaml`. Where both name the
-same resource, your hand-written entry wins and keeps its title and section. A pinned
-kind is otherwise an ordinary menu row, listed under **Custom Resources** unless the
-menu already places it elsewhere.
-
-Unpinning from the UI isn't wired yet — for now, drop the entry from
-`pinnedResources:` in that context's state file.
+same resource, your hand-written entry wins and keeps its title and section; `*` on
+such a row says so and changes nothing, since that entry is yours to edit. Only a kind
+you pinned with `*` can be unpinned with it — seed rows and discovered rows are not
+removable this way. A pinned kind is otherwise an ordinary menu row, listed under
+**Custom Resources** unless the menu already places it elsewhere.
 
 #### Remembered namespace
 

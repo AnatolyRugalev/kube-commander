@@ -11,6 +11,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // pinKey is the menu.pin default binding (`*`), fed as a live keypress so every
@@ -19,15 +20,21 @@ import (
 var pinKey = tea.Key{Code: '*', Text: "*"}
 
 // fakePinPersister is a hermetic PinPersister: it records what it was asked to
-// write and can be made to fail. The real one (cmd/kubecom's statePersister) writes
-// the per-context state file.
+// write, in either direction, and can be made to fail. The real one (cmd/kubecom's
+// statePersister) writes the per-context state file.
 type fakePinPersister struct {
-	got []config.MenuResource
-	err error
+	got     []config.MenuResource // pins written
+	removed []config.MenuResource // pins cleared (CRD-PIN-03)
+	err     error
 }
 
 func (f *fakePinPersister) PersistPin(r config.MenuResource) error {
 	f.got = append(f.got, r)
+	return f.err
+}
+
+func (f *fakePinPersister) PersistUnpin(r config.MenuResource) error {
+	f.removed = append(f.removed, r)
 	return f.err
 }
 
@@ -39,6 +46,15 @@ func crdResource() kube.Resource {
 		GVK:        schema.GroupVersionKind{Group: "external-secrets.io", Version: "v1", Kind: "ExternalSecret"},
 		GVR:        schema.GroupVersionResource{Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets"},
 		Namespaced: true,
+	}
+}
+
+// pinnedCRD is crdResource as the state file records it (config.MenuResource) — the
+// pin a context launches with, fed in through WithPinnedResources.
+func pinnedCRD() config.MenuResource {
+	return config.MenuResource{
+		Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets",
+		Kind: "ExternalSecret", Namespaced: true,
 	}
 }
 
@@ -122,16 +138,17 @@ func TestPinIsRecordedForAKindTheMenuAlreadyShows(t *testing.T) {
 	if len(fp.got) != 1 {
 		t.Fatalf("a discovered kind must still be recorded as a pin, calls = %d", len(fp.got))
 	}
-	// And it joins the extras list, so it survives the menu being rebuilt from the
-	// seed the way a context switch rebuilds it.
+	// And it joins the live pinned list, so it survives the menu being rebuilt from
+	// the seed the way a context switch rebuilds it — and so the next press knows it
+	// is a pin, and unpins rather than re-recording it (CRD-PIN-03).
 	found := false
-	for _, e := range m.menuExtras {
+	for _, e := range m.menuPinned {
 		if e.Resource == "externalsecrets" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("the pin should join the model's menu extras, got %+v", m.menuExtras)
+		t.Errorf("the pin should join the model's pinned list, got %+v", m.menuPinned)
 	}
 }
 
@@ -154,50 +171,218 @@ func TestPinFromTableUsesTheBrowsedKind(t *testing.T) {
 	}
 }
 
-// TestPinTwiceIsANoOpWithANotice: the second press has nothing to add — the kind is
-// already an entry — so it writes nothing and says so, rather than growing a
-// duplicate row or a duplicate line in the state file.
-func TestPinTwiceIsANoOpWithANotice(t *testing.T) {
+// TestPinTwiceUnpinsAndRemovesTheRow is CRD-PIN-03's headline and the behaviour
+// change from CRD-PIN-02, where the second press was a no-op: `*` is a toggle, so
+// the second press takes the pin back out — the line leaves the state file and the
+// row leaves the menu, because with discovery silent the pin was the only reason it
+// was listed. That is the case the whole feature is for (a kind the menu would not
+// otherwise carry), and it is the case an undo must actually undo.
+func TestPinTwiceUnpinsAndRemovesTheRow(t *testing.T) {
 	fp := &fakePinPersister{}
-	m := discoveredModel(t, fp)
+	m := sizedWith(t, WithPinPersister(fp), WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+	if !menuHasResource(m, "externalsecrets") {
+		t.Fatal("a pinned kind should be in the menu at launch")
+	}
 	m = menuAt(t, m, "externalsecrets")
+	before := len(m.menu.Items())
 
 	m, cmd := press(t, m, pinKey)
 	drain(cmd)
+
+	if len(fp.removed) != 1 || fp.removed[0].Resource != "externalsecrets" {
+		t.Fatalf("unpin writes = %+v, want the kind cleared from the state file", fp.removed)
+	}
+	if len(fp.got) != 0 {
+		t.Errorf("unpinning must not also record a pin, got %+v", fp.got)
+	}
+	if menuHasResource(m, "externalsecrets") {
+		t.Error("the row should be gone: nothing but the pin was listing it")
+	}
+	if got := len(m.menu.Items()); got != before-1 {
+		t.Errorf("menu items = %d, want %d", got, before-1)
+	}
+	if !strings.Contains(m.View().Content, "unpinned ExternalSecret") {
+		t.Errorf("the status bar should name what was unpinned:\n%s", m.View().Content)
+	}
+
+	// And the toggle comes back round: a third press pins it again.
+	m, cmd = press(t, m, pinKey)
+	drain(cmd)
+	if len(fp.got) != 1 {
+		t.Errorf("a press after the unpin should pin again, writes = %+v", fp.got)
+	}
+}
+
+// TestUnpinKeepsARowDiscoveryAlsoLists is the board's revert-to-a-discovered-row
+// rule: unpinning means "stop keeping this for me", not "hide a kind this cluster
+// has". So the state file loses the line and the row stays — and it is now an
+// ordinary discovered row, which the next press proves by pinning it afresh.
+func TestUnpinKeepsARowDiscoveryAlsoLists(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := discoveredModel(t, fp, WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+	m = menuAt(t, m, "externalsecrets")
 	before := len(m.menu.Items())
+
+	m, cmd := press(t, m, pinKey)
+	drain(cmd)
+
+	if len(fp.removed) != 1 {
+		t.Fatalf("unpin writes = %+v, want one", fp.removed)
+	}
+	if !menuHasResource(m, "externalsecrets") {
+		t.Error("discovery lists this kind, so the row must survive its unpin")
+	}
+	if got := len(m.menu.Items()); got != before {
+		t.Errorf("menu items = %d, want %d — the row stays, only the pin went", got, before)
+	}
+	if !strings.Contains(m.View().Content, "unpinned ExternalSecret") {
+		t.Errorf("the notice names what the reader did:\n%s", m.View().Content)
+	}
 
 	m, cmd = press(t, m, pinKey)
 	drain(cmd)
-
 	if len(fp.got) != 1 {
-		t.Errorf("pinning an already-pinned kind must not write again, calls = %d", len(fp.got))
+		t.Errorf("the row is unpinned now, so a press should pin it, writes = %+v", fp.got)
 	}
-	if got := len(m.menu.Items()); got != before {
-		t.Errorf("menu items = %d, want %d — no duplicate row", got, before)
+}
+
+// TestUnpinFromTheTableUsesTheBrowsedKind: the toggle reads its target from the same
+// place the pin does, so a reader who drilled into a pinned kind can unpin it from
+// the table without walking back to the menu row.
+func TestUnpinFromTheTableUsesTheBrowsedKind(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := browsingModel(t, &fakeWatcher{}, WithPinPersister(fp),
+		WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+	m = menuAt(t, m, "externalsecrets")
+	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: crdResource()})
+	m = next.(Model)
+	if !m.table.Focused() {
+		t.Fatal("drilling in should focus the table")
 	}
-	if !strings.Contains(m.View().Content, "already in the menu") {
-		t.Errorf("the second press should say why nothing happened:\n%s", m.View().Content)
+
+	m, cmd := press(t, m, pinKey)
+	drain(cmd)
+
+	if len(fp.removed) != 1 || fp.removed[0].Resource != "externalsecrets" {
+		t.Fatalf("unpin writes = %+v, want the browsed kind", fp.removed)
+	}
+	if menuHasResource(m, "externalsecrets") {
+		t.Error("the row should have gone with the pin, even with the table focused")
+	}
+}
+
+// TestPinThenUnpinLeavesASeedRowAlone is the guard on the removal rule. `*` on a
+// seed row records a pin that never rendered anything (the row was already there),
+// so taking it back out must not take the seed row with it — a menu that can lose
+// Pods to a stray keypress is worse than one that cannot be pinned at all.
+func TestPinThenUnpinLeavesASeedRowAlone(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := sizedWith(t, WithPinPersister(fp))
+	m = menuAt(t, m, "pods")
+	before := len(m.menu.Items())
+
+	m, cmd := press(t, m, pinKey) // pin the seed row
+	drain(cmd)
+	m, cmd = press(t, m, pinKey) // and take it back out
+	drain(cmd)
+
+	if len(fp.got) != 1 || len(fp.removed) != 1 {
+		t.Fatalf("writes = %+v / removals = %+v, want one each", fp.got, fp.removed)
+	}
+	if !menuHasResource(m, "pods") || len(m.menu.Items()) != before {
+		t.Error("a seed row must outlive a pin made on it")
+	}
+}
+
+// TestUnpinWriteFailureSurfacesAnErrorAndKeepsTheRowGone mirrors the pin's failure
+// rule (principle 3): the menu already shows what the reader asked for, so a failed
+// write is a toast, never a rollback that puts the row back to report an error.
+func TestUnpinWriteFailureSurfacesAnErrorAndKeepsTheRowGone(t *testing.T) {
+	fp := &fakePinPersister{err: errors.New("read-only file system")}
+	m := sizedWith(t, WithPinPersister(fp), WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+	m = menuAt(t, m, "externalsecrets")
+
+	m, cmd := press(t, m, pinKey)
+	var gotErr bool
+	for _, msg := range drain(cmd) {
+		if e, ok := msg.(ErrorMsg); ok {
+			gotErr = true
+			if !strings.Contains(e.Message(), "read-only file system") {
+				t.Errorf("error message = %q, want the write failure", e.Message())
+			}
+		}
+	}
+	if !gotErr {
+		t.Error("a failed unpin write should surface an ErrorMsg")
+	}
+	if menuHasResource(m, "externalsecrets") {
+		t.Error("the row should stay gone for the session even when the write failed")
 	}
 }
 
 // TestPinIsANoOpForAnAuthoredEntry: a kind the user hand-wrote into
 // menus/<context>.yaml is already in the menu on their terms, and the authored entry
 // wins over a pin (D193 pt 3) — so pinning it would record a line that can never
-// render. It is the same "already an entry" no-op as a second press.
+// render, and unpinning it would have `*` silently disagree with a file written by
+// hand. Both directions decline, and the notice says where the entry actually is.
 func TestPinIsANoOpForAnAuthoredEntry(t *testing.T) {
 	fp := &fakePinPersister{}
 	m := sizedWith(t, WithPinPersister(fp),
 		WithMenuExtras([]config.MenuResource{certExtra("certificates")}))
 	m = menuAt(t, m, "certificates")
+	before := len(m.menu.Items())
 
 	m, cmd := press(t, m, pinKey)
 	drain(cmd)
 
-	if len(fp.got) != 0 {
-		t.Errorf("an authored menu entry must not be re-recorded as a pin, got %+v", fp.got)
+	if len(fp.got) != 0 || len(fp.removed) != 0 {
+		t.Errorf("an authored menu entry is neither pinned nor unpinned, got %+v / %+v", fp.got, fp.removed)
 	}
-	if !strings.Contains(m.View().Content, "already in the menu") {
-		t.Errorf("the press should say why nothing happened:\n%s", m.View().Content)
+	if !menuHasResource(m, "certificates") || len(m.menu.Items()) != before {
+		t.Error("an authored row must not be removed by the pin key")
+	}
+	if !strings.Contains(m.View().Content, "menu file") {
+		t.Errorf("the press should say where that entry lives:\n%s", m.View().Content)
+	}
+}
+
+// TestAnAuthoredEntryOutranksAPinForTheSameKind is D193 pt 3 as the menu renders it,
+// now that the two lists reach the shell separately (D202): the hand-written entry
+// keeps its title and section, the kind is listed once, and the shadowed pin is not
+// something `*` may remove.
+func TestAnAuthoredEntryOutranksAPinForTheSameKind(t *testing.T) {
+	fp := &fakePinPersister{}
+	authored := config.MenuResource{
+		Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets",
+		Kind: "ExternalSecret", Title: "Secrets (external)", Section: "Config", Namespaced: true,
+	}
+	m := sizedWith(t, WithPinPersister(fp),
+		WithMenuExtras([]config.MenuResource{authored}),
+		WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+
+	var rows int
+	var title, section string
+	for _, it := range m.menu.Items() {
+		if it.Resource.GVR.Resource == "externalsecrets" {
+			rows++
+			title, section = it.Title, it.Section
+		}
+	}
+	if rows != 1 {
+		t.Fatalf("rows for the kind = %d, want exactly 1", rows)
+	}
+	if title != "Secrets (external)" || section != "Config" {
+		t.Errorf("row = %q in %q, want the authored title and section", title, section)
+	}
+
+	m = menuAt(t, m, "externalsecrets")
+	m, cmd := press(t, m, pinKey)
+	drain(cmd)
+	if len(fp.removed) != 0 {
+		t.Errorf("the shadowed pin is not the key's to remove, got %+v", fp.removed)
+	}
+	if !menuHasResource(m, "externalsecrets") {
+		t.Error("the authored row must survive a press of the pin key")
 	}
 }
 
@@ -213,7 +398,7 @@ func TestPinIsInertWithoutAPersister(t *testing.T) {
 	if cmd != nil {
 		t.Error("a pin-inert model should issue no command")
 	}
-	if len(m.menu.Items()) != before || len(m.menuExtras) != 0 {
+	if len(m.menu.Items()) != before || len(m.menuExtras) != 0 || len(m.menuPinned) != 0 {
 		t.Error("a pin-inert model must not change the menu")
 	}
 	if m.status.HasNotice() {
@@ -300,6 +485,31 @@ func TestSwitchRebindsThePinPersister(t *testing.T) {
 	}
 	if len(oldFP.got) != 0 {
 		t.Errorf("the departed context's state file must not be written, got %+v", oldFP.got)
+	}
+}
+
+// TestThePinKeyIsHintedInTheMenuContext is the discoverability half of CRD-PIN-03:
+// a menu row does not say it can be pinned, so the key has to be on the hint line
+// where the gesture applies. It is a menu-context hint only — the table's line is
+// the app's fullest and elides first — and it is rendered wide so the assertion is
+// about the curated set rather than about elision.
+func TestThePinKeyIsHintedInTheMenuContext(t *testing.T) {
+	next, _ := New(WithWatcher(&fakeWatcher{})).Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	m := next.(Model)
+	if !m.menu.Focused() {
+		t.Fatal("menu should start focused")
+	}
+	if hint := m.hintbar.View(); !strings.Contains(hint, keymap.ActionPin.Describe()) {
+		t.Errorf("the menu hint should advertise the pin toggle; got %q", hint)
+	}
+
+	next, _ = m.Update(menu.ResourceSelectedMsg{Resource: crdResource()})
+	m = next.(Model)
+	if !m.table.Focused() {
+		t.Fatal("drilling in should focus the table")
+	}
+	if hint := m.hintbar.View(); strings.Contains(hint, keymap.ActionPin.Describe()) {
+		t.Errorf("the table hint is already the longest; the pin belongs to the menu line: %q", hint)
 	}
 }
 
