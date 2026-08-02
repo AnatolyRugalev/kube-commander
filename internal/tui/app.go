@@ -1008,7 +1008,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.table = table.New(s)
 	m.status = statusbar.New(s)
 	m.hintbar = hintbar.New(s)
-	m.nsPicker = picker.New(s, "namespace")
+	m.nsPicker = picker.New(s, namespacePickerKind)
 	m.resPicker = picker.New(s, "resource")
 	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
@@ -1754,12 +1754,38 @@ func (m *Model) resetCluster() {
 	m.syncHints() // focus is back on the menu → menu-context hints.
 }
 
-// namespacesLoadedMsg carries the outcome of the async namespace list issued when
-// the picker opens (M2-08c). It seeds the already-shown picker; listing happens
-// off the update loop so opening the picker never blocks on the network.
+// namespacePickerKind is the Kind stamped on the standalone namespace picker
+// (ctrl+n). It is also a namespacesLoadedMsg's dest, naming that picker as the
+// surface a pending list belongs to.
+const namespacePickerKind = "namespace"
+
+// namespacesLoadedMsg carries the outcome of the async namespace list issued when a
+// surface that needs namespaces opens (M2-08c). Listing happens off the update loop
+// so opening that surface never blocks on the network.
+//
+// dest names **which** surface asked (PAL-03b): the standalone picker
+// (namespacePickerKind) or the command palette's argument stage (commandPickerKind).
+// Two surfaces now issue this load, and a result carries no other way to tell them
+// apart — routing on "whichever one happens to be open" would let a list ordered by
+// one surface land in the other when the first was dismissed while it was in flight.
 type namespacesLoadedMsg struct {
 	namespaces []string
 	err        error
+	dest       string
+}
+
+// loadNamespaces is the off-loop list itself, addressed to the surface that asked.
+// Both callers — the standalone picker and the palette's `:namespace ` stage — go
+// through it, so neither can drift into listing namespaces its own way.
+func (m Model) loadNamespaces(dest string) tea.Cmd {
+	lister := m.nsLister
+	if lister == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ns, err := lister.Namespaces(context.Background())
+		return namespacesLoadedMsg{namespaces: ns, err: err, dest: dest}
+	}
 }
 
 // openNamespacePicker shows the namespace picker and kicks off the async list that
@@ -1773,11 +1799,7 @@ func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
 	}
 	m.nsPicker.SetItems(nil)
 	show := m.nsPicker.Show()
-	lister := m.nsLister
-	return m, tea.Batch(show, func() tea.Msg {
-		ns, err := lister.Namespaces(context.Background())
-		return namespacesLoadedMsg{namespaces: ns, err: err}
-	})
+	return m, tea.Batch(show, m.loadNamespaces(namespacePickerKind))
 }
 
 // namespaceAllItem is the sentinel entry pinned at the top of the namespace picker.
@@ -1788,35 +1810,63 @@ func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
 // never collide with it: DNS-label names cannot contain a space.
 const namespaceAllItem = "all namespaces"
 
-// handleNamespacesLoaded seeds the open picker with the listed namespaces, pinning
-// the all-namespaces sentinel at the top so the unscoped view is always reachable.
-// A list failure surfaces a classified error and closes the picker (principle 3 —
-// the switcher degrades, the app does not crash). A result that arrives after the
-// user already dismissed the picker is dropped.
+// namespaceItems renders the picker rows for a listed namespace set: the
+// all-namespaces sentinel pinned at the top, then the namespaces as listed. Shared
+// by both surfaces so the sentinel cannot go missing from one of them.
+func namespaceItems(namespaces []string) []string {
+	items := make([]string, 0, len(namespaces)+1)
+	items = append(items, namespaceAllItem)
+	items = append(items, namespaces...)
+	return items
+}
+
+// handleNamespacesLoaded seeds whichever surface asked for the list — the standalone
+// picker or the palette's `:namespace ` stage (PAL-03b) — with the listed namespaces.
+// A list failure surfaces a classified error and dismisses that surface (principle 3
+// — the switcher degrades, the app does not crash). A result that arrives after the
+// surface moved on (dismissed, or the palette line rewound to its verbs) is dropped:
+// it belongs to a stage that no longer exists.
 func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.Cmd) {
+	waiting := m.nsPicker.Active()
+	if msg.dest == commandPickerKind {
+		waiting = m.awaitingPaletteArg(keymap.ActionNamespace)
+	}
 	if msg.err != nil {
-		m.nsPicker.Hide()
+		if waiting {
+			if msg.dest == commandPickerKind {
+				m.closePalette()
+			} else {
+				m.nsPicker.Hide()
+			}
+		}
 		return m, func() tea.Msg { return NewErrorMsg("list namespaces", msg.err) }
 	}
-	if !m.nsPicker.Active() {
+	if !waiting {
 		return m, nil // dismissed before the list arrived; ignore.
 	}
-	items := make([]string, 0, len(msg.namespaces)+1)
-	items = append(items, namespaceAllItem)
-	items = append(items, msg.namespaces...)
+	items := namespaceItems(msg.namespaces)
+	if msg.dest == commandPickerKind {
+		return m.fillPaletteArg(keymap.ActionNamespace, items), nil
+	}
 	m.nsPicker.SetItems(items)
 	return m, nil
 }
 
-// handleNamespaceSelected applies the picked namespace: it closes the picker,
-// records the new scope on the model and the status bar, and re-scopes the live
-// table by re-selecting the current resource with the new m.namespace (M2-07c's
-// watch reads that field). The all-namespaces sentinel maps back to the empty scope
-// (watch every namespace). With no resource open yet the scope is simply stored
-// for the next selection.
+// handleNamespaceSelected applies a namespace picked from the standalone picker: it
+// closes the picker and hands the row to applyNamespaceValue, the same apply the
+// palette's `:namespace ` stage ends in (D198 pt 2).
 func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	m.nsPicker.Hide()
-	ns := msg.Value
+	return m.applyNamespaceValue(msg.Value)
+}
+
+// applyNamespaceValue applies a picked namespace row: it records the new scope on the
+// model and the status bar, and re-scopes the live table by re-selecting the current
+// resource with the new m.namespace (M2-07c's watch reads that field). The
+// all-namespaces sentinel maps back to the empty scope (watch every namespace). With
+// no resource open yet the scope is simply stored for the next selection.
+func (m Model) applyNamespaceValue(value string) (tea.Model, tea.Cmd) {
+	ns := value
 	if ns == namespaceAllItem {
 		ns = ""
 	}
@@ -3449,8 +3499,8 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// (PAL-03a) — so it sees the key before its filter field does. Everything it
 		// does not consume types, exactly as in every other picker.
 		if p.Kind() == commandPickerKind {
-			if next, consumed := m.handlePaletteFilterKey(msg); consumed {
-				return next, nil
+			if next, load, consumed := m.handlePaletteFilterKey(msg); consumed {
+				return next, load
 			}
 		}
 		*p, cmd = p.UpdateFilter(msg)

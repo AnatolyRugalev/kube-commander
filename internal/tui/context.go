@@ -9,6 +9,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // ClusterConnector connects to a kubeconfig context by name and hands back the
@@ -286,12 +287,32 @@ func WithContextLister(l ContextLister) Option {
 const contextPickerKind = "context"
 
 // contextsLoadedMsg carries the outcome of the kubeconfig context listing issued
-// when the picker opens. It carries no generation: the list describes the
-// kubeconfig, not a cluster, so a result that lands late is still correct — the
-// only guard needed is that the picker is still open (a dismissed picker drops it).
+// when a surface that needs contexts opens. It carries no generation: the list
+// describes the kubeconfig, not a cluster, so a result that lands late is still
+// correct — the only guard needed is that the surface is still waiting for it.
+//
+// dest names which surface asked (PAL-03b): the standalone picker
+// (contextPickerKind) or the command palette's `:context ` stage
+// (commandPickerKind). See namespacesLoadedMsg for why the routing is addressed
+// rather than inferred from whichever surface is open.
 type contextsLoadedMsg struct {
 	contexts []kube.ContextInfo
 	err      error
+	dest     string
+}
+
+// loadContexts is the off-loop listing itself, addressed to the surface that asked.
+// Both callers — the standalone picker and the palette's argument stage — go through
+// it, so neither can drift into listing contexts its own way.
+func (m Model) loadContexts(dest string) tea.Cmd {
+	lister := m.ctxLister
+	if lister == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		cs, err := lister.Contexts()
+		return contextsLoadedMsg{contexts: cs, err: err, dest: dest}
+	}
 }
 
 // openContextPicker shows the context picker and kicks off the listing that seeds
@@ -307,34 +328,49 @@ func (m Model) openContextPicker() (tea.Model, tea.Cmd) {
 	m.ctxPicker.SetItems(nil)
 	m.ctxByLabel = nil
 	show := m.ctxPicker.Show()
-	lister := m.ctxLister
-	return m, tea.Batch(show, func() tea.Msg {
-		cs, err := lister.Contexts()
-		return contextsLoadedMsg{contexts: cs, err: err}
-	})
+	return m, tea.Batch(show, m.loadContexts(contextPickerKind))
 }
 
-// handleContextsLoaded seeds the open picker with the listed contexts. A listing
-// failure (an unreadable or malformed kubeconfig) surfaces a classified error and
-// closes the picker, and a kubeconfig that declares no contexts closes it with a
-// notice rather than leaving an empty modal the reader can only escape from — both
-// degrade, neither crashes (principle 3). A result that arrives after the picker
-// was dismissed is dropped.
+// handleContextsLoaded seeds whichever surface asked for the listing — the standalone
+// picker or the palette's `:context ` stage (PAL-03b) — with the listed contexts. A
+// listing failure (an unreadable or malformed kubeconfig) surfaces a classified error
+// and dismisses that surface, and a kubeconfig that declares no contexts dismisses it
+// with a notice rather than leaving an empty modal the reader can only escape from —
+// both degrade, neither crashes (principle 3). A result that arrives after the surface
+// moved on is dropped.
 func (m Model) handleContextsLoaded(msg contextsLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
+	palette := msg.dest == commandPickerKind
+	waiting := m.ctxPicker.Active()
+	if palette {
+		waiting = m.awaitingPaletteArg(keymap.ActionContext)
+	}
+	dismiss := func() {
+		if !waiting {
+			return
+		}
+		if palette {
+			m.closePalette()
+			return
+		}
 		m.ctxPicker.Hide()
+	}
+	if msg.err != nil {
+		dismiss()
 		return m, func() tea.Msg { return NewErrorMsg("list contexts", msg.err) }
 	}
-	if !m.ctxPicker.Active() {
-		return m, nil // dismissed before the list arrived; ignore.
+	if !waiting {
+		return m, nil // dismissed before the listing arrived; ignore.
 	}
 	if len(msg.contexts) == 0 {
-		m.ctxPicker.Hide()
+		dismiss()
 		notice := m.surfaceNotice("no contexts in kubeconfig")
 		return m, notice
 	}
 	labels, byLabel := contextPickerItems(msg.contexts, m.context)
 	m.ctxByLabel = byLabel
+	if palette {
+		return m.fillPaletteArg(keymap.ActionContext, labels), nil
+	}
 	m.ctxPicker.SetItems(labels)
 	return m, nil
 }
@@ -378,7 +414,15 @@ func contextPickerItems(cs []kube.ContextInfo, current string) ([]string, map[st
 // mapped, so this is defensive) closes the picker without switching.
 func (m Model) handleContextSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	m.ctxPicker.Hide()
-	name, ok := m.ctxByLabel[msg.Value]
+	return m.applyContextLabel(msg.Value)
+}
+
+// applyContextLabel resolves a context picker row back to its context name and hands
+// it to switchContext. It is the apply both surfaces end in — the standalone picker
+// and the palette's `:context ` stage — so an argument reached through the palette
+// and one reached through `C` are one code path (D198 pt 2).
+func (m Model) applyContextLabel(label string) (tea.Model, tea.Cmd) {
+	name, ok := m.ctxByLabel[label]
 	m.ctxByLabel = nil
 	if !ok {
 		return m, nil

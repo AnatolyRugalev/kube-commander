@@ -5347,3 +5347,30 @@ implementation" D197 exists to forbid.
    next esc closes. A returned-to palette is indistinguishable from a freshly opened one
    (`showPaletteVerbs` is the single definition of "the palette showing verbs"), so no
    stage can leave a stale prompt, title or label map behind.
+
+## D199 — A fetched value list is addressed to the surface that asked for it (2026-08-02, PAL-03b)
+
+PAL-03b gave the palette the two argument verbs whose values are **not in hand** when the
+stage opens: `:namespace ` lists against the cluster, `:context ` reads the kubeconfig.
+Both loads previously existed to seed exactly one picker and bailed unless *that* picker
+was open. Two surfaces now issue them, and the rule for every such load from here on is:
+
+1. **The load carries its destination.** `namespacesLoadedMsg`/`contextsLoadedMsg` (and any
+   future value load a second surface can issue) carry a `dest` naming the picker kind that
+   asked, and the handler routes on it. Routing on "whichever surface happens to be open"
+   is the tempting one-liner and is wrong: the reader can dismiss one surface and open the
+   other while a list is in flight, and the result would then land in a surface that never
+   asked for it — with rows another surface ordered and a label map to match.
+2. **A result whose stage no longer exists is dropped, not painted.** For the palette that
+   means open *and* still on that verb's stage (`awaitingPaletteArg`); a line the reader
+   rewound to the verbs, or advanced to another verb, must not be overwritten by a late
+   answer. Only the surface still waiting is dismissed on an error, for the same reason.
+3. **Inertness is decided before the stage opens, never by the answer.** A missing lister is
+   known synchronously, so a verb with no seam wired declines the stage outright (D198 pt 3)
+   rather than opening one that waits forever. Conversely a stage that *did* open is
+   entitled to its answer: an empty or failed list dismisses it with a notice or a toast, it
+   does not silently leave a dead prompt.
+4. **A pending stage says so.** An argument stage waiting on values is titled
+   `<verb> — loading…` and drops the marker when they land — an empty modal that reads as
+   broken is the failure this avoids — and the query typed while waiting is kept and applied
+   to the arriving list, so typing ahead of a slow cluster is never thrown away.

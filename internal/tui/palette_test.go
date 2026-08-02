@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -45,7 +46,7 @@ func TestPaletteOpensWithoutACluster(t *testing.T) {
 
 // selectInPalette drills into the palette's highlighted row and feeds the resulting
 // SelectedMsg back through Update — the whole keystroke path, as the runtime does it.
-func selectInPalette(t *testing.T, m Model) Model {
+func selectInPalette(t *testing.T, m Model) (Model, tea.Cmd) {
 	t.Helper()
 	m, selCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
 	if selCmd == nil {
@@ -58,8 +59,8 @@ func selectInPalette(t *testing.T, m Model) Model {
 	if sel.Kind != commandPickerKind {
 		t.Fatalf("palette selection Kind = %q, want %q", sel.Kind, commandPickerKind)
 	}
-	next, _ := m.Update(sel)
-	return next.(Model)
+	next, cmd := m.Update(sel)
+	return next.(Model), cmd
 }
 
 // TestPaletteResourceVerbCommitsInPlace is the D68 guard for this slice: `:resource`
@@ -74,7 +75,7 @@ func TestPaletteResourceVerbCommitsInPlace(t *testing.T) {
 		t.Fatalf("typing \"resource\" selected %q, want %q", v, keymap.ActionResources.Describe())
 	}
 
-	m = selectInPalette(t, m)
+	m, _ = selectInPalette(t, m)
 
 	if !m.cmdPicker.Active() {
 		t.Fatal("an argument verb should keep the palette open, not close it")
@@ -146,7 +147,7 @@ func TestPaletteArgumentSwitchesTheResource(t *testing.T) {
 		t.Fatalf("filtering the argument to \"cron\" selected %q, want CronJob", v)
 	}
 
-	m = selectInPalette(t, m)
+	m, _ = selectInPalette(t, m)
 
 	if m.cmdPicker.Active() {
 		t.Fatal("applying an argument should close the palette")
@@ -179,7 +180,7 @@ func TestPaletteArgumentAppliesATheme(t *testing.T) {
 	}
 	m = typeInto(t, m, "monokai")
 
-	m = selectInPalette(t, m)
+	m, _ = selectInPalette(t, m)
 
 	if m.cmdPicker.Active() {
 		t.Fatal("applying an argument should close the palette")
@@ -255,12 +256,195 @@ func TestPaletteArgumentStaysInertWithoutACluster(t *testing.T) {
 	m := sized(t) // no WithWatcher
 	m, _ = press(t, m, colon)
 	m = typeInto(t, m, "resource")
-	m = selectInPalette(t, m)
+	m, _ = selectInPalette(t, m)
 	if m.palArg != "" {
 		t.Fatalf("an inert verb should not open an argument stage, stage = %q", m.palArg)
 	}
 	if m.cmdPicker.Active() || m.resPicker.Active() {
 		t.Fatal("an inert verb should leave nothing open")
+	}
+}
+
+// commitVerb opens the palette, narrows it to a verb and commits it with the line's
+// separator, returning the model and whatever command the commit issued (the value
+// load, for a verb whose list is fetched).
+func commitVerb(t *testing.T, m Model, verb string) (Model, tea.Cmd) {
+	t.Helper()
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, verb)
+	return press(t, m, tea.Key{Code: ' ', Text: " "})
+}
+
+// TestPaletteNamespaceArgumentLoadsThenSeeds is the PAL-03b headline: a verb whose
+// values are fetched enters the argument stage *immediately* — the reader never waits
+// for the network to see the line advance — on an empty list that says so, and the
+// list is addressed to the palette rather than to the standalone picker. Typing while
+// it is in flight is kept, so a fast typist's query narrows the values the moment they
+// land instead of being discarded.
+func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+
+	m, cmd := commitVerb(t, m, "namespace")
+	if m.palArg != keymap.ActionNamespace {
+		t.Fatalf("space should commit the namespace verb, stage = %q", m.palArg)
+	}
+	if m.nsPicker.Active() {
+		t.Fatal("the argument stage should be the palette itself, not the standalone picker")
+	}
+	if got := m.cmdPicker.Len(); got != 0 {
+		t.Fatalf("the stage should open empty while the list is in flight, got %d entries", got)
+	}
+	if view := m.cmdPicker.View(); !strings.Contains(view, "loading") {
+		t.Fatalf("a pending stage must say so rather than look empty:\n%s", view)
+	}
+	if cmd == nil {
+		t.Fatal("committing the namespace verb should issue the list command")
+	}
+	lm, ok := pickerMsg(t, cmd).(namespacesLoadedMsg)
+	if !ok {
+		t.Fatalf("the commit produced %T, want namespacesLoadedMsg", pickerMsg(t, cmd))
+	}
+	if lm.dest != commandPickerKind {
+		t.Fatalf("the load is addressed to %q, want %q — it must seed the surface that asked", lm.dest, commandPickerKind)
+	}
+
+	m = typeInto(t, m, "sys") // type ahead of the answer
+	next, _ := m.Update(lm)
+	m = next.(Model)
+
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionNamespace {
+		t.Fatalf("the values should land in the open stage, active=%v stage=%q", m.cmdPicker.Active(), m.palArg)
+	}
+	if view := m.cmdPicker.View(); strings.Contains(view, "loading") {
+		t.Fatalf("the loading marker should go once the values land:\n%s", view)
+	}
+	if got := m.cmdPicker.Len(); got != 1 {
+		t.Fatalf("the query typed while waiting should narrow the arrived list to kube-system, got %d entries", got)
+	}
+	if v, _ := m.cmdPicker.Selected(); v != "kube-system" {
+		t.Fatalf("selected %q, want kube-system", v)
+	}
+}
+
+// TestPaletteNamespaceArgumentAppliesTheScope closes the namespace line: the pick
+// re-scopes the app exactly as the standalone picker's does, because both end in
+// applyNamespaceValue (D198 pt 2) — including the all-namespaces sentinel, which must
+// be offered here too or the palette line would be a one-way door.
+func TestPaletteNamespaceArgumentAppliesTheScope(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	fp := &fakePersister{}
+	m := sizedWith(t, WithNamespaceLister(fl), WithNamespacePersister(fp))
+
+	m, cmd := commitVerb(t, m, "namespace")
+	next, _ := m.Update(pickerMsg(t, cmd))
+	m = next.(Model)
+	if got := m.cmdPicker.Len(); got != 3 {
+		t.Fatalf("stage seeded with %d entries, want 3 (2 namespaces + the all-namespaces sentinel)", got)
+	}
+	m = typeInto(t, m, "kube-sys")
+
+	m, _ = selectInPalette(t, m)
+
+	if m.cmdPicker.Active() {
+		t.Fatal("applying an argument should close the palette")
+	}
+	if got := m.namespace; got != "kube-system" {
+		t.Fatalf("namespace = %q, want kube-system", got)
+	}
+	if m.nsPicker.Active() {
+		t.Fatal("the namespace argument stage should never open the standalone picker")
+	}
+}
+
+// TestPaletteContextArgumentSwitchesContext proves the second fetched verb, and that
+// its rows are the context picker's own (marked, cluster-qualified) rows resolved
+// through the same map and the same apply — a pick here connects exactly as `C` does.
+func TestPaletteContextArgumentSwitchesContext(t *testing.T) {
+	fl := &fakeContextLister{contexts: twoContexts()}
+	fc := &fakeConnector{}
+	fc.cluster, _, _ = newClusterFake()
+	m := sizedWith(t, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
+
+	m, cmd := commitVerb(t, m, "context")
+	if m.palArg != keymap.ActionContext {
+		t.Fatalf("space should commit the context verb, stage = %q", m.palArg)
+	}
+	if fl.calls != 0 {
+		t.Errorf("the kubeconfig was read on the update loop (%d calls)", fl.calls)
+	}
+	next, _ := m.Update(pickerMsg(t, cmd))
+	m = next.(Model)
+	if m.ctxPicker.Active() {
+		t.Fatal("the argument stage should be the palette itself, not the standalone context picker")
+	}
+	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
+		t.Errorf("the stage should mark the context the shell is on, row = %q", got)
+	}
+	m = typeInto(t, m, "dev")
+
+	m, selCmd := selectInPalette(t, m)
+
+	if m.cmdPicker.Active() || m.ctxByLabel != nil {
+		t.Error("applying the argument should close the palette and drop its label map")
+	}
+	if selCmd == nil {
+		t.Fatal("a picked context should issue the connect Cmd")
+	}
+	if _, ok := selCmd().(clusterConnectedMsg); !ok {
+		t.Fatalf("the argument should route into switchContext, got %T", selCmd())
+	}
+	if len(fc.names) != 1 || fc.names[0] != "dev" {
+		t.Errorf("connected to %v, want [dev] — the row must resolve back to a context name", fc.names)
+	}
+}
+
+// TestPaletteFetchedValuesDroppedAfterRewind pins why the load is addressed rather
+// than delivered to whatever is open: the reader can unwind the line while the values
+// are in flight, and a list that lands on a stage that no longer exists must be
+// dropped, not painted over the verb list they went back to.
+func TestPaletteFetchedValuesDroppedAfterRewind(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+
+	m, cmd := commitVerb(t, m, "namespace")
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace}) // rewind to the verbs
+	if m.palArg != "" {
+		t.Fatalf("backspace into an empty argument should leave the stage, stage = %q", m.palArg)
+	}
+	next, _ := m.Update(pickerMsg(t, cmd))
+	m = next.(Model)
+
+	if got, want := m.cmdPicker.Len(), len(paletteVerbs); got != want {
+		t.Fatalf("a late list overwrote the verb stage: %d entries, want %d", got, want)
+	}
+	if !m.cmdPicker.Active() {
+		t.Fatal("a late list must not close the palette the reader is still in")
+	}
+}
+
+// TestPaletteFetchedVerbsStayInertWithoutTheirSeam proves inertness is still decided
+// before the stage opens: with no lister wired there is nothing to list, so the verb
+// does exactly what its key does — nothing — instead of opening a stage that would
+// wait forever for values that were never going to come.
+func TestPaletteFetchedVerbsStayInertWithoutTheirSeam(t *testing.T) {
+	for _, tc := range []struct{ name, verb string }{
+		{"namespace", "namespace"},
+		{"context", "context"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := sized(t) // no lister of either kind
+			m, cmd := commitVerb(t, m, tc.verb)
+			if m.palArg != "" {
+				t.Fatalf("an inert verb should not open an argument stage, stage = %q", m.palArg)
+			}
+			if cmd != nil {
+				t.Fatalf("an inert verb should issue no command, got %v", pickerMsgs(cmd))
+			}
+			if m.nsPicker.Active() || m.ctxPicker.Active() {
+				t.Fatal("an inert verb should open no standalone picker either")
+			}
+		})
 	}
 }
 

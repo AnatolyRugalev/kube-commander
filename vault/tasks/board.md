@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-03a made the palette's line `<verb> <argument>`: `resource` and `theme` commit in place and complete their value in the same box (D198). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-03b completed the palette line: `:namespace ` and `:context ` complete in the box too, their fetched values addressed to the surface that asked (D199). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -296,24 +295,12 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 - [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
       — done 2026-08-01 (D194)
 - [x] **PAL-02** The palette shell: `:` opens a verb list — done 2026-08-02 (D197)
-- [ ] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface — **split**
-      (2026-08-02) into **PAL-03a** (the argument stage + the two verbs whose values are
-      already in hand) and **PAL-03b** (the two verbs whose values arrive asynchronously).
-      The line becomes `<verb> <argument>`: committing a verb swaps the item list for that
-      verb's values, still in the same modal, so the whole interaction is one uninterrupted
-      line of typing. It is the slice that retires the separate namespace/resource pickers
-      as *surfaces* (the picker component stays — it is what the palette is built from);
-      their keys keep opening them until PAL-05.
+- [x] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface — done
+      2026-08-02 via its two slices, **PAL-03a** (D198) and **PAL-03b** (D199)
 - [x] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
       — done 2026-08-02 (D198)
-- [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
-      notes: Both verbs' values arrive as messages (`namespacesLoadedMsg`,
-      `contextsLoadedMsg`) whose handlers today seed a specific picker and bail unless *that*
-      picker is open. Teach them to seed whichever surface is asking, so the palette's
-      argument stage can be the one waiting, and keep the empty/pending state legible while
-      the list is in flight. Then the four argument verbs behave identically and PAL-05 can
-      convert their keys without a special case.
+- [x] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
+      — done 2026-08-02 (D199)
 - [ ] **PAL-04** Contextual verbs for the selected row
       status: todo | owner: — | added: 2026-08-01
       notes: With a table row selected, the palette also offers the row-scoped actions

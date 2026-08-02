@@ -197,9 +197,11 @@ of typing: type enough of the verb, press **Space** (or Enter), and the list bec
 that verb's values with the prompt reading `:resource `. So `:res` `␣` `pods` `Enter`
 switches the table to Pods, and `:theme ` `mono` `Enter` changes theme, without a second
 pop-up appearing. Backspace on an empty value takes you back to the verb list, as does
-`Esc`; another `Esc` closes the palette. Today `resource` and `theme` complete this way
-— `namespace` and `context` still open their own pickers, and their keys (`Ctrl+n`, `C`)
-work throughout either way.
+`Esc`; another `Esc` closes the palette. All four value verbs complete this way —
+`resource`, `theme`, `namespace` and `context`. The last two have to fetch their values
+(from the cluster and from your kubeconfig), so their list can appear a moment after the
+prompt does; the box says `— loading…` until it lands, and anything you type meanwhile
+still narrows it. Their own keys (`Ctrl+n`, `C`) keep working exactly as before.
 
 Press `R` (`resources.switch`, rebindable) to jump straight to the resource picker —
 a pop-up list of every browsable resource kind, also reachable as the palette's
