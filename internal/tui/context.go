@@ -63,6 +63,13 @@ type ContextState struct {
 	// file. Nil disables persistence for the switched-in context (an unresolvable
 	// state path), exactly as a nil WithNamespacePersister does at launch.
 	Persister NamespacePersister
+	// Pinner writes a kind pinned on the new context back to *its* state file
+	// (CRD-PIN-02). It rides here for the same reason Persister does: both are bound
+	// to one context's state path, so a switch that carried the launch context's
+	// writer over would record the new context's pins in the departed context's file
+	// — the bug D163 exists to prevent. Nil disables pinning for the switched-in
+	// context, exactly as a nil WithPinPersister does at launch.
+	Pinner PinPersister
 }
 
 // ContextStateLoader resolves ContextState for a kubeconfig context (M4-05). It is
@@ -213,6 +220,7 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 	// would be a no-op write on every switch).
 	if m.ctxState != nil {
 		m.nsPersister = msg.state.Persister
+		m.pinner = msg.state.Pinner // pins recorded next belong to the new context's file
 		m.setNamespace(msg.state.Namespace)
 	}
 

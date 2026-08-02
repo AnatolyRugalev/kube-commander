@@ -722,6 +722,12 @@ type Model struct {
 	// (nsPicker, with the other components) is seeded by the bundle's nsLister.
 	nsPersister NamespacePersister
 
+	// pinner records a kind pinned with menu.pin to the per-context state file so
+	// it stays in this context's menu (nil → pin-inert, CRD-PIN-02). Like nsPersister
+	// it is bound to one context's state path rather than to the cluster client, so
+	// it is not part of the Cluster bundle and a context switch rebinds it (D163).
+	pinner PinPersister
+
 	// viewerGen tags each shared-viewer open (describe/secret and, through logMsg, the
 	// log stream — the viewer is one component) so an async fetch that returns after
 	// the user closed the viewer, or opened a newer one, is dropped rather than
@@ -4120,6 +4126,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openSearch()
 	case keymap.ActionActions:
 		return m.openActionsMenu()
+	case keymap.ActionPin:
+		return m.pinResource()
 	case keymap.ActionDescribe, keymap.ActionLogs,
 		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren:
 		return m.triggerRowActionKey(a)

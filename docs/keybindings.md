@@ -78,6 +78,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `menu.toggle` | `m` | Toggle left menu pane |
+| `menu.pin` | `*` | Pin the selected kind to this context's menu |
 
 ## actions
 

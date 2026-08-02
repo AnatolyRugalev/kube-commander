@@ -190,6 +190,19 @@ const (
 	// "no y/n" part of D88/D115.
 	ActionConfirmAccept  Action = "confirm.accept"
 	ActionConfirmDecline Action = "confirm.decline"
+	// ActionPin records the kind you are pointing at as a **pinned** kind for the
+	// current kubeconfig context (CRD-PIN-02): it joins that context's menu from now
+	// on, whether or not discovery lists it, which is what makes a CRD you reached
+	// for once reachable again without hunting for it. It reads the kind from the
+	// surface that has one — the highlighted menu row, or the kind the table is
+	// browsing — and is inert where neither names a kind, or with no pin persister
+	// wired. It is a *toggle* in name because CRD-PIN-03 adds the unpin half to this
+	// same action and this same key: renaming a user-bindable action id later would
+	// break every keymap that had bound it. It is `menu.pin` rather than a `pin.*`
+	// id of its own because what it changes is the menu, and because the `?` overlay
+	// renders one column per action namespace — a namespace holding a single action
+	// costs a column on a surface that already has sixteen (D201).
+	ActionPin Action = "menu.pin"
 )
 
 // keyContext scopes key resolution: a chord means different actions in different
@@ -276,6 +289,7 @@ var actionMeta = []struct {
 	{ActionSearchAllNamespaces, "Toggle searching all namespaces (cluster search)"},
 	{ActionConfirmAccept, "Accept the confirm dialog"},
 	{ActionConfirmDecline, "Decline the confirm dialog"},
+	{ActionPin, "Pin the selected kind to this context's menu"},
 }
 
 var registered = func() map[Action]string {
@@ -438,6 +452,17 @@ var defaultBindings = map[Action][]string{
 	// a different context (build partitions them).
 	ActionConfirmAccept:  {"y", "enter"},
 	ActionConfirmDecline: {"n", "esc"},
+	// The pin gesture cannot have the letter it wants: `p` is the port picker's
+	// local-port prompt (D139) and `P` is res.children (D165), and the browse context
+	// is flat — one action per key — so the mnemonic is spent twice over, exactly as
+	// it was when logs.previous had to take ctrl+p (D177). `*` takes the *starred /
+	// favourite* reading instead of a mnemonic one, which is what a pin is: it is
+	// free in the browse context, is not a reserved nav chord (D10), and is a symbol
+	// rather than a letter, so it stays clear of the letters the row actions keep
+	// claiming. It carries text, so it would type into an always-open query field —
+	// harmless here, since the surfaces this action reads (the menu, the browse
+	// table) have no such field.
+	ActionPin: {"*"},
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app

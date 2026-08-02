@@ -5406,3 +5406,29 @@ that follows (AUTH-04 is next):
    to one paragraph, because that is the sentence a bug report needs. Never promise a retry
    the code does not perform: the browse watch loop does re-List on a backoff, so that
    sentence is honest *there* and must not be copied to a surface without one.
+
+## D201 — Pinning writes state, dedupes against the *extras* list, and joins an existing action namespace (2026-08-02, CRD-PIN-02)
+
+CRD-PIN-01 (D193) decided where a pin is stored. This is the gesture that writes one, and
+the three choices a later slice must not silently reverse:
+
+1. **The "already there" test is the extras list, never the menu.** Discovery appends every
+   kind it finds to the menu, so a pin refused because "the menu already lists it" would be
+   refused in exactly the case the line exists for — a pin is what keeps a kind in the menu
+   when discovery does *not* list it (before the pass returns, when its group fails, when a
+   later slice narrows what is listed). The no-op is "this kind is already a menu *entry*"
+   — a hand-authored `menus/<context>.yaml` row (which wins, D193 pt 3) or an existing pin
+   — tested against the model's merged extras list, which a context switch rebinds.
+2. **Pinning is per-context state, so its writer is rebound on a context switch.** The
+   `PinPersister` seam is bound to one context's state-file path, exactly like
+   `NamespacePersister`, so it rides in `ContextState` and is re-resolved on every switch.
+   A per-context writer that is wired only at launch files the new cluster's kinds under
+   the departed cluster's name — the bug D163 exists to prevent, and the second seam to
+   have needed this. Any future per-context writer goes in both places or in neither.
+3. **A new action joins an existing action namespace unless it needs its own.** The `?`
+   overlay renders one column per action-id namespace, so a namespace holding a single
+   action costs a column on a surface that already has sixteen. The pin gesture is
+   `menu.pin`, not `pin.toggle`: what it changes is the menu. And the id is a compatibility
+   surface — users bind it in `config.yaml` — so it is named for what the *action* will be
+   once CRD-PIN-03 lands its unpin half, and that slice extends this id and this key rather
+   than renaming either.

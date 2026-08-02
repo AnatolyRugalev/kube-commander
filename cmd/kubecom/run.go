@@ -146,9 +146,15 @@ func runTUI(opts runOptions) error {
 	// the persister (statePersister), so the next launch reopens on it.
 	state, statePath := loadState(ctxName)
 	namespace := initialNamespace(opts, state)
+	// One statePersister serves both writes into that file — the namespace and the
+	// pinned kinds (CRD-PIN-02) — behind two narrow interfaces. Both are declared as
+	// interfaces and assigned only when the path resolved, so a missing state path
+	// leaves true nils rather than typed-nil pointers that would read as "wired".
 	var persister tui.NamespacePersister
+	var pinner tui.PinPersister
 	if statePath != "" {
-		persister = &statePersister{path: statePath, state: state}
+		p := &statePersister{path: statePath, state: state}
+		persister, pinner = p, p
 	}
 	// The kinds pinned on this context join the authored menu entries (CRD-PIN-01/D193):
 	// one merged list goes into the menu, so a pinned CRD and a hand-written one render
@@ -168,6 +174,7 @@ func runTUI(opts runOptions) error {
 		tui.WithContextStateLoader(contextStateLoader{}),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
+		tui.WithPinPersister(pinner),
 		tui.WithContext(ctxName),
 		tui.WithKubeconfig(opts.kubeconfig),
 		tui.WithVersion(version.Version),
@@ -302,10 +309,12 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 		Namespace:  state.LastNamespace,
 	}
 	if statePath != "" {
-		// Guarded so the interface field stays a true nil when the state path is
-		// unresolvable — a typed nil pointer in it would read as "persistence wired"
-		// and panic on the first write.
-		st.Persister = &statePersister{path: statePath, state: state}
+		// Guarded so the interface fields stay true nils when the state path is
+		// unresolvable — a typed nil pointer in one would read as "persistence wired"
+		// and panic on the first write. Both writers into this context's state file
+		// are the same object, as at launch.
+		p := &statePersister{path: statePath, state: state}
+		st.Persister, st.Pinner = p, p
 	}
 	return st
 }
@@ -495,6 +504,22 @@ type statePersister struct {
 // 0o600). Called off the update loop by the shell whenever the picked scope changes.
 func (p *statePersister) PersistNamespace(ns string) error {
 	p.state.LastNamespace = ns
+	return p.state.SaveFile(p.path)
+}
+
+// PersistPin records a kind pinned in the UI (tui.PinPersister, CRD-PIN-02) in the
+// same context's state file, through State.Pin — so the pin list's GVR identity and
+// its dedupe live in one place (config, D193 pt 5) rather than being re-derived here.
+// A kind already pinned writes nothing: the file on disk already says what the caller
+// wants it to say, and rewriting it would only risk a partial write for no change.
+//
+// The retained *config.State is mutated in place, exactly as PersistNamespace mutates
+// it, so a pin and a later namespace write each carry the other rather than reverting
+// it — the reason this seam holds the loaded state instead of re-reading the file.
+func (p *statePersister) PersistPin(r config.MenuResource) error {
+	if !p.state.Pin(r) {
+		return nil
+	}
 	return p.state.SaveFile(p.path)
 }
 

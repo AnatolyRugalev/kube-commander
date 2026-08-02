@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CRD-01 gave the browse table an empty state that says why its LIST failed, naming the two cluster-side causes the error kind would misdescribe (D200), closing the DIAG line. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CRD-PIN-02 landed the pin gesture: `*` records the kind under the cursor in this context's state file and folds it into the live menu (D201). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-PIN-02** The pin gesture: a key on a kind records it in this context's menu
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -244,17 +243,7 @@ the gesture that removes it, then the discoverability that makes "reach for it o
 
 - [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
       2026-08-01 (D193)
-- [ ] **CRD-PIN-02** `p` on a resource row/search hit pins that kind for the context
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
-      notes: The write gesture. A new `pin.toggle` action (D10/D11 — a named action, never a
-      raw key) on the surfaces that can name a kind: the resource picker (`:`) and the menu
-      itself. It appends to `State.PinnedResources` through a persister seam shaped like
-      `statePersister`/`configThemePersister` (the tui package never touches disk), then
-      folds the new entry into the live menu with `menu.AddExtras` so the row appears without
-      a relaunch. Pinning an already-pinned or already-listed kind is a no-op with a notice,
-      not a duplicate row. Needs the kind's `Namespaced` flag from discovery, not a guess.
-      **Carries the README section** for pinning — CRD-PIN-01 deliberately left it out, since
-      there was no gesture yet and the state file is documented as kubecom-managed (D68).
+- [x] **CRD-PIN-02** `*` pins the kind under the cursor for this context — done 2026-08-02 (D201)
 - [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
       status: todo | owner: — | added: 2026-08-01
       notes: The removal half the feedback insists must be as easy as the adding ("a key on
@@ -263,6 +252,10 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       where it came from, which is the one new piece of state this slice adds. Unpinning
       removes the row unless discovery also lists the kind, in which case it reverts to a
       plain discovered row rather than vanishing. Hint-bar text so the key is discoverable.
+      The gesture is already `menu.pin` on `*` (CRD-PIN-02/D201 pt 3): extend that action
+      and that key — do not add a second id — and the state side (`State.Unpin`, keyed by
+      GVR) has existed since CRD-PIN-01. The README's "unpinning isn't wired yet" paragraph
+      is this slice's to replace.
 - [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
       status: todo | owner: — | added: 2026-08-01
       notes: The premise the whole line rests on — "you reach for one *once*" — needs a
@@ -272,7 +265,9 @@ the gesture that removes it, then the discoverability that makes "reach for it o
       same picker to become `:resource` in a general palette, so **sequence this after the
       palette shell lands** or the two will fight over the same surface — the shell landed
       in PAL-02 (the picker is now the palette's "Switch resource" verb, and `R`), so this
-      is unblocked.
+      is unblocked. Also decide here whether a kind can be pinned *from* the picker:
+      CRD-PIN-02 left that surface alone because every picker filters as you type (D194), so
+      `*` types a `*` there — it needs a no-text chord or a palette verb, not a letter.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs

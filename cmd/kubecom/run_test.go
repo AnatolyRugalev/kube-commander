@@ -412,6 +412,42 @@ func TestStatePersisterRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPersistPinRoundTripsAndKeepsTheNamespace covers the other write into the same
+// file (CRD-PIN-02) and the reason the seam holds the loaded state rather than
+// re-reading it per call: SaveFile marshals the whole struct, so a pin written from a
+// fresh State would drop the namespace the same launch recorded — and vice versa.
+// A second pin of the same GVR writes nothing (State.Pin's dedupe, D193 pt 5).
+func TestPersistPinRoundTripsAndKeepsTheNamespace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	state, path := loadState("prod")
+	p := &statePersister{path: path, state: state}
+	if err := p.PersistNamespace("monitoring"); err != nil {
+		t.Fatalf("PersistNamespace: %v", err)
+	}
+	pin := config.MenuResource{
+		Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets",
+		Kind: "ExternalSecret", Namespaced: true,
+	}
+	if err := p.PersistPin(pin); err != nil {
+		t.Fatalf("PersistPin: %v", err)
+	}
+	if err := p.PersistPin(pin); err != nil {
+		t.Fatalf("PersistPin (repeat): %v", err)
+	}
+
+	reloaded, _ := loadState("prod")
+	if len(reloaded.PinnedResources) != 1 || reloaded.PinnedResources[0] != pin {
+		t.Fatalf("reloaded PinnedResources = %+v, want exactly %+v", reloaded.PinnedResources, pin)
+	}
+	if reloaded.LastNamespace != "monitoring" {
+		t.Fatalf("reloaded LastNamespace = %q — a pin must not drop the recorded namespace", reloaded.LastNamespace)
+	}
+	// And the pin is what the launcher folds into the menu, on both paths.
+	if got := mergeMenuExtras(nil, reloaded.PinnedResources); len(got) != 1 || got[0] != pin {
+		t.Fatalf("mergeMenuExtras(nil, pins) = %+v, want the pin", got)
+	}
+}
+
 // TestPersistThemeKeepsTheRestOfTheConfig is the leg's real risk (M4-12b-2): SaveFile
 // marshals the whole struct, so a write-back that does not load the file first deletes
 // everything else in it — a user's entire `keys:` section for the sake of one theme

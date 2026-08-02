@@ -431,13 +431,32 @@ resources:
 An entry whose resource is already in the menu (a seed row or one discovery finds)
 is merged, never listed twice.
 
+#### Pinning a kind (`*`)
+
+A cluster with a lot of CRDs has more kinds than a menu can usefully list, so the
+ones *you* work with can be pinned: press `*` on a menu row — or on the table while
+you're browsing a kind — and kubecom keeps that kind in this context's menu from then
+on, whether or not discovery lists it. The status bar confirms what was pinned; a
+kind that's already an entry says so and nothing is written twice.
+
+Pins are recorded for you, so they live in the kubecom-managed state file
+(`~/.config/kubecom/state/<context>.yaml`, below) rather than in the menu file you
+hand-write — pressing `*` never rewrites `menus/<context>.yaml`. Where both name the
+same resource, your hand-written entry wins and keeps its title and section. A pinned
+kind is otherwise an ordinary menu row, listed under **Custom Resources** unless the
+menu already places it elsewhere.
+
+Unpinning from the UI isn't wired yet — for now, drop the entry from
+`pinnedResources:` in that context's state file.
+
 #### Remembered namespace
 
 kubecom remembers the last namespace you selected, per kubeconfig context, and
 reopens on it next time. The choice is stored in
 `os.UserConfigDir()/kubecom/state/<context>.yaml` (`~/.config/kubecom/state/` on
 Linux) — a kubecom-managed file, separate from your config and menu files, so
-kubecom rewrites it freely without touching anything you hand-edit. Passing
+kubecom rewrites it freely without touching anything you hand-edit (it also holds
+the kinds you pin, above). Passing
 `-n`/`--namespace` overrides the remembered scope for that run (use `-n ""` to
 force all namespaces); switching namespace in the UI updates what's remembered.
 Switching context (`C`) lands you in *that* context's remembered namespace, and
