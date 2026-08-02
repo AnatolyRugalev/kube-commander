@@ -567,10 +567,15 @@ type Model struct {
 	help   help.Model
 	styles styles.Styles
 
-	menu      menu.Model
-	table     table.Model
-	status    statusbar.Model
-	hintbar   hintbar.Model
+	menu    menu.Model
+	table   table.Model
+	status  statusbar.Model
+	hintbar hintbar.Model
+	// hintCtx is the hint subset the hintbar currently renders. It is the memo
+	// refreshHints compares against at the tail of every Update (HINT-01/D206), so a
+	// message that does not move input ownership re-renders nothing.
+	hintCtx keymap.HelpContext
+
 	nsPicker  picker.Model
 	resPicker picker.Model
 	actPicker picker.Model
@@ -1136,7 +1141,24 @@ func (m Model) Init() tea.Cmd {
 // Update implements tea.Model. It sizes the layout on a window-size message,
 // resolves keypresses through the sequencer, and services the sequence timeout
 // tick. Every behaviour flows through an Action; no raw key is matched.
+//
+// It wraps the real handler so the bottom hint line is re-derived after every
+// message (HINT-01/D206): input ownership moves on far more messages than it has
+// explicit `syncHints` calls — every picker Show and Hide, and there are ~30 of
+// them — and a hint pushed from thirty places is one that goes stale. refreshHints
+// re-renders only when the derived context actually changed, so the common message
+// (a watch delta, a log line) costs one comparison.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	if nm, ok := next.(Model); ok {
+		nm.refreshHints()
+		return nm, cmd
+	}
+	return next, cmd
+}
+
+// update is the real message handler; Update wraps it with the hint derivation.
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -3819,27 +3841,54 @@ func (m Model) sortNext() (tea.Model, tea.Cmd) {
 // wherever focus switches, and on resize (the help renderer elides the hint to the
 // current width).
 func (m *Model) syncHints() {
-	ctx := keymap.HelpMenu
+	ctx := m.hintContext()
+	m.hintCtx = ctx
+	m.hintbar.SetHint(m.help.ShortHelpContextView(ctx))
+}
+
+// refreshHints re-renders the hint only when the context it derives from has
+// changed since the last sync — the tail of every Update (HINT-01/D206). The
+// forced syncHints stays the call for a change the context does not capture (a
+// resize re-elides the same context to a new width).
+func (m *Model) refreshHints() {
+	if m.hintContext() != m.hintCtx {
+		m.syncHints()
+	}
+}
+
+// hintContext derives which curated hint subset is truthful right now. It mirrors
+// the precedence Update routes keys by, in the same order, because that is exactly
+// what makes a hint entry a promise (D143 pt 1): whoever owns input owns the hint.
+func (m *Model) hintContext() keymap.HelpContext {
 	switch {
 	case m.searchView.Active():
 		// The search mini-app replaces the browse body and captures every keypress, so
 		// the browse hints (filter, sort, actions, namespace…) are all unreachable while
 		// it is up — it gets its own context (SEARCH-03b).
-		ctx = keymap.HelpSearch
-	case m.logsView.Active():
-		// The logs mini-app likewise replaces the body (LOGS-02). It has two input
-		// states, and D143 pt 1 makes the difference matter: with the grep field open
-		// every text-producing key (`/`, `f`, `q`) types instead of firing, so only the
-		// no-text keys may be advertised.
-		if m.logsView.Filtering() {
-			ctx = keymap.HelpLogsFilter
-		} else {
-			ctx = keymap.HelpLogs
+		return keymap.HelpSearch
+	case m.logsView.Filtering():
+		// The logs mini-app's live grep captures text while it is open (LOGS-02), and
+		// D143 pt 1 makes the difference matter: `/`, `f` and `q` type instead of firing,
+		// so only the no-text keys may be advertised. Resolved before the picker for the
+		// same reason Update routes it first.
+		return keymap.HelpLogsFilter
+	case m.activePicker() != nil:
+		// A modal picker captures all input while it is up, so the browse hints under it
+		// are unreachable (HINT-01). Which of the two picker contexts applies is the
+		// field's state, not the picker's kind: open (every picker since PAL-01) leaves
+		// only the no-text keys, closed (WithOptInFilter) also honours `/`.
+		if m.activePicker().Filtering() {
+			return keymap.HelpPickerFilter
 		}
+		return keymap.HelpPicker
+	case m.logsView.Active():
+		// The logs mini-app with its grep closed honours every key it advertises, `q`
+		// included — quit closes the view, as it does in any pager.
+		return keymap.HelpLogs
 	case m.table.Focused():
-		ctx = keymap.HelpTable
+		return keymap.HelpTable
 	}
-	m.hintbar.SetHint(m.help.ShortHelpContextView(ctx))
+	return keymap.HelpMenu
 }
 
 // syncFilterStatus reflects the current filter state on the status bar: the live

@@ -72,6 +72,15 @@ const (
 	// HelpLogsFilter is the same logs mini-app with its live grep *open*, which
 	// captures text — so it advertises only the keys that still act there.
 	HelpLogsFilter
+	// HelpPickerFilter is any modal picker with its filter field open — which is
+	// every picker from the moment it is shown (PAL-01/D194 pt 2), the port picker
+	// excepted. The overlay captures all input and the open field takes every
+	// text-producing key, so only the no-text keys act: move, select, cancel.
+	HelpPickerFilter
+	// HelpPicker is a modal picker with its filter field *closed* — reachable only on
+	// a WithOptInFilter picker (the port picker, D139), where the letter keys are free
+	// and `/` opens the field.
+	HelpPicker
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
@@ -132,12 +141,30 @@ const (
 // them it self-announces — pressing it puts a timestamp on every row — so `?` and the
 // generated doc carry it and the hint line stays about the keys a reader needs to be
 // told about.
+//
+// The two picker contexts (HINT-01) are the same rule applied to an *overlay* rather
+// than a full-screen view: a modal picker captures every keypress while it is up, so
+// the browse hints underneath it advertised ten keys of which two acted. The
+// type-to-filter picker — every picker but the port one, since PAL-01 — opens its
+// field with itself, so `/`, `s`, `a`, `?` and `q` type a character and the honest set
+// is the four no-text keys the root actually routes: move the cursor, confirm, cancel.
+// Paging (ctrl+d/u) acts too and is left out as it is in every other context: the hint
+// is the keys a reader must be told about, not an inventory.
+//
+// HelpPicker is the closed-field state, which only a WithOptInFilter picker can be in
+// (the port picker, D139). It adds `/` — the key that opens the field — and nothing
+// else. The port picker's own two gestures (`p` local port, `0` free port) are *not*
+// hinted here even though they act: a HelpContext names an input state, not a picker
+// kind, and this set is shared by any future opt-in picker that does not bind them.
+// They stay in `?` and in the port picker's own title.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:       {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable:      {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
-	HelpSearch:     {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
-	HelpLogs:       {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
-	HelpLogsFilter: {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
+	HelpMenu:         {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable:        {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpSearch:       {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
+	HelpLogs:         {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
+	HelpLogsFilter:   {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
+	HelpPickerFilter: {ActionDown, ActionUp, ActionDrillIn, ActionBack},
+	HelpPicker:       {ActionDown, ActionUp, ActionFilter, ActionDrillIn, ActionBack},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

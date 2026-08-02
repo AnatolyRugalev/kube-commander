@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-04 put the selected row's own actions in the palette, with the object they act on named in its title (D205). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — HINT-01 stopped the hint line advertising keys an open picker swallows, by deriving the hint context at the tail of every Update instead of pushing it from ~30 sites (D206). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HINT-01** The hint line tells the truth while a picker is open
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -282,15 +281,18 @@ captures all input and, since PAL-01, opens its filter field with itself — so 
 menu/table set. Flagged by PAL-02, PAL-03a, PAL-03b, CRD-PIN-04 and CRD-01 in turn, and each
 time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shape.
 
-- [ ] **HINT-01** The hint line tells the truth while a picker is open
+- [x] **HINT-01** The hint line tells the truth while a picker is open
+      — done 2026-08-02 (D206)
+- [ ] **HINT-02** The same for the modals, the help overlay and the shared viewer
       status: todo | owner: — | added: 2026-08-02
-      notes: Two contexts, mirroring the logs view's pair: the type-to-filter picker (every
-      picker but one) honours only the no-text keys — move, select, cancel — while the
-      opt-in-filter picker (the port picker, D139/D194 pt 3) additionally honours `/`. Worth
-      doing **before PAL-05**, which makes the palette the surface those hints are wrong
-      about. Check while wiring it whether the sync belongs at each of the ~30 Show/Hide
-      sites or once where every message lands — a hint that has to be pushed from thirty
-      places is a hint that will go stale again.
+      notes: The neighbours HINT-01 left: a confirm modal swallows everything but
+      `y`/`n`/esc/enter, a prompt modal captures text, and the help overlay and shared
+      viewer each capture input too — all four still show the browse hint underneath.
+      Now a one-case change each in `hintContext` (D206 pt 1), so the work is deciding the
+      honest *sets*, not the wiring. The confirm set is the open question: its keys come
+      from the separate `ConfirmAction` table (D132), so its hint cannot be sourced from
+      the browse registry the way every other context is. Not urgent — a confirm modal
+      names its own choices in its body — so it ranks below PAL-05 and the AUTH line.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
@@ -492,6 +494,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **HINT-01** The bottom hint line stops promising keys an open picker swallows — two picker `HelpContext`s (field open: move/select/cancel; the opt-in field closed: `/` as well) chosen by the picker's input state rather than its kind, wired by *deriving* the hint context at the tail of every `Update` instead of pushing `syncHints` from the ~30 Show/Hide sites that never called it, with the derivation mirroring the router's own precedence — done 2026-08-02 (D206)
 
 - [x] **CRD-01** The browse table's empty pane says why its LIST failed — the reason lives where the reader is looking, outlives the 5-second toast, shows only while there are no rows and is retired by the RESET that recovery brings; a conversion webhook the apiserver cannot reach and a 406 on Table conversion are named by narrow `kube` predicates rather than by the error kind that would call both of them "cluster unreachable", and every reason says where the fix is and quotes the server — done 2026-08-02 (D200)
 

@@ -5553,3 +5553,32 @@ question the surface has to answer before it offers anything destructive. The ru
    claims is dropped rather than shadowing it (pt 2's identity rule); nothing collides
    today and a test says so, which is what keeps the drop a guard instead of silent
    behaviour.
+
+## D206 — The hint line is derived from whoever owns input, at the tail of every Update (2026-08-02, HINT-01)
+
+D143 made a hint entry a promise and D143 pt 3 said the promise is kept by calling
+`syncHints` "wherever input ownership moves". HINT-01 found where that rule ran out: a
+modal picker moves ownership at ~30 Show/Hide sites — every picker, the palette's stage
+changes, the context-switch teardown — and not one of them called it, so for the whole
+life of an open picker the hint advertised the browse keys while the picker's filter field
+ate them. A rule that has to be remembered in thirty places is not a rule.
+
+1. **The hint context is derived, not pushed.** `hintContext()` reads the shell's state
+   and returns the context; `Update` calls `refreshHints` after handling *every* message,
+   which re-renders only when the derived context differs from the one on screen. New
+   surfaces that capture input get a case there and are correct everywhere by
+   construction — do not answer a stale hint by adding a `syncHints` call to a handler.
+   The forced `syncHints` remains for a change the context does not capture (a resize
+   re-elides the same context to a new width).
+2. **The derivation mirrors Update's key-routing precedence, in the same order.** Search
+   view, then the logs grep, then any active picker, then the logs view, then pane focus.
+   The hint is a claim about which keys act, so it can only be read off the same
+   precedence that decides which keys act. If a future slice reorders one, it reorders
+   both — they are one list written twice, and the tests that pin the picker contexts are
+   what catches the drift.
+3. **An overlay's hint context is chosen by its input state, not by its kind.** A picker
+   with its filter open (every picker since PAL-01) honours only the no-text keys; a
+   WithOptInFilter picker with the field closed also honours `/`. Two contexts cover every
+   picker, present and future. A picker-kind-specific hint set (the port picker's `p`/`0`)
+   is *not* what a `HelpContext` is for — that would tie the hint registry to a surface
+   rather than to an input state.

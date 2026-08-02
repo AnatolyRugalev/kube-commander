@@ -192,6 +192,31 @@ func TestShortHelpContext(t *testing.T) {
 		t.Error("logs.regex acts in both logs states and should be hinted in both")
 	}
 
+	// The picker contexts (HINT-01) apply the same rule to an overlay. Every picker
+	// opens its filter with itself since PAL-01, so the honest set with the field open
+	// is the no-text keys the root routes: move, confirm, cancel. The closed-field
+	// state exists only on a WithOptInFilter picker, where `/` is what opens it.
+	pickerFilter := descs(hm.ShortHelpContext(HelpPickerFilter))
+	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionBack} {
+		if !pickerFilter[a.Describe()] {
+			t.Errorf("picker-filter context should offer %q — the picker honours it", a)
+		}
+	}
+	for _, a := range []Action{ActionFilter, ActionSort, ActionActions, ActionNamespace, ActionPin, ActionHelp, ActionQuit} {
+		if pickerFilter[a.Describe()] {
+			t.Errorf("%q types into an open picker filter, not honoured — it must not be hinted", a)
+		}
+	}
+	pickerClosed := descs(hm.ShortHelpContext(HelpPicker))
+	if !pickerClosed[ActionFilter.Describe()] {
+		t.Error("picker context (field closed) should offer the key that opens the field")
+	}
+	for _, a := range []Action{ActionNamespace, ActionHelp, ActionQuit} {
+		if pickerClosed[a.Describe()] {
+			t.Errorf("%q is swallowed by an open picker; the hint must not offer it", a)
+		}
+	}
+
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
 	if err != nil {
