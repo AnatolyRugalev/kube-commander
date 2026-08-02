@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-05b converted `R` to the palette's `:resource ` stage and retired the standalone resource picker, the second of PAL-05's four keys (D207). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-05c split on pickup into PAL-05c-1 (`ctrl+n`) and PAL-05c-2 (`C`), and PAL-05c-1 claimed. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -330,13 +331,34 @@ what changes is which surface they open, never whether they act.
 - [x] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
       — done 2026-08-02 (D207)
 - [x] **PAL-05b** `R` opens the palette's `:resource ` stage — done 2026-08-02 (D207)
-- [ ] **PAL-05c** `ctrl+n` and `C` open the `:namespace ` / `:context ` stages
-      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
-      notes: The two asynchronous verbs, together because they are the same shape: retiring
-      `nsPicker`/`ctxPicker` collapses the `dest` field on `namespacesLoadedMsg`/
-      `contextsLoadedMsg` (D199) to a single destination, so the two-surface routing in
-      `handleNamespacesLoaded`/`handleContextsLoaded` goes with them. `nsPicker` is the most
-      referenced of the five (52 sites, 9 files) — re-split if it proves > ~300 lines alone.
+**PAL-05c was split on pickup**, as its own notes allowed, into **PAL-05c-1** (`ctrl+n` →
+`:namespace `) and **PAL-05c-2** (`C` → `:context `). The two verbs are the same *shape* —
+both fetch their values, and retiring each picker collapses that message's `dest` routing
+(D199) — but they are not one diff: `nsPicker` is the most referenced picker of the five and
+has a second entry point the others do not (the menu's namespace-seam row,
+`menu.NamespaceRequestedMsg`), while `ctxPicker` carries M4-04b's marker rule and the
+kubeconfig read. One key per slice, as PAL-05a/b established.
+
+- [ ] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+      notes: The third D207 application, and the one with a second door: besides `ctrl+n`,
+      the menu's namespace-seam row (`menu.NamespaceRequestedMsg`) opens the same surface,
+      so both must land on the stage or the retired picker survives behind a menu row.
+      Retiring `nsPicker` collapses `namespacesLoadedMsg.dest` to a single destination and
+      takes the two-surface routing in `handleNamespacesLoaded` with it, plus the
+      `picker.SelectedMsg`/`CancelledMsg` **default** arms, which have routed to the
+      namespace picker since M2-08c.
+- [ ] **PAL-05c-2** `C` opens the palette's `:context ` stage
+      status: todo | owner: — | added: 2026-08-02
+      notes: The last mechanical conversion. Retiring `ctxPicker` collapses
+      `contextsLoadedMsg.dest` to one destination exactly as PAL-05c-1 did for
+      `namespacesLoadedMsg`, so `handleContextsLoaded` loses its two-surface routing;
+      `ctxByLabel` stays (the stage resolves through it) and must **not** join
+      `closePalette` — `applyPaletteArg` closes before it resolves the label (the PAL-05a
+      note about `themeByLabel`, now true of two maps). The one thing `C` carries that `R`
+      did not is D158's marker rule: the `*` follows the **shell's** context, not the
+      kubeconfig's, and `contextItems` is where that lives — it moves nowhere, like D203
+      did not.
 - [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
       status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The one slice that is not a mechanical conversion, because `a` has no argument
