@@ -834,6 +834,14 @@ type Model struct {
 	// touches it.
 	palArg keymap.Action
 
+	// palRowByLabel maps the palette's **row-scoped** entries back to their rowAction
+	// (PAL-04). It is the actions menu's own per-row source (rowActionTitles), rebuilt
+	// whenever the palette shows its verb stage, so the two surfaces cannot come to
+	// offer different actions for the same row. It is nil whenever there is no row to
+	// act on, which is also what makes "did the reader pick a row verb?" a lookup
+	// rather than a second piece of state. Only the update loop touches it.
+	palRowByLabel map[string]rowAction
+
 	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
 	// modal.ConfirmedMsg carries only the modal's Kind (no payload in confirm mode,
 	// D88), so the resource + the row's ObjectRef (its UID guards the snapshot race,

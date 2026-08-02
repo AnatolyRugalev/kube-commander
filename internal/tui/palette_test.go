@@ -511,3 +511,177 @@ func TestPaletteVerbsAreRegisteredAndDistinct(t *testing.T) {
 		seen[desc] = a
 	}
 }
+
+// rowVerbTitles is the set of row-action titles applicable to the browsed kind — the
+// same source the actions menu lists — so a test asserts against what `a` would offer
+// rather than against a second hand-written list that could drift from it.
+func rowVerbTitles(t *testing.T, m Model) []string {
+	t.Helper()
+	titles, _ := rowActionTitles(m.current)
+	return titles
+}
+
+// TestPaletteListsTheSelectedRowsActions is PAL-04's headline: with a row selected,
+// `:` offers the row-scoped actions beside the app-global verbs — exactly the set the
+// actions menu computes for that kind, so a Pod gets Logs and Exec shell and does not
+// get the node-only Cordon.
+func TestPaletteListsTheSelectedRowsActions(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m, _ = press(t, m, colon)
+
+	for _, title := range []string{"Describe", "Logs", "Exec shell", "View / Edit YAML", "Delete"} {
+		if _, ok := m.palRowByLabel[title]; !ok {
+			t.Errorf("the palette should offer the row verb %q with a Pod row selected", title)
+		}
+	}
+	for _, title := range []string{"Cordon", "Drain", "Suspend"} {
+		if _, ok := m.palRowByLabel[title]; ok {
+			t.Errorf("the palette should not offer %q — it does not apply to a Pod", title)
+		}
+	}
+	want := len(paletteVerbs) + len(rowVerbTitles(t, m))
+	if got := m.cmdPicker.Len(); got != want {
+		t.Fatalf("palette seeded with %d entries, want %d (verbs + row actions)", got, want)
+	}
+}
+
+// TestPaletteGlobalVerbsKeepTheTopOfTheList pins the compatibility rule: the row verbs
+// are *appended*, so every line a reader already types resolves to the same verb
+// whether or not a row happens to be selected — with an empty query the first entry is
+// still the first app-global verb.
+func TestPaletteGlobalVerbsKeepTheTopOfTheList(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m, _ = press(t, m, colon)
+	first, ok := m.cmdPicker.Selected()
+	if !ok {
+		t.Fatal("the palette should have a highlighted entry")
+	}
+	if want := paletteVerbs[0].Describe(); first != want {
+		t.Fatalf("first palette entry = %q, want the first global verb %q", first, want)
+	}
+}
+
+// TestPaletteTitleNamesTheRowItWouldActOn is the answer to "which object?" (D205): the
+// palette's own title carries the target, on screen, above the verbs that would act on
+// it — so a destructive entry can never be picked over an unnamed selection.
+func TestPaletteTitleNamesTheRowItWouldActOn(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("setup: the table should have a selected row")
+	}
+	target := viewerTitle(m.current, row.Object)
+	m, _ = press(t, m, colon)
+	if !strings.Contains(frame(m), target) {
+		t.Fatalf("the open palette should name its target %q on screen", target)
+	}
+}
+
+// TestPaletteTitleIsPlainWithNoRow is the other half: with nothing to act on there is
+// no target to name and no row verb to explain, so the title stays the bare one PAL-02
+// shipped.
+func TestPaletteTitleIsPlainWithNoRow(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, colon)
+	if m.palRowByLabel != nil {
+		t.Fatal("no row selected → no row verbs")
+	}
+	if got := frame(m); strings.Contains(got, paletteTitle+paletteTargetSep) {
+		t.Fatal("the palette title should carry no target when there is no row to act on")
+	}
+}
+
+// TestPaletteRowVerbDispatchesTheRowActionIntent proves a row verb picked in the
+// palette lands on the same rowActionMsg the actions menu and the direct key dispatch,
+// against the selected row's own object — one code path, not a palette-side copy.
+func TestPaletteRowVerbDispatchesTheRowActionIntent(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	row, _ := m.table.SelectedRow()
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "describe")
+	if v, _ := m.cmdPicker.Selected(); v != "Describe" {
+		t.Fatalf("typing \"describe\" selected %q, want the row verb %q", v, "Describe")
+	}
+
+	m, cmd := selectInPalette(t, m)
+
+	if m.cmdPicker.Active() {
+		t.Fatal("picking a row verb should close the palette")
+	}
+	if m.palRowByLabel != nil {
+		t.Fatal("closing the palette should drop the row-verb map")
+	}
+	if cmd == nil {
+		t.Fatal("a row verb should dispatch a row-action intent")
+	}
+	intent, ok := cmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("row verb produced %T, want rowActionMsg", cmd())
+	}
+	if intent.Action != rowActionDescribe {
+		t.Errorf("intent action = %q, want %q", intent.Action, rowActionDescribe)
+	}
+	if intent.Object.Name != row.Object.Name || intent.Object.Name == "" {
+		t.Errorf("intent object = %q, want the selected row's %q", intent.Object.Name, row.Object.Name)
+	}
+}
+
+// TestPaletteDeleteVerbStillConfirms is the guard on the one palette entry that can do
+// damage: `:delete` goes through the row action's own confirm modal, so the palette
+// adds a way to reach delete and no way to skip its confirmation.
+func TestPaletteDeleteVerbStillConfirms(t *testing.T) {
+	d := &fakeDeleter{}
+	m := openPodTable(t, "Pod", WithDeleter(d))
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "delete")
+	m, cmd := selectInPalette(t, m)
+	if cmd == nil {
+		t.Fatal("the delete row verb should dispatch an intent")
+	}
+	next, _ := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	if !m.modal.Active() || m.modal.Kind() != deleteModalKind {
+		t.Fatal("a delete picked in the palette should open the confirm modal")
+	}
+	if d.calls != 0 {
+		t.Fatal("nothing may be deleted before the modal is accepted")
+	}
+}
+
+// TestPaletteRowVerbsSurviveLeavingAnArgumentStage proves the verb stage has one
+// definition: backspacing out of `:resource ` returns to the *same* list `:` opened,
+// row verbs and target title included, rather than to a globals-only stage.
+func TestPaletteRowVerbsSurviveLeavingAnArgumentStage(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	want := len(paletteVerbs) + len(rowVerbTitles(t, m))
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "res")
+	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	if m.palArg != keymap.ActionResources {
+		t.Fatalf("setup: space should commit the resource verb, stage = %q", m.palArg)
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.palArg != "" {
+		t.Fatalf("backspace should return to the verb stage, stage = %q", m.palArg)
+	}
+	if got := m.cmdPicker.Len(); got != want {
+		t.Fatalf("the returned-to verb stage holds %d entries, want %d", got, want)
+	}
+}
+
+// TestRowVerbTitlesDoNotCollideWithPaletteVerbs pins the assumption the label→value
+// maps rest on (D203 pt 3): a palette label names exactly one thing. paletteRowVerbs
+// drops a row title an app-global verb already claims, which is a guard against a
+// future rename — this test is what says the guard is not currently swallowing an
+// action.
+func TestRowVerbTitlesDoNotCollideWithPaletteVerbs(t *testing.T) {
+	globals := map[string]keymap.Action{}
+	for _, a := range paletteVerbs {
+		globals[a.Describe()] = a
+	}
+	for _, meta := range rowActions {
+		if other, dup := globals[meta.title]; dup {
+			t.Errorf("row action %q shares its label with the palette verb %q — it would be dropped", meta.title, other)
+		}
+	}
+}

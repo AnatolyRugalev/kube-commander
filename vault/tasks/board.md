@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CRD-PIN-05 closed the CRD-PIN line: the palette's `:pin ` verb toggles a pin on a kind you name by typing it (D204). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-04 put the selected row's own actions in the palette, with the object they act on named in its title (D205). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-04** Contextual verbs for the selected row
-      status: in-progress | owner: claude-opus | added: 2026-08-01 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -297,16 +296,7 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
       — done 2026-08-02 (D198)
 - [x] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
       — done 2026-08-02 (D199)
-- [ ] **PAL-04** Contextual verbs for the selected row
-      status: todo | owner: — | added: 2026-08-01
-      notes: With a table row selected, the palette also offers the row-scoped actions
-      (logs, describe, edit, port-forward, delete…). The action picker (`a`) already computes
-      exactly this set per row — reuse that source, do not grow a second list that can drift
-      from it. Verbs that are unavailable for the row must not be offered.
-      CRD-PIN-05 already put one cursor-reading action in the palette as an argument verb
-      (`:pin `, D204): that is the *total* shape — the verb names its target — and it is not
-      what this slice does. PAL-04's verbs act on the row that is already selected, so the
-      thing to settle here is how the palette says which object it would act on.
+- [x] **PAL-04** Contextual verbs for the selected row — done 2026-08-02 (D205)
 - [ ] **PAL-05** The shortcut keys become sugar for a pre-typed palette line
       status: todo | owner: — | added: 2026-08-01
       notes: The one slice that changes what the existing keys *are*: `ctrl+n` becomes
@@ -315,6 +305,11 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
       PAL-03/04 land, the shortcuts are the *only* way to reach those values, so converting
       them earlier would remove function to add uniformity. Decide then whether any key is
       retired outright; the default is that all of them stay (D194 pt 4).
+      PAL-04 has landed the row-verb palette this converts `a` into: the entries come from
+      `rowActionTitles` and the target is named in the palette's title (D205). Two things it
+      left for this slice — whether the now-redundant "Open actions menu for the selected
+      row" verb survives the conversion, and whether `a`'s inertness rule and the palette's
+      stay one rule once they are one surface.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195)
 Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a

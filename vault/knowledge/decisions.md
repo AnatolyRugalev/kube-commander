@@ -5520,3 +5520,36 @@ must not undo:
    there is no `:unpin ` listing a different set. D202 pt 3's "both directions or
    neither" is a property of the gesture, not of the number of names it has, and a
    second verb would need its own value list and its own refusals.
+
+## D205 — Row-scoped verbs in the palette: one source for the set, the title for the target (2026-08-02, PAL-04)
+
+PAL-04 put the actions that operate on the **selected row** into the command palette, so
+`:` finally answers "what can I do right now?" and not only "what can this app do". D204
+pt 1 drew the line these sit on the other side of: a row verb does *not* name its target
+in the line, it acts on the row already under the cursor — which makes "which object?" a
+question the surface has to answer before it offers anything destructive. The rules:
+
+1. **The set is the actions menu's set, computed by the actions menu's code.** The
+   palette calls `rowActionTitles(m.current)` — what `a` lists — under `openActionsMenu`'s
+   own preconditions (a resource table showing, a row under the cursor; focus is not
+   required). An action that does not apply to the kind is absent here because it is
+   absent there, in the same predicate. A second list of what kubecom can do to a row is
+   the one thing this slice must never grow.
+2. **The palette names the object it would act on, in its title.** `Command — Pod
+   default/web-1`, above the list, from the same `viewerTitle` the viewers and the delete
+   confirm use. Once, in the chrome — not on each row: a 60-column modal cannot spare the
+   width, and a row's label is the identity its pick is resolved by (D203 pt 3), so
+   widening the labels would widen that key too. A palette that offers `Delete` without
+   naming what it would delete is the one entry in this surface that can do damage.
+3. **A row verb dispatches the row action's intent, and inherits every guard on it.**
+   The pick ends in `dispatchRowAction` — the function `a` and the direct keys end in — so
+   the palette emits the same `rowActionMsg` against the same row, and the confirmations
+   (delete, drain, rollout restart…) are the action's own. The palette adds a way to
+   reach an action and never a way to skip its confirmation.
+4. **The app-global verbs keep the top of the list; row verbs are appended.** A line a
+   reader has already learned resolves to the same verb whether or not a row happens to be
+   selected — the matcher reorders the moment anything is typed, so the position costs
+   nothing and the stability is free. A row title an app-global verb's description already
+   claims is dropped rather than shadowing it (pt 2's identity rule); nothing collides
+   today and a test says so, which is what keeps the drop a guard instead of silent
+   behaviour.

@@ -210,6 +210,14 @@ pop-up appearing. Backspace on an empty value takes you back to the verb list, a
 prompt does; the box says `— loading…` until it lands, and anything you type meanwhile
 still narrows it. Their own keys (`Ctrl+n`, `C`) keep working exactly as before.
 
+With a row selected in the table, the palette also lists **what you can do to that
+row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the
+rest, exactly the entries the actions menu (`a`) offers for that kind, and only the
+ones that apply to it. The object they would act on is named in the palette's own
+title (`Command — Pod default/web-1`), so you can always see what you are about to
+act on before you press Enter. Picking one does precisely what the actions menu does,
+confirmations included: `:del` `Enter` still asks before it deletes.
+
 Press `R` (`resources.switch`, rebindable) to jump straight to the resource picker —
 a pop-up list of every browsable resource kind, also reachable as the palette's
 "Switch resource" verb. Just type to narrow it and press Enter to switch the table to

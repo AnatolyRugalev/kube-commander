@@ -45,6 +45,14 @@ import (
 // all four argument verbs now behave identically from the reader's side: type the
 // verb, space, type the value.
 //
+// PAL-04 answers the other half of the feedback's "what can I do right now?": with a
+// table row selected the verb stage also lists the **row-scoped** actions — the exact
+// set the actions menu (`a`) computes for that row, never a second list — and the
+// palette's title names the object they would act on (D205). That title is the whole
+// answer to "which object": a palette entry that can delete something must say what,
+// and saying it once above the list beats repeating it on every row of a 60-column
+// modal.
+//
 // PAL-05 turns the shortcut keys into pre-typed palette lines. Until then the shortcuts
 // keep working unchanged (D194 pt 4) — these slices add a way in, they do not take one
 // away.
@@ -101,6 +109,12 @@ const (
 	// reads as a broken one, so the title is what distinguishes "nothing here" from
 	// "not here yet" (PAL-03b).
 	paletteLoading = " — loading…"
+	// paletteTargetSep joins the palette's title to the object its row verbs would
+	// act on: `Command — Pod default/web-1` (PAL-04). The target is named once, above
+	// the list, rather than on each row — a 60-column modal cannot spare the width,
+	// and the row titles are also the labels a pick is resolved by (D203 pt 3), so
+	// widening them would widen that key too.
+	paletteTargetSep = " — "
 )
 
 // paletteArgVerbs are the verbs whose **argument** the palette completes in place:
@@ -149,15 +163,66 @@ func paletteVerbItems() ([]string, map[string]keymap.Action) {
 	return labels, byLabel
 }
 
+// paletteRowVerbs returns the row-scoped verbs the palette offers right now and the
+// title of the object they would act on, or nil/"" when there is no row to act on.
+//
+// The set is rowActionTitles' — the actions menu's own source — so PAL-04 adds a way
+// *in* to those actions and not a second list of what they are: an action the menu
+// hides for this kind (Cordon on a Pod) is absent here for the same reason, in the
+// same code. The preconditions are openActionsMenu's too, deliberately: a resource
+// table showing and a row under the cursor, with no requirement that the table hold
+// focus, so `:` offers exactly what `a` would at that moment.
+//
+// A title already claimed by an app-global verb is dropped rather than shadowing it —
+// the label is the identity a SelectedMsg resolves by (D203 pt 3), so it must name one
+// thing. Nothing collides today (the globals are sentences, the row titles are
+// imperatives) and a test pins that, which is what makes the drop a guard rather than
+// silent behaviour.
+func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[string]rowAction, string) {
+	if !m.hasCurrent {
+		return nil, nil, ""
+	}
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		return nil, nil, ""
+	}
+	titles, byTitle := rowActionTitles(m.current)
+	labels := make([]string, 0, len(titles))
+	for _, title := range titles {
+		if _, dup := taken[title]; dup {
+			delete(byTitle, title)
+			continue
+		}
+		labels = append(labels, title)
+	}
+	if len(labels) == 0 {
+		return nil, nil, ""
+	}
+	return labels, byTitle, viewerTitle(m.current, row.Object)
+}
+
 // showPaletteVerbs puts the palette into its verb stage: the curated verb list, the
 // `: ` prompt, an empty query. It seeds a fresh palette and is also how the argument
 // stage is walked back out of, so "the palette showing verbs" has exactly one
 // definition and a returned-to palette is indistinguishable from a just-opened one.
+//
+// Since PAL-04 the stage is two lists: the app-global verbs, then the ones scoped to
+// the selected row. The globals keep the top in the empty-query order they have had
+// since PAL-02, so every line a reader has already learned still resolves to the same
+// verb whether or not a row happens to be selected — the row verbs are additive, and
+// the matcher ranks them the moment anything is typed.
 func (m Model) showPaletteVerbs() Model {
 	labels, byLabel := paletteVerbItems()
 	m.cmdByLabel = byLabel
 	m.palArg = ""
-	m.cmdPicker.SetTitle(paletteTitle)
+	title := paletteTitle
+	rowLabels, rowByLabel, target := m.paletteRowVerbs(byLabel)
+	m.palRowByLabel = rowByLabel
+	if target != "" {
+		labels = append(labels, rowLabels...)
+		title = paletteTitle + paletteTargetSep + target
+	}
+	m.cmdPicker.SetTitle(title)
 	m.cmdPicker.SetPrompt(palettePrompt)
 	m.cmdPicker.ClearQuery()
 	m.cmdPicker.SetItems(labels)
@@ -180,6 +245,7 @@ func (m *Model) closePalette() {
 	m.cmdPicker.SetTitle(paletteTitle)
 	m.cmdPicker.SetPrompt(palettePrompt)
 	m.cmdByLabel = nil
+	m.palRowByLabel = nil
 	m.palArg = ""
 }
 
@@ -316,12 +382,23 @@ func (m Model) applyPaletteArg(a keymap.Action, value string) (tea.Model, tea.Cm
 // line) and every other verb is handed to handleAction, the same dispatch a key press
 // reaches (D11). A label with no mapping — the palette can only list labels it mapped,
 // so this is defensive — closes it without running anything.
+//
+// A row verb (PAL-04) ends in dispatchRowAction — the one function `a` and the direct
+// keys already end in — so the palette emits the same rowActionMsg intent against the
+// same selected row, and every precondition and confirm modal on the way to the act
+// itself is the row action's own. The globals are resolved first: the two maps are
+// disjoint by construction (paletteRowVerbs drops a colliding title) and looking here
+// first is what makes that ordering explicit rather than incidental.
 func (m Model) handleCommandSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
 	if m.palArg != "" {
 		return m.applyPaletteArg(m.palArg, msg.Value)
 	}
 	a, ok := m.cmdByLabel[msg.Value]
 	if !ok {
+		if act, isRow := m.palRowByLabel[msg.Value]; isRow {
+			m.closePalette()
+			return m.dispatchRowAction(act)
+		}
 		m.closePalette()
 		return m, nil
 	}
