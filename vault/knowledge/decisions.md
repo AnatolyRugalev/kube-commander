@@ -5465,3 +5465,31 @@ gesture that takes one back out, and what had to change for it to be possible:
    and the menu's two visual states (cursor, active) are already the two a reader needs;
    the status-bar notice is what confirms the gesture. A later slice wanting to *show*
    pinned-ness decides that on its own evidence rather than inheriting it here.
+
+## D203 — A picker value carries match-only aliases, and a name two kinds share is qualified (2026-08-02, CRD-PIN-04)
+
+The CRD-PIN line rests on "a kind you reach for once is yours from then on", and the
+reaching happens in the resource picker, not by scrolling a menu of hundreds. Two ways
+that surface lost kinds are closed here, and both generalise beyond it:
+
+1. **A picker value may carry aliases: terms the filter matches but the row never
+   shows** (`picker.Item{Label, Aliases}`). A label is a name *for a reader*; a query is
+   whatever the reader knows the thing as. The resource picker's labels are Kinds, and a
+   Kubernetes user types what kubectl takes — the plural, a short name, the group — none
+   of which is even a subsequence of the Kind, so those queries matched nothing at all.
+   Aliases are match-only on purpose: widening the *label* would put text nobody reads on
+   every row, and the label is also the key a `SelectedMsg` is resolved by
+   (`resByLabel` and its siblings), so widening it would widen that key too.
+2. **An alias hit is scored on its own merit, unpenalised.** A row reached through `es`
+   ranks beside one reached through its label; the contiguous-over-scattered ordering
+   (D194 pt 1) still decides between them. A penalty would put the name the server itself
+   advertises below an accidental subsequence of someone else's Kind.
+3. **A label a picker shows must identify exactly one value.** Where two rows would
+   render the same text, *both* are qualified by what distinguishes them (the resource
+   picker: the API group, `Cluster (postgresql.cnpg.io)`, with the core group written
+   `core`) — never silently deduplicated to the first, which is what made a Kind two
+   operators share unreachable. Qualification applies only where the collision is, so the
+   common names muscle memory is built on stay bare.
+4. **Aliases and qualification are computed where the item set is built, once**
+   (`resourcePickerItems`), so `R` and the palette's `:resource ` stage cannot come to
+   match different things — the property D197 asks of the palette generally.

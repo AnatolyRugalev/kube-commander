@@ -75,6 +75,38 @@ type item string
 
 func (i item) FilterValue() string { return string(i) }
 
+// Item is one pickable value: the Label the reader sees, picks and gets back in
+// SelectedMsg, plus Aliases — extra terms the filter matches against but never
+// shows (CRD-PIN-04).
+//
+// The aliases exist because a label is a *name for a reader* while a query is
+// whatever the reader happens to know the thing as. The resource picker is the
+// case that forced it: its labels are Kinds ("Pod", "ExternalSecret") and the name
+// a Kubernetes user types is very often the one kubectl takes — the plural
+// ("externalsecrets"), a short name ("es"), or the API group — none of which is a
+// subsequence of the Kind, so typing them matched nothing at all.
+//
+// An alias is match-only on purpose: putting the extra terms in the label instead
+// would make every row of every picker carry text nobody reads, and the label is
+// also the identity a SelectedMsg is resolved by (resByLabel and its siblings), so
+// widening it would widen that key too.
+type Item struct {
+	Label   string
+	Aliases []string
+}
+
+// Labels lifts a plain value list into Items with no aliases — the shape every
+// picker but the resource one wants, and what SetItems does internally. It exists
+// so a caller that mixes the two (the command palette, whose verbs each seed the
+// same picker) can hand one type to one setter.
+func Labels(values []string) []Item {
+	items := make([]Item, 0, len(values))
+	for _, v := range values {
+		items = append(items, Item{Label: v})
+	}
+	return items
+}
+
 // itemDelegate renders each item on a single line, highlighting the cursor row with
 // the shared Selection style. It is a minimal list.ItemDelegate (no per-item state,
 // no key bindings) so the list contributes no hard-coded keys or help of its own.
@@ -110,7 +142,7 @@ type Model struct {
 	// all is the unfiltered value set (SetItems input). The list always shows the
 	// subset matching the current filter query; all is the source it is rebuilt from
 	// so clearing the filter restores every value without re-seeding.
-	all       []string
+	all       []Item
 	filter    textinput.Model // the incremental filter field (shown only while filtering)
 	filtering bool            // whether the filter field is open and capturing text
 
@@ -214,9 +246,19 @@ func (m *Model) ClearQuery() {
 }
 
 // SetItems replaces the picker's values (the unfiltered set) and shows the subset
-// matching the current filter query, cursor reset to the top.
+// matching the current filter query, cursor reset to the top. Each value is both
+// what is shown and the only thing matched; a picker whose values answer to other
+// names uses SetItemsWithAliases.
 func (m *Model) SetItems(values []string) {
-	m.all = append(m.all[:0:0], values...)
+	m.SetItemsWithAliases(Labels(values))
+}
+
+// SetItemsWithAliases is SetItems with match-only terms attached to each value
+// (Item.Aliases) — see Item. Both setters land here, so aliases are replaced with
+// the item set rather than accumulating across seeds: a picker reseeded in place
+// (the palette committing a verb) can never match against the last stage's terms.
+func (m *Model) SetItemsWithAliases(items []Item) {
+	m.all = append(m.all[:0:0], items...)
 	m.applyFilter()
 }
 
@@ -234,11 +276,17 @@ func (m *Model) SetItems(values []string) {
 // now the same one keystroke for keystroke in every picker.
 //
 // The sort is stable, so values the matcher scores equally keep the caller's order.
+//
+// A value with Aliases is matched against its label *and* each alias, and scored by
+// the best of them, unpenalised (CRD-PIN-04): an alias is a name the reader may
+// genuinely have meant — `es` for ExternalSecret is the name kubectl answers to —
+// so a row hit through one ranks beside a row hit through its label, and the
+// contiguous-over-scattered ordering (D194 pt 1) still decides between them.
 func (m *Model) applyFilter() {
 	items := make([]list.Item, 0, len(m.all))
 	if strings.TrimSpace(m.filter.Value()) == "" {
 		for _, v := range m.all {
-			items = append(items, item(v))
+			items = append(items, item(v.Label))
 		}
 		m.list.SetItems(items)
 		m.list.Select(0)
@@ -251,8 +299,8 @@ func (m *Model) applyFilter() {
 	}
 	hits := make([]hit, 0, len(m.all))
 	for _, v := range m.all {
-		if score, _, ok := matcher.Match(v); ok {
-			hits = append(hits, hit{value: v, score: score})
+		if score, ok := matchItem(matcher, v); ok {
+			hits = append(hits, hit{value: v.Label, score: score})
 		}
 	}
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
@@ -261,6 +309,21 @@ func (m *Model) applyFilter() {
 	}
 	m.list.SetItems(items)
 	m.list.Select(0)
+}
+
+// matchItem scores one item against the query: the best score among its label and
+// its aliases, and whether anything matched at all. Taking the best rather than the
+// first means the order aliases are listed in carries no meaning — a caller adds the
+// names a value answers to, not a ranked list.
+func matchItem(matcher kube.NameMatcher, it Item) (int, bool) {
+	best, _, ok := matcher.Match(it.Label)
+	for _, a := range it.Aliases {
+		score, _, hit := matcher.Match(a)
+		if hit && (!ok || score > best) {
+			best, ok = score, true
+		}
+	}
+	return best, ok
 }
 
 // SetSize records the full screen size; the modal is sized and centered within it.

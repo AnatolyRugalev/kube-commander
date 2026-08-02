@@ -186,7 +186,7 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	var (
-		labels  []string
+		items   []picker.Item
 		load    tea.Cmd
 		pending bool
 	)
@@ -195,9 +195,14 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		if m.watcher == nil {
 			return m, nil, false // watch-inert: there is no table to switch.
 		}
-		labels, m.resByLabel = m.resourcePickerItems()
+		// The one stage whose values carry aliases (CRD-PIN-04/D203): the kinds match
+		// their plural, short names and group here exactly as they do on `R`, since
+		// both stages are seeded from the one snapshot.
+		items, m.resByLabel = m.resourcePickerItems()
 	case keymap.ActionTheme:
+		var labels []string
 		labels, m.themeByLabel = themePickerItems(styles.Themes(), m.styles.Theme.Name)
+		items = picker.Labels(labels)
 	case keymap.ActionNamespace:
 		if m.nsLister == nil {
 			return m, nil, false // namespace-switch-inert, exactly as ctrl+n is.
@@ -212,7 +217,7 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 	default:
 		return m, nil, false
 	}
-	if !pending && len(labels) == 0 {
+	if !pending && len(items) == 0 {
 		return m, nil, false
 	}
 	m.palArg = a
@@ -223,7 +228,7 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 	m.cmdPicker.SetTitle(title)
 	m.cmdPicker.SetPrompt(palettePrompt + word + " ")
 	m.cmdPicker.ClearQuery() // SetItems applies the standing query; the verb's is spent.
-	m.cmdPicker.SetItems(labels)
+	m.cmdPicker.SetItemsWithAliases(items)
 	return m, load, true
 }
 

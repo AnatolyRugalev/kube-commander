@@ -395,3 +395,81 @@ func TestSetStylesRestylesRowsAndKeepsPlace(t *testing.T) {
 		t.Errorf("the item set changed on restyle: Len() = %d, want 3", got)
 	}
 }
+
+// newAliasModel is newTestModel for the alias-carrying shape (CRD-PIN-04): a picker
+// whose values answer to names the reader may type but never sees on the row.
+func newAliasModel(items ...Item) Model {
+	m := New(styles.Default(), "resource")
+	m.SetSize(80, 24)
+	m.SetItemsWithAliases(items)
+	return m
+}
+
+// TestFilterMatchesAnAlias is CRD-PIN-04's headline property: a query that matches
+// only a value's alias still finds it. "externalsecrets" is not a subsequence of
+// "ExternalSecret" (the trailing plural `s` has nothing to match), so before aliases
+// the name kubectl takes found nothing at all.
+func TestFilterMatchesAnAlias(t *testing.T) {
+	m := newAliasModel(
+		Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es", "external-secrets.io"}},
+		Item{Label: "Secret", Aliases: []string{"secrets"}},
+	)
+	m.Show()
+	m = typeFilter(m, "externalsecrets")
+	if got := m.Len(); got != 1 {
+		t.Fatalf("query %q matched %d rows, want 1 (ExternalSecret via its plural)", "externalsecrets", got)
+	}
+	if v, _ := m.Selected(); v != "ExternalSecret" {
+		t.Fatalf("selected %q, want ExternalSecret", v)
+	}
+}
+
+// TestAliasNeverShowsOnTheRow proves an alias is match-only: it widens what the query
+// reaches without adding a word to the list, which is the whole reason it is not simply
+// appended to the label.
+func TestAliasNeverShowsOnTheRow(t *testing.T) {
+	m := newAliasModel(Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es"}})
+	m.Show()
+	m = typeFilter(m, "es")
+	view := m.View()
+	if !strings.Contains(view, "ExternalSecret") {
+		t.Fatalf("the matched row should render its label; got:\n%s", view)
+	}
+	if strings.Contains(view, "externalsecrets") {
+		t.Fatalf("an alias leaked into the rendered row:\n%s", view)
+	}
+}
+
+// TestAliasHitRanksBesideALabelHit pins the unpenalised rule: a row reached through an
+// alias competes on the alias's own score, so an exact short name beats a scattered
+// subsequence of another row's label. Query "es": ExternalSecret's short name is the
+// whole needle, while "Secret" only matches it scattered (e...s is not contiguous
+// there) — so the short name must come first.
+func TestAliasHitRanksBesideALabelHit(t *testing.T) {
+	m := newAliasModel(
+		Item{Label: "Secret", Aliases: []string{"secrets"}},
+		Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es"}},
+	)
+	m.Show()
+	m = typeFilter(m, "es")
+	if got := m.Len(); got < 2 {
+		t.Fatalf("query %q matched %d rows, want both", "es", got)
+	}
+	if v, _ := m.Selected(); v != "ExternalSecret" {
+		t.Fatalf("selected %q, want ExternalSecret (its short name is an exact hit)", v)
+	}
+}
+
+// TestSetItemsClearsAliases proves the two setters land in one place: reseeding with
+// plain values drops the previous stage's aliases, so a picker swapped in place (the
+// command palette committing a new verb) cannot match against terms belonging to a
+// list it no longer shows.
+func TestSetItemsClearsAliases(t *testing.T) {
+	m := newAliasModel(Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets"}})
+	m.Show()
+	m.SetItems([]string{"ExternalSecret"})
+	m = typeFilter(m, "externalsecrets")
+	if got := m.Len(); got != 0 {
+		t.Fatalf("a stale alias still matched after SetItems: Len() = %d, want 0", got)
+	}
+}

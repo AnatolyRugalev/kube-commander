@@ -216,6 +216,14 @@ a pop-up list of every browsable resource kind, also reachable as the palette's
 that kind. This is the pane-free way to change the browsed resource, so you can work
 with the left menu hidden.
 
+The rows are Kinds (`ExternalSecret`), but you can type **whatever you call the kind
+at the kubectl prompt**: its plural (`externalsecrets`), any short name the server
+advertises (`es`), or its API group (`external-secrets.io`, which narrows to that
+operator's kinds when the Kind is the thing you cannot remember). And when two API
+groups define the same Kind — a `Cluster` per operator is common — both are listed,
+each with its group beside it (`Cluster (postgresql.cnpg.io)`), so you can tell them
+apart and pick either.
+
 **Every pop-up picker filters as you type** — the command palette, the resource
 picker, the namespace switcher (`Ctrl+n`), the context switcher (`C`), the theme
 switcher (`T`), the actions menu (`a`) and the container picker. There is no filter

@@ -2025,32 +2025,94 @@ func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
 	if m.watcher == nil {
 		return m, nil
 	}
-	labels, byLabel := m.resourcePickerItems()
+	items, byLabel := m.resourcePickerItems()
 	m.resByLabel = byLabel
-	m.resPicker.SetItems(labels)
+	m.resPicker.SetItemsWithAliases(items)
 	return m, m.resPicker.Show()
 }
 
 // resourcePickerItems renders the switchable resource kinds and the map resolving a
-// picked title back to its kube.Resource. It is shared by the standalone picker above
+// picked label back to its kube.Resource. It is shared by the standalone picker above
 // and the palette's `:resource ` argument stage (PAL-03a) so the two surfaces cannot
 // come to offer different kinds — the snapshot is the menu's own item list, taken once,
 // in one place.
-func (m Model) resourcePickerItems() ([]string, map[string]kube.Resource) {
-	items := m.menu.Items()
-	labels := make([]string, 0, len(items))
-	byLabel := make(map[string]kube.Resource, len(items))
-	for _, it := range items {
+//
+// CRD-PIN-04 made this the surface the CRD-PIN line's premise rests on — "a kind you
+// reach for once" is reached *here*, not by scrolling a menu of hundreds — so two ways
+// it lost kinds are closed (D203):
+//
+//   - **Every listed kind is reachable.** Two Kinds of the same name in different API
+//     groups (ordinary on a CRD-heavy cluster: a `Cluster`, a `Certificate` or a
+//     `Policy` per operator) used to collapse to one row and the second kind could not
+//     be picked at all. A name more than one row answers to is now qualified by its API
+//     group on *every* row that shares it, so both are listed and tell themselves apart.
+//   - **Every kind answers to the names it has.** The labels are Kinds, and a
+//     Kubernetes user types what kubectl takes: the plural (`externalsecrets`), a short
+//     name (`es`), or the group. None is a subsequence of the Kind, so all three matched
+//     nothing. They ride along as picker aliases — matched, never shown.
+func (m Model) resourcePickerItems() ([]picker.Item, map[string]kube.Resource) {
+	rows := m.menu.Items()
+
+	// Count the titles first: qualification has to apply to *both* sides of a
+	// collision, which is only knowable after the whole list has been seen. (A title
+	// unique to one row keeps its bare Kind — the common case, and the one muscle
+	// memory is built on.)
+	titles := make(map[string]int, len(rows))
+	for _, it := range rows {
 		if it.Kind != menu.ItemResource || !it.Available {
 			continue
 		}
-		if _, dup := byLabel[it.Title]; dup {
-			continue // a title collision would make the pick ambiguous — keep the first.
-		}
-		byLabel[it.Title] = it.Resource
-		labels = append(labels, it.Title)
+		titles[it.Title]++
 	}
-	return labels, byLabel
+
+	items := make([]picker.Item, 0, len(rows))
+	byLabel := make(map[string]kube.Resource, len(rows))
+	for _, it := range rows {
+		if it.Kind != menu.ItemResource || !it.Available {
+			continue
+		}
+		label := it.Title
+		if titles[label] > 1 {
+			label = qualifiedResourceLabel(it.Title, it.Resource.GVR.Group)
+		}
+		if _, dup := byLabel[label]; dup {
+			continue // same Kind *and* group (two versions) — still ambiguous, keep the first.
+		}
+		byLabel[label] = it.Resource
+		items = append(items, picker.Item{Label: label, Aliases: resourceAliases(it.Resource)})
+	}
+	return items, byLabel
+}
+
+// qualifiedResourceLabel disambiguates a Kind shared by more than one API group by
+// naming the group: `Cluster (postgresql.cnpg.io)`. The core group has no name, so it
+// is written `core` — the spelling kubectl and the API docs use for it, and better
+// than an empty pair of brackets.
+func qualifiedResourceLabel(title, group string) string {
+	if group == "" {
+		group = "core"
+	}
+	return title + " (" + group + ")"
+}
+
+// resourceAliases are the other names a kind answers to — the plural resource name,
+// its short names, and its API group — matched by the picker's filter but never
+// rendered (picker.Item).
+//
+// Discovery is what fills ShortNames, so a kind reached before the pass returns (a
+// seed row, a pinned row) matches on its plural and Kind alone and gains the rest when
+// discovery lands. That is a narrowing of what matches over time, never a change to
+// what is listed, so nothing disappears from under the reader.
+func resourceAliases(r kube.Resource) []string {
+	aliases := make([]string, 0, len(r.ShortNames)+2)
+	if r.GVR.Resource != "" {
+		aliases = append(aliases, r.GVR.Resource)
+	}
+	aliases = append(aliases, r.ShortNames...)
+	if r.GVR.Group != "" {
+		aliases = append(aliases, r.GVR.Group)
+	}
+	return aliases
 }
 
 // handleResourceSelected applies a resource picked from the command palette: it closes

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CRD-PIN-03 made `*` a toggle: the same key unpins, and only a row a pin put there can go (D202). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CRD-PIN-04 made the resource picker findable by plural, short name and group, and stopped a Kind two groups share from hiding one of them (D203). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -241,25 +240,34 @@ CRDs and is deliberately not CRD-01's degradation half (D191 pt 1 keeps them apa
 
 Triaged into four slices, bottom-up (D52): the store, then the gesture that writes it, then
 the gesture that removes it, then the discoverability that makes "reach for it once" true.
+The fourth was split on pickup into **CRD-PIN-04** (finding the kind — done) and
+**CRD-PIN-05** (pinning it from where you found it), since the two are different surfaces
+and the second wants a key the picker cannot spare.
 
 - [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
       2026-08-01 (D193)
 - [x] **CRD-PIN-02** `*` pins the kind under the cursor for this context — done 2026-08-02 (D201)
 - [x] **CRD-PIN-03** `*` on a pinned row unpins it — done 2026-08-02 (D202)
-- [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
-      notes: The premise the whole line rests on — "you reach for one *once*" — needs a
-      surface that lists **every discovered kind**, not just the menu's. The resource picker
-      is that surface; check what it lists today before building anything. Overlaps the
-      command-palette feedback (`2026-08-01-command-palette-unification`), which wants the
-      same picker to become `:resource` in a general palette, so **sequence this after the
-      palette shell lands** or the two will fight over the same surface — the shell landed
-      in PAL-02 (the picker is now the palette's "Switch resource" verb, and `R`), so this
-      is unblocked. Also decide here whether a kind can be pinned *from* the picker:
-      CRD-PIN-02 left that surface alone because every picker filters as you type (D194), so
-      `*` types a `*` there — it needs a no-text chord or a palette verb, not a letter. With
-      CRD-PIN-03 landed the gesture is a toggle, so whatever surface answers this offers
-      both directions or neither (D202 pt 3). This is the last slice of the line.
+- [x] **CRD-PIN-04** The resource picker finds a kind by any name it answers to — done
+      2026-08-02 (D203)
+- [ ] **CRD-PIN-05** Pin/unpin a kind from the resource picker
+      status: todo | owner: — | added: 2026-08-02
+      notes: The half of CRD-PIN-04 that is its own leg (split on pickup). CRD-PIN-02 left
+      the picker alone because every picker filters as you type (D194), so `*` there types a
+      `*` — the gesture needs a **no-text chord** (the `ctrl+…` shape `logs.previous` took,
+      D177) or a **palette verb** (`:pin <kind>`, which PAL-03a's `<verb> <argument>` line
+      already has the machinery for and which needs no new key at all). Whichever it is, it
+      offers **both directions or neither** (D202 pt 3), and it declines on an authored
+      entry with the same "in this context's menu file" notice `*` gives. Worth deciding
+      alongside PAL-04 (row-scoped verbs in the palette) — if the palette answers this, the
+      two slices share one surface and one refusal.
+      _Note on where the picker gets its kinds:_ its source is still the menu's item list.
+      That is equivalent to "every discovered kind" **today**, because `Reconcile` appends
+      every kind discovery finds — so the premise holds and nothing was re-plumbed for a
+      hypothetical. The day a slice narrows what the menu lists (the CRD-heavy-cluster ask
+      the feedback opens with), the picker must be re-sourced from the discovery result
+      instead, at the one snapshot D203 pt 4 names (`resourcePickerItems`), or the narrowing
+      takes the picker down with it.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
