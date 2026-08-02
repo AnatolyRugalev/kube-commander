@@ -211,10 +211,10 @@ prompt does; the box says `— loading…` until it lands, and anything you type
 still narrows it.
 
 A verb's own key is a **shortcut into the same line**: `T` opens the palette already
-reading `:theme `, so the key saves you the typing without taking you to a different
-box. Backspace or `Esc` from there rewinds to the full verb list, so a key pressed by
-mistake still leaves you one keystroke from everything else. (`Ctrl+n` and `C` still
-open their own pop-ups for now; they are converted next.)
+reading `:theme ` and `R` opens it reading `:resource `, so the key saves you the typing
+without taking you to a different box. Backspace or `Esc` from there rewinds to the full
+verb list, so a key pressed by mistake still leaves you one keystroke from everything
+else. (`Ctrl+n` and `C` still open their own pop-ups for now; they are converted next.)
 
 With a row selected in the table, the palette also lists **what you can do to that
 row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the
@@ -224,11 +224,11 @@ title (`Command — Pod default/web-1`), so you can always see what you are abou
 act on before you press Enter. Picking one does precisely what the actions menu does,
 confirmations included: `:del` `Enter` still asks before it deletes.
 
-Press `R` (`resources.switch`, rebindable) to jump straight to the resource picker —
-a pop-up list of every browsable resource kind, also reachable as the palette's
-"Switch resource" verb. Just type to narrow it and press Enter to switch the table to
-that kind. This is the pane-free way to change the browsed resource, so you can work
-with the left menu hidden.
+Press `R` (`resources.switch`, rebindable) to jump straight to the resource list — the
+palette opened on `:resource `, listing every browsable resource kind, exactly what the
+palette's "Switch resource" verb reaches. Just type to narrow it and press Enter to
+switch the table to that kind. This is the pane-free way to change the browsed
+resource, so you can work with the left menu hidden.
 
 The rows are Kinds (`ExternalSecret`), but you can type **whatever you call the kind
 at the kubectl prompt**: its plural (`externalsecrets`), any short name the server
@@ -238,8 +238,8 @@ groups define the same Kind — a `Cluster` per operator is common — both are 
 each with its group beside it (`Cluster (postgresql.cnpg.io)`), so you can tell them
 apart and pick either.
 
-**Every pop-up picker filters as you type** — the command palette (including `T`,
-which opens it on `:theme `), the resource picker, the namespace switcher (`Ctrl+n`),
+**Every pop-up picker filters as you type** — the command palette (including `T` and
+`R`, which open it on `:theme ` and `:resource `), the namespace switcher (`Ctrl+n`),
 the context switcher (`C`), the actions menu (`a`) and the container picker. There is
 no filter key to press first: the matching is the same one cluster search uses, so a
 typo-free abbreviation finds its

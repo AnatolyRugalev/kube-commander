@@ -1030,45 +1030,83 @@ func availableResourceCount(m Model) int {
 	return n
 }
 
-// TestResourcePaletteOpensAndSeeds proves `R` (resources.switch) opens the resource
-// command palette seeded with the menu's available resource kinds — the pane-free
-// resource switch of FB-nav-resource-palette (D96 slice 2). It needs a watcher (the
-// palette only makes sense when a resource can be watched).
-func TestResourcePaletteOpensAndSeeds(t *testing.T) {
+// openResourceStage presses `R` through the real key path (D11 — the binding is
+// registry-resolved, never matched raw) and returns the shell with the palette on its
+// `:resource ` stage. Since PAL-05b that is the only resource-switching surface there
+// is, so every test that used to open the standalone picker reaches it this way — the
+// way a reader does, rather than by calling an opener.
+func openResourceStage(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = press(t, m, capitalR)
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionResources {
+		t.Fatalf("`R` should open the palette on its resource stage, stage = %q", m.palArg)
+	}
+	return m
+}
+
+// TestResourceKeyOpensThePaletteResourceStage is PAL-05b's headline assertion: `R` no
+// longer opens a modal of its own, it opens the one palette with the resource verb
+// already committed — the pane-free switch of FB-nav-resource-palette (D96 slice 2)
+// on the palette's line. It is seeded synchronously from the menu's own available
+// kinds (no seam, no Cmd, nothing to wait for) and the prompt reading `:resource ` is
+// the tell that this is the palette and not a picker.
+func TestResourceKeyOpensThePaletteResourceStage(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
 	m, cmd := press(t, m, capitalR)
-	if !m.resPicker.Active() {
-		t.Fatal("resources.switch should open the resource palette")
+	if !m.cmdPicker.Active() {
+		t.Fatal("resources.switch should open the command palette")
+	}
+	if m.palArg != keymap.ActionResources {
+		t.Fatalf("`R` should commit the resource verb, stage = %q", m.palArg)
 	}
 	if msgs := pickerMsgs(cmd); len(msgs) != 0 {
-		t.Fatalf("opening the palette should issue no command beyond the filter blink, got %v", msgs)
+		t.Fatalf("the resource stage needs no async load: the kinds are the menu's own, got %v", msgs)
 	}
-	if got, want := m.resPicker.Len(), availableResourceCount(m); got != want {
-		t.Fatalf("palette seeded with %d entries, want %d (available resource rows)", got, want)
+	if got, want := m.cmdPicker.Len(), availableResourceCount(m); got != want {
+		t.Fatalf("stage seeded with %d entries, want %d (available resource rows)", got, want)
 	}
-	if got := m.resPicker.Len(); got == 0 {
-		t.Fatal("palette should list the seed resource kinds")
+	if got := m.cmdPicker.Len(); got == 0 {
+		t.Fatal("the stage should list the seed resource kinds")
+	}
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, palettePrompt+"resource ") {
+		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
+	}
+
+	// The key is sugar, not a second surface: typing the line by hand must land on the
+	// very same stage (D207) — same verb committed, same prompt, same rows.
+	typed := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	typed, _ = press(t, typed, colon)
+	typed = typeInto(t, typed, "resource")
+	typed, _ = press(t, typed, tea.Key{Code: ' ', Text: " "})
+	if got, want := stripANSI(typed.View().Content), view; got != want {
+		t.Errorf("`R` and `:resource ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
-// TestResourcePaletteInertWithoutWatcher proves a model with no watcher is
-// switch-inert: `R` opens nothing (there is no live table to switch).
-func TestResourcePaletteInertWithoutWatcher(t *testing.T) {
+// TestResourceStageInertWithoutWatcher proves a model with no watcher is switch-inert:
+// `R` opens nothing (there is no live table to switch). The stage decides that before
+// it shows anything (D197), so the key does not open an empty palette that would imply
+// the verb was available.
+func TestResourceStageInertWithoutWatcher(t *testing.T) {
 	m := sized(t) // no WithWatcher
 	m, cmd := press(t, m, capitalR)
-	if m.resPicker.Active() {
+	if m.cmdPicker.Active() {
 		t.Fatal("resources.switch without a watcher should not open the palette")
+	}
+	if m.palArg != "" {
+		t.Fatalf("an inert verb should not commit a stage, stage = %q", m.palArg)
 	}
 	if cmd != nil {
 		t.Fatal("resources.switch without a watcher should issue no command")
 	}
 }
 
-// TestResourcePaletteSelectSwitchesResource drives the whole switch: open the palette,
+// TestResourceStageSelectSwitchesResource drives the whole switch: open the stage,
 // filter to a kind, drill in — the selection starts a watch for that resource, marks
 // it active in the menu, and moves focus to the table (the same selectResource path a
 // menu drill-in takes). Works with the menu hidden, so it is the pane-free switch.
-func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
+func TestResourceStageSelectSwitchesResource(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
 
@@ -1078,33 +1116,34 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 		t.Fatal("menu.toggle should hide the menu")
 	}
 
-	// Open the palette and filter to "CronJob" (query "cron"). The filter is open with
+	// Open the stage and filter to "CronJob" (query "cron"). The filter is open with
 	// the palette (PAL-01), so the query starts on the first keystroke; the fuzzy
 	// fallback may add scattered matches below, but the contiguous one ranks first
 	// (D194 pt 1), so the cursor lands on CronJob.
-	m, _ = press(t, m, capitalR)
-	if !m.resPicker.Filtering() {
-		t.Fatal("opening the palette should open its filter")
+	m = openResourceStage(t, m)
+	if !m.cmdPicker.Filtering() {
+		t.Fatal("opening the stage should open its filter")
 	}
 	for _, r := range "cron" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
 	}
-	if got := m.resPicker.Len(); got == 0 {
+	if got := m.cmdPicker.Len(); got == 0 {
 		t.Fatal("filter to 'cron' left no items, want CronJob at least")
 	}
-	if v, _ := m.resPicker.Selected(); v != "CronJob" {
+	if v, _ := m.cmdPicker.Selected(); v != "CronJob" {
 		t.Fatalf("filter to 'cron' selected %q, want CronJob (the contiguous match)", v)
 	}
 
 	// Drill in (enter → nav.drillIn) selects the filtered value, stamped with the
-	// resource picker's Kind so the root routes it to selectResource, not namespaces.
+	// palette's Kind — since PAL-05b there is no resource Kind, because there is no
+	// second surface to distinguish from.
 	m, selCmd := press(t, m, tea.Key{Code: tea.KeyEnter})
 	sel, ok := selCmd().(picker.SelectedMsg)
 	if !ok {
 		t.Fatalf("drill-in produced %T, want picker.SelectedMsg", selCmd())
 	}
-	if sel.Kind != resourcePickerKind {
-		t.Fatalf("palette selection Kind = %q, want %q", sel.Kind, resourcePickerKind)
+	if sel.Kind != commandPickerKind {
+		t.Fatalf("stage selection Kind = %q, want %q", sel.Kind, commandPickerKind)
 	}
 	if sel.Value != "CronJob" {
 		t.Fatalf("selected %q, want CronJob", sel.Value)
@@ -1112,7 +1151,7 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 	next, _ := m.Update(sel)
 	m = next.(Model)
 
-	if m.resPicker.Active() {
+	if m.cmdPicker.Active() {
 		t.Fatal("selecting a resource should close the palette")
 	}
 	if !m.hasCurrent || m.current.GVR.Resource != "cronjobs" {
@@ -1122,27 +1161,37 @@ func TestResourcePaletteSelectSwitchesResource(t *testing.T) {
 		t.Fatal("switching a resource should move focus to the table")
 	}
 	if len(fw.res) != 1 || fw.res[0].GVR.Resource != "cronjobs" {
-		t.Fatalf("palette selection should watch cronjobs, got watch calls %v", fw.res)
+		t.Fatalf("the selection should watch cronjobs, got watch calls %v", fw.res)
 	}
 }
 
-// TestResourcePaletteCancels proves nav.back (esc) dismisses the palette without
-// switching the resource.
-func TestResourcePaletteCancels(t *testing.T) {
+// TestResourceStageCancelRewindsThenCloses: esc out of the key-opened stage behaves
+// exactly as it does for one reached by typing — it rewinds the line to the verb list
+// first and closes on the next esc (D207 pt 2). That is what makes `R` a way *into*
+// the palette rather than a dead end when the kind you want is not in the list, and
+// neither esc may start a watch.
+func TestResourceStageCancelRewindsThenCloses(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
-	m, _ = press(t, m, capitalR)
-	if !m.resPicker.Active() {
-		t.Fatal("resources.switch should open the palette")
-	}
+	m = openResourceStage(t, m)
+
 	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
 	if cancelCmd == nil {
 		t.Fatal("back should emit a cancel command")
 	}
 	next, _ := m.Update(cancelCmd())
 	m = next.(Model)
-	if m.resPicker.Active() {
-		t.Fatal("nav.back should close the palette")
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("the first esc should rewind to the verb list, stage = %q", m.palArg)
+	}
+	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionTheme.Describe()) {
+		t.Errorf("the rewound palette should show the verbs:\n%s", got)
+	}
+
+	next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind})
+	m = next.(Model)
+	if m.cmdPicker.Active() {
+		t.Fatal("the second esc should close the palette")
 	}
 	if m.hasCurrent {
 		t.Fatal("cancelling should not start a watch")

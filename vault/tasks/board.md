@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-05a landed the shortcut-to-palette mechanism on `T`, which now opens the palette's `:theme ` stage instead of a picker of its own, retiring that picker (D207). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-05b converted `R` to the palette's `:resource ` stage and retired the standalone resource picker, the second of PAL-05's four keys (D207). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -330,14 +329,7 @@ what changes is which surface they open, never whether they act.
 
 - [x] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
       — done 2026-08-02 (D207)
-- [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: The other synchronous verb, and the bigger one: `resPicker` carries the alias
-      matching (D203) and has its own test file (`respicker_test.go`, 194 lines). Those tests
-      do **not** get deleted with the picker — the behaviour they pin survives in the
-      `:resource ` stage, which is seeded from the same `resourcePickerItems` snapshot, so
-      they get re-pointed at it. Watch-inert must stay inert (`enterPaletteArg` already
-      refuses the stage with no watcher).
+- [x] **PAL-05b** `R` opens the palette's `:resource ` stage — done 2026-08-02 (D207)
 - [ ] **PAL-05c** `ctrl+n` and `C` open the `:namespace ` / `:context ` stages
       status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The two asynchronous verbs, together because they are the same shape: retiring
@@ -517,6 +509,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-05b** `R` opens the command palette on its `:resource ` line instead of a resource modal of its own — D207 applied unchanged to the bigger key, so `R` and `:` `resource` `␣` render byte-for-byte the same stage; the standalone `resPicker` is retired with its Kind, both message arms, `openResourcePicker`/`handleResourceSelected` and its seven plumbing sites, and CRD-PIN-04's aliases, group qualification and resolution move nowhere because the stage was already seeded from the one `resourcePickerItems` snapshot — the leg deletes the second place those guarantees had to hold, not the guarantees; `respicker_test.go` becomes `resourcestage_test.go`, re-pointed at the stage — done 2026-08-02 (D207)
 
 - [x] **PAL-05a** `T` opens the command palette on its `:theme ` line instead of a theme modal of its own — one `openPaletteArg` that enters the verb's argument stage through the same `enterPaletteArg` the typed line uses, so the key and `:` `theme` `␣` render byte-for-byte the same stage and cannot drift; esc/backspace rewind to the verb list before closing, which makes the key a way *into* the palette rather than a faster dead end; the standalone theme picker is retired in the same leg (the lint gate's `unused` couples them, and a dormant second surface for one verb is what the PAL feedback was about) with its tests re-pointed at the stage rather than deleted — done 2026-08-02 (D207)
 

@@ -577,7 +577,6 @@ type Model struct {
 	hintCtx keymap.HelpContext
 
 	nsPicker  picker.Model
-	resPicker picker.Model
 	actPicker picker.Model
 	ctrPicker picker.Model
 	// cmdPicker is the command palette (PAL-02): a picker over the app's verbs rather
@@ -804,12 +803,13 @@ type Model struct {
 	secretSel        int
 	secretEntryLines []int
 
-	// resByLabel maps each entry of the resource command palette (resPicker) back to
-	// its kube.Resource. The picker is generic over strings (D65), so the palette
-	// lists resource titles and this map, rebuilt each time the palette opens from the
-	// menu's current item set (openResourcePicker), resolves the picked title to the
-	// resource selectResource watches (FB-nav-resource-palette). It holds no shared
-	// mutable state — only the update loop touches it.
+	// resByLabel maps each row of the palette's `:resource ` (and `:pin `) stage back
+	// to its kube.Resource. The picker is generic over strings (D65), so the stage
+	// lists resource titles and this map, rebuilt each time the stage opens from the
+	// menu's current item set (resourcePickerItems), resolves the picked title to the
+	// resource selectResource watches (FB-nav-resource-palette; the stage is the only
+	// surface since PAL-05b). It holds no shared mutable state — only the update loop
+	// touches it.
 	resByLabel map[string]kube.Resource
 
 	// actByLabel maps each entry of the actions menu (actPicker) back to its
@@ -1044,7 +1044,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.status = statusbar.New(s)
 	m.hintbar = hintbar.New(s)
 	m.nsPicker = picker.New(s, namespacePickerKind)
-	m.resPicker = picker.New(s, "resource")
 	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
 	m.cmdPicker = picker.New(s, commandPickerKind)
@@ -1059,7 +1058,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.welcome = welcome.New(s)
 	m.searchView = searchview.New(s)
 	m.logsView = logsview.New(s)
-	m.resPicker.SetTitle("Switch resource")
 	m.actPicker.SetTitle("Actions")
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
@@ -1264,8 +1262,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case picker.SelectedMsg:
 		switch msg.Kind {
-		case resourcePickerKind:
-			return m.handleResourceSelected(msg)
 		case actionPickerKind:
 			return m.handleActionSelected(msg)
 		case commandPickerKind:
@@ -1282,8 +1278,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case picker.CancelledMsg:
 		switch msg.Kind {
-		case resourcePickerKind:
-			m.resPicker.Hide()
 		case actionPickerKind:
 			m.actPicker.Hide()
 		case commandPickerKind:
@@ -1744,7 +1738,6 @@ func (m *Model) resetCluster() {
 	m.viewer.Hide()
 	m.modal.Hide() // a pending confirm targets an object on the cluster being left.
 	m.nsPicker.Hide()
-	m.resPicker.Hide()
 	m.actPicker.Hide()
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
@@ -1985,8 +1978,6 @@ func (m *Model) activePicker() *picker.Model {
 	switch {
 	case m.nsPicker.Active():
 		return &m.nsPicker
-	case m.resPicker.Active():
-		return &m.resPicker
 	case m.actPicker.Active():
 		return &m.actPicker
 	case m.ctrPicker.Active():
@@ -2001,25 +1992,6 @@ func (m *Model) activePicker() *picker.Model {
 	return nil
 }
 
-// resourcePickerKind is the Kind stamped on the resource command palette's picker
-// (picker.New(s, "resource")). Both the namespace switcher and the palette emit the
-// same picker.SelectedMsg/CancelledMsg types (D65), so the root branches on this Kind
-// to route a resolved palette selection to selectResource rather than the namespace
-// path. An empty Kind (as the hermetic tests deliver) is treated as the namespace
-// picker, keeping those tests unchanged.
-const resourcePickerKind = "resource"
-
-// openResourcePicker opens the resource command palette (FB-nav-resource-palette,
-// D96's k9s `:`-style switch, on `R` since the palette took `:` in PAL-02): a modal
-// list of the browsable resource kinds, ranked as you type (PAL-01) and confirmed
-// with Enter to switch the table to that kind — a pane-free way
-// to change the browsed resource that does not need the left menu shown (it is what
-// makes the toggled-off menu of D99 fully usable). The source list is the menu's own
-// current item set (so discovered CRDs and per-context extras are included), filtered
-// to the available resource rows; the namespace seam and unavailable rows are skipped,
-// mirroring what a menu drill-in can act on. resByLabel is rebuilt from that snapshot
-// so the picked title resolves back to its resource. With no watcher wired the model
-// is watch-inert and switching a resource is a no-op, so the palette does not open.
 // availableResources is the kind set the shell currently knows about: the menu's own
 // item list narrowed to the available resource rows, so discovered CRDs and
 // per-context extras are included and an unavailable kind is skipped. It is the one
@@ -2038,21 +2010,12 @@ func (m Model) availableResources() []kube.Resource {
 	return out
 }
 
-func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
-	if m.watcher == nil {
-		return m, nil
-	}
-	items, byLabel := m.resourcePickerItems()
-	m.resByLabel = byLabel
-	m.resPicker.SetItemsWithAliases(items)
-	return m, m.resPicker.Show()
-}
-
 // resourcePickerItems renders the switchable resource kinds and the map resolving a
-// picked label back to its kube.Resource. It is shared by the standalone picker above
-// and the palette's `:resource ` argument stage (PAL-03a) so the two surfaces cannot
-// come to offer different kinds — the snapshot is the menu's own item list, taken once,
-// in one place.
+// picked label back to its kube.Resource. It seeds the palette's `:resource ` argument
+// stage (PAL-03a) and its `:pin ` stage (CRD-PIN-05/D203 pt 4) — since PAL-05b the two
+// stages are the only surfaces that list kinds, `R` among them — so the snapshot is the
+// menu's own item list, taken once, in one place, and no two of them can come to offer
+// different kinds.
 //
 // CRD-PIN-04 made this the surface the CRD-PIN line's premise rests on — "a kind you
 // reach for once" is reached *here*, not by scrolling a menu of hundreds — so two ways
@@ -2130,21 +2093,6 @@ func resourceAliases(r kube.Resource) []string {
 		aliases = append(aliases, r.GVR.Group)
 	}
 	return aliases
-}
-
-// handleResourceSelected applies a resource picked from the command palette: it closes
-// the palette and drives the same selectResource path a menu drill-in takes (start a
-// watch for the kind, mark it active in the menu, move focus to the table). The picked
-// title is resolved through resByLabel (built when the palette opened); a title with no
-// mapping — the palette can only list titles it mapped, so this is defensive — closes
-// the palette without switching.
-func (m Model) handleResourceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
-	m.resPicker.Hide()
-	r, ok := m.resByLabel[msg.Value]
-	if !ok {
-		return m, nil
-	}
-	return m.selectResource(r)
 }
 
 // actionPickerKind is the Kind stamped on the actions menu's picker
@@ -3907,7 +3855,7 @@ func (m *Model) syncFilterStatus() {
 // namespace picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.resPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.nsPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -4075,7 +4023,6 @@ func (m *Model) resize() {
 	// bar) and center themselves within it, so the status line stays visible below
 	// the modal.
 	m.nsPicker.SetSize(m.width, bodyH)
-	m.resPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
@@ -4227,12 +4174,14 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openNamespacePicker()
 	case keymap.ActionContext:
 		return m.openContextPicker()
-	case keymap.ActionTheme:
-		// `T` is the first shortcut converted to a pre-typed palette line (PAL-05a):
-		// it opens the palette on `:theme `, not a theme modal of its own (D207).
+	case keymap.ActionTheme, keymap.ActionResources:
+		// The shortcut keys converted to pre-typed palette lines so far (D207): `T`
+		// opens the palette on `:theme ` (PAL-05a) and `R` on `:resource ` (PAL-05b),
+		// neither on a modal of its own. One arm rather than one per key, because the
+		// conversion is the *same* fact about every one of them — the key names the
+		// verb, enterPaletteArg produces the stage, and the values, the inertness and
+		// the rendered frame are the typed line's. PAL-05c adds `ctrl+n` and `C` here.
 		return m.openPaletteArg(a)
-	case keymap.ActionResources:
-		return m.openResourcePicker()
 	case keymap.ActionPalette:
 		// `:` opens the palette (PAL-02). Reached from a key only: the palette skips
 		// itself when it builds its list, so this can never be a pick recursing.
@@ -4442,8 +4391,6 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
 	case m.nsPicker.Active():
 		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
-	case m.resPicker.Active():
-		body = overlayCenter(body, m.resPicker.View(), m.width, m.bodyHeight())
 	case m.actPicker.Active():
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	case m.ctrPicker.Active():

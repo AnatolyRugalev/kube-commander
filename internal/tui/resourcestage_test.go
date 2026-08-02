@@ -9,10 +9,16 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 )
 
-// CRD-PIN-04: the resource picker is the surface a kind is reached from once, so
-// every kind it lists has to be *findable* (by the names a Kubernetes user types,
-// not only its Kind) and *reachable* (a Kind two API groups share used to collapse
-// to one row, and the second kind could not be picked at all). D203.
+// CRD-PIN-04: the resource list is the surface a kind is reached from once, so every
+// kind it lists has to be *findable* (by the names a Kubernetes user types, not only
+// its Kind) and *reachable* (a Kind two API groups share used to collapse to one row,
+// and the second kind could not be picked at all). D203.
+//
+// Since PAL-05b that surface is the palette's `:resource ` stage rather than a picker
+// of its own — `R` opens the stage (D207) — so these tests moved with the behaviour
+// instead of dying with the picker. Nothing they pin is about the modal: the aliases,
+// the group qualification and the resolution all live in resourcePickerItems, which
+// seeds the stage from the same menu snapshot it seeded the picker from.
 
 // discoveredWith opens a sized, watchable, discoverable shell and folds one discovery
 // pass carrying rs into its menu — the state every test below asserts against.
@@ -36,7 +42,7 @@ func crd(group, kind, plural string, short ...string) kube.Resource {
 	}
 }
 
-// pickerLabels is the label set the resource picker would list, in order.
+// pickerLabels is the label set the `:resource ` stage would list, in order.
 func pickerLabels(m Model) []string {
 	items, _ := m.resourcePickerItems()
 	out := make([]string, 0, len(items))
@@ -46,54 +52,51 @@ func pickerLabels(m Model) []string {
 	return out
 }
 
-// TestResourcePickerFindsAKindByItsPlural drives the case the CRD feedback describes:
+// TestResourceStageFindsAKindByItsPlural drives the case the CRD feedback describes:
 // the reader knows the kind as `kubectl get externalsecrets` and types that. The plural
 // is not a subsequence of "ExternalSecret", so before CRD-PIN-04 this query left the
-// picker empty and the kind was unreachable by the only name the reader had.
-func TestResourcePickerFindsAKindByItsPlural(t *testing.T) {
+// list empty and the kind was unreachable by the only name the reader had.
+func TestResourceStageFindsAKindByItsPlural(t *testing.T) {
 	m := discoveredWith(t, crd("external-secrets.io", "ExternalSecret", "externalsecrets", "es"))
-	m, _ = press(t, m, capitalR)
-	if !m.resPicker.Active() {
-		t.Fatal("precondition: resources.switch should open the picker")
-	}
+	m = openResourceStage(t, m)
 	m = typeInto(t, m, "externalsecrets")
-	if got := m.resPicker.Len(); got != 1 {
+	if got := m.cmdPicker.Len(); got != 1 {
 		t.Fatalf("query %q left %d rows, want 1 (ExternalSecret)", "externalsecrets", got)
 	}
-	if v, _ := m.resPicker.Selected(); v != "ExternalSecret" {
+	if v, _ := m.cmdPicker.Selected(); v != "ExternalSecret" {
 		t.Fatalf("selected %q, want ExternalSecret", v)
 	}
 }
 
-// TestResourcePickerFindsAKindByItsShortName is the same property through the other
+// TestResourceStageFindsAKindByItsShortName is the same property through the other
 // name the server advertises — the one `kubectl get es` takes.
-func TestResourcePickerFindsAKindByItsShortName(t *testing.T) {
+func TestResourceStageFindsAKindByItsShortName(t *testing.T) {
 	m := discoveredWith(t, crd("external-secrets.io", "ExternalSecret", "externalsecrets", "es"))
-	m, _ = press(t, m, capitalR)
+	m = openResourceStage(t, m)
 	m = typeInto(t, m, "es")
-	if v, _ := m.resPicker.Selected(); v != "ExternalSecret" {
+	if v, _ := m.cmdPicker.Selected(); v != "ExternalSecret" {
 		t.Fatalf("selected %q, want ExternalSecret (its short name is the exact query)", v)
 	}
 }
 
-// TestResourcePickerFindsAKindByItsGroup proves the third alias: half-remembering the
+// TestResourceStageFindsAKindByItsGroup proves the third alias: half-remembering the
 // operator ("external-secrets…") narrows to that group's kinds, which is how a CRD is
 // hunted for when its Kind is the thing you cannot recall.
-func TestResourcePickerFindsAKindByItsGroup(t *testing.T) {
+func TestResourceStageFindsAKindByItsGroup(t *testing.T) {
 	m := discoveredWith(t,
 		crd("external-secrets.io", "ExternalSecret", "externalsecrets"),
 		crd("external-secrets.io", "SecretStore", "secretstores"),
 	)
-	m, _ = press(t, m, capitalR)
+	m = openResourceStage(t, m)
 	m = typeInto(t, m, "external-secrets.io")
-	if got := m.resPicker.Len(); got != 2 {
+	if got := m.cmdPicker.Len(); got != 2 {
 		t.Fatalf("query by group left %d rows, want the group's 2 kinds", got)
 	}
 }
 
 // TestCollidingKindsAreBothListedAndQualified is the reachability half. Two operators
 // each own a `Cluster`; both rows must be listed, and each must say which group it is —
-// a picker showing "Cluster" twice is not a choice the reader can make.
+// a list showing "Cluster" twice is not a choice the reader can make.
 func TestCollidingKindsAreBothListedAndQualified(t *testing.T) {
 	m := discoveredWith(t,
 		crd("postgresql.cnpg.io", "Cluster", "clusters"),
@@ -114,7 +117,7 @@ func TestCollidingKindsAreBothListedAndQualified(t *testing.T) {
 	}
 	for l, seen := range want {
 		if !seen {
-			t.Fatalf("%q missing from the picker: %v", l, labels)
+			t.Fatalf("%q missing from the stage: %v", l, labels)
 		}
 	}
 }
@@ -132,12 +135,12 @@ func TestCollidingKindsResolveToTheirOwnResource(t *testing.T) {
 	}}})
 	m = next.(Model)
 
-	m, _ = press(t, m, capitalR)
-	next, _ = m.Update(picker.SelectedMsg{Kind: resourcePickerKind, Value: "Cluster (cluster.x-k8s.io)"})
+	m = openResourceStage(t, m)
+	next, _ = m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "Cluster (cluster.x-k8s.io)"})
 	m = next.(Model)
 
-	if m.resPicker.Active() {
-		t.Fatal("picking a resource should close the picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("picking a resource should close the palette")
 	}
 	if len(fw.res) != 1 {
 		t.Fatalf("picking a resource started %d watches, want 1", len(fw.res))

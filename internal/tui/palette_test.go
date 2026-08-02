@@ -11,16 +11,18 @@ import (
 )
 
 // TestPaletteOpensOnColon proves `:` opens the command palette (PAL-02) — not the
-// resource picker it used to open — seeded with the curated verb list, with its
-// filter open from the moment it appears (PAL-01/D194 pt 1).
+// resource list it used to open — seeded with the curated verb list, with its filter
+// open from the moment it appears (PAL-01/D194 pt 1). Since PAL-05b the resource list
+// is a stage of this same palette, so "not the resource list" is now the assertion
+// that no verb is committed: `:` starts on the verbs, `R` on `:resource `.
 func TestPaletteOpensOnColon(t *testing.T) {
 	m := sized(t)
 	m, cmd := press(t, m, colon)
 	if !m.cmdPicker.Active() {
 		t.Fatal("app.palette should open the command palette")
 	}
-	if m.resPicker.Active() {
-		t.Fatal("`:` should no longer open the resource picker directly")
+	if m.palArg != "" {
+		t.Fatalf("`:` should open on the verb list, not on a committed stage, stage = %q", m.palArg)
 	}
 	if got, want := m.cmdPicker.Len(), len(paletteVerbs); got != want {
 		t.Fatalf("palette seeded with %d verbs, want %d", got, want)
@@ -79,9 +81,6 @@ func TestPaletteResourceVerbCommitsInPlace(t *testing.T) {
 
 	if !m.cmdPicker.Active() {
 		t.Fatal("an argument verb should keep the palette open, not close it")
-	}
-	if m.resPicker.Active() {
-		t.Fatal("the argument stage should be the palette itself, not the standalone resource picker")
 	}
 	if m.palArg != keymap.ActionResources {
 		t.Fatalf("palette stage = %q, want %q", m.palArg, keymap.ActionResources)
@@ -257,7 +256,7 @@ func TestPaletteArgumentStaysInertWithoutACluster(t *testing.T) {
 	if m.palArg != "" {
 		t.Fatalf("an inert verb should not open an argument stage, stage = %q", m.palArg)
 	}
-	if m.cmdPicker.Active() || m.resPicker.Active() {
+	if m.cmdPicker.Active() {
 		t.Fatal("an inert verb should leave nothing open")
 	}
 }

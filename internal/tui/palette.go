@@ -57,7 +57,15 @@ import (
 // an argument stops opening a modal of its own and opens *this* one with its verb
 // already committed (openPaletteArg). The key keeps working and keeps its meaning —
 // what changes is that there is one surface behind it instead of two (D207). It lands
-// one key per slice, `T` first (PAL-05a).
+// one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b).
+//
+// PAL-05b is the slice that shows what the conversion is worth rather than merely what
+// it costs. `R`'s picker was the surface CRD-PIN-04 hardened (aliases, group
+// qualification — D203), and the stage inherited every bit of that for free, because
+// both were already seeded from the one resourcePickerItems snapshot; retiring the
+// picker deletes the *second* place those guarantees had to hold, not the guarantees.
+// What `R` gains in exchange is the rest of the line: backspace rewinds to the verb
+// list, so a kind you cannot find is one keystroke from every other verb.
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
