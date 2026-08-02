@@ -513,6 +513,133 @@ func TestThePinKeyIsHintedInTheMenuContext(t *testing.T) {
 	}
 }
 
+// CRD-PIN-05: the same gesture reached by *typing the kind's name* rather than by
+// pointing at its row — the palette's `:pin ` verb (D204). The tests below drive the
+// real line (`:` → type the verb → space → type the kind → Enter), so they cover the
+// stage wiring and the toggle's three outcomes on the surface the CRD line's premise
+// ("you reach for a kind once") actually happens on.
+
+// pinInPalette walks the palette's pin line to its argument stage: `:`, the verb, the
+// separating space. It returns the model with the kinds listed and the prompt reading
+// `:pin `.
+func pinInPalette(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "pin")
+	if v, _ := m.cmdPicker.Selected(); v != keymap.ActionPin.Describe() {
+		t.Fatalf("typing \"pin\" selected %q, want %q", v, keymap.ActionPin.Describe())
+	}
+	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	if m.palArg != keymap.ActionPin {
+		t.Fatalf("space should commit the pin verb, stage = %q", m.palArg)
+	}
+	return m
+}
+
+// TestPalettePinVerbPinsTheKindYouTyped is the leg's headline: a kind is pinned by
+// naming it, with no cursor anywhere near its row (the menu here is focused on its
+// first row, not the CRD). The kind is found by its **plural** — the name the reader
+// types into kubectl — because the stage is seeded from the one snapshot `R` uses,
+// aliases and all (D203/D204 pt 1).
+func TestPalettePinVerbPinsTheKindYouTyped(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := discoveredModel(t, fp)
+	m = pinInPalette(t, m)
+
+	m = typeInto(t, m, "externalsecrets")
+	if got := m.cmdPicker.Len(); got != 1 {
+		t.Fatalf("query %q left %d rows, want 1 (ExternalSecret)", "externalsecrets", got)
+	}
+	m, cmd := selectInPalette(t, m)
+	drain(cmd)
+
+	if m.cmdPicker.Active() {
+		t.Error("applying the argument should close the palette")
+	}
+	if len(fp.got) != 1 || fp.got[0] != pinnedCRD() {
+		t.Fatalf("persisted %+v, want exactly one %+v", fp.got, pinnedCRD())
+	}
+	if !strings.Contains(m.View().Content, "pinned ExternalSecret") {
+		t.Errorf("the status bar should confirm the pin:\n%s", m.View().Content)
+	}
+}
+
+// TestPalettePinVerbUnpinsAPinnedKind is D202 pt 3 on the new surface: one verb, both
+// directions. The kind arrives already pinned (as a launch does it) and is not listed
+// by discovery, so the row the pin created leaves with it.
+func TestPalettePinVerbUnpinsAPinnedKind(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := sizedWith(t, WithPinPersister(fp), WithPinnedResources([]config.MenuResource{pinnedCRD()}))
+	if !menuHasResource(m, "externalsecrets") {
+		t.Fatal("precondition: the launch pin should be in the menu")
+	}
+	before := len(m.menu.Items())
+
+	m = pinInPalette(t, m)
+	m = typeInto(t, m, "externalsecrets")
+	m, cmd := selectInPalette(t, m)
+	drain(cmd)
+
+	if len(fp.removed) != 1 || fp.removed[0] != pinnedCRD() {
+		t.Fatalf("cleared %+v, want exactly one %+v", fp.removed, pinnedCRD())
+	}
+	if menuHasResource(m, "externalsecrets") || len(m.menu.Items()) != before-1 {
+		t.Error("the row the pin created should leave with the pin")
+	}
+	if !strings.Contains(m.View().Content, "unpinned ExternalSecret") {
+		t.Errorf("the status bar should confirm the unpin:\n%s", m.View().Content)
+	}
+}
+
+// TestPalettePinVerbDeclinesAnAuthoredEntry: the refusal is the toggle's, not the
+// key's, so it reaches the palette for free — and it must, because a `:pin ` that
+// quietly recorded a line `menus/<context>.yaml` outranks would be a lie told on a
+// second surface (D204 pt 2).
+func TestPalettePinVerbDeclinesAnAuthoredEntry(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := sizedWith(t, WithPinPersister(fp),
+		WithMenuExtras([]config.MenuResource{certExtra("certificates")}))
+
+	m = pinInPalette(t, m)
+	m = typeInto(t, m, "certificates")
+	m, cmd := selectInPalette(t, m)
+	drain(cmd)
+
+	if len(fp.got) != 0 || len(fp.removed) != 0 {
+		t.Errorf("an authored entry is neither pinned nor unpinned, got %+v / %+v", fp.got, fp.removed)
+	}
+	if !strings.Contains(m.View().Content, "menu file") {
+		t.Errorf("the palette should say where that entry lives:\n%s", m.View().Content)
+	}
+}
+
+// TestPalettePinVerbIsInertWithoutAPersister mirrors D197's rule for the verb stage: a
+// verb that cannot produce an outcome does not open an argument list that suggests it
+// can. With no persister the pin verb is as inert in the palette as `*` is on a row —
+// the stage is refused and the palette closes, rather than listing kinds that would
+// silently fail to be recorded.
+func TestPalettePinVerbIsInertWithoutAPersister(t *testing.T) {
+	m := sizedWith(t) // no WithPinPersister
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "pin")
+	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	if m.palArg == keymap.ActionPin {
+		t.Fatal("a pin-inert shell should not enter the pin argument stage")
+	}
+}
+
+// TestPalettePinVerbNeedsNoWatcher is the one way the pin stage differs from
+// `:resource `: switching the table needs a watcher and pinning does not, so a shell
+// that cannot browse can still record the kinds you want kept (D204 pt 1).
+func TestPalettePinVerbNeedsNoWatcher(t *testing.T) {
+	fp := &fakePinPersister{}
+	m := sizedWith(t, WithPinPersister(fp)) // no WithWatcher
+	m = pinInPalette(t, m)
+	if m.cmdPicker.Len() == 0 {
+		t.Fatal("the pin stage should list the seed kinds even with no watcher wired")
+	}
+}
+
 // drain runs a command (batched or not) and returns every message it produced, so a
 // test can assert on the write's outcome as well as the notice.
 func drain(cmd tea.Cmd) []tea.Msg {

@@ -120,6 +120,22 @@ func (m Model) pinResource() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	return m.togglePin(r)
+}
+
+// togglePin is the decision above applied to a kind that has already been named, and
+// it is where the three outcomes live. `*` names the kind by where the cursor is
+// (pinResource); the palette's `:pin ` stage names it by what you typed (CRD-PIN-05),
+// and both end here, so the two surfaces cannot come to disagree about what pinning an
+// authored entry does or about what the status bar says it did (D204 pt 2).
+//
+// It re-checks the persister because it is an entry point in its own right: a caller
+// that resolved a kind from a list is not necessarily one that checked the shell can
+// write.
+func (m Model) togglePin(r kube.Resource) (tea.Model, tea.Cmd) {
+	if m.pinner == nil {
+		return m, nil
+	}
 	entry := pinEntry(r)
 	label := pinLabel(r)
 	if indexOfGVR(m.menuExtras, entry) >= 0 {

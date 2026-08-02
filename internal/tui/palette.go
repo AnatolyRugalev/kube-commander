@@ -62,6 +62,12 @@ const commandPickerKind = "command"
 // nothing 95% of the time would be worse than no entry. Row-scoped verbs join the
 // palette in PAL-04, from the actions menu's own per-row source (never a second list).
 //
+// menu.pin is here despite its *key* reading the cursor, and that is not an exception
+// to the rule above: as a palette verb it takes the kind as its argument, so it names
+// what it acts on instead of depending on which pane has focus (CRD-PIN-05/D204). The
+// rule is about what the entry needs in order to mean something, not about which
+// surface the key happens to read.
+//
 // Adding a verb is adding a line here; the label and the dispatch both come from the
 // registry, so an entry cannot describe itself differently from its key or run
 // something else.
@@ -72,6 +78,7 @@ var paletteVerbs = []keymap.Action{
 	keymap.ActionSearch,
 	keymap.ActionForwards,
 	keymap.ActionActions,
+	keymap.ActionPin,
 	keymap.ActionToggleMenu,
 	keymap.ActionTheme,
 	keymap.ActionToggleMouse,
@@ -106,11 +113,18 @@ const (
 // are the menu's current item snapshot; the themes are the compiled-in registry) and
 // two do not (namespace lists against the cluster, context reads the kubeconfig) —
 // the difference is invisible in the line and is confined to enterPaletteArg.
+// CRD-PIN-05 adds a fifth, `pin`, whose values are the same kinds `:resource ` offers
+// — the one place a kind can be named by typing it rather than by pointing at it. Its
+// word stays `pin` though the verb toggles, because that is the name of the gesture
+// and of the thing it manages; a line reading `:unpin ` would have to be a second verb
+// listing a different set, and D202 pt 3's "both directions or neither" is satisfied by
+// one verb that does both, exactly as the key does.
 var paletteArgVerbs = map[keymap.Action]string{
 	keymap.ActionResources: "resource",
 	keymap.ActionTheme:     "theme",
 	keymap.ActionNamespace: "namespace",
 	keymap.ActionContext:   "context",
+	keymap.ActionPin:       "pin",
 }
 
 // paletteVerbItems renders the verb list and the label→action map that resolves a pick
@@ -199,6 +213,16 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		// their plural, short names and group here exactly as they do on `R`, since
 		// both stages are seeded from the one snapshot.
 		items, m.resByLabel = m.resourcePickerItems()
+	case keymap.ActionPin:
+		if m.pinner == nil {
+			return m, nil, false // pin-inert, exactly as `*` is.
+		}
+		// The same snapshot `:resource ` lists, aliases and group qualification and
+		// all (D203 pt 4): a kind is pinned by the name you find it under, and the two
+		// stages cannot come to offer different kinds. Pinning does not need a watcher
+		// — you may pin a kind you are not about to browse — so, unlike `:resource `,
+		// this stage is live in a watch-inert shell.
+		items, m.resByLabel = m.resourcePickerItems()
 	case keymap.ActionTheme:
 		var labels []string
 		labels, m.themeByLabel = themePickerItems(styles.Themes(), m.styles.Theme.Name)
@@ -251,10 +275,10 @@ func (m Model) fillPaletteArg(a keymap.Action, labels []string) Model {
 }
 
 // applyPaletteArg runs a verb with the argument picked in the palette. Each arm ends in
-// the *same* function the verb's standalone picker ends in — selectResource,
-// applyThemeNamed, applyNamespaceValue, applyContextLabel — so an argument reached
-// through the palette and one reached through the picker are one code path, in the
-// spirit of D197's "no second implementation": the palette resolves and applies, it
+// the *same* function the verb's standalone gesture ends in — selectResource,
+// togglePin, applyThemeNamed, applyNamespaceValue, applyContextLabel — so an argument
+// reached through the palette and one reached through the picker are one code path, in
+// the spirit of D197's "no second implementation": the palette resolves and applies, it
 // never re-implements what the verb does.
 func (m Model) applyPaletteArg(a keymap.Action, value string) (tea.Model, tea.Cmd) {
 	m.closePalette()
@@ -265,6 +289,12 @@ func (m Model) applyPaletteArg(a keymap.Action, value string) (tea.Model, tea.Cm
 			return m, nil // the stage only lists labels it mapped — defensive.
 		}
 		return m.selectResource(r)
+	case keymap.ActionPin:
+		r, ok := m.resByLabel[value]
+		if !ok {
+			return m, nil // the stage only lists labels it mapped — defensive.
+		}
+		return m.togglePin(r)
 	case keymap.ActionTheme:
 		name, ok := m.themeByLabel[value]
 		m.themeByLabel = nil

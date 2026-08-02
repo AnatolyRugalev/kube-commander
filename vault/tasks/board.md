@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — CRD-PIN-04 made the resource picker findable by plural, short name and group, and stopped a Kind two groups share from hiding one of them (D203). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CRD-PIN-05 closed the CRD-PIN line: the palette's `:pin ` verb toggles a pin on a kind you name by typing it (D204). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-PIN-05** Pin/unpin a kind from the resource picker
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -242,8 +241,9 @@ CRDs and is deliberately not CRD-01's degradation half (D191 pt 1 keeps them apa
 Triaged into four slices, bottom-up (D52): the store, then the gesture that writes it, then
 the gesture that removes it, then the discoverability that makes "reach for it once" true.
 The fourth was split on pickup into **CRD-PIN-04** (finding the kind — done) and
-**CRD-PIN-05** (pinning it from where you found it), since the two are different surfaces
-and the second wants a key the picker cannot spare.
+**CRD-PIN-05** (pinning it from where you found it — done), since the two are different
+surfaces and the second wanted a key the picker could not spare; the palette's argument
+stage is what supplied one (D204).
 
 - [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
       2026-08-01 (D193)
@@ -251,24 +251,27 @@ and the second wants a key the picker cannot spare.
 - [x] **CRD-PIN-03** `*` on a pinned row unpins it — done 2026-08-02 (D202)
 - [x] **CRD-PIN-04** The resource picker finds a kind by any name it answers to — done
       2026-08-02 (D203)
-- [ ] **CRD-PIN-05** Pin/unpin a kind from the resource picker
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
-      notes: The half of CRD-PIN-04 that is its own leg (split on pickup). CRD-PIN-02 left
-      the picker alone because every picker filters as you type (D194), so `*` there types a
-      `*` — the gesture needs a **no-text chord** (the `ctrl+…` shape `logs.previous` took,
-      D177) or a **palette verb** (`:pin <kind>`, which PAL-03a's `<verb> <argument>` line
-      already has the machinery for and which needs no new key at all). Whichever it is, it
-      offers **both directions or neither** (D202 pt 3), and it declines on an authored
-      entry with the same "in this context's menu file" notice `*` gives. Worth deciding
-      alongside PAL-04 (row-scoped verbs in the palette) — if the palette answers this, the
-      two slices share one surface and one refusal.
-      _Note on where the picker gets its kinds:_ its source is still the menu's item list.
-      That is equivalent to "every discovered kind" **today**, because `Reconcile` appends
-      every kind discovery finds — so the premise holds and nothing was re-plumbed for a
-      hypothetical. The day a slice narrows what the menu lists (the CRD-heavy-cluster ask
-      the feedback opens with), the picker must be re-sourced from the discovery result
-      instead, at the one snapshot D203 pt 4 names (`resourcePickerItems`), or the narrowing
-      takes the picker down with it.
+- [x] **CRD-PIN-05** Pin/unpin a kind by naming it — the palette's `:pin ` verb — done
+      2026-08-02 (D204)
+
+**The CRD-PIN line is closed** as of CRD-PIN-05/D204: the store, both directions of the
+gesture, the picker that makes a kind findable, and a palette verb that pins one by name.
+The answer to "which surface pins from the picker" was the palette rather than a `ctrl+…`
+chord — `:pin ` takes the kind as its argument, so it needs no key the pickers cannot spare
+and it works from anywhere. Two things it deliberately left, either of which is its own
+small item if a dogfood wants them: the `R` picker still has **no** in-place pin chord (the
+palette verb is the way in), and neither surface **shows** which kinds are already pinned
+(D202 pt 4 keeps provenance off the display; the status-bar notice is what confirms the
+gesture).
+
+_Note on where these surfaces get their kinds, carried forward:_ the source is still the
+menu's item list, and `:pin ` now shares it (D204 pt 1). That is equivalent to "every
+discovered kind" **today**, because `Reconcile` appends every kind discovery finds — so the
+premise holds and nothing was re-plumbed for a hypothetical. The day a slice narrows what
+the menu lists (the CRD-heavy-cluster ask the feedback opens with), both must be re-sourced
+from the discovery result instead, at the one snapshot D203 pt 4 names
+(`resourcePickerItems`), or the narrowing takes the picker **and the pin verb** down with
+it — and `:pin ` is the worse loss, since a narrowed menu is exactly when you need to pin.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
@@ -299,6 +302,10 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
       (logs, describe, edit, port-forward, delete…). The action picker (`a`) already computes
       exactly this set per row — reuse that source, do not grow a second list that can drift
       from it. Verbs that are unavailable for the row must not be offered.
+      CRD-PIN-05 already put one cursor-reading action in the palette as an argument verb
+      (`:pin `, D204): that is the *total* shape — the verb names its target — and it is not
+      what this slice does. PAL-04's verbs act on the row that is already selected, so the
+      thing to settle here is how the palette says which object it would act on.
 - [ ] **PAL-05** The shortcut keys become sugar for a pre-typed palette line
       status: todo | owner: — | added: 2026-08-01
       notes: The one slice that changes what the existing keys *are*: `ctrl+n` becomes

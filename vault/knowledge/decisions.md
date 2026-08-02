@@ -5493,3 +5493,30 @@ that surface lost kinds are closed here, and both generalise beyond it:
 4. **Aliases and qualification are computed where the item set is built, once**
    (`resourcePickerItems`), so `R` and the palette's `:resource ` stage cannot come to
    match different things — the property D197 asks of the palette generally.
+
+## D204 — A gesture that reads the cursor gets a palette verb that takes the target as its argument (2026-08-02, CRD-PIN-05)
+
+CRD-PIN-05 asked how a kind is pinned from the surface it is *found* on. The picker
+could not answer with a key — every picker filters as you type (D194), so `*` there
+types a `*` — and the palette could, because a verb's argument stage (D198) is a list
+you narrow by typing. That answer generalises, and these are the parts a later slice
+must not undo:
+
+1. **A palette verb may take as its argument what the equivalent key reads from the
+   cursor.** `paletteVerbs` is otherwise app-global actions only, and a row-scoped
+   action has no meaning there (PAL-04 is where that changes). A cursor-reading action
+   is not row-scoped in this sense: naming its target explicitly is what makes the
+   palette entry total rather than focus-dependent. The argument stage is seeded from
+   the *same* snapshot the standalone picker uses (D203 pt 4) — never a second list —
+   and it is inert exactly where the key is inert (`:pin ` needs a pin persister; unlike
+   `:resource ` it does **not** need a watcher, because pinning a kind is not browsing
+   it).
+2. **A verb reached two ways decides once.** Both surfaces end in the one handler
+   (`togglePin`), which is where "authored entry → decline and name the file", "pinned →
+   unpin", "neither → pin" live. A palette arm that re-derived any of those would be a
+   second implementation free to drift, and the drift would be a lie about the user's
+   own files (D197's rule, applied to a verb that *writes*).
+3. **A toggle keeps one verb and one word in the line.** `:pin ` both pins and unpins;
+   there is no `:unpin ` listing a different set. D202 pt 3's "both directions or
+   neither" is a property of the gesture, not of the number of names it has, and a
+   second verb would need its own value list and its own refusals.

@@ -204,8 +204,8 @@ of typing: type enough of the verb, press **Space** (or Enter), and the list bec
 that verb's values with the prompt reading `:resource `. So `:res` `␣` `pods` `Enter`
 switches the table to Pods, and `:theme ` `mono` `Enter` changes theme, without a second
 pop-up appearing. Backspace on an empty value takes you back to the verb list, as does
-`Esc`; another `Esc` closes the palette. All four value verbs complete this way —
-`resource`, `theme`, `namespace` and `context`. The last two have to fetch their values
+`Esc`; another `Esc` closes the palette. All five value verbs complete this way —
+`resource`, `pin`, `theme`, `namespace` and `context`. The last two have to fetch their values
 (from the cluster and from your kubeconfig), so their list can appear a moment after the
 prompt does; the box says `— loading…` until it lands, and anything you type meanwhile
 still narrows it. Their own keys (`Ctrl+n`, `C`) keep working exactly as before.
@@ -450,6 +450,13 @@ on, whether or not discovery lists it. The status bar confirms what was pinned.
 no file to edit. The row goes with it — unless discovery lists that kind too, in which
 case it stays as an ordinary discovered row, because unpinning means "stop keeping
 this for me", not "hide a kind this cluster has".
+
+You can also pin **by name**, without hunting for the row first: the command palette
+has a `pin` verb, so `:pin ` `externalsecrets` `Enter` toggles that kind from wherever
+you are. Its list is the same one `R` offers, so a kind is found by its plural, its
+short name or its API group — which is the point, since a kind you have never seen in
+the menu is exactly the one you want to pin. The verb toggles like the key does, and
+declines on a hand-written entry for the same reason.
 
 Pins are recorded for you, so they live in the kubecom-managed state file
 (`~/.config/kubecom/state/<context>.yaml`, below) rather than in the menu file you
