@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CRD-01 gave the browse table an empty state that s
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-PIN-02** The pin gesture: a key on a kind records it in this context's menu
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -244,7 +245,7 @@ the gesture that removes it, then the discoverability that makes "reach for it o
 - [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
       2026-08-01 (D193)
 - [ ] **CRD-PIN-02** `p` on a resource row/search hit pins that kind for the context
-      status: todo | owner: — | added: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
       notes: The write gesture. A new `pin.toggle` action (D10/D11 — a named action, never a
       raw key) on the surfaces that can name a kind: the resource picker (`:`) and the menu
       itself. It appends to `State.PinnedResources` through a persister seam shaped like
