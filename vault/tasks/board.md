@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — PAL-03a made the palette's line `<verb> <argument>
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -306,7 +307,7 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 - [x] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
       — done 2026-08-02 (D198)
 - [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-03a
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
       notes: Both verbs' values arrive as messages (`namespacesLoadedMsg`,
       `contextsLoadedMsg`) whose handlers today seed a specific picker and bail unless *that*
       picker is open. Teach them to seed whichever surface is asking, so the palette's
