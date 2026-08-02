@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/clientcmd"
@@ -173,6 +174,38 @@ func Classify(err error) ErrorKind {
 	}
 
 	return KindUnknown
+}
+
+// conversionWebhookMarker is the phrase apiextensions-apiserver puts in the
+// status message when it cannot complete a CRD conversion — "conversion webhook
+// for <group>/<version>, Kind=<kind> failed: …". Nothing else produces it.
+const conversionWebhookMarker = "conversion webhook for "
+
+// ConversionWebhookFailed reports whether err is the **apiserver's own** failure
+// to call a custom resource's conversion webhook. It is not an ErrorKind because
+// it is not a way the *client* can fail: the request reached the server, the
+// server tried to serve it, and a component of the cluster did not answer — so
+// `kubectl get` fails identically and there is nothing to fix on this machine
+// (the 2026-08-01 dogfood's finding, D191 pt 1).
+//
+// Kept apart from Classify on purpose: the status carried is a 500 InternalError
+// or a 503, both of which classify to something that reads as "the cluster is
+// unreachable" — which is the misleading message this predicate exists to
+// prevent. Matched on the message text because the status carries no machine
+// field for it, and narrowly: only the apiserver writes that phrase.
+func ConversionWebhookFailed(err error) bool {
+	return err != nil && strings.Contains(err.Error(), conversionWebhookMarker)
+}
+
+// TableUnsupported reports whether err is the server refusing the Table content
+// type (HTTP 406). Every List and Watch asks for `application/json;as=Table` so
+// the columns are the server's own, kubectl-identical ones — an aggregated or
+// legacy apiserver that does not implement the Table conversion answers 406, and
+// the resource simply cannot be browsed against that server. 406 has no
+// ErrorKind: it is a content-negotiation outcome, not a cluster fault, and every
+// kind sharing that apiserver fails the same way.
+func TableUnsupported(err error) bool {
+	return err != nil && apierrors.IsNotAcceptable(err)
 }
 
 // chainMatches reports whether pred holds for err or any error in its unwrap

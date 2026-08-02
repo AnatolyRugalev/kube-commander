@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -128,4 +129,62 @@ users: []
 		t.Fatalf("write empty kubeconfig: %v", err)
 	}
 	return path
+}
+
+// TestConversionWebhookFailed pins the narrow match: the apiserver's own
+// "conversion webhook for … failed" wording is recognised through kubecom's
+// wrapping, and no other server error is dressed up as one (CRD-01/D191 pt 1).
+func TestConversionWebhookFailed(t *testing.T) {
+	gr := schema.GroupResource{Group: "external-secrets.io", Resource: "externalsecrets"}
+	webhook := apierrors.NewInternalError(errors.New(
+		`conversion webhook for external-secrets.io/v1beta1, Kind=ExternalSecret failed: ` +
+			`Post "https://external-secrets-webhook.external-secrets.svc:443/convert?timeout=30s": ` +
+			`dial tcp 10.0.0.1:443: connect: connection refused`))
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"the apiserver's conversion failure", webhook, true},
+		{"wrapped as the list path wraps it", fmt.Errorf("kube: listing externalsecrets: %w", webhook), true},
+		{"a plain internal error", apierrors.NewInternalError(errors.New("boom")), false},
+		{"a forbidden list", apierrors.NewForbidden(gr, "", errors.New("denied")), false},
+		{"a transport failure", &url.Error{Op: "Get", Err: errors.New("connection refused")}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ConversionWebhookFailed(tc.err); got != tc.want {
+				t.Fatalf("ConversionWebhookFailed = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTableUnsupported proves a 406 — the server refusing the Table content type
+// every List and Watch asks for — is recognised through the wrap chain, and that
+// neighbouring statuses are not.
+func TestTableUnsupported(t *testing.T) {
+	notAcceptable := &apierrors.StatusError{ErrStatus: metav1.Status{
+		Status:  metav1.StatusFailure,
+		Code:    406,
+		Reason:  metav1.StatusReasonNotAcceptable,
+		Message: "only the following media types are accepted: application/json",
+	}}
+
+	if !TableUnsupported(fmt.Errorf("kube: listing widgets: %w", notAcceptable)) {
+		t.Fatal("a wrapped 406 must be recognised")
+	}
+	if TableUnsupported(nil) {
+		t.Fatal("nil is not a 406")
+	}
+	if TableUnsupported(apierrors.NewBadRequest("nope")) {
+		t.Fatal("a 400 is not a 406")
+	}
+	// 406 carries no ErrorKind of its own: the copy layer switches on the
+	// predicate, and Classify must not be quietly taught to guess at it.
+	if got := Classify(notAcceptable); got != KindUnknown {
+		t.Fatalf("Classify(406) = %v, want KindUnknown", got)
+	}
 }

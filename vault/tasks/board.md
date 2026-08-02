@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-03b completed the palette line: `:namespace ` and `:context ` complete in the box too, their fetched values addressed to the surface that asked (D199). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CRD-01 gave the browse table an empty state that says why its LIST failed, naming the two cluster-side causes the error kind would misdescribe (D200), closing the DIAG line. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CRD-01** A LIST that fails for the whole group says *why*, legibly, instead of a
-      5-second toast
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -223,19 +221,14 @@ removed is the conversion webhook — the fresh chart serves only `v1` with
 `spec.conversion.strategy: None`, while the reporting cluster served `v1beta1` *and* `v1`
 behind `strategy: Webhook`. A conversion webhook that is down or serving a bad cert makes
 the **apiserver** fail the LIST, which kills `kubectl` too. So there is no client bug, and a
-leg that "fixes" one would be inventing it (D79). What remains is the degradation path — the
-half DISC-01 (D187) landed in the log file, not yet on screen:
-
-- [ ] **CRD-01** A LIST that fails for the whole group says *why*, legibly, instead of a
-      5-second toast
-      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | re-scoped: 2026-08-01 | claimed: 2026-08-02
-      notes: When a kind's LIST fails on a cluster-side cause the user can act on — a
-      conversion webhook unavailable, a 406 on Table conversion, a 403 on the group — the
-      browse table should say so where the reader is looking, rather than surfacing the bare
-      error through the toast that DIAG-01 already logs. The empty-table-with-reason surface
-      is the leg; the wording is the point of it. Check the sibling kinds (`SecretStore`,
-      `PushSecret`) with it. **Not** a CRD-handling fix: no evidence of one exists, and D191
-      pt 1 says a future leg may not re-derive one from this line's title.
+leg that "fixes" one would be inventing it (D79). What remained was the degradation path —
+the half DISC-01 (D187) landed in the log file, not yet on screen — and **CRD-01 landed it
+on 2026-08-02 (D200), which closes the DIAG line**: an empty browse pane now carries why its
+LIST failed, with the conversion webhook and a 406 on Table conversion named apart from the
+kind that would otherwise misdescribe them. The wording, not the mechanism, was the leg.
+One claim is unverified against a real broken-webhook cluster and is parked in
+`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks
+nothing).
 
 ### Custom resources (CRD-PIN — feedback-driven)
 Raised by feedback `2026-08-01-custom-resources-pinning` ("custom resources are really hard
@@ -480,6 +473,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CRD-01** The browse table's empty pane says why its LIST failed — the reason lives where the reader is looking, outlives the 5-second toast, shows only while there are no rows and is retired by the RESET that recovery brings; a conversion webhook the apiserver cannot reach and a 406 on Table conversion are named by narrow `kube` predicates rather than by the error kind that would call both of them "cluster unreachable", and every reason says where the fix is and quotes the server — done 2026-08-02 (D200)
 
 - [x] **PAL-02** `:` opens the command palette — one picker over the app's verbs, labelled by the action registry's own `Describe()` text and ranked by PAL-01's matcher, whose pick runs through the same `handleAction` a key press reaches (no palette-specific handler, so a verb and its key cannot diverge); `resources.switch` handed `:` over and took `R`, keeping a direct key because an unbound action vanishes from `?` and the generated doc — done 2026-08-02 (D197)
 

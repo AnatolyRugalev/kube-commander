@@ -33,6 +33,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
@@ -93,6 +94,17 @@ type Model struct {
 	// applyFilter. See usage.go.
 	usage map[kube.UsageKey]kube.Usage
 
+	// notice is the reason there is nothing to show, rendered *in place of* the
+	// empty body when the table holds no rows (CRD-01). A LIST that fails leaves
+	// the pane blank forever — the watch loop retries behind a 5-second toast that
+	// is gone by the time the reader looks up — so the pane itself has to carry the
+	// reason. Its first line is the headline (Error style) and the rest is detail
+	// (Subtle); the embedder composes the text, this package only lays it out.
+	// It is shown only while there are no rows: rows on screen are the answer, and
+	// a stale reason must never cover them. SetTable and a RESET both clear it —
+	// a new snapshot, or a List that finally succeeded, is the end of the failure.
+	notice string
+
 	cursor  int // index of the highlighted row
 	offset  int // index of the first visible row (vertical scroll)
 	hoffset int // first visible display column (horizontal scroll)
@@ -132,12 +144,32 @@ func (m *Model) SetTable(t kube.Table) {
 	// the overlay is dropped here exactly as the filter and the sort are. The shell
 	// re-installs it for the new kind if the cluster measures it (M4-10).
 	m.usage = nil
+	m.notice = "" // a fresh snapshot supersedes whatever the last one failed with.
 	m.applyFilter()
 	m.cursor = 0
 	m.offset = 0
 	m.hoffset = 0
 	m.clampOffset()
 }
+
+// SetNotice records why the table has nothing to show, to be rendered in the
+// body while it holds no rows (CRD-01). text's first line is the headline and
+// any further lines are detail; both wrap to the pane width. Passing "" clears
+// it, exactly as ClearNotice does.
+//
+// Setting a notice never hides rows: an error that arrives while a populated
+// table is on screen (a watch that drops after a good List) leaves the rows
+// visible and the notice dormant, ready for the moment the rows go away. That is
+// why it is a separate field rather than a substitute row set.
+func (m *Model) SetNotice(text string) { m.notice = text }
+
+// ClearNotice drops the recorded reason. The embedder calls it when the
+// condition behind it is gone; SetTable and a RESET delta clear it on their own.
+func (m *Model) ClearNotice() { m.notice = "" }
+
+// Notice returns the recorded reason ("" when none). For the embedder and tests
+// — the rendering is View's business.
+func (m Model) Notice() string { return m.notice }
 
 // SetFilter narrows the displayed rows to those matching q (case-insensitive
 // substring across the visible columns' cells), preserving the selection by
@@ -324,6 +356,10 @@ func (m *Model) ApplyEvent(ev kube.WatchEvent) {
 	switch ev.Type {
 	case kube.WatchReset:
 		m.full = kube.Table{Columns: ev.Columns, Rows: ev.Rows}
+		// A RESET is a List that succeeded — including the re-List the watch loop
+		// runs after a failure — so whatever reason the pane was carrying is over,
+		// even when the successful List returned no rows (CRD-01).
+		m.notice = ""
 	case kube.WatchAdded, kube.WatchModified:
 		for _, r := range ev.Rows {
 			m.upsertRow(r)
@@ -835,16 +871,48 @@ func (m Model) View() string {
 	starts := m.columnStarts()
 
 	dataRows := inner - 1
-	for row := 0; row < dataRows; row++ {
-		i := m.offset + row
-		if i >= len(m.table.Rows) {
-			lines = append(lines, m.styles.App.Width(innerW).Render(""))
-			continue
+	if len(m.table.Rows) == 0 && m.notice != "" {
+		lines = append(lines, m.noticeBody(innerW, dataRows)...)
+	} else {
+		for row := 0; row < dataRows; row++ {
+			i := m.offset + row
+			if i >= len(m.table.Rows) {
+				lines = append(lines, m.styles.App.Width(innerW).Render(""))
+				continue
+			}
+			lines = append(lines, m.renderRow(m.table.Rows[i], i == m.cursor, innerW, starts))
 		}
-		lines = append(lines, m.renderRow(m.table.Rows[i], i == m.cursor, innerW, starts))
 	}
 
 	return frame.Width(m.width).Height(m.height).Render(strings.Join(lines, "\n"))
+}
+
+// noticeBody renders the notice into exactly rows lines of width innerW: the
+// first source line as the headline (Error), the rest as detail (Subtle), each
+// word-wrapped to the pane and the remainder blank-filled so the frame keeps its
+// height. Text past the available rows is dropped rather than scrolled — the
+// pane is not a viewer, and the headline (the part that must be read) is first.
+func (m Model) noticeBody(innerW, rows int) []string {
+	if rows <= 0 || innerW <= 0 {
+		return nil
+	}
+	out := make([]string, 0, rows)
+	for i, src := range strings.Split(m.notice, "\n") {
+		style := m.styles.Subtle
+		if i == 0 {
+			style = m.styles.Error
+		}
+		for _, line := range strings.Split(ansi.Wordwrap(src, innerW, ""), "\n") {
+			if len(out) == rows {
+				return out
+			}
+			out = append(out, style.Width(innerW).Render(ansi.Truncate(line, innerW, "")))
+		}
+	}
+	for len(out) < rows {
+		out = append(out, m.styles.App.Width(innerW).Render(""))
+	}
+	return out
 }
 
 // renderHeader lays out the column headers padded to the computed widths and

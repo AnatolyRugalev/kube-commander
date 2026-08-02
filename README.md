@@ -154,6 +154,13 @@ kubeconfig/context fails with a clear message instead of launching. While the UI
 runs it owns the terminal, so all logs (including client-go warnings) go to a file
 under your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
 
+**A resource that won't list** says why in the table itself, not just in the
+toast: open a kind whose LIST the API server refuses and the empty pane carries
+the reason (RBAC denied it, credentials rejected, the CRD is gone, an unreachable
+conversion webhook…), where the fix is — your machine or the cluster — and the
+server's own words underneath. It stays until the list succeeds; kubecom keeps
+retrying in the background, and the rows replace it the moment one comes back.
+
 **Hit an error?** Every error kubecom shows you in the status bar is also written
 to that log file, in full — the toast clears after five seconds and is clipped to
 your terminal width, the log line is neither and carries the underlying cause.

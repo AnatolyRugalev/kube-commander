@@ -1119,3 +1119,122 @@ func headerLine(view string) string {
 	}
 	return ansi.Strip(lines[1]) // line 0 is the top border; line 1 is the header.
 }
+
+// --- CRD-01: the empty pane carries the reason -----------------------------
+
+// bodyLines returns the rendered data-area lines (everything between the header
+// row and the bottom border), stripped of styling.
+func bodyLines(view string) []string {
+	lines := strings.Split(view, "\n")
+	if len(lines) < 4 {
+		return nil
+	}
+	out := make([]string, 0, len(lines)-3)
+	for _, l := range lines[2 : len(lines)-1] {
+		plain := strings.Trim(ansi.Strip(l), "│")
+		out = append(out, strings.TrimRight(plain, " "))
+	}
+	return out
+}
+
+// TestNoticeRendersInTheEmptyBody proves a notice set on an empty table is what
+// the pane shows — the whole point of CRD-01, since a failed LIST otherwise
+// leaves a blank pane and a toast that is gone in five seconds.
+func TestNoticeRendersInTheEmptyBody(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(60, 10)
+	m.SetNotice("Cannot list ExternalSecret\nThe webhook is down.")
+
+	body := bodyLines(m.View())
+	if len(body) == 0 {
+		t.Fatal("no body lines rendered")
+	}
+	if body[0] != "Cannot list ExternalSecret" {
+		t.Fatalf("first body line = %q, want the headline", body[0])
+	}
+	if body[1] != "The webhook is down." {
+		t.Fatalf("second body line = %q, want the detail", body[1])
+	}
+	if got, want := len(body), 7; got != want {
+		t.Fatalf("body height = %d lines, want %d (the frame must keep its height)", got, want)
+	}
+}
+
+// TestNoticeNeverHidesRows pins the rule that makes the notice safe to set from
+// any failure: rows on screen are the answer, so a watch that drops after a good
+// List keeps showing them and the notice stays dormant.
+func TestNoticeNeverHidesRows(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(60, 10)
+	m.SetTable(sampleTable())
+	m.SetNotice("Cannot list Pod\nThe watch dropped.")
+
+	body := bodyLines(m.View())
+	if !strings.Contains(body[0], "pod-a") {
+		t.Fatalf("first body line = %q, want the first row", body[0])
+	}
+	for _, l := range body {
+		if strings.Contains(l, "Cannot list") {
+			t.Fatalf("notice rendered over a populated table: %q", l)
+		}
+	}
+	if m.Notice() == "" {
+		t.Fatal("the notice must be retained while dormant, ready for the rows going away")
+	}
+}
+
+// TestResetClearsTheNotice proves the recovery path: the watch loop re-Lists
+// after a failure, and that RESET — even an empty one — ends the reason.
+func TestResetClearsTheNotice(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(60, 10)
+	m.SetNotice("Cannot list ExternalSecret\nThe webhook is down.")
+
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchReset, Columns: sampleTable().Columns})
+	if m.Notice() != "" {
+		t.Fatalf("a RESET must clear the notice, still %q", m.Notice())
+	}
+	for _, l := range bodyLines(m.View()) {
+		if strings.Contains(l, "Cannot list") {
+			t.Fatalf("notice still rendered after a RESET: %q", l)
+		}
+	}
+}
+
+// TestSetTableClearsTheNotice proves selecting a different resource does not
+// carry the previous one's failure into the new pane.
+func TestSetTableClearsTheNotice(t *testing.T) {
+	m := newTestModel()
+	m.SetNotice("Cannot list ExternalSecret\nThe webhook is down.")
+	m.SetTable(kube.Table{})
+	if m.Notice() != "" {
+		t.Fatalf("SetTable must clear the notice, still %q", m.Notice())
+	}
+}
+
+// TestNoticeWrapsAndClipsToThePane proves long copy stays inside the frame: it
+// wraps to the pane width rather than blowing the border out, and a notice
+// taller than the body is cut instead of pushing the frame open.
+func TestNoticeWrapsAndClipsToThePane(t *testing.T) {
+	m := newTestModel()
+	m.SetSize(30, 6) // 28 inner columns, 3 body rows
+	m.SetNotice("Cannot list ExternalSecret\n" + strings.Repeat("the conversion webhook is unavailable ", 6))
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if got, want := len(lines), 6; got != want {
+		t.Fatalf("view height = %d lines, want %d", got, want)
+	}
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w != 30 {
+			t.Fatalf("line %d width = %d, want 30: %q", i, w, ansi.Strip(l))
+		}
+	}
+	body := bodyLines(view)
+	if len(body) != 3 {
+		t.Fatalf("body = %d lines, want 3", len(body))
+	}
+	if body[0] != "Cannot list ExternalSecret" {
+		t.Fatalf("headline was not preserved: %q", body[0])
+	}
+}

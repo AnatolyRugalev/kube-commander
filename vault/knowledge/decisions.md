@@ -5374,3 +5374,35 @@ was open. Two surfaces now issue them, and the rule for every such load from her
    `<verb> — loading…` and drops the marker when they land — an empty modal that reads as
    broken is the failure this avoids — and the query typed while waiting is kept and applied
    to the arriving list, so typing ahead of a slow cluster is never thrown away.
+
+## D200 — A pane that has nothing to show says why, and never guesses (2026-08-02, CRD-01)
+
+CRD-01 gave the browse table an empty state that carries the reason its LIST failed. It is
+the first user-facing copy keyed on `kube.ErrorKind` — the taxonomy exists precisely so
+"the TUI renders its own message per kind" — so the rules are set here for every surface
+that follows (AUTH-04 is next):
+
+1. **The reason lives where the reader is looking, and outlives the toast.** A failure that
+   leaves a pane empty writes its reason *into that pane*; `surfaceError`'s 5-second,
+   width-clipped toast and D159's log line both stay, and neither substitutes for it. A
+   reason is shown only while the pane is empty — rows on screen are the answer, and a
+   failure that arrives over a populated table (a watch dropping after a good List) leaves
+   the rows alone and waits, dormant.
+2. **The success that ends it is the one that clears it.** For the table that is a RESET —
+   including an *empty* one, which is a List that worked — plus `SetTable`, so one kind's
+   failure can never linger over the next kind's pane. A leg that adds a reason must name
+   the event that retires it; a reason with no exit is a lie the moment the cluster heals.
+3. **A cluster-side cause the taxonomy would misname is recognised by name.** An
+   `ErrorKind` is a client-facing classification, and two LIST failures are *not* client
+   problems: an unreachable CRD conversion webhook (500/503 — it reads as "cluster
+   unreachable" and breaks `kubectl` identically, D191 pt 1) and a 406 refusing the Table
+   content type. `kube.ConversionWebhookFailed`/`kube.TableUnsupported` are narrow
+   predicates beside `ExecPluginFailed`, deliberately *not* new `ErrorKind`s: they describe
+   what the cluster did, not how the call failed. Match narrowly on the server's own
+   wording, and let the kind's sentence answer everything unmatched.
+4. **Every reason says where the fix is, and quotes the server.** This machine
+   (re-authenticate, switch context) or the cluster (a webhook, RBAC) — a reader who cannot
+   tell retries the wrong one — and the server's own text is quoted underneath, flattened
+   to one paragraph, because that is the sentence a bug report needs. Never promise a retry
+   the code does not perform: the browse watch loop does re-List on a backoff, so that
+   sentence is honest *there* and must not be copied to a surface without one.

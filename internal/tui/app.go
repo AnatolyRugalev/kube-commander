@@ -1449,7 +1449,13 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	ch, err := m.watcher.Watch(ctx, r, ns, opts)
 	if err != nil {
 		cancel()
-		return m, func() tea.Msg { return NewErrorMsg("watch "+r.GVR.Resource, err) }
+		e := NewErrorMsg("watch "+r.GVR.Resource, err)
+		// No watch was ever started, so no RESET is coming and no retry is running:
+		// the pane would stay blank behind a 5-second toast. Say why in the pane
+		// itself (CRD-01) — the kind is r's, not m.current's, which this failure
+		// leaves pointing at the resource being left.
+		m.table.SetNotice(browseFailure(r.GVK.Kind, e))
+		return m, func() tea.Msg { return e }
 	}
 	m.watchCancel = cancel
 	m.watchCh = ch
@@ -1539,6 +1545,13 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 		// The watch loop retries and re-lists on recovery (a fresh RESET follows),
 		// so the chain stays alive; surface the error transiently in the status bar
 		// meanwhile rather than swallowing it silently.
+		//
+		// The toast is gone in five seconds and the retry can fail for as long as
+		// the cluster stays broken, so the reason is *also* written into the table,
+		// where it shows only while the pane is empty and is cleared by the RESET
+		// that recovery brings (CRD-01). A watch that drops after a good List keeps
+		// its rows and the notice stays dormant.
+		m.table.SetNotice(browseFailure(m.current.GVK.Kind, inner))
 		clear := m.surfaceError(inner)
 		return m, tea.Batch(clear, m.pumpWatch())
 	case WatchClosedMsg:
