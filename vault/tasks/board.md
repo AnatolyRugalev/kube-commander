@@ -7,7 +7,9 @@ _Last updated: 2026-08-02 — HINT-01 stopped the hint line advertising keys an 
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+      notes: First slice of the four PAL-05 was split into on pickup (see the PAL section).
 
 ## Blocked
 
@@ -318,19 +320,47 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 - [x] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
       — done 2026-08-02 (D199)
 - [x] **PAL-04** Contextual verbs for the selected row — done 2026-08-02 (D205)
-- [ ] **PAL-05** The shortcut keys become sugar for a pre-typed palette line
-      status: todo | owner: — | added: 2026-08-01
-      notes: The one slice that changes what the existing keys *are*: `ctrl+n` becomes
-      `:namespace `, `C` `:context `, `T` `:theme `, `a` the row-verb palette — pre-typed
-      lines in the one surface rather than five separate modals. Last on purpose: until
-      PAL-03/04 land, the shortcuts are the *only* way to reach those values, so converting
-      them earlier would remove function to add uniformity. Decide then whether any key is
-      retired outright; the default is that all of them stay (D194 pt 4).
-      PAL-04 has landed the row-verb palette this converts `a` into: the entries come from
-      `rowActionTitles` and the target is named in the palette's title (D205). Two things it
-      left for this slice — whether the now-redundant "Open actions menu for the selected
-      row" verb survives the conversion, and whether `a`'s inertness rule and the palette's
-      stay one rule once they are one surface.
+**PAL-05 was split on pickup into four slices**, one per key, because the conversion is not
+the line it looks like: `unused` is in the lint gate (`default: standard`), so the moment a
+key stops opening its standalone picker that picker, its Kind, its Selected/Cancelled arms,
+its `activePicker`/`applyStyles`/`SetSize`/`View`/`capturing` sites **and its tests** all go
+in the same leg or the tree is red. That is 20–52 references per picker, so four keys in one
+leg is a ~700-line diff. Bottom-up as usual (D52): the mechanism lands on the cheapest key
+first, then the keys get converted one at a time. The letter keys keep working throughout —
+what changes is which surface they open, never whether they act.
+
+- [ ] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
+      status: todo | owner: — | added: 2026-08-02
+      notes: The mechanism slice: one `openPaletteArg(verb)` that opens the palette
+      *already* in a verb's argument stage, plus the first key on it. `T` is chosen to go
+      first because it is the cheapest and the least load-bearing — its values are compiled
+      in (no seam, never inert, no async `dest` routing) and `themePickerItems` already
+      feeds the palette's `:theme ` stage, so the standalone picker is the only thing that
+      goes. Retires `themePicker`/`themePickerKind`/`openThemePicker`/`handleThemeSelected`.
+- [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      notes: The other synchronous verb, and the bigger one: `resPicker` carries the alias
+      matching (D203) and has its own test file (`respicker_test.go`, 194 lines). Those tests
+      do **not** get deleted with the picker — the behaviour they pin survives in the
+      `:resource ` stage, which is seeded from the same `resourcePickerItems` snapshot, so
+      they get re-pointed at it. Watch-inert must stay inert (`enterPaletteArg` already
+      refuses the stage with no watcher).
+- [ ] **PAL-05c** `ctrl+n` and `C` open the `:namespace ` / `:context ` stages
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      notes: The two asynchronous verbs, together because they are the same shape: retiring
+      `nsPicker`/`ctxPicker` collapses the `dest` field on `namespacesLoadedMsg`/
+      `contextsLoadedMsg` (D199) to a single destination, so the two-surface routing in
+      `handleNamespacesLoaded`/`handleContextsLoaded` goes with them. `nsPicker` is the most
+      referenced of the five (52 sites, 9 files) — re-split if it proves > ~300 lines alone.
+- [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      notes: The one slice that is not a mechanical conversion, because `a` has no argument
+      word to pre-type: what it opens is the palette's row-verb *set* (PAL-04/D205), which
+      means deciding whether `a` opens the whole verb stage (identical to `:`, and a
+      *narrower* list is what `a` is for) or a row-verbs-only palette. Then the two
+      questions PAL-04 left: whether the now-redundant `ActionActions` verb ("Open actions
+      menu for the selected row") survives its own conversion, and whether `a`'s inertness
+      rule and the palette's become one rule once they are one surface.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195)
 Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a
