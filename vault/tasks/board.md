@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CRD-PIN-04 made the resource picker findable by pl
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-PIN-05** Pin/unpin a kind from the resource picker
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -251,7 +252,7 @@ and the second wants a key the picker cannot spare.
 - [x] **CRD-PIN-04** The resource picker finds a kind by any name it answers to — done
       2026-08-02 (D203)
 - [ ] **CRD-PIN-05** Pin/unpin a kind from the resource picker
-      status: todo | owner: — | added: 2026-08-02
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
       notes: The half of CRD-PIN-04 that is its own leg (split on pickup). CRD-PIN-02 left
       the picker alone because every picker filters as you type (D194), so `*` there types a
       `*` — the gesture needs a **no-text chord** (the `ctrl+…` shape `logs.previous` took,
