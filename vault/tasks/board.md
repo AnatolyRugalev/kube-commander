@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CRD-PIN-03 made `*` a toggle: the same key unpins,
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -246,7 +247,7 @@ the gesture that removes it, then the discoverability that makes "reach for it o
 - [x] **CRD-PIN-02** `*` pins the kind under the cursor for this context — done 2026-08-02 (D201)
 - [x] **CRD-PIN-03** `*` on a pinned row unpins it — done 2026-08-02 (D202)
 - [ ] **CRD-PIN-04** Reaching a kind that is not in the menu, once
-      status: todo | owner: — | added: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
       notes: The premise the whole line rests on — "you reach for one *once*" — needs a
       surface that lists **every discovered kind**, not just the menu's. The resource picker
       is that surface; check what it lists today before building anything. Overlaps the
