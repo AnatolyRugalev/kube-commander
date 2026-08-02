@@ -58,9 +58,9 @@ Enter
 Sleep 5s
 
 # ------------------------------------------------------- browse: open Pods ---
-# `:` is the command palette — one place you type what you want to do. Both lists
-# rank as you type (no `/` first, PAL-01), so the tour types the verb, Enters to
-# run it, then types the kind: `:` → "resource" → Pods.
+# `:` is the command palette — one place you type what you want to do. The verb and
+# its argument are one line in one box (PAL-03a): the tour types the verb, Enters to
+# commit it, then types the kind into the same box — `:` → "resource" → Pods.
 # kubecom-action: app.palette
 Type ":"
 Sleep 1500ms
@@ -70,7 +70,7 @@ Sleep 1200ms
 # kubecom-action: nav.drillIn
 Enter
 Sleep 1s
-# kubecom-input: narrow the resource picker to Pods
+# kubecom-input: narrow the palette's resource argument to Pods
 Type "pods"
 Sleep 1500ms
 # kubecom-action: nav.drillIn

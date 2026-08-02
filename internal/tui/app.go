@@ -798,6 +798,15 @@ type Model struct {
 	// the Action handleAction runs; only the update loop touches it.
 	cmdByLabel map[string]keymap.Action
 
+	// palArg is the verb the command palette has committed to, i.e. which stage its
+	// line is in: empty means it is choosing a verb, and a value means the list now
+	// holds that verb's *arguments* and a pick runs the verb with one (PAL-03a). It is
+	// the palette's whole extra state — the items and the label map are the picker's
+	// and cmdByLabel's as before — so "which stage" can never disagree with what a
+	// pick does: handleCommandSelected reads this one field. Only the update loop
+	// touches it.
+	palArg keymap.Action
+
 	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
 	// modal.ConfirmedMsg carries only the modal's Kind (no payload in confirm mode,
 	// D88), so the resource + the row's ObjectRef (its UID guards the snapshot race,
@@ -1229,8 +1238,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case actionPickerKind:
 			m.actPicker.Hide()
 		case commandPickerKind:
-			m.cmdPicker.Hide()
-			m.cmdByLabel = nil
+			// esc in the argument stage rewinds the line one word rather than closing:
+			// the verb is uncommitted and the verb list comes back, so a mistyped
+			// argument costs one key instead of reopening the palette. (The picker
+			// itself already spent an esc clearing a non-empty query, so this is the
+			// second one — and from the verb list the next esc closes.)
+			if m.palArg != "" {
+				return m.showPaletteVerbs(), nil
+			}
+			m.closePalette()
 		case containerPickerKind:
 			m.ctrPicker.Hide()
 			m.ctrByLabel = nil
@@ -1678,8 +1694,7 @@ func (m *Model) resetCluster() {
 	// while the reader opened the list against the old one, so it closes with the rest
 	// (the theme picker is the deliberate exception: nothing it offers is per-cluster
 	// in either direction).
-	m.cmdPicker.Hide()
-	m.cmdByLabel = nil
+	m.closePalette()
 	// The context picker holds kubeconfig data, not the departing cluster's, so it
 	// is dismissed for a different reason than the rest: its rows mark the context
 	// the shell is on, and a switch is exactly what makes that marker wrong. (In
@@ -1918,6 +1933,18 @@ func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
 	if m.watcher == nil {
 		return m, nil
 	}
+	labels, byLabel := m.resourcePickerItems()
+	m.resByLabel = byLabel
+	m.resPicker.SetItems(labels)
+	return m, m.resPicker.Show()
+}
+
+// resourcePickerItems renders the switchable resource kinds and the map resolving a
+// picked title back to its kube.Resource. It is shared by the standalone picker above
+// and the palette's `:resource ` argument stage (PAL-03a) so the two surfaces cannot
+// come to offer different kinds — the snapshot is the menu's own item list, taken once,
+// in one place.
+func (m Model) resourcePickerItems() ([]string, map[string]kube.Resource) {
 	items := m.menu.Items()
 	labels := make([]string, 0, len(items))
 	byLabel := make(map[string]kube.Resource, len(items))
@@ -1931,9 +1958,7 @@ func (m Model) openResourcePicker() (tea.Model, tea.Cmd) {
 		byLabel[it.Title] = it.Resource
 		labels = append(labels, it.Title)
 	}
-	m.resByLabel = byLabel
-	m.resPicker.SetItems(labels)
-	return m, m.resPicker.Show()
+	return labels, byLabel
 }
 
 // handleResourceSelected applies a resource picked from the command palette: it closes
@@ -3417,9 +3442,18 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if p.Filtering() {
 		if mapped && key.Text == "" {
 			*p, cmd = p.Update(action)
-		} else {
-			*p, cmd = p.UpdateFilter(msg)
+			return m, cmd
 		}
+		// The palette's line has two editing gestures of its own — space commits a verb
+		// into its argument stage, backspace at the start of an argument leaves it
+		// (PAL-03a) — so it sees the key before its filter field does. Everything it
+		// does not consume types, exactly as in every other picker.
+		if p.Kind() == commandPickerKind {
+			if next, consumed := m.handlePaletteFilterKey(msg); consumed {
+				return next, nil
+			}
+		}
+		*p, cmd = p.UpdateFilter(msg)
 		return m, cmd
 	}
 	// The port picker carries two gestures of its own (FB-pf-local-port): they act on

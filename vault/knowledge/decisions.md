@@ -5312,3 +5312,38 @@ implementation, because the three remaining PAL slices all build on this surface
    resource switch from both places a user looks. The rest of D194 pt 4 stands: `ctrl+n`,
    `C`, `T` and `a` are unchanged, and PAL-05 remains the only slice allowed to re-express
    a shortcut key.
+
+## D198 — An argument verb resolves inside the palette, and its stage ends in the verb's own apply function (2026-08-02, PAL-03a)
+
+PAL-03a turned the palette's line into `<verb> <argument>`: a verb that needs a value no
+longer dispatches — it **commits in place**, and the same picker re-prompts itself
+`:resource ` and lists that verb's values. That is a deliberate exception to D197 pt 1,
+so it is written down with the fence that keeps it from becoming the "second
+implementation" D197 exists to forbid.
+
+1. **An argument verb does not dispatch its action; it commits into the palette's
+   argument stage.** Dispatching would open the verb's own modal *over* the palette,
+   which is precisely the pile of separate pop-ups the PAL feedback asked to be rid of.
+   Verbs that need no value are unchanged — they still go through `handleAction` (D197
+   pt 1), which stays the rule for everything outside `paletteArgVerbs`.
+2. **The stage's apply must be the same function the verb's standalone picker ends in**
+   (`selectResource`, `applyThemeNamed`), never a copy of what it does. This is D197 pt 1's
+   substance surviving the exception: the palette resolves a label and applies it, so a
+   value reached through the palette and one reached through the picker cannot diverge.
+   Adding an argument verb therefore means *extracting* its apply if it is still inline in
+   a handler — that refactor is part of the slice, not optional.
+3. **A verb whose values cannot be produced does not enter the stage at all.** With no
+   watcher, `:resource` opens no argument list: it stays as inert as `R` is (D197 pt 2). An
+   empty argument stage would be a surface promising a choice that cannot be made — worse
+   than the verb doing nothing, which is what the reader already expects from its key.
+4. **In the verb stage, space is the line's separator and is never query text.** It commits
+   the highlighted verb when that verb takes an argument, and is swallowed otherwise. The
+   fuzzy matcher skips a label's own spaces (`switchr` still finds "Switch resource"), so
+   nothing becomes unreachable by giving the key up — and a separator that sometimes typed
+   would make the one gesture unpredictable. Inside an argument, space is ordinary text
+   again.
+5. **The line unwinds the way it was typed.** Backspace into an empty argument, and esc,
+   both uncommit the verb and restore the verb list rather than closing the palette; the
+   next esc closes. A returned-to palette is indistinguishable from a freshly opened one
+   (`showPaletteVerbs` is the single definition of "the palette showing verbs"), so no
+   stage can leave a stale prompt, title or label map behind.

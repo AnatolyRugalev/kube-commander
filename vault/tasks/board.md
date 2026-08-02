@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — PAL-02 landed the command palette on `:` (verbs from the action registry, dispatched like a key press, D197) and moved the resource picker to `R`. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-03a made the palette's line `<verb> <argument>`: `resource` and `theme` commit in place and complete their value in the same box (D198). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -304,15 +303,8 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
       line of typing. It is the slice that retires the separate namespace/resource pickers
       as *surfaces* (the picker component stays — it is what the palette is built from);
       their keys keep opening them until PAL-05.
-- [ ] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
-      notes: The mechanism, plus the two verbs whose value lists are **synchronous** —
-      `resource` (the menu's own item snapshot) and `theme` (the compiled-in registry).
-      Space (or enter) on a highlighted argument-verb commits it: the palette keeps the same
-      modal, re-prompts `:resource `, and shows that verb's values; enter applies through the
-      *same* function the standalone picker's handler calls, never a copy. Esc/backspace walk
-      back out to the verb list before closing. The other argument verbs (namespace, context)
-      keep dispatching to their own pickers this slice — that is PAL-03b.
+- [x] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
+      — done 2026-08-02 (D198)
 - [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
       status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-03a
       notes: Both verbs' values arrive as messages (`namespacesLoadedMsg`,

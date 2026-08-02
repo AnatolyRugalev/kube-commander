@@ -192,6 +192,15 @@ highlighted one. Each verb does exactly what its key does, so the palette is a w
 rather than a second set of behaviour — and you never have to remember a key to reach
 any of them.
 
+Verbs that need a value complete it **in the same box**, so the whole thing is one line
+of typing: type enough of the verb, press **Space** (or Enter), and the list becomes
+that verb's values with the prompt reading `:resource `. So `:res` `␣` `pods` `Enter`
+switches the table to Pods, and `:theme ` `mono` `Enter` changes theme, without a second
+pop-up appearing. Backspace on an empty value takes you back to the verb list, as does
+`Esc`; another `Esc` closes the palette. Today `resource` and `theme` complete this way
+— `namespace` and `context` still open their own pickers, and their keys (`Ctrl+n`, `C`)
+work throughout either way.
+
 Press `R` (`resources.switch`, rebindable) to jump straight to the resource picker —
 a pop-up list of every browsable resource kind, also reachable as the palette's
 "Switch resource" verb. Just type to narrow it and press Enter to switch the table to

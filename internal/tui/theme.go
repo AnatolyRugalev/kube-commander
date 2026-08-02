@@ -154,6 +154,14 @@ func (m Model) handleThemeSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) 
 	if !ok {
 		return m, nil
 	}
+	return m.applyThemeNamed(name)
+}
+
+// applyThemeNamed repaints and persists the named theme. It is the tail of the switcher
+// above, split out so the palette's `:theme ` argument stage applies a theme through
+// the very same function rather than a copy of it (PAL-03a/D198) — both surfaces
+// resolve a label to a name and then land here.
+func (m Model) applyThemeNamed(name string) (tea.Model, tea.Cmd) {
 	theme, found := styles.ByName(name)
 	if !found || theme.Name == m.styles.Theme.Name {
 		return m, nil

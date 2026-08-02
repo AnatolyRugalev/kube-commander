@@ -190,6 +190,29 @@ func (m Model) Kind() string { return m.kind }
 // SetTitle overrides the title shown above the list.
 func (m *Model) SetTitle(t string) { m.title = t }
 
+// SetPrompt overrides the filter field's prompt (the text drawn before the query).
+// The default is the `/ ` of an ordinary filter; the command palette re-prompts
+// itself as its line advances — `: ` for a verb, `:resource ` once that verb is
+// committed (PAL-03a) — so the one line reads as `<verb> <argument>` while staying
+// one field. The picker itself attaches no meaning to the prompt: it is chrome.
+func (m *Model) SetPrompt(p string) { m.filter.Prompt = p }
+
+// Query is the current filter text (empty when the filter is closed or untouched).
+// It lets the embedder distinguish "the reader has typed something" from "this is a
+// fresh field" — which is what makes an editing key at the start of the line
+// meaningful (the palette leaves its argument stage on a backspace into an empty
+// query) without the embedder tracking a second copy of the field's contents.
+func (m Model) Query() string { return m.filter.Value() }
+
+// ClearQuery empties the filter query and restores the full list, leaving the field
+// open and focused. It is the swap-in-place counterpart to Hide/Show: a surface that
+// replaces its item set while staying on screen (the palette committing a verb) must
+// clear the query first, since SetItems applies whatever query is standing.
+func (m *Model) ClearQuery() {
+	m.filter.Reset()
+	m.applyFilter()
+}
+
 // SetItems replaces the picker's values (the unfiltered set) and shows the subset
 // matching the current filter query, cursor reset to the top.
 func (m *Model) SetItems(values []string) {
