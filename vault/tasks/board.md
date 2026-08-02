@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — PAL-04 put the selected row's own actions in the p
 
 ## In Progress
 
-_(none)_
+- [ ] **HINT-01** The hint line tells the truth while a picker is open
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -272,6 +273,24 @@ the menu lists (the CRD-heavy-cluster ask the feedback opens with), both must be
 from the discovery result instead, at the one snapshot D203 pt 4 names
 (`resourcePickerItems`), or the narrowing takes the picker **and the pin verb** down with
 it — and `:pin ` is the worse loss, since a narrowed menu is exactly when you need to pin.
+
+### Hint-line truth (HINT — agent-found)
+The bottom hint line is a promise about which keys act right now (D143 pt 1), and there is
+one place it has been lying since M2-08: **while a modal picker is open**. Every picker
+captures all input and, since PAL-01, opens its filter field with itself — so `/`, `n`, `s`,
+`a`, `?` and `q` all type into the query — yet the hint underneath still shows the browse
+menu/table set. Flagged by PAL-02, PAL-03a, PAL-03b, CRD-PIN-04 and CRD-01 in turn, and each
+time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shape.
+
+- [ ] **HINT-01** The hint line tells the truth while a picker is open
+      status: todo | owner: — | added: 2026-08-02
+      notes: Two contexts, mirroring the logs view's pair: the type-to-filter picker (every
+      picker but one) honours only the no-text keys — move, select, cancel — while the
+      opt-in-filter picker (the port picker, D139/D194 pt 3) additionally honours `/`. Worth
+      doing **before PAL-05**, which makes the palette the surface those hints are wrong
+      about. Check while wiring it whether the sync belongs at each of the ~30 Show/Hide
+      sites or once where every message lands — a hint that has to be pushed from thirty
+      places is a hint that will go stale again.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
