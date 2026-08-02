@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CRD-PIN-02 landed the pin gesture: `*` records the
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-PIN-03** The same key on a pinned menu row unpins it
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-02
 
 ## Blocked
 
