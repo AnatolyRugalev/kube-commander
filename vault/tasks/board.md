@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — PAL-02 landed the command palette on `:` (verbs fr
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -295,13 +296,31 @@ The letter keys keep working throughout — PAL-05 is the only slice that change
 - [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
       — done 2026-08-01 (D194)
 - [x] **PAL-02** The palette shell: `:` opens a verb list — done 2026-08-02 (D197)
-- [ ] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface
-      status: todo | owner: — | added: 2026-08-01
-      notes: The palette line becomes `<verb> <argument>`: completing a verb and typing a
-      space swaps the item list for that verb's values, still in the same modal, so the whole
-      interaction is one uninterrupted line of typing. This is the slice that actually
-      retires the separate namespace/resource pickers as *surfaces* (the picker component
-      stays — it is what the palette is built from).
+- [ ] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface — **split**
+      (2026-08-02) into **PAL-03a** (the argument stage + the two verbs whose values are
+      already in hand) and **PAL-03b** (the two verbs whose values arrive asynchronously).
+      The line becomes `<verb> <argument>`: committing a verb swaps the item list for that
+      verb's values, still in the same modal, so the whole interaction is one uninterrupted
+      line of typing. It is the slice that retires the separate namespace/resource pickers
+      as *surfaces* (the picker component stays — it is what the palette is built from);
+      their keys keep opening them until PAL-05.
+- [ ] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02 | claimed: 2026-08-02
+      notes: The mechanism, plus the two verbs whose value lists are **synchronous** —
+      `resource` (the menu's own item snapshot) and `theme` (the compiled-in registry).
+      Space (or enter) on a highlighted argument-verb commits it: the palette keeps the same
+      modal, re-prompts `:resource `, and shows that verb's values; enter applies through the
+      *same* function the standalone picker's handler calls, never a copy. Esc/backspace walk
+      back out to the verb list before closing. The other argument verbs (namespace, context)
+      keep dispatching to their own pickers this slice — that is PAL-03b.
+- [ ] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-03a
+      notes: Both verbs' values arrive as messages (`namespacesLoadedMsg`,
+      `contextsLoadedMsg`) whose handlers today seed a specific picker and bail unless *that*
+      picker is open. Teach them to seed whichever surface is asking, so the palette's
+      argument stage can be the one waiting, and keep the empty/pending state legible while
+      the list is in flight. Then the four argument verbs behave identically and PAL-05 can
+      convert their keys without a special case.
 - [ ] **PAL-04** Contextual verbs for the selected row
       status: todo | owner: — | added: 2026-08-01
       notes: With a table row selected, the palette also offers the row-scoped actions
