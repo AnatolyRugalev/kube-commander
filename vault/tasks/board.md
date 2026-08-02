@@ -7,7 +7,8 @@ _Last updated: 2026-08-02 — CRD-PIN-05 closed the CRD-PIN line: the palette's 
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-04** Contextual verbs for the selected row
+      status: in-progress | owner: claude-opus | added: 2026-08-01 | claimed: 2026-08-02
 
 ## Blocked
 
