@@ -7,7 +7,10 @@ _Last updated: 2026-08-01 — PAL-01 drained the command-palette feedback into t
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
+      status: in-progress | owner: claude-opus | added: 2026-08-01
+      notes: Feedback leg for `2026-08-01-eks-sso-reauth` — triage the new auth area into the
+      AUTH line and land its first (provider-neutral) slice.
 
 ## Blocked
 
