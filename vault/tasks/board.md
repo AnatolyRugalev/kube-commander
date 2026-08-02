@@ -7,7 +7,9 @@ _Last updated: 2026-08-02 — PAL-03b completed the palette line: `:namespace ` 
 
 ## In Progress
 
-_(none)_
+- [ ] **CRD-01** A LIST that fails for the whole group says *why*, legibly, instead of a
+      5-second toast
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | claimed: 2026-08-02
 
 ## Blocked
 
@@ -226,7 +228,7 @@ half DISC-01 (D187) landed in the log file, not yet on screen:
 
 - [ ] **CRD-01** A LIST that fails for the whole group says *why*, legibly, instead of a
       5-second toast
-      status: todo | owner: — | added: 2026-07-29 | re-scoped: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-07-29 | re-scoped: 2026-08-01 | claimed: 2026-08-02
       notes: When a kind's LIST fails on a cluster-side cause the user can act on — a
       conversion webhook unavailable, a 406 on Table conversion, a 403 on the group — the
       browse table should say so where the reader is looking, rather than surfacing the bare
