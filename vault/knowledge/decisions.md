@@ -5236,3 +5236,46 @@ what the other four must not contradict.
    plugin's failure and stops. The catalogue mapping plugin → remediation is a small
    explicit table, **AWS SSO its only entry**, and it stays a table rather than becoming a
    provider framework until a second provider actually lands.
+
+## D196 — A departed cluster may be retained only *connector-side*, never by the shell; the teardown stays unconditional, and the retention is measured before it is built (2026-08-02, CTX-WARM-01)
+
+From feedback `2026-08-01-context-switch-keep-state`: "can we keep the state of the previous
+cluster, so we can switch between contexts instantly?" — the submitter flagged that this
+pushes against M4-04a/D157 and asked for the resolution to be recorded rather than quietly
+made. It is recorded here, before any code retains anything, so the four CTX-WARM slices
+inherit one shape instead of each negotiating with the teardown.
+
+1. **The shell's teardown does not change.** `resetCluster` stays unconditional and
+   exhaustive: on every switch, every per-cluster async is cancelled and generation-bumped
+   and every surface showing the departed cluster's data is dismissed (M4-03/D156, D155
+   pt 1). "Nothing from the departed cluster leaks" is a property of the shell holding no
+   reference to it, and no warmth optimisation may weaken that — a retained *watch* firing
+   into a dead view is precisely the bug the teardown exists to prevent, and it is not on
+   the table at any speed.
+2. **Retention, if it happens, lives on the connector side.** The only thing a switch-back
+   may reuse is what `ClusterConnector.ConnectCluster` builds: the client bundle and its
+   warm discovery cache. The connector already outlives every switch by construction
+   (D155 pt 2) and the shell already treats it as a factory, so a bounded cache *inside*
+   the launcher's `contextConnector` changes nothing about the shell's lifecycle — it makes
+   `ConnectCluster` faster, not the teardown weaker. A leg that instead teaches the shell
+   to hold a second `Cluster` is contradicting this decision, not implementing it.
+3. **Measure first; the numbers gate the build.** The feedback's own instruction, and
+   CTX-WARM-01 is only the measurement: a completed switch logs `connect`, `discovery` and
+   `total` to the diagnostic log, and the open dogfood
+   (`2026-07-29-context-switch-live-dogfood`, pt 7) is where real numbers come from. There
+   is a real chance the win is already mostly banked — `kube.Connect` does no network I/O
+   (`NewClients` is local, the RESTMapper is deferred) and discovery is disk-cached per host
+   with kubectl's 6 h TTL (`internal/kube/cache.go`), so a switch-back inside a session
+   re-reads files rather than the API. CTX-WARM-02/03 are **not** to be built on the
+   assumption that reconnecting is expensive; they are built if the log says it is.
+4. **Bounded, and never a correctness claim.** Any retention caps at the **previous
+   context only** (one entry), is dropped on any connect error for that context, and is
+   invalidated rather than trusted when the user forces a refresh. A retained client is a
+   cache: everything it serves must be re-derivable, so nothing user-visible may depend on
+   a context having been visited before — the second visit may only be *faster*, never
+   different.
+5. **This waits on the baseline.** No slice that changes what a switch retains lands before
+   `2026-07-29-context-switch-live-dogfood` pts 3-6 are done, because those are the checks
+   that would catch a leak, and running them against an already-changed teardown measures
+   two moving parts (the submitter's own instruction). CTX-WARM-01 is deliberately outside
+   that gate: it only observes.

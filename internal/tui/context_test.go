@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -612,5 +614,125 @@ func TestSwitchWithoutStateLoaderKeepsLaunchState(t *testing.T) {
 	}
 	if m.namespace != "" {
 		t.Errorf("the reset still clears the scope, got %q", m.namespace)
+	}
+}
+
+// switchTimingModel drives one whole switch — connect, swap, and the discovery pass
+// the swap started — against a logger writing into a buffer, and hands back what the
+// diagnostic log recorded. It is the harness for CTX-WARM-01's measurement: the point
+// of the instrumentation is that a dogfooding human can read these numbers out of
+// `~/.cache/kubecom/kubecom.log` after switching, so the tests assert on the same
+// text rather than on an internal field.
+func switchTimingModel(t *testing.T, to string, extra ...Option) (Model, *bytes.Buffer) {
+	t.Helper()
+	newCluster, _, _ := newClusterFake()
+	fc := &fakeConnector{cluster: newCluster}
+	var buf bytes.Buffer
+	h := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	opts := append([]Option{
+		WithClusterConnector(fc), WithContext("dev"), WithLogger(slog.New(h)),
+	}, extra...)
+	m := browsingModel(t, &fakeWatcher{}, opts...)
+
+	next, cmd := m.switchContext(to)
+	m = next.(Model)
+	next, _ = m.Update(pickerMsg(t, cmd))
+	return next.(Model), &buf
+}
+
+// discoveryLanded delivers the discovery pass the *current* cluster is waiting on —
+// gen-tagged from the model so it is not dropped by the M4-03 generation guard, which
+// a switch bumps.
+func discoveryLanded(t *testing.T, m Model) Model {
+	t.Helper()
+	next, _ := m.Update(DiscoveryReadyMsg{gen: m.discoveryGen, Result: kube.DiscoveryResult{}})
+	return next.(Model)
+}
+
+// TestSwitchIsTimedIntoTheLog is CTX-WARM-01's headline: a completed context switch
+// writes its cost to the diagnostic log — the connect, the wait for the new cluster's
+// menu, and their sum. Nothing about the switch's behaviour changes; the numbers are
+// what decides whether retaining a departed cluster (CTX-WARM-02/03) is worth its
+// risk, and without them that decision would be guesswork (D196 pt 3).
+func TestSwitchIsTimedIntoTheLog(t *testing.T) {
+	m, buf := switchTimingModel(t, "prod")
+	if m.ctxSwitch.context != "prod" {
+		t.Fatalf("the swap should have started the stopwatch, got %q", m.ctxSwitch.context)
+	}
+	if strings.Contains(buf.String(), "context switch complete") {
+		t.Fatal("the timing must not be reported before the new cluster's menu is complete")
+	}
+
+	m = discoveryLanded(t, m)
+
+	got := buf.String()
+	for _, want := range []string{"context switch complete", "context=prod", "connect=", "discovery=", "total="} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log missing %q\ngot: %s", want, got)
+		}
+	}
+	if m.ctxSwitch.context != "" {
+		t.Error("the stopwatch should be consumed by the pass that closed it, not left pending")
+	}
+}
+
+// TestSwitchTimingIsReportedOnce guards against the number turning into noise: the
+// timing belongs to one switch and one discovery pass. A later pass on the same
+// cluster (a refresh, a re-discovery) has no switch behind it and must stay silent,
+// or the log would read as though the user kept switching.
+func TestSwitchTimingIsReportedOnce(t *testing.T) {
+	m, buf := switchTimingModel(t, "prod")
+	m = discoveryLanded(t, m)
+	discoveryLanded(t, m)
+
+	if n := strings.Count(buf.String(), "context switch complete"); n != 1 {
+		t.Errorf("switch timing logged %d times, want exactly 1\n%s", n, buf.String())
+	}
+}
+
+// TestLaunchDiscoveryIsNotTimedAsASwitch pins the other side of the same rule: the
+// launch-time discovery pass is not a switch and logs no timing. The log is a
+// dogfooding surface, so a line that appears when nobody switched would be actively
+// misleading about what the number measures.
+func TestLaunchDiscoveryIsNotTimedAsASwitch(t *testing.T) {
+	m, buf := logSink(t)
+	m = discoveryLanded(t, m)
+
+	if strings.Contains(buf.String(), "context switch complete") {
+		t.Errorf("a launch discovery pass reported a switch timing:\n%s", buf.String())
+	}
+	if m.ctxSwitch.context != "" {
+		t.Error("a launch discovery pass should leave the stopwatch zero")
+	}
+}
+
+// TestSupersededSwitchReportsOnlyTheSurvivingOne: two switches in quick succession (a
+// mis-pick corrected immediately) must report the switch the reader is actually
+// waiting on, not the one they moved off. The superseded connect is dropped by the
+// generation guard before it can start a stopwatch, so this falls out of D156 pt 2
+// rather than needing a rule of its own — which is what the test exists to keep true.
+func TestSupersededSwitchReportsOnlyTheSurvivingOne(t *testing.T) {
+	newCluster, _, _ := newClusterFake()
+	fc := &fakeConnector{cluster: newCluster}
+	var buf bytes.Buffer
+	h := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	m := browsingModel(t, &fakeWatcher{},
+		WithClusterConnector(fc), WithContext("dev"), WithLogger(slog.New(h)))
+
+	next, first := m.switchContext("prod")
+	m = next.(Model)
+	next, second := m.switchContext("staging") // supersedes it before the first lands.
+	m = next.(Model)
+	next, _ = m.Update(first())
+	m = next.(Model)
+	next, _ = m.Update(pickerMsg(t, second))
+	discoveryLanded(t, next.(Model))
+
+	got := buf.String()
+	if !strings.Contains(got, "context=staging") {
+		t.Errorf("the surviving switch should be the one timed:\n%s", got)
+	}
+	if strings.Contains(got, "context=prod") {
+		t.Errorf("a superseded switch must not be timed:\n%s", got)
 	}
 }

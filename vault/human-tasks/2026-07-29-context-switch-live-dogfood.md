@@ -40,6 +40,23 @@ other context:
    change what the first one reopens on. A context kubecom has never recorded starts on
    all-namespaces, which is the old behaviour and still correct.
 
+7. **How long does it take?** _(added 2026-08-02 by CTX-WARM-01, from feedback
+   `2026-08-01-context-switch-keep-state` — "switching back should feel like flipping a
+   tab".)_ Since that leg, every completed switch writes its own cost to the diagnostic
+   log. After doing pts 1-6, switch away and back a couple of times and paste:
+
+   ```bash
+   grep 'context switch complete' ~/.cache/kubecom/kubecom.log
+   ```
+
+   Each line reads `context=… connect=… discovery=… total=…`: `connect` is building the
+   client for the new context (local, no round-trip by design), `discovery` is the wait
+   from the swap landing to the new cluster's menu being complete, and `total` is what the
+   reader actually experiences. **This is the number that decides CTX-WARM-02/03** — whether
+   retaining a departed cluster is worth its risk, and if so which half is worth retaining
+   (D196 pt 3). A first switch to a cluster and a switch *back* to one seen already are
+   different measurements: please include both, the second is the one the feedback is about.
+
 ## Why the agent can't do it
 
 The sandbox has no cluster, let alone two, and no interactive terminal. Every *mechanism*

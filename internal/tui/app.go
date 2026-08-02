@@ -605,6 +605,12 @@ type Model struct {
 	connector ClusterConnector
 	ctxGen    int
 
+	// ctxSwitch times the switch currently in flight — connect, then the wait for the
+	// new cluster's menu — and is consumed (and zeroed) by the discovery pass that
+	// switch started, which writes the numbers to the diagnostic log (CTX-WARM-01).
+	// Zero outside a switch, which is why a launch-time discovery logs nothing.
+	ctxSwitch switchTiming
+
 	// ctxLister seeds the context picker from the kubeconfig (M4-04b); nil → the
 	// ctx.switch action is inert. ctxByLabel maps each open picker row back to its
 	// context name, the resByLabel/actByLabel pattern (the picker's SelectedMsg
@@ -1543,6 +1549,10 @@ func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.logDiscovery(msg.Result)
 	m.menu.Reconcile(msg.Result)
+	// The menu is complete now, which is the moment a switched-to cluster becomes
+	// usable — so this is where a context switch's stopwatch stops (CTX-WARM-01).
+	// A launch-time pass has none pending and this is a no-op.
+	m = m.logSwitchComplete()
 	return m, nil
 }
 

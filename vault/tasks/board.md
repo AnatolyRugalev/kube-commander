@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-01 — AUTH-01 drained the EKS/SSO feedback into the five-slice AUTH line and landed its provider-neutral first slice (D195); one 2026-08-01 feedback item remains, still gated by an open human task (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — CTX-WARM-01 drained the last 2026-08-01 feedback item into the four-slice CTX-WARM line, resolved its clash with the switch teardown in D196 and instrumented the switch; the feedback inbox is empty. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CTX-WARM-01** Triage the context-switch warmth feedback, and measure the switch
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: Feedback `2026-08-01-context-switch-keep-state` asks that switching back to a
-      context be instant. It pushes against M4-04a/D157's unconditional teardown, so this
-      leg resolves the tension in a decision, splits the ask into a CTX-WARM line, and does
-      the measurement half the submitter asked for **before** anything touches the teardown.
+_(none)_
 
 ## Blocked
 
@@ -376,6 +371,44 @@ runs anything.
       retry the failed request rather than the whole launch. Live-cluster only, so expect to
       raise a human task for the dogfood rather than tick anything on a fake.
 
+### Context switch warmth (CTX-WARM — feedback-driven, D196)
+Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
+and back pays the full cost again (reconnect, rediscover, re-watch), and the submitter
+wants `C` → other → `C` → back to feel like flipping a tab. It **pushes against** M4-04a's
+unconditional teardown, so D196 fixes the shape before any code retains anything: the
+shell's teardown never changes, retention (if it is built at all) lives inside the
+launcher's `contextConnector`, it caps at the previous context, and it is **gated on
+measurement** rather than on the assumption that reconnecting is slow.
+
+CTX-WARM-02/03 additionally wait on `2026-07-29-context-switch-live-dogfood` pts 3-6 — the
+leak checks — so the teardown baseline is known-good before it is optimised (D196 pt 5).
+
+- [x] **CTX-WARM-01** Triage the warmth feedback; time the switch into the diagnostic log
+      — done 2026-08-02 (D196)
+- [ ] **CTX-WARM-02** Retain the previous context's client in the connector
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: the dogfood's pts 3-6 and
+      CTX-WARM-01's numbers
+      notes: A one-entry cache inside `cmd/kubecom`'s `contextConnector`, keyed by context
+      name: `ConnectCluster` returns the retained `tui.Cluster` for the context just left
+      instead of rebuilding it. The shell is untouched — it still resets everything and
+      still holds exactly one cluster (D196 pt 1/2). Drop the entry on any connect error
+      for that name. **Only worth doing if CTX-WARM-01's `connect=` is material**; note
+      that `kube.Connect` does no network I/O, so it may well not be.
+- [ ] **CTX-WARM-03** Retain the discovery result per context, if discovery is the cost
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02
+      notes: The other half of the log line. Discovery is already disk-cached per host with
+      a 6 h TTL (`internal/kube/cache.go`), so the remaining cost is the walk + reconcile,
+      not the network — measure before building. If it is worth it, retain the last
+      `DiscoveryResult` beside the client so a switch-back reconciles the menu immediately
+      and re-runs the pass in the background, never showing a stale menu as final.
+- [ ] **CTX-WARM-04** Prove the retention cannot leak, and bound it
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02
+      notes: The guard rail for the two above: a test that a retained cluster holds no
+      watch, no stream and no overlay (the shell cancelled them all), that the cache never
+      exceeds one entry however many contexts are visited, and that a forced refresh
+      invalidates rather than trusts it (D196 pt 4). Then a line on the dogfood task asking
+      for the switch-back timing again, to confirm the win is real on a real cluster.
+
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
 into ordered, leg-sized slices (M4-PLAN, D52/D155). Two of M4's six scope bullets are
@@ -452,6 +485,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CTX-WARM-01** Resolved the "keep the previous cluster warm" feedback against M4-04a's teardown in D196 — the shell's teardown never weakens, any retention lives connector-side, caps at the previous context, and is gated on measurement — triaged it into the four-slice CTX-WARM line, and landed the measurement: a completed context switch now logs `connect`/`discovery`/`total` to the diagnostic log, with the open dogfood extended to ask for the numbers — feedback `2026-08-01-context-switch-keep-state` — done 2026-08-02 (D196)
 
 - [x] **AUTH-01** `kube.ExecPluginFor` names the exec credential plugin behind a context (stanza only, nothing executed) and `Classify` gained `KindExecPlugin`, so a failed `aws eks get-token` no longer reads as "cluster unreachable"; matched narrowly on client-go's own two message shapes because its `%v` formatting breaks the wrap chain, with a real server status still winning; triaged the feedback into the five-slice AUTH line — feedback `2026-08-01-eks-sso-reauth` — done 2026-08-01 (D195)
 

@@ -190,6 +190,23 @@ nothing useful; attach is the way.)
   classified as `KindUnreachable` until `KindExecPlugin` was added ahead of the transport
   net — a cluster reported unreachable that was never contacted.
 
+- **Connecting to a second cluster is cheaper than it looks** (checked in v0.31 for
+  CTX-WARM-01/D196, before any "keep the previous cluster warm" work is built):
+  (1) `kube.Connect` does **no network I/O** — `RESTConfig` reads the kubeconfig,
+  `NewClients` builds the clientset/dynamic/discovery handles locally, and the RESTMapper is
+  a static seed ahead of a *deferred* discovery mapper (D8/M1-02) that warms on first use;
+  (2) discovery is **disk-cached per host with a 6 h TTL** (`internal/kube/cache.go`,
+  kubectl's own), so a second visit to a cluster in the same session reads files, not the
+  API server;
+  (3) client-go keeps **process-wide caches** that survive building a new `rest.Config` for
+  the same cluster — `transport/cache.go`'s `tlsCache` (keyed `tlsCacheKey`, so an identical
+  config reuses the `*http.Transport` and its connection pool) and
+  `plugin/pkg/client/auth/exec`'s `globalCache` of authenticators (so a credential plugin is
+  not re-run per client).
+  Net: "reconnect" is mostly local work already, which is why D196 pt 3 gates any retention
+  cache on the switch timings (`context switch complete` in the diagnostic log) instead of
+  on the assumption that reconnecting is expensive.
+
 ## Key API patterns
 - **Server-side Table watch gotchas** (all handled in M1-05b, `watch.go`, D34):
   - Request `includeObject=Metadata` (or `Object`) — without it Table rows carry

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -106,6 +107,29 @@ type clusterConnectedMsg struct {
 	cluster Cluster
 	state   ContextState
 	err     error
+	// connect is how long the off-loop half took — ConnectCluster plus the state
+	// load, i.e. everything a *retained* cluster would let a switch-back skip
+	// (CTX-WARM-01). Measured here rather than in the handler because the handler
+	// runs whenever the message is delivered, which is not when the work happened.
+	connect time.Duration
+}
+
+// switchTiming is the stopwatch a context switch carries from its connect through to
+// the moment the new cluster's menu is reconciled. It exists to answer the question
+// the "keep the previous cluster warm" feedback turns on and nobody has measured:
+// *what* is slow about switching back — the connect, or the discovery pass (D196 pt 3).
+//
+// It is per-switch state on the Model rather than a counter somewhere because there is
+// at most one switch in flight and a superseded one must not report: each successful
+// connect overwrites it, the discovery pass that switch started consumes it, and a
+// launch-time pass (no switch) leaves it zero and logs nothing.
+type switchTiming struct {
+	context string
+	connect time.Duration
+	// applied is when the swap landed on the update loop, so time.Since(applied) at
+	// reconcile is the discovery half — the wall-clock the reader actually waits
+	// between the picker closing and the new cluster's menu being complete.
+	applied time.Time
 }
 
 // switchContext moves the shell to another kubeconfig context: it connects to it
@@ -127,6 +151,7 @@ func (m Model) switchContext(name string) (tea.Model, tea.Cmd) {
 	m.ctxGen++
 	gen, conn, loader := m.ctxGen, m.connector, m.ctxState
 	return m, func() tea.Msg {
+		start := time.Now()
 		cluster, err := conn.ConnectCluster(name)
 		msg := clusterConnectedMsg{gen: gen, context: name, cluster: cluster, err: err}
 		// The per-context state is resolved in the same Cmd (M4-05): it is a disk
@@ -135,6 +160,7 @@ func (m Model) switchContext(name string) (tea.Model, tea.Cmd) {
 		if err == nil && loader != nil {
 			msg.state = loader.LoadContextState(name)
 		}
+		msg.connect = time.Since(start)
 		return msg
 	}
 }
@@ -189,10 +215,45 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		m.setNamespace(msg.state.Namespace)
 	}
 
+	// Start the stopwatch's second half now the swap has landed; the discovery pass
+	// started below closes it (logSwitchComplete). Overwriting rather than appending
+	// is deliberate: a switch superseded before its menu arrived is not worth a
+	// timing, and the surviving switch is the one the reader is waiting on.
+	m.ctxSwitch = switchTiming{context: msg.context, connect: msg.connect, applied: time.Now()}
+
 	// After the reset, which clears the status bar the old cluster wrote.
 	notice := m.surfaceNotice("switched to " + msg.context)
 	next, discover := m.startDiscovery()
 	return next, tea.Batch(notice, discover)
+}
+
+// logSwitchComplete closes a context switch's stopwatch when the discovery pass that
+// switch started has reconciled, and writes the three numbers to the diagnostic log
+// (D159's file, `~/.cache/kubecom/kubecom.log`): the connect, the discovery, and their
+// sum — the wall-clock between picking a context and its menu being complete.
+//
+// It logs rather than renders on purpose (D196 pt 3): this is a measurement taken to
+// decide whether retaining a departed cluster is worth its risk, not a number a user
+// asked to see. A launch-time discovery pass has no timing pending and logs nothing,
+// so the log stays quiet until someone actually switches.
+//
+// The watch re-arm is deliberately *outside* the total: it starts only when the reader
+// drills into a resource, so folding it in would measure their reading speed. The menu
+// being complete is the moment the new cluster is usable, and that is what is timed.
+func (m Model) logSwitchComplete() Model {
+	if m.ctxSwitch.context == "" {
+		return m
+	}
+	t := m.ctxSwitch
+	m.ctxSwitch = switchTiming{}
+	discovery := time.Since(t.applied)
+	m.logger.Info("context switch complete",
+		"context", t.context,
+		"connect", t.connect.Round(time.Microsecond),
+		"discovery", discovery.Round(time.Microsecond),
+		"total", (t.connect + discovery).Round(time.Microsecond),
+	)
+	return m
 }
 
 // ContextLister lists the kubeconfig contexts the switcher offers (M4-04b). Like
