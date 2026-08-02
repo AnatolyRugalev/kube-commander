@@ -208,7 +208,13 @@ pop-up appearing. Backspace on an empty value takes you back to the verb list, a
 `resource`, `pin`, `theme`, `namespace` and `context`. The last two have to fetch their values
 (from the cluster and from your kubeconfig), so their list can appear a moment after the
 prompt does; the box says `— loading…` until it lands, and anything you type meanwhile
-still narrows it. Their own keys (`Ctrl+n`, `C`) keep working exactly as before.
+still narrows it.
+
+A verb's own key is a **shortcut into the same line**: `T` opens the palette already
+reading `:theme `, so the key saves you the typing without taking you to a different
+box. Backspace or `Esc` from there rewinds to the full verb list, so a key pressed by
+mistake still leaves you one keystroke from everything else. (`Ctrl+n` and `C` still
+open their own pop-ups for now; they are converted next.)
 
 With a row selected in the table, the palette also lists **what you can do to that
 row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the
@@ -232,10 +238,10 @@ groups define the same Kind — a `Cluster` per operator is common — both are 
 each with its group beside it (`Cluster (postgresql.cnpg.io)`), so you can tell them
 apart and pick either.
 
-**Every pop-up picker filters as you type** — the command palette, the resource
-picker, the namespace switcher (`Ctrl+n`), the context switcher (`C`), the theme
-switcher (`T`), the actions menu (`a`) and the container picker. There is no filter
-key to press first: the matching is the same one cluster search uses, so a
+**Every pop-up picker filters as you type** — the command palette (including `T`,
+which opens it on `:theme `), the resource picker, the namespace switcher (`Ctrl+n`),
+the context switcher (`C`), the actions menu (`a`) and the container picker. There is
+no filter key to press first: the matching is the same one cluster search uses, so a
 typo-free abbreviation finds its
 value (`ksys` → `kube-system`) and exact matches always rank above fuzzy ones. `Esc`
 clears the query, a second `Esc` closes the picker, and Enter picks the highlighted
@@ -417,8 +423,9 @@ The name is matched ignoring case and surrounding space, but it is never guessed
 at: an unknown name launches on the default theme and shows a brief startup notice
 listing the ones that exist.
 
-You can also switch theme from inside kubecom: `T` opens a picker over the built-in
-palettes (the one you are rendering in is marked `*`), the pick repaints immediately,
+You can also switch theme from inside kubecom: `T` opens the command palette on its
+`:theme ` line, listing the built-in palettes (the one you are rendering in is marked
+`*`) — the same list `:` `theme` `␣` reaches. The pick repaints immediately,
 and the name is written back to `config.yaml` so the next launch opens on it. The
 write-back keeps the rest of the file's settings, but it rewrites the file — **YAML
 comments and hand-crafted formatting are lost** — so if you keep comments in your

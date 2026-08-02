@@ -3,7 +3,6 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
@@ -50,13 +49,12 @@ func (m *Model) applyStyles(s styles.Styles) {
 	m.resPicker.SetStyles(s)
 	m.actPicker.SetStyles(s)
 	m.ctrPicker.SetStyles(s)
+	// Including the command palette, which is the surface a theme is picked from since
+	// PAL-05a: it hides before the restyle lands, but a cursor or a half-typed line
+	// there must not be the one overlay left on the departed palette next time it opens.
 	m.cmdPicker.SetStyles(s)
 	m.portPicker.SetStyles(s)
 	m.ctxPicker.SetStyles(s)
-	// Including the theme picker itself: the pick that triggers this restyle happens
-	// with it open (it hides first, but a filter or a cursor there must not be the one
-	// surface left on the departed palette next time it opens).
-	m.themePicker.SetStyles(s)
 
 	m.viewer.SetStyles(s)
 	m.modal.SetStyles(s)
@@ -92,27 +90,7 @@ func WithThemePersister(p ThemePersister) Option {
 	return func(m *Model) { m.themePersister = p }
 }
 
-// themePickerKind is the Kind stamped on the theme picker (picker.New(s, "theme")).
-// Every picker emits the same SelectedMsg/CancelledMsg types (D65), so the root
-// branches on this Kind to route a picked theme rather than a namespace/context/…
-const themePickerKind = "theme"
-
-// openThemePicker shows the theme switcher, seeded from the built-in registry
-// (M4-12b-2). Unlike every other picker it needs no seam and no async load: the
-// palettes are compiled in, so styles.Themes() is the whole list and the rows are
-// built here rather than arriving in a later message. It is therefore never inert.
-//
-// The rows are rebuilt on every open so the marker follows the theme the shell is
-// rendering in *now* rather than the one it launched with — the same reason the
-// context picker re-seeds (D158).
-func (m Model) openThemePicker() (tea.Model, tea.Cmd) {
-	labels, byLabel := themePickerItems(styles.Themes(), m.styles.Theme.Name)
-	m.themeByLabel = byLabel
-	m.themePicker.SetItems(labels)
-	return m, m.themePicker.Show()
-}
-
-// themePickerItems renders one picker row per built-in theme and the map resolving a
+// themeItems renders one picker row per built-in theme and the map resolving a
 // row back to its theme name (the picker's SelectedMsg carries only the label, D65 —
 // the resByLabel/ctxByLabel pattern). Rows are `* name`, the marker on the theme the
 // shell is currently rendering in, exactly as the context picker marks the context it
@@ -121,7 +99,11 @@ func (m Model) openThemePicker() (tea.Model, tea.Cmd) {
 //
 // Order comes from the registry (default first, then sorted — D169 pt 4), which is
 // the one order every theme surface agrees on.
-func themePickerItems(themes []styles.Theme, current string) ([]string, map[string]string) {
+//
+// The rows are rebuilt every time the stage opens so the marker follows the theme the
+// shell is rendering in *now* rather than the one it launched with — the same reason
+// the context picker re-seeds (D158).
+func themeItems(themes []styles.Theme, current string) ([]string, map[string]string) {
 	labels := make([]string, 0, len(themes))
 	byLabel := make(map[string]string, len(themes))
 	for _, t := range themes {
@@ -138,29 +120,14 @@ func themePickerItems(themes []styles.Theme, current string) ([]string, map[stri
 	return labels, byLabel
 }
 
-// handleThemeSelected applies a theme picked from the switcher: it closes the picker,
-// repaints the running shell through the M4-12b-1 fan-out (applyStyles — every
-// component, colors only, no state reset, D171) and writes the name back to the
-// config off the update loop.
+// applyThemeNamed repaints and persists the named theme: it is where the palette's
+// `:theme ` stage lands, whether that stage was reached by typing the line or by
+// pressing `T` (PAL-05a/D207 — one surface, so one apply).
 //
 // Picking the theme already rendering is a no-op — the marked row is choosable, so it
-// must cost neither a repaint nor a file write. A label with no mapping, or a name the
-// registry no longer knows, closes the picker and changes nothing (the picker only
-// offers names it produced, so both are defensive; principle 3).
-func (m Model) handleThemeSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
-	m.themePicker.Hide()
-	name, ok := m.themeByLabel[msg.Value]
-	m.themeByLabel = nil
-	if !ok {
-		return m, nil
-	}
-	return m.applyThemeNamed(name)
-}
-
-// applyThemeNamed repaints and persists the named theme. It is the tail of the switcher
-// above, split out so the palette's `:theme ` argument stage applies a theme through
-// the very same function rather than a copy of it (PAL-03a/D198) — both surfaces
-// resolve a label to a name and then land here.
+// must cost neither a repaint nor a file write. A name the registry no longer knows
+// changes nothing (the stage only offers names it produced, so it is defensive;
+// principle 3).
 func (m Model) applyThemeNamed(name string) (tea.Model, tea.Cmd) {
 	theme, found := styles.ByName(name)
 	if !found || theme.Name == m.styles.Theme.Name {

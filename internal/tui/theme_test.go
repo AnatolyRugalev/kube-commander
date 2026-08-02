@@ -130,14 +130,16 @@ var themeSurfaces = []struct {
 		m.searchView.AppendHit(searchHit("Service", "services", "web", "api"))
 		return m
 	}},
-	{"theme picker overlay", func(t *testing.T, opts ...Option) Model {
-		// Seeded with fixed rows rather than through openThemePicker: the marker names
-		// the theme the shell is rendering in, so the real opener would put it on a
-		// different row in the launch-themed and restyled builds and the comparison
-		// would fail on glyphs instead of colors.
+	{"palette on its theme stage", func(t *testing.T, opts ...Option) Model {
+		// Seeded with fixed rows rather than by pressing `T`: the marker names the theme
+		// the shell is rendering in, so the real opener would put it on a different row
+		// in the launch-themed and restyled builds and the comparison would fail on
+		// glyphs instead of colors.
 		m := sizedWith(t, opts...)
-		m.themePicker.SetItems([]string{"* default", "  monokai", "  solarized-dark"})
-		m.themePicker.Show()
+		m.cmdPicker.SetTitle(keymap.ActionTheme.Describe())
+		m.cmdPicker.SetPrompt(palettePrompt + "theme ")
+		m.cmdPicker.SetItems([]string{"* default", "  monokai", "  solarized-dark"})
+		m.cmdPicker.Show()
 		return m
 	}},
 	{"logs view", func(t *testing.T, opts ...Option) Model {
@@ -272,7 +274,7 @@ func (f *fakeThemePersister) PersistTheme(name string) error {
 	return f.err
 }
 
-// themeLabelFor reads the open picker's row for a theme back out through the label
+// themeLabelFor reads the open stage's row for a theme back out through the label
 // map, which is the only thing a pick can resolve through — the picker's SelectedMsg
 // carries a label, not a theme (D65).
 func themeLabelFor(t *testing.T, m Model, theme string) string {
@@ -282,7 +284,7 @@ func themeLabelFor(t *testing.T, m Model, theme string) string {
 			return label
 		}
 	}
-	t.Fatalf("no picker row maps to theme %q (rows: %v)", theme, m.themeByLabel)
+	t.Fatalf("no stage row maps to theme %q (rows: %v)", theme, m.themeByLabel)
 	return ""
 }
 
@@ -319,32 +321,63 @@ func themeCmdMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	return out
 }
 
-// TestThemeKeyOpensThePickerOverTheRegistry drives the gesture through the real key
-// path (D11 — the binding is registry-resolved, never matched raw): `T` opens the
-// picker with one row per built-in, seeded synchronously since the palettes are
-// compiled in (no seam, no Cmd, nothing to wait for), and composited over the browse
-// body like every other overlay (D95).
-func TestThemeKeyOpensThePickerOverTheRegistry(t *testing.T) {
+// openThemeStage presses `T` through the real key path (D11 — the binding is
+// registry-resolved, never matched raw) and returns the shell with the palette on its
+// `:theme ` stage. Since PAL-05a that is the only theme surface there is, so every
+// test below reaches it the way a reader does rather than by calling an opener.
+func openThemeStage(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = press(t, m, tea.Key{Code: 'T', Text: "T"})
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionTheme {
+		t.Fatalf("`T` should open the palette on its theme stage, stage = %q", m.palArg)
+	}
+	return m
+}
+
+// TestThemeKeyOpensThePaletteThemeStage is PAL-05a's headline assertion: `T` no longer
+// opens a modal of its own, it opens the one palette with the theme verb already
+// committed — the same stage `:` `theme` `␣` reaches, on the same rows, seeded
+// synchronously since the palettes are compiled in (no seam, no Cmd, nothing to wait
+// for) and composited over the browse body like every other overlay (D95). The line the
+// reader sees is the tell that this is the palette and not a picker: the prompt reads
+// `:theme `.
+func TestThemeKeyOpensThePaletteThemeStage(t *testing.T) {
 	m := sizedWith(t)
 
 	m, cmd := press(t, m, tea.Key{Code: 'T', Text: "T"})
-	if !m.themePicker.Active() {
-		t.Fatal("theme.switch should open the theme picker")
+	if !m.cmdPicker.Active() {
+		t.Fatal("theme.switch should open the command palette")
+	}
+	if m.palArg != keymap.ActionTheme {
+		t.Fatalf("`T` should commit the theme verb, stage = %q", m.palArg)
 	}
 	if msgs := pickerMsgs(cmd); len(msgs) != 0 {
-		t.Errorf("the theme picker needs no async load: the registry is compiled in, got %v", msgs)
+		t.Errorf("the theme stage needs no async load: the registry is compiled in, got %v", msgs)
 	}
 	if got, want := len(m.themeByLabel), len(styles.Themes()); got != want {
-		t.Errorf("picker rows = %d, want %d (%v)", got, want, m.themeByLabel)
+		t.Errorf("stage rows = %d, want %d (%v)", got, want, m.themeByLabel)
 	}
 	view := stripANSI(m.View().Content)
-	if !strings.Contains(view, "Switch theme") {
-		t.Errorf("the open picker should be composited over the browse body:\n%s", view)
+	if !strings.Contains(view, palettePrompt+"theme ") {
+		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
+	}
+	if !strings.Contains(view, keymap.ActionTheme.Describe()) {
+		t.Errorf("the open stage should be composited over the browse body:\n%s", view)
 	}
 	for _, name := range styles.ThemeNames() {
 		if !strings.Contains(view, name) {
-			t.Errorf("theme %q missing from the picker:\n%s", name, view)
+			t.Errorf("theme %q missing from the stage:\n%s", name, view)
 		}
+	}
+
+	// The key is sugar, not a second surface: typing the line by hand must land on the
+	// very same stage (D207) — same verb committed, same prompt, same rows.
+	typed := sizedWith(t)
+	typed, _ = press(t, typed, tea.Key{Code: ':', Text: ":"})
+	typed = typeInto(t, typed, "theme")
+	typed, _ = press(t, typed, tea.Key{Code: ' ', Text: " "})
+	if got, want := stripANSI(typed.View().Content), view; got != want {
+		t.Errorf("`T` and `:theme ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -354,8 +387,7 @@ func TestThemeKeyOpensThePickerOverTheRegistry(t *testing.T) {
 // launch (they agree) and wrong from the first pick onward.
 func TestThemePickerMarksTheRenderingTheme(t *testing.T) {
 	m := sizedWith(t, WithTheme(styles.MonokaiTheme()))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 
 	if got := themeLabelFor(t, m, "monokai"); !strings.HasPrefix(got, "* ") {
 		t.Errorf("the rendering theme should be marked, got %q", got)
@@ -365,9 +397,8 @@ func TestThemePickerMarksTheRenderingTheme(t *testing.T) {
 	}
 
 	// After a switch the marker moves with the shell, not with the launch option.
-	next, _ = m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "solarized-dark")})
-	next, _ = next.(Model).openThemePicker()
-	m = next.(Model)
+	next, _ := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "solarized-dark")})
+	m = openThemeStage(t, next.(Model))
 	if got := themeLabelFor(t, m, "solarized-dark"); !strings.HasPrefix(got, "* ") {
 		t.Errorf("the marker did not follow the switch, got %q", got)
 	}
@@ -382,12 +413,11 @@ func TestThemePickerMarksTheRenderingTheme(t *testing.T) {
 func TestThemePickRepaintsAndPersists(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithThemePersister(fp))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 
-	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "monokai")})
 	m = next.(Model)
-	if m.themePicker.Active() || m.themeByLabel != nil {
+	if m.cmdPicker.Active() || m.themeByLabel != nil {
 		t.Error("the pick should close the picker and drop its label map")
 	}
 	if got := m.styles.Theme.Name; got != "monokai" {
@@ -426,11 +456,10 @@ func TestThemePickRepaintsAndPersists(t *testing.T) {
 func TestThemePickOfTheRenderingThemeIsANoOp(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithTheme(styles.MonokaiTheme()), WithThemePersister(fp))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 	before := m.View().Content
 
-	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "monokai")})
 	m = next.(Model)
 	if cmd != nil {
 		t.Error("re-picking the rendering theme should issue no work")
@@ -438,7 +467,7 @@ func TestThemePickOfTheRenderingThemeIsANoOp(t *testing.T) {
 	if len(fp.names) != 0 {
 		t.Errorf("re-picking the rendering theme wrote the config: %v", fp.names)
 	}
-	if m.themePicker.Active() {
+	if m.cmdPicker.Active() {
 		t.Error("the pick should still close the picker")
 	}
 	if got := m.View().Content; got == before {
@@ -455,10 +484,9 @@ func TestThemePickOfTheRenderingThemeIsANoOp(t *testing.T) {
 // for the session rather than doing nothing.
 func TestThemeSwitchWithoutAPersisterStillRepaints(t *testing.T) {
 	m := sizedWith(t)
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 
-	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "monokai")})
 	m = next.(Model)
 	if got := m.styles.Theme.Name; got != "monokai" {
 		t.Fatalf("the theme did not apply without a persister: %q", got)
@@ -478,10 +506,9 @@ func TestThemeSwitchWithoutAPersisterStillRepaints(t *testing.T) {
 func TestThemeWriteBackFailureKeepsTheTheme(t *testing.T) {
 	fp := &fakeThemePersister{err: errors.New("permission denied")}
 	m := sizedWith(t, WithThemePersister(fp))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 
-	next, cmd := m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "monokai")})
 	m = next.(Model)
 	msgs := themeCmdMsgs(t, cmd)
 	if len(msgs) != 1 {
@@ -504,18 +531,28 @@ func TestThemeWriteBackFailureKeepsTheTheme(t *testing.T) {
 	}
 }
 
-// TestThemePickerCancelClosesWithoutSwitching: esc out of the picker leaves both the
-// palette and the config alone (the picker's clear-then-close, D65/M2-08b).
-func TestThemePickerCancelClosesWithoutSwitching(t *testing.T) {
+// TestThemeStageCancelRewindsThenCloses: esc out of a key-opened stage behaves exactly
+// as it does for one reached by typing — it rewinds the line to the verb list first and
+// closes on the next esc (D207 pt 2). That is what makes `T` a way *into* the palette
+// rather than a dead end, and neither esc may touch the theme or the config.
+func TestThemeStageCancelRewindsThenCloses(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithThemePersister(fp))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
+	m = openThemeStage(t, m)
 
-	next, _ = m.Update(picker.CancelledMsg{Kind: themePickerKind})
+	next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind})
 	m = next.(Model)
-	if m.themePicker.Active() || m.themeByLabel != nil {
-		t.Error("cancelling should close the picker and drop its label map")
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("the first esc should rewind to the verb list, stage = %q", m.palArg)
+	}
+	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionResources.Describe()) {
+		t.Errorf("the rewound palette should show the verbs:\n%s", got)
+	}
+
+	next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind})
+	m = next.(Model)
+	if m.cmdPicker.Active() {
+		t.Error("the second esc should close the palette")
 	}
 	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
 		t.Errorf("cancelling changed the theme: %q", got)
@@ -532,9 +569,8 @@ func TestThemePickerCancelClosesWithoutSwitching(t *testing.T) {
 func TestThemeSwitchSurvivesAContextSwitch(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithThemePersister(fp))
-	next, _ := m.openThemePicker()
-	m = next.(Model)
-	next, _ = m.Update(picker.SelectedMsg{Kind: themePickerKind, Value: themeLabelFor(t, m, "monokai")})
+	m = openThemeStage(t, m)
+	next, _ := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: themeLabelFor(t, m, "monokai")})
 	m = next.(Model)
 
 	m.resetCluster()

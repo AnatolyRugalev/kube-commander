@@ -188,9 +188,6 @@ func TestPaletteArgumentAppliesATheme(t *testing.T) {
 	if got := m.styles.Theme.Name; got != "monokai" {
 		t.Fatalf("theme = %q, want monokai", got)
 	}
-	if m.themePicker.Active() {
-		t.Fatal("the theme's argument stage should never open the standalone theme picker")
-	}
 }
 
 // TestPaletteBackspaceLeavesTheArgumentStage proves the line unwinds the way it was

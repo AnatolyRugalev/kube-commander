@@ -53,9 +53,11 @@ import (
 // and saying it once above the list beats repeating it on every row of a 60-column
 // modal.
 //
-// PAL-05 turns the shortcut keys into pre-typed palette lines. Until then the shortcuts
-// keep working unchanged (D194 pt 4) — these slices add a way in, they do not take one
-// away.
+// PAL-05 turns the shortcut keys into pre-typed palette lines: a key whose verb takes
+// an argument stops opening a modal of its own and opens *this* one with its verb
+// already committed (openPaletteArg). The key keeps working and keeps its meaning —
+// what changes is that there is one surface behind it instead of two (D207). It lands
+// one key per slice, `T` first (PAL-05a).
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
@@ -238,6 +240,31 @@ func (m Model) openPalette() (tea.Model, tea.Cmd) {
 	return m, m.cmdPicker.Show()
 }
 
+// openPaletteArg opens the palette *already* in verb a's argument stage — the pre-typed
+// line a shortcut key becomes (PAL-05a/D207). `T` does not open a theme modal any more;
+// it opens the one palette, re-prompted `:theme `, over the same values `:` `theme` `␣`
+// reaches. The key is unchanged as a gesture: same key, same verb, same list.
+//
+// It ends in enterPaletteArg, which is the whole point — the stage a key opens and the
+// stage the line opens are produced by one function, so a shortcut cannot come to offer
+// a different set from the palette's own. Two behaviours follow from that and are the
+// reason this is sugar rather than a re-implementation: backspace on the empty argument
+// rewinds to the verb list (handlePaletteFilterKey), so a key pressed by mistake is one
+// keystroke from every other verb rather than a dead end; and esc rewinds once before it
+// closes, exactly as it does for a stage reached by typing.
+//
+// A verb whose values cannot be produced leaves its key exactly as inert as it is today:
+// enterPaletteArg decides that before anything is shown (D197), so a shortcut never
+// opens an empty palette that implies the verb was available.
+func (m Model) openPaletteArg(a keymap.Action) (tea.Model, tea.Cmd) {
+	next, load, entered := m.enterPaletteArg(a)
+	if !entered {
+		return m, nil
+	}
+	show := next.cmdPicker.Show()
+	return next, tea.Batch(show, load)
+}
+
 // closePalette dismisses the palette and returns it to the verb stage, so the next `:`
 // opens on verbs with a clean prompt rather than on wherever the last line ended.
 func (m *Model) closePalette() {
@@ -291,7 +318,7 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		items, m.resByLabel = m.resourcePickerItems()
 	case keymap.ActionTheme:
 		var labels []string
-		labels, m.themeByLabel = themePickerItems(styles.Themes(), m.styles.Theme.Name)
+		labels, m.themeByLabel = themeItems(styles.Themes(), m.styles.Theme.Name)
 		items = picker.Labels(labels)
 	case keymap.ActionNamespace:
 		if m.nsLister == nil {

@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-02 — HINT-01 stopped the hint line advertising keys an open picker swallows, by deriving the hint context at the tail of every Update instead of pushing it from ~30 sites (D206). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-02 — PAL-05a landed the shortcut-to-palette mechanism on `T`, which now opens the palette's `:theme ` stage instead of a picker of its own, retiring that picker (D207). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: First slice of the four PAL-05 was split into on pickup (see the PAL section).
+_(none)_
 
 ## Blocked
 
@@ -329,16 +327,10 @@ leg is a ~700-line diff. Bottom-up as usual (D52): the mechanism lands on the ch
 first, then the keys get converted one at a time. The letter keys keep working throughout —
 what changes is which surface they open, never whether they act.
 
-- [ ] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
-      status: todo | owner: — | added: 2026-08-02
-      notes: The mechanism slice: one `openPaletteArg(verb)` that opens the palette
-      *already* in a verb's argument stage, plus the first key on it. `T` is chosen to go
-      first because it is the cheapest and the least load-bearing — its values are compiled
-      in (no seam, never inert, no async `dest` routing) and `themePickerItems` already
-      feeds the palette's `:theme ` stage, so the standalone picker is the only thing that
-      goes. Retires `themePicker`/`themePickerKind`/`openThemePicker`/`handleThemeSelected`.
+- [x] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
+      — done 2026-08-02 (D207)
 - [ ] **PAL-05b** `R` opens the palette's `:resource ` stage
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The other synchronous verb, and the bigger one: `resPicker` carries the alias
       matching (D203) and has its own test file (`respicker_test.go`, 194 lines). Those tests
       do **not** get deleted with the picker — the behaviour they pin survives in the
@@ -346,14 +338,14 @@ what changes is which surface they open, never whether they act.
       they get re-pointed at it. Watch-inert must stay inert (`enterPaletteArg` already
       refuses the stage with no watcher).
 - [ ] **PAL-05c** `ctrl+n` and `C` open the `:namespace ` / `:context ` stages
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The two asynchronous verbs, together because they are the same shape: retiring
       `nsPicker`/`ctxPicker` collapses the `dest` field on `namespacesLoadedMsg`/
       `contextsLoadedMsg` (D199) to a single destination, so the two-surface routing in
       `handleNamespacesLoaded`/`handleContextsLoaded` goes with them. `nsPicker` is the most
       referenced of the five (52 sites, 9 files) — re-split if it proves > ~300 lines alone.
 - [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: PAL-05a's mechanism
+      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The one slice that is not a mechanical conversion, because `a` has no argument
       word to pre-type: what it opens is the palette's row-verb *set* (PAL-04/D205), which
       means deciding whether `a` opens the whole verb stage (identical to `:`, and a
@@ -524,6 +516,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-05a** `T` opens the command palette on its `:theme ` line instead of a theme modal of its own — one `openPaletteArg` that enters the verb's argument stage through the same `enterPaletteArg` the typed line uses, so the key and `:` `theme` `␣` render byte-for-byte the same stage and cannot drift; esc/backspace rewind to the verb list before closing, which makes the key a way *into* the palette rather than a faster dead end; the standalone theme picker is retired in the same leg (the lint gate's `unused` couples them, and a dormant second surface for one verb is what the PAL feedback was about) with its tests re-pointed at the stage rather than deleted — done 2026-08-02 (D207)
 
 - [x] **HINT-01** The bottom hint line stops promising keys an open picker swallows — two picker `HelpContext`s (field open: move/select/cancel; the opt-in field closed: `/` as well) chosen by the picker's input state rather than its kind, wired by *deriving* the hint context at the tail of every `Update` instead of pushing `syncHints` from the ~30 Show/Hide sites that never called it, with the derivation mirroring the router's own precedence — done 2026-08-02 (D206)
 

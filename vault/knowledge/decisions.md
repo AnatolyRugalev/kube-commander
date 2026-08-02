@@ -5582,3 +5582,35 @@ ate them. A rule that has to be remembered in thirty places is not a rule.
    picker, present and future. A picker-kind-specific hint set (the port picker's `p`/`0`)
    is *not* what a `HelpContext` is for — that would tie the hint registry to a surface
    rather than to an input state.
+
+## D207 — A shortcut key opens the palette on its verb's stage; it never opens a second surface (2026-08-02, PAL-05a)
+
+The PAL feedback's complaint was five modals with five sets of habits. PAL-02…04
+built the one surface; PAL-05 is where the keys stop being the *other* way of doing
+the same thing. The rule for each conversion, starting with `T`:
+
+1. **The key ends in `enterPaletteArg`, not in an opener of its own.** `openPaletteArg`
+   is the whole mechanism: it enters the verb's argument stage and shows the palette,
+   so the stage a key opens and the stage `:` `<verb>` `␣` opens are produced by one
+   function and cannot come to list different values. A converted key keeps its
+   binding, its action and its inertness — `enterPaletteArg` already refuses a verb
+   whose values cannot be produced (D197), and refusing *before* anything is shown is
+   what keeps a shortcut from opening an empty box that implies the verb was available.
+2. **Esc and backspace rewind to the verb list before they close.** A key-opened stage
+   is not special-cased into closing outright, and that is deliberate: the rewind is
+   what makes the key a way *into* the palette rather than a faster dead end — press
+   the wrong one and every other verb is one keystroke away. The cost is a second esc
+   to leave, which is the same cost the line already had.
+3. **The standalone picker is retired in the same leg, not left dormant.** `unused` is
+   in the lint gate, so a picker no key opens is a red tree — but the reason is not the
+   linter: two surfaces for one verb is exactly what the feedback was about, and a
+   dormant one is a second implementation waiting to drift (the D197 argument). One
+   key per leg follows from this, since retiring a picker means its Kind, its
+   Selected/Cancelled arms, its `activePicker`/`applyStyles`/`SetSize`/`View`/
+   `capturing` sites and its tests all move together.
+4. **The tests move with it rather than dying with it.** What a retired picker's tests
+   pinned is behaviour that survives — the marker on the rendering theme, the no-op
+   re-pick, the write-back, the failure that keeps the theme — so they are re-pointed
+   at the stage (through the key, `press(t, m, T)`) instead of deleted. Only the
+   assertions about the *picker as a surface* are rewritten. A conversion that deletes
+   its tests has silently narrowed the guarantee, whatever the diff looks like.
