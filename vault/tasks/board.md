@@ -7,7 +7,8 @@ _Last updated: 2026-08-04 — AUTH-03 done; an AWS SSO expiry in the plugin's st
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-04a** The copy for a diagnosed credential-plugin failure
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
 
 ## Blocked
 
@@ -372,7 +373,35 @@ runs anything.
       — done 2026-08-04 (D211)
 - [x] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
       — done 2026-08-04 (D212)
-- [ ] **AUTH-04** Show the plugin failure legibly, with the remediation printed
+**AUTH-04 was split on pickup** into **AUTH-04a** (what the surface *says*) and **AUTH-04b**
+(how the diagnosis *gets* there), because the two halves are independently a leg's worth: the
+copy has seven distinct cases to get right (failed re-run with stderr / with none, a re-run
+that succeeded, a missing binary, a timeout, a truncated capture, and a remediation that is
+present, unrecognised or unsubstantiated), while the wiring is a new seam, an async Cmd, a
+generation guard and a launcher line. Bottom-up as usual (D52): the renderer first, since the
+wiring calls it. Nothing reaches the screen until 04b.
+
+- [ ] **AUTH-04a** The copy for a diagnosed credential-plugin failure
+      status: todo | owner: — | added: 2026-08-04
+      notes: `kube.ExecPluginReport` (the stanza + its diagnosis + the remediation it
+      substantiates — the value 04b's seam carries across the layer boundary) and the
+      renderer that turns one into the browse pane's notice, extending `browseFailure`'s
+      rules (`internal/tui/browsefail.go`). Order matters here in a way it did not for
+      CRD-01: the pane **drops** notice text past its height (`table.noticeBody`), so the
+      actionable line goes above the plugin's stderr, not below it.
+- [ ] **AUTH-04b** Wire the diagnosis into the browse surface
+      status: todo | owner: — | added: 2026-08-04 | blocked-on: AUTH-04a
+      notes: The runtime half: a `kube` producer (`ExecPluginFor` → `Diagnose` →
+      `SuggestedRemediation` in one call over a `ClientConfig`), an `AuthDiagnoser` seam on
+      the shell, an async Cmd fired when a browse failure classifies `KindExecPlugin`, and
+      the result re-writing the pane's notice through AUTH-04a's renderer. The seam takes
+      the `ClientConfig` at call time (the shell already holds `kubeconfig` + `context`), so
+      it is **stateless across a context switch** and does not belong on `Cluster`. Tag the
+      Cmd with `watchGen` so a diagnosis for the resource the user just left cannot overwrite
+      the new pane, and re-check the pane is still empty before writing. Live-cluster only to
+      see for real, so expect to add a line to a dogfood human task rather than tick
+      M-anything.
+- [ ] **AUTH-04 (parent)** Show the plugin failure legibly, with the remediation printed
       status: todo | owner: — | added: 2026-08-01
       notes: The first slice with a runtime surface, and the smallest thing that delivers
       most of the feedback's value: on `KindExecPlugin`, say which command failed, show its
