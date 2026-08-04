@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — PAL-05c-1 done (`ctrl+n` and the menu's namespace-seam row both open the palette's `:namespace ` stage). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — PAL-05c-2 claimed (`C` → the palette's `:context ` stage, the last mechanical PAL-05 conversion). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-05c-2** `C` opens the palette's `:context ` stage
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -340,7 +341,7 @@ kubeconfig read. One key per slice, as PAL-05a/b established.
 
 - [x] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage — done 2026-08-04 (D208)
 - [ ] **PAL-05c-2** `C` opens the palette's `:context ` stage
-      status: todo | owner: — | added: 2026-08-02
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
       notes: The last mechanical conversion. Retiring `ctxPicker` collapses
       `contextsLoadedMsg.dest` to one destination exactly as PAL-05c-1 did for
       `namespacesLoadedMsg` (keep `awaitingPaletteArg` — D208 pt 3), so
