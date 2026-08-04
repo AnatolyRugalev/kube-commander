@@ -7,7 +7,8 @@ _Last updated: 2026-08-04 — AUTH-02 done; the plugin's stderr is recoverable b
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-04
 
 ## Blocked
 
