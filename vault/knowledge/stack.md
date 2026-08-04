@@ -241,6 +241,24 @@ nothing useful; attach is the way.)
     staleness signal**: metrics-server keeps serving its last scrape, so a
     successful request says nothing about freshness.
   - There is **no watch verb** — samples are point-in-time and must be polled.
+- **Exec credential plugins** (`user.exec` in the kubeconfig; `internal/kube/authexec.go`,
+  AUTH-01/02):
+  - client-go runs the plugin inside `RoundTrip`, so a failure arrives wrapped in a
+    `*url.Error` and reads as "cluster unreachable" unless classified first (D195 pt 1).
+  - Its **stderr goes straight to the process's `os.Stderr`** — under the alt-screen the
+    user never sees it — and there is no seam to capture it. The returned error is
+    formatted with `%v` (`getting credentials: %v`), so the `*exec.ExitError` does **not**
+    survive in the wrap chain: no `errors.As` path, only text. Recovering *why* it failed
+    means re-running the plugin (`ExecPlugin.Diagnose`, D211).
+  - `Cmd.Env` is the process environment **plus** the stanza's `env:`; the stanza's own
+    `args`/`env` are the only place a remediation's detail (`--profile`, `AWS_PROFILE`) may
+    be substantiated from (D195 pt 5).
+- **`os/exec` gotcha: killing a process does not unblock `Wait`.** With a non-`*os.File`
+  `Stdout`/`Stderr`, `os/exec` copies through a pipe in a goroutine and `Wait` blocks on it.
+  A killed process that spawned a child leaves the child holding the write end, so `Wait`
+  hangs long past the context deadline — an `sh -c 'sleep 30'` takes the full 30s despite a
+  50 ms deadline. **`Cmd.WaitDelay`** is the bound that actually closes the pipe (found in
+  AUTH-02; applies to any future subprocess kubecom captures output from).
 - **`labels.Parse` quirks** (`k8s.io/apimachinery/pkg/labels`, used by the search
   query parser, SEARCH-04c-1):
   - It accepts a **bare identifier** — `labels.Parse("nginx")` is the valid

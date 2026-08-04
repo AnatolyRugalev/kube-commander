@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-02 claimed (re-run the exec credential plugin as a diagnostic and capture its stderr). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-02 done; the plugin's stderr is recoverable by a bounded diagnostic re-run whose stdout is never captured (D211). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+_(none)_
 
 ## Blocked
 
@@ -369,15 +368,8 @@ runs anything.
 
 - [x] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
       — done 2026-08-01 (D195)
-- [ ] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: The blocker AUTH-01 found: client-go streams the plugin's stderr to the
-      process's `os.Stderr` (invisible under the alt-screen) and its error text carries only
-      the exit code, so *why* it failed is unavailable (D195 pt 3). Re-invoke the
-      `ExecPluginFor` stanza — exactly that command, never a composed one — with a timeout
-      and a captured stdout/stderr, and return the stderr text. Must not be interactive
-      (`Stdin` closed) and must not run during a normal launch: it is a diagnostic on an
-      already-failed request, not a pre-flight.
+- [x] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
+      — done 2026-08-04 (D211)
 - [ ] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
       status: todo | owner: — | added: 2026-08-01
       notes: The only provider-specific slice. Over AUTH-02's stderr, match the AWS CLI's own
@@ -392,7 +384,10 @@ runs anything.
       stderr, and **print** the suggested `aws sso login --profile x` without offering to run
       it. Also fixes the misleading message AUTH-01's kind was created for — a plugin failure
       previously read as "cluster unreachable". Needs a home bigger than a status-bar toast
-      (stderr is multi-line); check what the existing error surfaces can carry first.
+      (stderr is multi-line); check what the existing error surfaces can carry first. Inherits
+      one obligation from AUTH-02/D211 pt 5: a diagnostic re-run that *succeeds*
+      (`ExecPluginDiagnosis.Failed() == false`, the user re-authenticated in another terminal
+      meanwhile) is a case this surface must be willing to say, not one it may assume away.
 - [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
       status: todo | owner: — | added: 2026-08-01
       notes: The last slice, and the only one that executes anything. One confirm prompt per

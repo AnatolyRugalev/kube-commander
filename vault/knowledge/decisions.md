@@ -5702,3 +5702,41 @@ about `ctrPicker`/`portPicker` stands unchanged and they stay modals.
    first, and a test fails if that order is reversed. This is the same trap D209's leg
    recorded for `ctxByLabel` from the other side: one of the maps is cleared on close and
    two are not, so a new stage must check which it owns.
+
+## D211 — A credential plugin may be re-run only as a diagnostic on an already-failed request; its stdout is a credential and is never captured (2026-08-04, AUTH-02)
+
+D195 pt 3 recorded that the plugin's stderr — the sentence that says *why* auth failed — is
+unavailable from the failure, because client-go streams it to the process's own `os.Stderr`
+(invisible under the alt-screen) and its error text carries only the executable name and an
+exit code. AUTH-02 recovers it the only way available: kubecom re-runs the plugin itself
+(`ExecPlugin.Diagnose`, `internal/kube/authexec.go`). Running a binary to find out why it
+failed is the kind of thing that grows scope quietly, so the shape is fixed here for AUTH-03
+(which reads the stderr), AUTH-04 (which shows it) and AUTH-05 (which offers a remediation).
+
+1. **It is a diagnostic on an already-failed request, never a pre-flight.** `Diagnose` runs
+   only after a request came back `KindExecPlugin` — never on launch, never speculatively,
+   never on a timer, never to "check" a context the user has not tried to use. And it
+   re-invokes the kubeconfig's *own* stanza verbatim (`p.Command` with `p.Args`), never a
+   command kubecom composed: this is the read-only construction D195 pt 3 promised, and the
+   remediation (a *different* command) stays offer-only behind a confirm (D195 pt 4).
+2. **The plugin's stdout is discarded and never returned.** A credential plugin's stdout is
+   an `ExecCredential` — a live bearer token. Nothing about why it failed is there, so it is
+   read into `io.Discard` rather than into a struct that would end up in a pane, the
+   diagnostic log or a pasted bug report. `ExecPluginDiagnosis` therefore has no stdout
+   field, and a test fails if the token can be found anywhere in the rendered result. Any
+   future slice that wants "what did it print" wants stderr.
+3. **Stdin is closed.** The TUI owns the terminal, so a plugin that would prompt must fail
+   at EOF rather than block on input nobody can supply.
+4. **The run is bounded twice, and one of the bounds is not the obvious one.** A timeout
+   kills the process — but killing it does *not* necessarily close its stderr: a plugin that
+   spawned a child leaves that child holding the pipe, and `os/exec`'s `Wait` blocks on the
+   copy until it exits, so the timeout alone bounds nothing. `Cmd.WaitDelay` is what closes
+   the pipe and returns what was captured. Captured stderr is capped (8 KiB) and reports its
+   own truncation; the cap never short-writes, since a child that gets `EPIPE` on stderr
+   dies before reaching the exit status being diagnosed.
+5. **A re-run that succeeds is an outcome, not an error.** The credential may have been
+   renewed between the failed request and the diagnosis, so the caller asks
+   `ExecPluginDiagnosis.Failed()` rather than assuming the failure reproduces. `Diagnose`
+   returns an error only when the diagnostic could not be *attempted* (no stanza — tagged
+   `KindBadContext` — or a cancelled caller); a plugin that ran and failed is a successful
+   diagnosis, with the detail in the struct.

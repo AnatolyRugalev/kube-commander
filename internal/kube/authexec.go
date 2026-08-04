@@ -1,11 +1,19 @@
 package kube
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
@@ -188,3 +196,192 @@ func ExecPluginFailed(err error) (ExecPluginFailure, bool) {
 // as opaque text — but the sentinel exists so a future layer that *does* wrap one
 // (e.g. a diagnostic re-run of the plugin) classifies without re-matching text.
 var errExecPlugin = errors.New("exec credential plugin failed")
+
+// execDiagnosisTimeout bounds a diagnostic re-run. A credential plugin that has
+// not answered in this long is not going to: the interactive ones (`aws sso
+// login`) are a *remediation* (AUTH-05), not this, and a token mint that blocks
+// is itself the diagnosis. Generous enough for a cold `aws eks get-token` on a
+// slow link, short enough that a wedged binary cannot hold a keystroke's worth
+// of UI work open.
+const execDiagnosisTimeout = 15 * time.Second
+
+// execDiagnosisWaitDelay bounds the wait *after* the process is killed. Killing
+// the plugin does not necessarily close its stderr: a plugin that spawned a
+// child (a shell wrapper, a helper) leaves that child holding the pipe, and
+// os/exec's Wait blocks on the copy until it exits — so without this a wedged
+// plugin's *grandchild* outlives execDiagnosisTimeout unbounded. With it, the
+// pipe is closed and whatever was captured so far is returned.
+const execDiagnosisWaitDelay = 2 * time.Second
+
+// execDiagnosisStderrLimit caps the captured stderr. Plugins that fail are
+// terse; the ones that are not (a Python traceback, a `--debug` firehose) would
+// otherwise be carried around whole for a pane that shows a dozen lines.
+const execDiagnosisStderrLimit = 8 << 10 // 8 KiB
+
+// ExecPluginDiagnosis is what a diagnostic re-run of an exec credential plugin
+// recovered — above all **Stderr**, the plugin's own account of why it failed,
+// which is the one thing the failure error cannot carry (D195 pt 3).
+//
+// A diagnosis is an observation, not a verdict: a re-run that *succeeds* is a
+// real and useful outcome (the credential expired between the failed request and
+// the diagnosis, or another terminal re-authenticated in between), so callers
+// must check Failed rather than assuming the re-run reproduces the failure.
+type ExecPluginDiagnosis struct {
+	// CommandLine is the invocation as it was run, rendered for display
+	// (ExecPlugin.CommandLine). It is what a remediation message quotes.
+	CommandLine string
+	// Stderr is the plugin's captured standard error, trailing whitespace
+	// trimmed. Empty when the plugin said nothing — a plugin is allowed to fail
+	// silently, and an empty diagnosis is reported as empty rather than padded.
+	Stderr string
+	// ExitCode is the plugin's exit status: 0 when the re-run succeeded, -1 when
+	// it was killed by a signal.
+	ExitCode int
+	// NotFound is true when the binary could not be found or executed at all.
+	NotFound bool
+	// TimedOut is true when the re-run outlived execDiagnosisTimeout (or the
+	// caller's own deadline) and was killed.
+	TimedOut bool
+	// Truncated is true when Stderr was cut at execDiagnosisStderrLimit.
+	Truncated bool
+}
+
+// Failed reports whether the re-run reproduced a failure.
+func (d ExecPluginDiagnosis) Failed() bool {
+	return d.NotFound || d.TimedOut || d.ExitCode != 0
+}
+
+// Diagnose re-runs the credential plugin and captures its stderr, which is the
+// only way to learn *why* it failed: client-go streams the plugin's stderr to the
+// process's own os.Stderr — invisible under the alt-screen — and the error it
+// returns carries nothing but the executable name and an exit code (D195 pt 3).
+//
+// It is a **diagnostic on an already-failed request**, never a pre-flight: call
+// it after a request failed with KindExecPlugin, and never on a normal launch. It
+// is read-only by construction (D195 pt 3): it re-invokes the kubeconfig's *own*
+// stanza — exactly p.Command with exactly p.Args, never a command kubecom
+// composed. The remediation an operator would type is a *different* command; it
+// is offered, never run, and only behind a confirm (D195 pt 4).
+//
+// Four properties are load-bearing (D211):
+//
+//   - **Stdin is closed**, so a plugin that would prompt fails instead of hanging
+//     on a terminal the TUI owns.
+//   - **Stdout is discarded, never captured.** A credential plugin's stdout is an
+//     ExecCredential — a live bearer token. Nothing about why it failed lives
+//     there, so it is read and dropped rather than returned into a struct that
+//     ends up in a pane, a log line or a bug report.
+//   - **The run is bounded twice**: execDiagnosisTimeout kills the process, and
+//     execDiagnosisWaitDelay is what actually ends the wait, since a killed
+//     plugin's child can still hold the stderr pipe open.
+//   - **The capture is bounded** by execDiagnosisStderrLimit, and says so
+//     (Truncated) rather than silently returning a prefix.
+//
+// The returned error is non-nil only when the diagnostic could not be *attempted*
+// (no stanza, or the caller's context was cancelled). A plugin that ran and
+// failed is a successful diagnosis: the detail is in the ExecPluginDiagnosis.
+func (p *ExecPlugin) Diagnose(ctx context.Context) (ExecPluginDiagnosis, error) {
+	if p == nil || strings.TrimSpace(p.Command) == "" {
+		return ExecPluginDiagnosis{}, fmt.Errorf("kube: no exec credential plugin to diagnose: %w", errBadContext)
+	}
+	d := ExecPluginDiagnosis{CommandLine: p.CommandLine()}
+
+	ctx, cancel := context.WithTimeout(ctx, execDiagnosisTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, p.Command, p.Args...) //nolint:gosec // the kubeconfig's own credential command, run verbatim; never composed, never shelled.
+	cmd.Env = p.environ(os.Environ())
+	cmd.Stdin = nil // non-interactive: os/exec connects the null device.
+	cmd.Stdout = io.Discard
+	stderr := &cappedBuffer{limit: execDiagnosisStderrLimit}
+	cmd.Stderr = stderr
+	cmd.WaitDelay = execDiagnosisWaitDelay
+
+	runErr := cmd.Run()
+	d.Stderr = strings.TrimRight(stderr.String(), " \t\r\n")
+	d.Truncated = stderr.truncated
+
+	switch {
+	case runErr == nil:
+		return d, nil
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		d.TimedOut = true
+	case ctx.Err() != nil:
+		// The caller went away; nothing was diagnosed.
+		return ExecPluginDiagnosis{}, fmt.Errorf("kube: diagnosing exec credential plugin %q: %w", p.Command, ctx.Err())
+	case errors.Is(runErr, exec.ErrNotFound), errors.Is(runErr, fs.ErrNotExist), errors.Is(runErr, fs.ErrPermission):
+		d.NotFound = true
+	default:
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			// Not an exit status and not a missing binary: the process could not
+			// be started for some other reason. Tagged so Classify reports
+			// KindExecPlugin without re-matching text.
+			return ExecPluginDiagnosis{}, fmt.Errorf("kube: diagnosing exec credential plugin %q: %w: %w", p.Command, errExecPlugin, runErr)
+		}
+		d.ExitCode = exitErr.ExitCode()
+	}
+	return d, nil
+}
+
+// environ merges the stanza's explicit overrides onto base (the process
+// environment), override winning. os/exec's own de-duplication keeps the last
+// occurrence of a name, but relying on that would make the precedence a property
+// of the standard library rather than of this function, so the merge is explicit
+// and the result deterministic (overrides appended in name order).
+//
+// Only the stanza's *own* env is applied: client-go passes the plugin the process
+// environment plus the stanza's, and reproducing anything more (a provider's
+// implicit defaults, say) would make the diagnostic a different invocation from
+// the one that failed.
+func (p *ExecPlugin) environ(base []string) []string {
+	if len(p.Env) == 0 {
+		return base
+	}
+	out := make([]string, 0, len(base)+len(p.Env))
+	for _, kv := range base {
+		name, _, ok := strings.Cut(kv, "=")
+		if ok {
+			if _, overridden := p.Env[name]; overridden {
+				continue
+			}
+		}
+		out = append(out, kv)
+	}
+	names := make([]string, 0, len(p.Env))
+	for n := range p.Env {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	for _, n := range names {
+		out = append(out, n+"="+p.Env[n])
+	}
+	return out
+}
+
+// cappedBuffer accumulates at most limit bytes and reports whether it dropped
+// any. Writes always report full consumption: a child that overruns the cap must
+// keep running to its own exit, not die of a short write on its stderr pipe.
+type cappedBuffer struct {
+	limit     int
+	buf       bytes.Buffer
+	truncated bool
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	switch room := c.limit - c.buf.Len(); {
+	case room <= 0:
+		if n > 0 {
+			c.truncated = true
+		}
+	case n > room:
+		c.buf.Write(p[:room])
+		c.truncated = true
+	default:
+		c.buf.Write(p)
+	}
+	return n, nil
+}
+
+func (c *cappedBuffer) String() string { return c.buf.String() }
