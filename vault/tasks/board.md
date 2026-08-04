@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — PAL-05d done; `a` opens the palette's `:action ` stage and the actions menu is retired, which closes the PAL line (D210). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-02 claimed (re-run the exec credential plugin as a diagnostic and capture its stderr). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
 
 ## Blocked
 
@@ -369,7 +370,7 @@ runs anything.
 - [x] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
       — done 2026-08-01 (D195)
 - [ ] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
-      status: todo | owner: — | added: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
       notes: The blocker AUTH-01 found: client-go streams the plugin's stderr to the
       process's `os.Stderr` (invisible under the alt-screen) and its error text carries only
       the exit code, so *why* it failed is unavailable (D195 pt 3). Re-invoke the
