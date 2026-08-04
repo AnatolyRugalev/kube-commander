@@ -7,7 +7,8 @@ _Last updated: 2026-08-04 — AUTH-04b done, so a credential-plugin failure is n
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
 
 ## Blocked
 
@@ -384,14 +385,30 @@ with what it printed, so AUTH-05 inherits a diagnosis it only has to *offer to a
 
 - [x] **AUTH-04a** The copy for a diagnosed credential-plugin failure — done 2026-08-04 (D213)
 - [x] **AUTH-04b** Wire the diagnosis into the browse surface — done 2026-08-04 (D214)
-- [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
+**AUTH-05 was split on pickup** into **AUTH-05a** (the *run*: what happens once a remediation
+has been approved) and **AUTH-05b** (the *offer*: the confirm that approves it), for the same
+reason AUTH-04 was — each half is a leg's worth, and the halves fail differently. The run is a
+suspend, an argv + environment, a captured failure and a retry of the request that failed; the
+offer is a modal kind, a stash, a routing arm, a decline path and the notice copy that stops
+telling the reader to go to another terminal. Bottom-up as usual (D52): the runner first, since
+the offer calls it. **Nothing can run until 05b** — until then `runReauth` is reachable only
+from tests, which is the point: no code path arms it, so nothing executes unasked (D195 pt 4).
+
+- [ ] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
+      notes: The **existing** suspend — the `$EDITOR`/exec one (`tea.Exec`, `internal/tui/edit.go`,
+      D125) — because `aws sso login` opens a browser and prints a verification code; do not invent
+      a second suspend. The remediation runs verbatim (never shelled) in the *plugin's* environment,
+      because a stanza that redirects `AWS_CONFIG_FILE` must log in against the same config it
+      authenticates from. On return: exit 0 → retry the failed request (re-start that resource's
+      watch, not the launch); non-zero → the toast names what it printed.
+- [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
       status: todo | owner: — | added: 2026-08-01
-      notes: The last slice, and the only one that executes anything. One confirm prompt per
-      occurrence naming the exact command (D195 pt 4), then the **existing** suspend — the
-      `$EDITOR`/exec one (`internal/tui/edit.go`, D125) — because `aws sso login` opens a
-      browser and prints a verification code; do not invent a second suspend. On return,
-      retry the failed request rather than the whole launch. Live-cluster only, so expect to
-      raise a human task for the dogfood rather than tick anything on a fake.
+      notes: One confirm prompt per occurrence naming the exact command (D195 pt 4), opened when a
+      landed diagnosis substantiates a remediation; accept → AUTH-05a's `runReauth`, decline →
+      nothing but the notice. Also the copy: with the offer on screen the notice must stop saying
+      "run this in another terminal". Live-cluster only, so expect to raise a human task for the
+      dogfood rather than tick anything on a fake.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
