@@ -3,11 +3,12 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — PAL-05c-2 done; every argument key now opens the palette's stage and no standalone value picker is left (D209). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — PAL-05d claimed (`a` → the palette's row-verb stage, the last PAL-05 slice). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -341,7 +342,7 @@ kubeconfig read. One key per slice, as PAL-05a/b established.
 - [x] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage — done 2026-08-04 (D208)
 - [x] **PAL-05c-2** `C` opens the palette's `:context ` stage — done 2026-08-04 (D209)
 - [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
-      status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
       notes: The one slice that is not a mechanical conversion, because `a` has no argument
       word to pre-type: what it opens is the palette's row-verb *set* (PAL-04/D205), which
       means deciding whether `a` opens the whole verb stage (identical to `:`, and a
