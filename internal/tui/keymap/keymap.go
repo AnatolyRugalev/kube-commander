@@ -75,11 +75,15 @@ const (
 	ActionSort        Action = "sort.column"
 	ActionClearSort   Action = "sort.clear"
 	ActionToggleMenu  Action = "menu.toggle"
-	// M3 row actions (operate on the selected resource row). ActionActions opens
-	// the actions menu (D107); the rest are direct-key shortcuts for the most-used
-	// actions, all off the reserved nav keys (D10). The full curated action set
-	// (scale, cordon, drain, suspend, exec, …) is reachable through the actions
-	// menu rather than a key of its own (see vault/knowledge/keybindings.md).
+	// M3 row actions (operate on the selected resource row). ActionActions is the
+	// way to *all* of them (D107); the rest are direct-key shortcuts for the
+	// most-used ones, all off the reserved nav keys (D10). The full curated action
+	// set (scale, cordon, drain, suspend, exec, …) is reachable through it rather
+	// than through a key of its own (see vault/knowledge/keybindings.md). Since
+	// PAL-05d it is an *argument* verb like ns.switch and resources.switch: it takes
+	// the action as its argument and opens the palette's `:action ` stage rather than
+	// a menu of its own (D210), so its id keeps the `.menu` suffix for compatibility
+	// with existing keymap config while the surface it names is the palette's.
 	ActionActions  Action = "actions.menu"
 	ActionDescribe Action = "res.describe"
 	ActionLogs     Action = "res.logs"
@@ -268,7 +272,7 @@ var actionMeta = []struct {
 	{ActionSort, "Sort table (cycle column / direction)"},
 	{ActionClearSort, "Clear sort (restore order)"},
 	{ActionToggleMenu, "Toggle left menu pane"},
-	{ActionActions, "Open actions menu for the selected row"},
+	{ActionActions, "Act on the selected row"},
 	{ActionDescribe, "Describe the selected row"},
 	{ActionLogs, "View logs for the selected row"},
 	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},

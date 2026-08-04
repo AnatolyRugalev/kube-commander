@@ -352,7 +352,7 @@ func (m Model) handleContextsLoaded(msg contextsLoadedMsg) (tea.Model, tea.Cmd) 
 
 // contextPickerItems renders one row per context and the map resolving a row back to
 // its context name (a SelectedMsg carries only the label, D65 — the
-// resByLabel/actByLabel pattern). Rows are `* name (cluster)`, the marker on the
+// resByLabel/themeByLabel pattern). Rows are `* name (cluster)`, the marker on the
 // context the shell is **currently on**.
 //
 // That marker comes from the shell's own live context, not ContextInfo.Current

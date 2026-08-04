@@ -58,10 +58,11 @@ import (
 // already committed (openPaletteArg). The key keeps working and keeps its meaning —
 // what changes is that there is one surface behind it instead of two (D207). It lands
 // one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b),
-// `ctrl+n` → `:namespace ` (PAL-05c-1), `C` → `:context ` (PAL-05c-2). With PAL-05c-2
-// every key whose verb takes an argument opens this surface, and no standalone value
-// picker is left: actPicker/ctrPicker/portPicker pick from a *row's* own data, not
-// from a verb's argument list, so they are not conversions PAL-05 owes.
+// `ctrl+n` → `:namespace ` (PAL-05c-1), `C` → `:context ` (PAL-05c-2), `a` →
+// `:action ` (PAL-05d). With PAL-05d every key whose verb takes a value opens this
+// surface and no menu of its own is left: ctrPicker/portPicker pick from a *row's* own
+// data (its containers, its declared ports), not from a verb's argument list, so they
+// are the two modals the rule does not owe (D210 pt 3).
 //
 // PAL-05b is the slice that shows what the conversion is worth rather than merely what
 // it costs. `R`'s picker was the surface CRD-PIN-04 hardened (aliases, group
@@ -84,6 +85,13 @@ import (
 // **shell's** live context rather than the kubeconfig's `current-context`, and that
 // lives in contextPickerItems, which the stage was already seeded from — so, like D203
 // on `R`, it moved nowhere.
+//
+// PAL-05d finishes the line with the key that looked like the exception: `a` had no
+// argument word to pre-type, so D209 pt 3 filed its picker with the two row-data ones.
+// It is not one of those — its values are the compiled-in row-action registry, nameable
+// before the list is seen (`:action delete`), and PAL-04 already listed them here — so
+// `a` converts like the other four: it opens `:action `, the palette narrowed to the
+// verbs that act on the selected row, one backspace from every other verb (D210).
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
@@ -96,7 +104,9 @@ const commandPickerKind = "command"
 // open logs view, the port picker or the confirm modal, because those actions are
 // meaningful only while a particular surface is up and a palette entry that did
 // nothing 95% of the time would be worse than no entry. Row-scoped verbs join the
-// palette in PAL-04, from the actions menu's own per-row source (never a second list).
+// palette in PAL-04, from the row-action registry's own per-kind source (never a second
+// list), and `actions.menu` is the verb that narrows the palette to just those
+// (PAL-05d).
 //
 // menu.pin is here despite its *key* reading the cursor, and that is not an exception
 // to the rule above: as a palette verb it takes the kind as its argument, so it names
@@ -161,12 +171,17 @@ const (
 // and of the thing it manages; a line reading `:unpin ` would have to be a second verb
 // listing a different set, and D202 pt 3's "both directions or neither" is satisfied by
 // one verb that does both, exactly as the key does.
+//
+// PAL-05d adds the sixth and last, `actions.menu`, whose argument is the row action to
+// run: its word is `action` because that is what the line names, though the verb's id
+// still reads `actions.menu` from when it opened one (D210).
 var paletteArgVerbs = map[keymap.Action]string{
 	keymap.ActionResources: "resource",
 	keymap.ActionTheme:     "theme",
 	keymap.ActionNamespace: "namespace",
 	keymap.ActionContext:   "context",
 	keymap.ActionPin:       "pin",
+	keymap.ActionActions:   "action",
 }
 
 // paletteVerbItems renders the verb list and the label→action map that resolves a pick
@@ -194,18 +209,23 @@ func paletteVerbItems() ([]string, map[string]keymap.Action) {
 // paletteRowVerbs returns the row-scoped verbs the palette offers right now and the
 // title of the object they would act on, or nil/"" when there is no row to act on.
 //
-// The set is rowActionTitles' — the actions menu's own source — so PAL-04 adds a way
-// *in* to those actions and not a second list of what they are: an action the menu
-// hides for this kind (Cordon on a Pod) is absent here for the same reason, in the
-// same code. The preconditions are openActionsMenu's too, deliberately: a resource
-// table showing and a row under the cursor, with no requirement that the table hold
-// focus, so `:` offers exactly what `a` would at that moment.
+// The set is rowActionTitles' — the row-action registry's own per-kind source — so
+// PAL-04 adds a way *in* to those actions and not a second list of what they are: an
+// action the registry hides for this kind (Cordon on a Pod) is absent here for the same
+// reason, in the same code. The preconditions are the ones `a` has had since M3-02: a
+// resource table showing and a row under the cursor, with no requirement that the table
+// hold focus. Since PAL-05d `a` enters the `:action ` stage through this same function
+// too, so `:` and `a` do not merely agree about a kind's actions — they are one
+// computation.
 //
 // A title already claimed by an app-global verb is dropped rather than shadowing it —
 // the label is the identity a SelectedMsg resolves by (D203 pt 3), so it must name one
 // thing. Nothing collides today (the globals are sentences, the row titles are
 // imperatives) and a test pins that, which is what makes the drop a guard rather than
-// silent behaviour.
+// silent behaviour. That drop is a property of *co-listing*, not of the set: the
+// `:action ` stage (PAL-05d) lists these titles alone, so it passes a nil `taken` and
+// keeps every applicable action — a collision with a verb the stage does not show would
+// hide an action from `a` for no reader-visible reason (D210 pt 2).
 func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[string]rowAction, string) {
 	if !m.hasCurrent {
 		return nil, nil, ""
@@ -322,6 +342,10 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		items   []picker.Item
 		load    tea.Cmd
 		pending bool
+		// title overrides the stage's default title (the verb's own description). Only
+		// the row stage sets it: its chrome has to name the *object* it would act on
+		// (D205 pt 2), and at 60 columns that is worth more than repeating the verb.
+		title string
 	)
 	switch a {
 	case keymap.ActionResources:
@@ -362,6 +386,23 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		}
 		m.ctxByLabel = nil // a stale map would resolve a row this stage never listed.
 		load, pending = m.loadContexts(), true
+	case keymap.ActionActions:
+		// The one stage whose values are scoped to the selected *row* rather than to
+		// the app: the actions applicable to the browsed kind, from rowActionTitles
+		// through paletteRowVerbs — the same source the verb stage appends (D205 pt 1),
+		// so `:action ` and `:` can never offer different sets. Inertness is `a`'s own
+		// rule and is decided here, not in the key (D209 pt 2): no resource table, no
+		// row under the cursor, or no applicable action and the stage does not open.
+		var (
+			labels []string
+			target string
+		)
+		labels, m.palRowByLabel, target = m.paletteRowVerbs(nil)
+		if len(labels) == 0 {
+			return m, nil, false
+		}
+		items = picker.Labels(labels)
+		title = paletteTitle + paletteTargetSep + target
 	default:
 		return m, nil, false
 	}
@@ -369,7 +410,9 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	m.palArg = a
-	title := a.Describe()
+	if title == "" {
+		title = a.Describe()
+	}
 	if pending {
 		title += paletteLoading
 	}
@@ -400,11 +443,17 @@ func (m Model) fillPaletteArg(a keymap.Action, labels []string) Model {
 
 // applyPaletteArg runs a verb with the argument picked in the palette. Each arm ends in
 // the *same* function the verb's standalone gesture ends in — selectResource,
-// togglePin, applyThemeNamed, applyNamespaceValue, applyContextLabel — so an argument
-// reached through the palette and one reached through the picker are one code path, in
-// the spirit of D197's "no second implementation": the palette resolves and applies, it
-// never re-implements what the verb does.
+// togglePin, applyThemeNamed, applyNamespaceValue, applyContextLabel,
+// dispatchRowAction — so an argument reached through the palette and one reached
+// through the picker are one code path, in the spirit of D197's "no second
+// implementation": the palette resolves and applies, it never re-implements what the
+// verb does.
+//
+// The row map is read out *before* closePalette, which clears it: unlike resByLabel and
+// themeByLabel it is the palette's own state, so an arm that resolved after the close
+// would find nothing and the pick would silently do nothing.
 func (m Model) applyPaletteArg(a keymap.Action, value string) (tea.Model, tea.Cmd) {
+	rowByLabel := m.palRowByLabel
 	m.closePalette()
 	switch a {
 	case keymap.ActionResources:
@@ -430,6 +479,15 @@ func (m Model) applyPaletteArg(a keymap.Action, value string) (tea.Model, tea.Cm
 		return m.applyNamespaceValue(value)
 	case keymap.ActionContext:
 		return m.applyContextLabel(value)
+	case keymap.ActionActions:
+		act, ok := rowByLabel[value]
+		if !ok {
+			return m, nil // the stage only lists labels it mapped — defensive.
+		}
+		// The same dispatch the direct keys and the verb stage's row entries reach, so
+		// the intent, its preconditions and its confirm modal are the row action's own
+		// (D205 pt 3). The palette adds a way in, never a way past a confirmation.
+		return m.dispatchRowAction(act)
 	}
 	return m, nil
 }

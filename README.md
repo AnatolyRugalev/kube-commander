@@ -212,20 +212,25 @@ prompt does; the box says `— loading…` until it lands, and anything you type
 still narrows it.
 
 A verb's own key is a **shortcut into the same line**: `T` opens the palette already
-reading `:theme `, `R` reading `:resource `, `Ctrl+n` reading `:namespace ` and `C`
-reading `:context `, so the key saves you the typing without taking you to a different
-box. The namespace row in the left menu opens the same line. Backspace or `Esc` from
-there rewinds to the full verb list, so a key pressed by mistake still leaves you one
-keystroke from everything else. Every value verb now works this way — there is no
-second switcher pop-up left to learn.
+reading `:theme `, `R` reading `:resource `, `Ctrl+n` reading `:namespace `, `C`
+reading `:context ` and `a` reading `:action `, so the key saves you the typing without
+taking you to a different box. The namespace row in the left menu opens the same line.
+Backspace or `Esc` from there rewinds to the full verb list, so a key pressed by mistake
+still leaves you one keystroke from everything else. Every value verb now works this
+way — there is no second switcher pop-up left to learn.
 
 With a row selected in the table, the palette also lists **what you can do to that
 row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the
-rest, exactly the entries the actions menu (`a`) offers for that kind, and only the
-ones that apply to it. The object they would act on is named in the palette's own
-title (`Command — Pod default/web-1`), so you can always see what you are about to
-act on before you press Enter. Picking one does precisely what the actions menu does,
-confirmations included: `:del` `Enter` still asks before it deletes.
+rest, and only the ones that apply to that kind. The object they would act on is named
+in the palette's own title (`Command — Pod default/web-1`), so you can always see what
+you are about to act on before you press Enter. Picking one runs the action exactly as
+its own key would, confirmations included: `:del` `Enter` still asks before it deletes.
+
+`a` (`actions.menu`, rebindable) is the shortcut to just those: it opens the palette
+reading `:action `, listing **only** the actions for the selected row — the same
+entries, without the app-wide verbs above them. It is the answer to "what can I do to
+this?" when you do not want to scroll past "Switch namespace" to find out. Backspace
+brings the full verb list back.
 
 Press `R` (`resources.switch`, rebindable) to jump straight to the resource list — the
 palette opened on `:resource `, listing every browsable resource kind, exactly what the
@@ -242,8 +247,8 @@ each with its group beside it (`Cluster (postgresql.cnpg.io)`), so you can tell 
 apart and pick either.
 
 **Every pop-up picker filters as you type** — the command palette (including `T`, `R`,
-`Ctrl+n` and `C`, which open it on `:theme `, `:resource `, `:namespace ` and
-`:context `), the actions menu (`a`) and the container picker. There is
+`Ctrl+n`, `C` and `a`, which open it on `:theme `, `:resource `, `:namespace `,
+`:context ` and `:action `) and the container picker. There is
 no filter key to press first: the matching is the same one cluster search uses, so a
 typo-free abbreviation finds its
 value (`ksys` → `kube-system`) and exact matches always rank above fuzzy ones. `Esc`

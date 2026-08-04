@@ -109,21 +109,18 @@ func TestHintBarPickerContextFollowsFilterState(t *testing.T) {
 
 // TestHintBarRefreshesWithoutAnExplicitSync is the structural half of HINT-01 (D206):
 // the hint is derived at the tail of every Update, so a state change that no
-// syncHints call sits next to still lands. The actions menu (`a`) is such a path —
-// it opens a picker from a table row and nothing on that route touches the hint.
+// syncHints call sits next to still lands. `a` is such a path — it opens the palette's
+// action stage from a table row and nothing on that route touches the hint.
 func TestHintBarRefreshesWithoutAnExplicitSync(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 300, Height: 24})
 	m = resized.(Model)
 	table := m.hintbar.View()
 
-	m, _ = press(t, m, actionsKey)
-	if !m.actPicker.Active() {
-		t.Fatal("`a` should open the actions menu over the selected row")
-	}
+	m = openActionStage(t, m)
 	if got := m.hintbar.View(); got == table {
-		t.Errorf("the actions menu captures input; the hint must not stay on the table set: %q", got)
+		t.Errorf("the action stage captures input; the hint must not stay on the table set: %q", got)
 	}
-	hintHides(t, m.hintbar.View(), "the open actions menu",
+	hintHides(t, m.hintbar.View(), "the open action stage",
 		keymap.ActionSort, keymap.ActionActions, keymap.ActionQuit, keymap.ActionHelp)
 }

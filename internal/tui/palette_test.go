@@ -674,3 +674,85 @@ func TestRowVerbTitlesDoNotCollideWithPaletteVerbs(t *testing.T) {
 		}
 	}
 }
+
+// TestActionKeyOpensTheSamePaletteStageAsTheLine is PAL-05d's headline and the
+// assertion that makes `a` sugar rather than a second surface (D210 pt 1): the frame
+// the key produces is **byte-for-byte** the one `:` `act` `␣` produces. Both go
+// through enterPaletteArg, so a divergence here would mean one of the two grew its own
+// idea of the stage.
+func TestActionKeyOpensTheSamePaletteStageAsTheLine(t *testing.T) {
+	keyed := openActionStage(t, openPodTable(t, "Pod"))
+
+	typed, _ := commitVerb(t, openPodTable(t, "Pod"), "act")
+	if typed.palArg != keymap.ActionActions {
+		t.Fatalf("`:act␣` should commit the action verb, stage = %q", typed.palArg)
+	}
+	if frame(keyed) != frame(typed) {
+		t.Fatalf("`a` and `:act␣` render different stages:\n--- key ---\n%s\n--- line ---\n%s",
+			frame(keyed), frame(typed))
+	}
+}
+
+// TestActionStageNamesTheRowItWouldActOn is D205 pt 2 carried onto the stage `a` opens:
+// its chrome names the object, because this is the one surface in kubecom where every
+// entry acts on something and one of them deletes it. The verb is *not* repeated in the
+// title — the `:action ` prompt already says which stage the line is in.
+func TestActionStageNamesTheRowItWouldActOn(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	row, ok := m.table.SelectedRow()
+	if !ok {
+		t.Fatal("setup: the table should have a selected row")
+	}
+	target := viewerTitle(m.current, row.Object)
+
+	m = openActionStage(t, m)
+	if got := frame(m); !strings.Contains(got, target) {
+		t.Fatalf("the action stage should name its target %q on screen, got:\n%s", target, got)
+	}
+	if got := frame(m); !strings.Contains(got, palettePrompt+paletteArgVerbs[keymap.ActionActions]) {
+		t.Fatalf("the action stage should prompt %q, got:\n%s",
+			palettePrompt+paletteArgVerbs[keymap.ActionActions]+" ", got)
+	}
+}
+
+// TestActionStageOffersTheVerbStagesOwnRowSet is the one-source guard (D205 pt 1): the
+// set `a` narrows to is the same set `:` appends to its globals, computed by the same
+// function — so the two ways in cannot come to disagree about what applies to a kind.
+func TestActionStageOffersTheVerbStagesOwnRowSet(t *testing.T) {
+	verbStage, _ := press(t, openPodTable(t, "Pod"), colon)
+	actionStage := openActionStage(t, openPodTable(t, "Pod"))
+
+	if len(verbStage.palRowByLabel) == 0 {
+		t.Fatal("setup: the verb stage should carry row verbs with a Pod row selected")
+	}
+	if len(actionStage.palRowByLabel) != len(verbStage.palRowByLabel) {
+		t.Fatalf("the action stage lists %d row verbs, the verb stage %d — they must be one set",
+			len(actionStage.palRowByLabel), len(verbStage.palRowByLabel))
+	}
+	for title, act := range verbStage.palRowByLabel {
+		if got, ok := actionStage.palRowByLabel[title]; !ok || got != act {
+			t.Errorf("the action stage should offer %q → %q, got %q (present: %v)", title, act, got, ok)
+		}
+	}
+}
+
+// TestActionStageRewindsToTheVerbList proves `a` is a way *into* the palette rather
+// than a faster dead end (D207 pt 2): backspace on the empty line uncommits the verb
+// and the full list — globals and row verbs — comes back, so a key pressed by mistake
+// is one keystroke from everything else.
+func TestActionStageRewindsToTheVerbList(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	want := len(paletteVerbs) + len(rowVerbTitles(t, m))
+	m = openActionStage(t, m)
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.palArg != "" {
+		t.Fatalf("backspace should return to the verb stage, stage = %q", m.palArg)
+	}
+	if !m.cmdPicker.Active() {
+		t.Fatal("the rewind should not close the palette")
+	}
+	if got := m.cmdPicker.Len(); got != want {
+		t.Fatalf("the returned-to verb stage holds %d entries, want %d", got, want)
+	}
+}

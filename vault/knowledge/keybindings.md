@@ -84,12 +84,15 @@ in-list drill in/out — matching how the original mapped `Enter`/`Right`/`Left`
 Legacy pod actions collided with navigation (`l` logs, `s` shell, `f`
 port-forward). Resolved by moving actions **behind a leader / actions menu** so the
 nav keys stay clean and the action set is discoverable. **Finalized in M3-02**
-(D107): the actions menu (`a`) lists the actions applicable to the selected row's
-kind; the most-used actions also have a direct key; the rest are menu-only.
+(D107): `a` lists the actions applicable to the selected row's kind; the most-used
+actions also have a direct key; the rest are reachable only through that list. Since
+**PAL-05d** (D210) the list is not a menu of its own — `a` opens the command palette's
+`:action ` stage over the same set, so "via the actions menu" below means "via `a` /
+the palette's row verbs".
 
 | Action | Binding | Notes |
 |--------|---------|-------|
-| Open actions menu for selection | `a` (`actions.menu`) | lists the applicable actions for the selected row |
+| Act on the selected row | `a` (`actions.menu`) | opens the palette's `:action ` stage over the actions applicable to the selected row (PAL-05d/D210) |
 | Describe | `D` (`res.describe`) | any kind; read-only. Relocated off `d` (D133) so delete can take `d` |
 | Logs | `L` (`res.logs`) | Pod + pod-owning kinds (#84) |
 | Toggle log follow | `f` (`logs.follow`) | logs viewer only; auto-scroll on/off, manual up-scroll pauses (M3-06) |

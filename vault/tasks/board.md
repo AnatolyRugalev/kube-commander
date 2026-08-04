@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — PAL-05d claimed (`a` → the palette's row-verb stage, the last PAL-05 slice). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — PAL-05d done; `a` opens the palette's `:action ` stage and the actions menu is retired, which closes the PAL line (D210). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -341,15 +340,18 @@ kubeconfig read. One key per slice, as PAL-05a/b established.
 
 - [x] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage — done 2026-08-04 (D208)
 - [x] **PAL-05c-2** `C` opens the palette's `:context ` stage — done 2026-08-04 (D209)
-- [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: The one slice that is not a mechanical conversion, because `a` has no argument
-      word to pre-type: what it opens is the palette's row-verb *set* (PAL-04/D205), which
-      means deciding whether `a` opens the whole verb stage (identical to `:`, and a
-      *narrower* list is what `a` is for) or a row-verbs-only palette. Then the two
-      questions PAL-04 left: whether the now-redundant `ActionActions` verb ("Open actions
-      menu for the selected row") survives its own conversion, and whether `a`'s inertness
-      rule and the palette's become one rule once they are one surface.
+- [x] **PAL-05d** `a` opens the palette's `:action ` stage — done 2026-08-04 (D210)
+
+**The PAL line is closed** as of PAL-05d/D210: one surface, six argument stages, and no
+modal left that lists a set the palette also lists. The three open questions were answered
+in the leg — `a` opens the row verbs *alone* (narrower is the reason to keep the key),
+`ActionActions` survives as the verb that enters that stage, and its inertness is the
+stage's (`enterPaletteArg`), not the key's. D209 pt 3 is superseded for `actions.menu`
+only: its own "could you name the value first?" test says a compiled-in action registry is
+a verb's argument, while `ctrPicker`/`portPicker` list an object's own containers/ports and
+stay modals. Two things it deliberately left, either its own small item if a dogfood wants
+them: the row verbs are still ranked by the shared matcher rather than by frequency, and
+`:action ` does not show which entries carry a confirm before you pick one.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195)
 Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a

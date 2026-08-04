@@ -5663,3 +5663,42 @@ contradict.
    from a verb word. They stay modals. The test for which one a surface is: could a
    reader name the value on the palette line before seeing the list? If not, it is
    row data.
+
+## D210 — A curated set is a verb's argument even when the key is a noun; `a` is `:action ` (2026-08-04, PAL-05d)
+
+D209 pt 3 filed `actPicker` with `ctrPicker`/`portPicker` as row data that keeps its
+modal. Converting it showed the grouping was wrong, and by D209 pt 3's *own* test: the
+row-action set is a compiled-in registry, so a reader can name the value before seeing
+the list (`:action delete`), and PAL-04 had already been listing exactly those titles in
+the palette since 2026-08-02 — the actions menu was the last duplicated surface, not an
+exception to the rule. **D209 pt 3 is superseded for `actions.menu` only**; the sentence
+about `ctrPicker`/`portPicker` stands unchanged and they stay modals.
+
+1. **A verb's argument may be a curated set, not just a name the reader supplies.** `a`
+   looked unconvertible because it has no argument *word* — but the thing it asks for is
+   an argument like any other, so it converts like the other four (D207 pt 1): `a` opens
+   `:action `, the same stage `:` `act` `␣` opens, and a test asserts the two frames are
+   byte-for-byte equal. The test for "is this a stage or row data" is D209 pt 3's, applied
+   to the *values*: a compiled-in set is a stage; a particular object's own containers or
+   declared ports are not.
+2. **A row-scoped stage lists its set alone, and the co-listing drop does not follow it.**
+   `a` is worth keeping distinct from `:` precisely because it is *narrower* — the answer
+   to "what can I do to this?" without the app-wide verbs above it — so the stage shows
+   only the row verbs, one backspace from the full list. The D205 pt 4 rule that drops a
+   row title an app-global description already claims is a property of the two lists
+   sharing one label namespace: the stage passes a nil `taken` and keeps every applicable
+   action, because hiding one over a collision with a verb the stage does not display
+   would be invisible to the reader it hid it from.
+3. **A row-scoped stage's title names the object, not the verb.** Every other argument
+   stage titles itself with the verb's description; this one titles itself
+   `Command — Pod default/web-1`, because it is the surface where every entry acts on
+   something and one of them deletes it (D205 pt 2), and 60 columns are better spent on
+   the target than on a verb the `:action ` prompt already names. Any future stage whose
+   values act on a selected object inherits this, not the default.
+4. **The palette's own state must be read before `closePalette`, not after.**
+   `applyPaletteArg` closes the surface first, and `palRowByLabel` — unlike `resByLabel`
+   and `themeByLabel` — is cleared there, so an arm that resolved after the close would
+   find an empty map and the pick would do *nothing*, silently. It reads the map out
+   first, and a test fails if that order is reversed. This is the same trap D209's leg
+   recorded for `ctxByLabel` from the other side: one of the maps is cleared on close and
+   two are not, so a new stage must check which it owns.

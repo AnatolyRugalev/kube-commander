@@ -576,7 +576,6 @@ type Model struct {
 	// message that does not move input ownership re-renders nothing.
 	hintCtx keymap.HelpContext
 
-	actPicker picker.Model
 	ctrPicker picker.Model
 	// cmdPicker is the command palette (PAL-02): a picker over the app's verbs rather
 	// than over cluster data, resolved back to a keymap.Action through cmdByLabel and
@@ -625,7 +624,7 @@ type Model struct {
 
 	// ctxLister seeds the palette's `:context ` stage from the kubeconfig (M4-04b);
 	// nil → the ctx.switch action is inert. ctxByLabel maps each listed row back to
-	// its context name, the resByLabel/actByLabel pattern (a SelectedMsg carries only
+	// its context name, the resByLabel/themeByLabel pattern (a SelectedMsg carries only
 	// the label, D65). Both are kubeconfig-scoped, not cluster-scoped, so neither is
 	// part of the Cluster bundle or of what a switch tears down.
 	ctxLister  ContextLister
@@ -806,12 +805,6 @@ type Model struct {
 	// touches it.
 	resByLabel map[string]kube.Resource
 
-	// actByLabel maps each entry of the actions menu (actPicker) back to its
-	// rowAction, rebuilt each time the menu opens from the actions applicable to the
-	// browsed kind (openActionsMenu). Mirrors resByLabel for the resource palette
-	// (D107); only the update loop touches it.
-	actByLabel map[string]rowAction
-
 	// cmdByLabel maps each entry of the command palette (cmdPicker) back to its
 	// keymap.Action, rebuilt each time the palette opens from the curated verb list
 	// (openPalette). The picker is generic over strings (D65), so the palette lists
@@ -829,11 +822,13 @@ type Model struct {
 	palArg keymap.Action
 
 	// palRowByLabel maps the palette's **row-scoped** entries back to their rowAction
-	// (PAL-04). It is the actions menu's own per-row source (rowActionTitles), rebuilt
-	// whenever the palette shows its verb stage, so the two surfaces cannot come to
-	// offer different actions for the same row. It is nil whenever there is no row to
-	// act on, which is also what makes "did the reader pick a row verb?" a lookup
-	// rather than a second piece of state. Only the update loop touches it.
+	// (PAL-04). Its source is the row-action registry's own per-kind set
+	// (rowActionTitles), rebuilt whenever the palette shows its verb stage or, since
+	// PAL-05d, enters the `:action ` stage `a` opens — one map for both, so the two
+	// ways in cannot come to offer different actions for the same row. It is nil
+	// whenever there is no row to act on, which is also what makes "did the reader pick
+	// a row verb?" a lookup rather than a second piece of state. Only the update loop
+	// touches it.
 	palRowByLabel map[string]rowAction
 
 	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
@@ -1037,7 +1032,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.table = table.New(s)
 	m.status = statusbar.New(s)
 	m.hintbar = hintbar.New(s)
-	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
 	m.cmdPicker = picker.New(s, commandPickerKind)
 	// The port picker is the one picker that does not filter as you type (D194 pt 3):
@@ -1050,7 +1044,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.welcome = welcome.New(s)
 	m.searchView = searchview.New(s)
 	m.logsView = logsview.New(s)
-	m.actPicker.SetTitle("Actions")
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
@@ -1257,8 +1250,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case picker.SelectedMsg:
 		switch msg.Kind {
-		case actionPickerKind:
-			return m.handleActionSelected(msg)
 		case commandPickerKind:
 			return m.handleCommandSelected(msg)
 		case containerPickerKind:
@@ -1276,8 +1267,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case picker.CancelledMsg:
 		switch msg.Kind {
-		case actionPickerKind:
-			m.actPicker.Hide()
 		case commandPickerKind:
 			// esc in the argument stage rewinds the line one word rather than closing:
 			// the verb is uncommitted and the verb list comes back, so a mistyped
@@ -1731,7 +1720,6 @@ func (m *Model) resetCluster() {
 	m.logsView.Reset()
 	m.viewer.Hide()
 	m.modal.Hide() // a pending confirm targets an object on the cluster being left.
-	m.actPicker.Hide()
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
 	// The command palette lists verbs, not cluster data, so a switch does not make its
@@ -1761,7 +1749,7 @@ func (m *Model) resetCluster() {
 	m.pfPorts, m.pfPort = nil, kube.Port{}
 	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
 	m.searchTarget, m.hasSearchTarget = kube.ObjectRef{}, false
-	m.resByLabel, m.actByLabel = nil, nil
+	m.resByLabel = nil
 	m.clearChildScope() // the scope names an owner on the departing cluster.
 
 	// Back to the pre-drill-in browse panes. The menu is rebuilt rather than
@@ -1916,17 +1904,16 @@ func (m Model) persistNamespace(ns string) tea.Cmd {
 	}
 }
 
-// activePicker returns a pointer to whichever modal picker is currently open (the
-// command palette, the actions menu, the container/port pickers or the context
-// switcher), or nil when none is. At most
+// activePicker returns a pointer to whichever modal picker is currently open — since
+// PAL-05d that is the command palette (every verb's values, including the row actions
+// `a` opens) or one of the two row-data pickers, containers and ports — or nil when
+// none is. At most
 // one is ever active — opening one does not open the other — so the root can route
 // input and composite the overlay through this single accessor rather than branching
 // on each picker. The pointer aliases into the value-receiver copy, so mutations
 // through it persist in the returned model exactly like a direct field assignment.
 func (m *Model) activePicker() *picker.Model {
 	switch {
-	case m.actPicker.Active():
-		return &m.actPicker
 	case m.ctrPicker.Active():
 		return &m.ctrPicker
 	case m.cmdPicker.Active():
@@ -2040,48 +2027,12 @@ func resourceAliases(r kube.Resource) []string {
 	return aliases
 }
 
-// actionPickerKind is the Kind stamped on the actions menu's picker
-// (picker.New(s, "action")). Every picker emits the same SelectedMsg/CancelledMsg
-// types (D65), so the root branches on this Kind to route a picked action to
-// dispatchRowAction rather than the namespace/resource paths.
-const actionPickerKind = "action"
-
-// openActionsMenu opens the M3 actions menu (D107): a picker listing the actions
-// applicable to the browsed kind, over the selected table row. It is inert unless a
-// resource table is showing (hasCurrent) with a row selected — the actions operate
-// on a concrete object. The applicable titles come from the row-action registry
-// (rowActionTitles), and actByLabel resolves the picked title back to its action.
-// Picking one (or a direct key) dispatches a rowActionMsg the individual M3 legs
-// handle; this leg only opens the menu and routes.
-func (m Model) openActionsMenu() (tea.Model, tea.Cmd) {
-	if !m.hasCurrent {
-		return m, nil
-	}
-	if _, ok := m.table.SelectedRow(); !ok {
-		return m, nil
-	}
-	titles, byTitle := rowActionTitles(m.current)
-	if len(titles) == 0 {
-		return m, nil
-	}
-	m.actByLabel = byTitle
-	m.actPicker.SetItems(titles)
-	return m, m.actPicker.Show()
-}
-
-// handleActionSelected applies an action picked from the actions menu: it closes the
-// menu and dispatches the chosen row action's intent. The picked title is resolved
-// through actByLabel (built when the menu opened); a title with no mapping — the
-// menu can only list titles it mapped, so this is defensive — closes it without
-// dispatching.
-func (m Model) handleActionSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
-	m.actPicker.Hide()
-	act, ok := m.actByLabel[msg.Value]
-	if !ok {
-		return m, nil
-	}
-	return m.dispatchRowAction(act)
-}
+// The M3 actions menu (D107) was a modal picker of its own until PAL-05d: `a` now
+// opens the palette's `:action ` stage over the same set (rowActionTitles, through
+// paletteRowVerbs), so its opener, its Kind and its picker are gone rather than
+// dormant (D207 pt 3 / D210). What survives is everything that was not the surface:
+// the registry, the applicability predicates, and dispatchRowAction — which the stage,
+// the verb-stage row entries and the direct keys all still end in.
 
 // triggerRowActionKey handles a direct-key M3 action (describe/yaml/logs/edit/
 // delete). It resolves the keymap.Action to its rowAction and dispatches it against
@@ -3800,7 +3751,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3967,7 +3918,6 @@ func (m *Model) resize() {
 	// The picker and the help overlay both overlay the body area (above the status
 	// bar) and center themselves within it, so the status line stays visible below
 	// the modal.
-	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
@@ -4113,16 +4063,17 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil // the overlay swallows navigation while it is open.
 	}
 	switch a {
-	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace, keymap.ActionContext:
+	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace,
+		keymap.ActionContext, keymap.ActionActions:
 		// The shortcut keys converted to pre-typed palette lines (D207): `T` opens the
 		// palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b), `ctrl+n` on
-		// `:namespace ` (PAL-05c-1) and `C` on `:context ` (PAL-05c-2), none on a modal
-		// of its own. One arm rather than one per key, because the conversion is the
-		// *same* fact about every one of them — the key names the verb, enterPaletteArg
-		// produces the stage, and the values, the inertness and the rendered frame are
-		// the typed line's, whether the values were in hand or had to be fetched. The
-		// four argument keys are now all here; `a` (PAL-05d) is the one that is not a
-		// conversion, because it has no argument word to pre-type.
+		// `:namespace ` (PAL-05c-1), `C` on `:context ` (PAL-05c-2) and `a` on
+		// `:action ` (PAL-05d), none on a modal of its own. One arm rather than one per
+		// key, because the conversion is the *same* fact about every one of them — the
+		// key names the verb, enterPaletteArg produces the stage, and the values, the
+		// inertness and the rendered frame are the typed line's, whether the values were
+		// in hand, had to be fetched, or belong to the selected row. With `a` here every
+		// key that needs a value opens this one surface (D210).
 		return m.openPaletteArg(a)
 	case keymap.ActionPalette:
 		// `:` opens the palette (PAL-02). Reached from a key only: the palette skips
@@ -4145,8 +4096,6 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionSearch:
 		return m.openSearch()
-	case keymap.ActionActions:
-		return m.openActionsMenu()
 	case keymap.ActionPin:
 		return m.pinResource()
 	case keymap.ActionDescribe, keymap.ActionLogs,
@@ -4331,8 +4280,6 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.modal.View(), m.width, m.bodyHeight())
 	case m.help.Visible():
 		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
-	case m.actPicker.Active():
-		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	case m.ctrPicker.Active():
 		body = overlayCenter(body, m.ctrPicker.View(), m.width, m.bodyHeight())
 	case m.cmdPicker.Active():

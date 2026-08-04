@@ -2323,78 +2323,96 @@ func openPodTable(t *testing.T, kind string, opts ...Option) Model {
 // actionsKey is the default actions.menu key (`a`).
 var actionsKey = tea.Key{Code: 'a', Text: "a"}
 
-// TestActionsMenuListsApplicableActions proves the actions.menu key opens the
-// picker over the selected row and lists exactly the actions applicable to the
-// browsed kind: a Pod offers Logs and Exec but not the node-only Cordon/Drain.
-func TestActionsMenuListsApplicableActions(t *testing.T) {
-	m := openPodTable(t, "Pod")
+// openActionStage presses `a` and asserts it landed on the palette's `:action ` stage
+// — the surface PAL-05d replaced the actions menu with. Every assertion below runs
+// through the real key rather than through the stage's opener, so what is pinned is
+// what a reader gets.
+func openActionStage(t *testing.T, m Model) Model {
+	t.Helper()
 	m, _ = press(t, m, actionsKey)
-	if !m.actPicker.Active() {
-		t.Fatal("actions.menu key should open the actions picker over the selected row")
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionActions {
+		t.Fatalf("`a` should open the palette on its action stage, stage = %q", m.palArg)
 	}
+	return m
+}
+
+// TestActionStageListsApplicableActions proves the actions.menu key opens the palette's
+// action stage over the selected row and lists exactly the actions applicable to the
+// browsed kind: a Pod offers Logs and Exec but not the node-only Cordon/Drain.
+func TestActionStageListsApplicableActions(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m = openActionStage(t, m)
 	for _, title := range []string{"View / Edit YAML", "Describe", "Logs", "Exec shell", "Delete"} {
-		if _, ok := m.actByLabel[title]; !ok {
-			t.Errorf("Pod actions menu should list %q", title)
+		if _, ok := m.palRowByLabel[title]; !ok {
+			t.Errorf("the Pod action stage should list %q", title)
 		}
 	}
 	// The retired standalone "View YAML" folded into "View / Edit YAML" (D135/M3-15c).
-	if _, ok := m.actByLabel["View YAML"]; ok {
+	if _, ok := m.palRowByLabel["View YAML"]; ok {
 		t.Error("the standalone \"View YAML\" entry should be gone after the unify (M3-15c)")
 	}
 	for _, title := range []string{"Cordon", "Drain", "Suspend"} {
-		if _, ok := m.actByLabel[title]; ok {
-			t.Errorf("Pod actions menu should not list node/cronjob action %q", title)
+		if _, ok := m.palRowByLabel[title]; ok {
+			t.Errorf("the Pod action stage should not list node/cronjob action %q", title)
 		}
+	}
+	// The stage lists the row verbs *alone* — that is what `a` is for. A reader who
+	// wants the app-global verbs too is one backspace away (TestActionStageRewinds).
+	if got, want := m.cmdPicker.Len(), len(rowVerbTitles(t, m)); got != want {
+		t.Fatalf("action stage seeded with %d entries, want %d (the row actions alone)", got, want)
 	}
 }
 
-// TestActionsMenuKindSpecific proves applicability tracks the kind: a Node offers
+// TestActionStageKindSpecific proves applicability tracks the kind: a Node offers
 // Cordon/Drain but not Logs/Exec.
-func TestActionsMenuKindSpecific(t *testing.T) {
+func TestActionStageKindSpecific(t *testing.T) {
 	m := openPodTable(t, "Node")
-	m, _ = press(t, m, actionsKey)
+	m = openActionStage(t, m)
 	for _, title := range []string{"Cordon", "Uncordon", "Drain"} {
-		if _, ok := m.actByLabel[title]; !ok {
-			t.Errorf("Node actions menu should list %q", title)
+		if _, ok := m.palRowByLabel[title]; !ok {
+			t.Errorf("the Node action stage should list %q", title)
 		}
 	}
 	for _, title := range []string{"Logs", "Exec shell", "Scale"} {
-		if _, ok := m.actByLabel[title]; ok {
-			t.Errorf("Node actions menu should not list %q", title)
+		if _, ok := m.palRowByLabel[title]; ok {
+			t.Errorf("the Node action stage should not list %q", title)
 		}
 	}
 }
 
-// TestActionsMenuCronJob proves a CronJob offers Suspend/Resume but not the
+// TestActionStageCronJob proves a CronJob offers Suspend/Resume but not the
 // node-only Cordon/Drain (M3-12).
-func TestActionsMenuCronJob(t *testing.T) {
+func TestActionStageCronJob(t *testing.T) {
 	m := openPodTable(t, "CronJob")
-	m, _ = press(t, m, actionsKey)
+	m = openActionStage(t, m)
 	for _, title := range []string{"Suspend", "Resume"} {
-		if _, ok := m.actByLabel[title]; !ok {
-			t.Errorf("CronJob actions menu should list %q", title)
+		if _, ok := m.palRowByLabel[title]; !ok {
+			t.Errorf("the CronJob action stage should list %q", title)
 		}
 	}
 	for _, title := range []string{"Cordon", "Drain", "Logs"} {
-		if _, ok := m.actByLabel[title]; ok {
-			t.Errorf("CronJob actions menu should not list %q", title)
+		if _, ok := m.palRowByLabel[title]; ok {
+			t.Errorf("the CronJob action stage should not list %q", title)
 		}
 	}
 }
 
-// TestActionsMenuInertWithoutResource proves the actions key is a no-op before a
-// resource table is open (the welcome page is showing): there is no row to act on.
-func TestActionsMenuInertWithoutResource(t *testing.T) {
+// TestActionStageInertWithoutResource proves the actions key is a no-op before a
+// resource table is open (the welcome page is showing): there is no row to act on. The
+// inertness is the stage's, not the key's (D209 pt 2/D210 pt 2) — and it must leave the
+// palette *closed* rather than open on an empty list, which would imply `a` had
+// something to offer.
+func TestActionStageInertWithoutResource(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
 	m, _ = press(t, m, actionsKey)
-	if m.actPicker.Active() {
+	if m.cmdPicker.Active() {
 		t.Fatal("actions.menu should be inert with no resource table open")
 	}
 }
 
 // TestActionDirectKeyDispatchesIntent proves a direct-key M3 action (here `e`,
 // res.edit — the unified View/Edit YAML action) dispatches a rowActionMsg carrying
-// the action and the selected row's object, without opening the menu.
+// the action and the selected row's object, without opening the palette.
 func TestActionDirectKeyDispatchesIntent(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	_, cmd := press(t, m, tea.Key{Code: 'e', Text: "e"})
@@ -2413,15 +2431,17 @@ func TestActionDirectKeyDispatchesIntent(t *testing.T) {
 	}
 }
 
-// TestActionsMenuSelectionDispatchesIntent proves picking an action from the menu
-// dispatches the same rowActionMsg intent and closes the menu.
-func TestActionsMenuSelectionDispatchesIntent(t *testing.T) {
+// TestActionStageSelectionDispatchesIntent proves picking an action from the stage
+// dispatches the same rowActionMsg intent and closes the palette. The pick resolves
+// through palRowByLabel, which applyPaletteArg reads *before* closePalette clears it —
+// mutating that order makes this test fail rather than silently doing nothing.
+func TestActionStageSelectionDispatchesIntent(t *testing.T) {
 	m := openPodTable(t, "Pod")
-	m, _ = press(t, m, actionsKey)
-	next, cmd := m.Update(picker.SelectedMsg{Kind: actionPickerKind, Value: "Describe"})
+	m = openActionStage(t, m)
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "Describe"})
 	m = next.(Model)
-	if m.actPicker.Active() {
-		t.Fatal("picking an action should close the actions menu")
+	if m.cmdPicker.Active() {
+		t.Fatal("picking an action should close the palette")
 	}
 	intent, ok := cmd().(rowActionMsg)
 	if !ok {

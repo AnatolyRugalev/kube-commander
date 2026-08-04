@@ -387,20 +387,20 @@ func TestChildrenActionAppliesToOwnerKindsOnly(t *testing.T) {
 	}
 }
 
-// TestChildrenActionListedInActionsMenu proves the gesture is reachable without
-// knowing its key — the actions menu lists it for an owner kind and omits it for a
+// TestChildrenActionListedInActionStage proves the gesture is reachable without
+// knowing its key — `a`'s action stage lists it for an owner kind and omits it for a
 // Pod, matching the direct key's own applicability guard.
-func TestChildrenActionListedInActionsMenu(t *testing.T) {
+func TestChildrenActionListedInActionStage(t *testing.T) {
 	m, _ := ownerTable(t, "apps", "Deployment", &fakeChildResolver{scope: podScope()})
-	m, _ = press(t, m, actionsKey)
-	if _, ok := m.actByLabel["Show pods"]; !ok {
-		t.Error("a Deployment's actions menu should list the children drill-down")
+	m = openActionStage(t, m)
+	if _, ok := m.palRowByLabel["Show pods"]; !ok {
+		t.Error("a Deployment's action stage should list the children drill-down")
 	}
 
 	m = openPodTable(t, "Pod")
-	m, _ = press(t, m, actionsKey)
-	if _, ok := m.actByLabel["Show pods"]; ok {
-		t.Error("a Pod's actions menu should not list the children drill-down")
+	m = openActionStage(t, m)
+	if _, ok := m.palRowByLabel["Show pods"]; ok {
+		t.Error("a Pod's action stage should not list the children drill-down")
 	}
 }
 

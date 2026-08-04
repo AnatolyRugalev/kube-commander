@@ -84,7 +84,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `actions.menu` | `a` | Open actions menu for the selected row |
+| `actions.menu` | `a` | Act on the selected row |
 
 ## res
 
