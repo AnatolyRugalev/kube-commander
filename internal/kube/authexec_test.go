@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -648,5 +650,143 @@ func TestRemediationCatalogueStopsAtTheFirstMatch(t *testing.T) {
 	// A plugin aws-sso does *not* recognise still reaches the later entry.
 	if _, ok := (&ExecPlugin{Command: "gcloud"}).SuggestedRemediation(failed("whatever")); !ok {
 		t.Error("SuggestedRemediation() = _, false; an unrecognised plugin should fall through")
+	}
+}
+
+// --- DiagnoseExecPlugin: the one call a surface makes (AUTH-04b) -------------
+
+// awsScriptKubeconfig is a kubeconfig whose credential plugin is a real
+// executable named `aws` — the name is what makes the AWS SSO entry recognise it
+// (filepath.Base), and a script is what lets the whole producer run end to end
+// without an AWS CLI on the box.
+func awsScriptKubeconfig(t *testing.T, script string) string {
+	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("no POSIX shell on PATH: %v", err)
+	}
+	bin := filepath.Join(t.TempDir(), "aws")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script+"\n"), 0o700); err != nil {
+		t.Fatalf("write fake aws: %v", err)
+	}
+	return writeKubeconfigContents(t, fmt.Sprintf(`apiVersion: v1
+kind: Config
+current-context: eks
+clusters:
+- name: c
+  cluster:
+    server: https://c.example:6443
+contexts:
+- name: eks
+  context:
+    cluster: c
+    user: sso-user
+- name: plain
+  context:
+    cluster: c
+    user: token-user
+users:
+- name: token-user
+  user:
+    token: t
+- name: sso-user
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: %s
+      args: ["eks", "get-token", "--profile", "acme-prod"]
+`, bin))
+}
+
+// The headline: kubeconfig in, the three pieces a pane renders out — the stanza,
+// what re-running it said, and the command the stanza substantiates as the fix.
+func TestDiagnoseExecPluginGathersTheWholeReport(t *testing.T) {
+	path := awsScriptKubeconfig(t,
+		`echo 'Error loading SSO Token: Token for https://acme.awsapps.com/start does not exist' >&2; exit 255`)
+
+	rep, err := DiagnoseExecPlugin(context.Background(), ClientConfig{Kubeconfig: path, Context: "eks"})
+	if err != nil {
+		t.Fatalf("DiagnoseExecPlugin: %v", err)
+	}
+	if rep.Plugin == nil {
+		t.Fatal("report names no plugin for a context that declares one")
+	}
+	if rep.Plugin.Context != "eks" {
+		t.Errorf("Plugin.Context = %q, want eks", rep.Plugin.Context)
+	}
+	if !strings.Contains(rep.Diagnosis.Stderr, "Error loading SSO Token") {
+		t.Errorf("Diagnosis.Stderr = %q, want the plugin's own message", rep.Diagnosis.Stderr)
+	}
+	if rep.Diagnosis.ExitCode != 255 || !rep.Diagnosis.Failed() {
+		t.Errorf("Diagnosis = %+v, want a reproduced failure", rep.Diagnosis)
+	}
+	if !rep.Suggested {
+		t.Fatalf("no remediation substantiated for a named profile: %+v", rep)
+	}
+	if got, want := rep.Remediation.Args, []string{"sso", "login", "--profile", "acme-prod"}; !slices.Equal(got, want) {
+		t.Errorf("Remediation.Args = %q, want %q", got, want)
+	}
+}
+
+// A context that authenticates by token has nothing to diagnose, and that is not
+// an error: the zero report is what a renderer falls back from.
+func TestDiagnoseExecPluginWithoutAStanzaIsAnEmptyReport(t *testing.T) {
+	path := awsScriptKubeconfig(t, `exit 0`)
+	rep, err := DiagnoseExecPlugin(context.Background(), ClientConfig{Kubeconfig: path, Context: "plain"})
+	if err != nil {
+		t.Fatalf("DiagnoseExecPlugin: %v", err)
+	}
+	if rep.Plugin != nil || rep.Suggested {
+		t.Errorf("report = %+v, want the zero value for a context with no plugin", rep)
+	}
+}
+
+// A re-run that succeeds is reported as such — a plugin, a diagnosis that did not
+// fail, and no remediation (there is nothing to fix, D211 pt 5).
+func TestDiagnoseExecPluginReportsARerunThatWorked(t *testing.T) {
+	path := awsScriptKubeconfig(t, `exit 0`)
+	rep, err := DiagnoseExecPlugin(context.Background(), ClientConfig{Kubeconfig: path, Context: "eks"})
+	if err != nil {
+		t.Fatalf("DiagnoseExecPlugin: %v", err)
+	}
+	if rep.Plugin == nil {
+		t.Fatal("report names no plugin")
+	}
+	if rep.Diagnosis.Failed() {
+		t.Errorf("Diagnosis = %+v, want a re-run that succeeded", rep.Diagnosis)
+	}
+	if rep.Suggested {
+		t.Errorf("a working plugin must suggest nothing, got %+v", rep.Remediation)
+	}
+}
+
+// A kubeconfig that will not load cannot be diagnosed, and must not return a
+// half-report: a Plugin with a zero diagnosis would render as "it worked when
+// re-run", which nothing observed.
+func TestDiagnoseExecPluginBadKubeconfigIsAnError(t *testing.T) {
+	path := writeKubeconfigContents(t, "not: [valid")
+	rep, err := DiagnoseExecPlugin(context.Background(), ClientConfig{Kubeconfig: path})
+	if err == nil {
+		t.Fatalf("DiagnoseExecPlugin on a malformed kubeconfig returned %+v, want an error", rep)
+	}
+	if Classify(err) != KindBadContext {
+		t.Errorf("Classify = %v, want %v", Classify(err), KindBadContext)
+	}
+	if rep.Plugin != nil {
+		t.Errorf("report = %+v, want the zero value alongside an error", rep)
+	}
+}
+
+// The caller's context is honoured: a cancelled diagnosis is an error, not a
+// report claiming the plugin timed out on its own.
+func TestDiagnoseExecPluginRespectsTheCallersContext(t *testing.T) {
+	path := awsScriptKubeconfig(t, `sleep 30`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rep, err := DiagnoseExecPlugin(ctx, ClientConfig{Kubeconfig: path, Context: "eks"})
+	if err == nil {
+		t.Fatalf("DiagnoseExecPlugin with a cancelled context returned %+v, want an error", rep)
+	}
+	if rep.Plugin != nil {
+		t.Errorf("report = %+v, want the zero value alongside an error", rep)
 	}
 }

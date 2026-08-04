@@ -5816,3 +5816,40 @@ allowed to do with them.
    (this is where the stanza's `InstallHint` is printed, flattened, and nowhere else); timed
    out → the plugin is wedged, run it in a terminal and watch; did not fail → nothing at all,
    which is D211 pt 5's obligation made visible rather than assumed away.
+
+## D214 — Diagnosing a credential plugin is one call over a `ClientConfig`, fired once per browse selection, and it may only rewrite the pane that asked (2026-08-04, AUTH-04b)
+
+AUTH-04a made the copy; this is the runtime rule for producing it. The constraint a future
+leg must not silently contradict is that re-running a credential plugin is a **subprocess
+spawned by a failure the user did not ask about**, so where it is triggered from, how often,
+and what it is allowed to overwrite are all fixed here — not by whoever adds the next surface.
+
+1. **The kube layer answers in one call, and it is the only thing that runs anything.**
+   `kube.DiagnoseExecPlugin(ctx, cc)` is `ExecPluginFor` → `Diagnose` → `SuggestedRemediation`
+   behind one signature over a `ClientConfig`, so the shell asks a question rather than
+   orchestrating three (D213 pt 1's rule made mechanical). A diagnosis that could not be
+   *attempted* returns the **zero report plus an error**, never a report holding a plugin and
+   an unfilled diagnosis — `ExecPluginDiagnosis`'s zero value does not `Failed()`, so a
+   half-report renders as "it worked when re-run", which is a claim nothing observed.
+2. **The seam is kubeconfig-scoped, not cluster-scoped.** `tui.AuthDiagnoser` takes the
+   `ClientConfig` per call and lives beside `ctxLister`/`ctxState` rather than in the `Cluster`
+   bundle (D155 pt 2's converse): it asks about the *kubeconfig*, which a context switch does
+   not change, and the context it asks about is read from the shell at call time. Only the
+   in-flight run is per-cluster, and `stopClusterAsync` cancels it — a plugin re-run for the
+   context being left must not outlive the switch.
+3. **One re-run per browse selection, however often the failure repeats.** The watch loop
+   re-Lists on a backoff, so a cluster nobody is authenticated to emits a failure every few
+   seconds; without a latch each one spawns another `aws eks get-token`. The generation
+   already diagnosed (`authDiagGen` vs `watchGen`) is that latch, and a new selection is what
+   re-arms it. Any future surface that diagnoses on a *repeating* signal owes the same latch.
+4. **A diagnosis may only rewrite the pane that asked for it, and only while that pane is
+   still failing.** Tagged with `watchGen`, so an answer arriving after the reader drilled
+   elsewhere is dropped; and re-checked against the live pane (rows present, or the notice
+   already cleared by a successful re-List) before writing, because a notice installed behind
+   recovered rows lies dormant and then surfaces later, out of nowhere, on the next empty
+   result.
+5. **A diagnosis that establishes nothing changes nothing on screen.** An attempt that failed,
+   or a report naming no plugin, leaves the kind's generic sentence standing and goes to the
+   log (D159) — never to a second toast. The reader asked to browse a resource; they already
+   have the failure's own toast, and a diagnostic they did not request must not start
+   reporting on itself.

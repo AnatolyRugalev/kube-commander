@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-04 split on pickup; AUTH-04a done, so the diagnosed plugin failure has its copy — the fix above the stderr, because the pane drops its tail (D213). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-04b done, so a credential-plugin failure is now diagnosed on screen: one re-run per browse selection, written back only into the pane that asked (D214). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-04b** Wire the diagnosis into the browse surface
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
+_(none)_
 
 ## Blocked
 
@@ -379,28 +378,12 @@ copy has seven distinct cases to get right (failed re-run with stderr / with non
 that succeeded, a missing binary, a timeout, a truncated capture, and a remediation that is
 present, unrecognised or unsubstantiated), while the wiring is a new seam, an async Cmd, a
 generation guard and a launcher line. Bottom-up as usual (D52): the renderer first, since the
-wiring calls it. Nothing reaches the screen until 04b.
+wiring calls it. Nothing reaches the screen until 04b. **Both halves are done** (2026-08-04):
+a `KindExecPlugin` browse failure re-runs the plugin once per selection and rewrites the pane
+with what it printed, so AUTH-05 inherits a diagnosis it only has to *offer to act on*.
 
 - [x] **AUTH-04a** The copy for a diagnosed credential-plugin failure — done 2026-08-04 (D213)
-- [ ] **AUTH-04b** Wire the diagnosis into the browse surface
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
-      notes: The runtime half, and now the top unblocked AUTH item: a `kube` producer
-      (`ExecPluginFor` → `Diagnose` →
-      `SuggestedRemediation` in one call over a `ClientConfig`), an `AuthDiagnoser` seam on
-      the shell, an async Cmd fired when a browse failure classifies `KindExecPlugin`, and
-      the result re-writing the pane's notice through AUTH-04a's renderer. The seam takes
-      the `ClientConfig` at call time (the shell already holds `kubeconfig` + `context`), so
-      it is **stateless across a context switch** and does not belong on `Cluster`. Tag the
-      Cmd with `watchGen` so a diagnosis for the resource the user just left cannot overwrite
-      the new pane, and re-check the pane is still empty before writing. Live-cluster only to
-      see for real, so expect to add a line to a dogfood human task rather than tick
-      M-anything. It carries the whole of the parent AUTH-04's remaining value: the copy exists
-      and is tested (`tui.authFailure`, D213), so this slice adds no wording — it decides
-      *when* to diagnose and *which* pane the result lands in, and it is what finally replaces
-      the misleading message AUTH-01's kind was created for (a plugin failure read as "cluster
-      unreachable"). Both obligations the parent listed are already discharged by 04a: a re-run
-      that succeeded has its own sentence (D211 pt 5), and the two ways a remediation can be
-      absent render identically without inventing a profile (D212 pt 3, D213 pt 4).
+- [x] **AUTH-04b** Wire the diagnosis into the browse surface — done 2026-08-04 (D214)
 - [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
       status: todo | owner: — | added: 2026-08-01
       notes: The last slice, and the only one that executes anything. One confirm prompt per

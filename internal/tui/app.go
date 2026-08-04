@@ -645,6 +645,19 @@ type Model struct {
 	// left as it was wired at launch.
 	ctxState ContextStateLoader
 
+	// authDiagnoser re-runs the kubeconfig's credential plugin to explain a browse
+	// failure client-go classified as that plugin's (AUTH-04b, authdiag.go); nil → the
+	// failure keeps its kind's generic sentence. Like the three fields above it is
+	// kubeconfig-scoped rather than cluster-scoped — it is handed the ClientConfig per
+	// call — so a switch neither repoints nor tears it down. authDiagCancel and
+	// authDiagGen *are* per-cluster state: the cancel ends the subprocess a switch
+	// leaves behind, and the generation is the watchGen already diagnosed, which
+	// latches the re-run to one per browse selection (the watch loop's backoff would
+	// otherwise spawn one per retry).
+	authDiagnoser  AuthDiagnoser
+	authDiagCancel context.CancelFunc
+	authDiagGen    int
+
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
 	// before discovery so a discovered twin dedupes against them. startupErr is a
@@ -1298,6 +1311,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case metricsTickMsg:
 		return m.handleMetricsTick(msg)
 
+	case authDiagMsg:
+		return m.handleAuthDiagMsg(msg)
+
 	case modal.ConfirmedMsg:
 		return m.handleModalConfirmed(msg)
 
@@ -1478,7 +1494,10 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 		// itself (CRD-01) — the kind is r's, not m.current's, which this failure
 		// leaves pointing at the resource being left.
 		m.table.SetNotice(browseFailure(r.GVK.Kind, e))
-		return m, func() tea.Msg { return e }
+		// A credential plugin's failure has more to say than that sentence, but only a
+		// re-run can say it, so the pane is rewritten when the diagnosis lands (AUTH-04b).
+		diag := m.diagnoseAuth(r.GVK.Kind, e)
+		return m, tea.Batch(func() tea.Msg { return e }, diag)
 	}
 	m.watchCancel = cancel
 	m.watchCh = ch
@@ -1576,7 +1595,11 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 		// its rows and the notice stays dormant.
 		m.table.SetNotice(browseFailure(m.current.GVK.Kind, inner))
 		clear := m.surfaceError(inner)
-		return m, tea.Batch(clear, m.pumpWatch())
+		// And if it was the credential plugin that failed, re-run it and rewrite the
+		// notice with what it printed — once per selection, however often the loop
+		// retries (AUTH-04b).
+		diag := m.diagnoseAuth(m.current.GVK.Kind, inner)
+		return m, tea.Batch(clear, diag, m.pumpWatch())
 	case WatchClosedMsg:
 		m.watchCh = nil
 		m.watchCancel = nil
@@ -1681,6 +1704,7 @@ func (m *Model) stopClusterAsync() {
 	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
 	m.childGen++     // an in-flight child-scope resolve names an object on this cluster.
 	m.stopMetrics()  // the metrics poll lists this cluster's samples on a ticker.
+	m.stopAuthDiag() // a credential-plugin re-run asks about the context being left.
 	m.stopDrain()
 	m.drainGen++ // in-flight drain steps are now stale.
 	m.stopForwards()

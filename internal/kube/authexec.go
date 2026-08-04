@@ -507,6 +507,39 @@ type ExecPluginReport struct {
 	Suggested bool
 }
 
+// DiagnoseExecPlugin is the whole diagnosis in one call over a ClientConfig: name
+// the context's credential plugin (ExecPluginFor), re-run it (Diagnose), and ask
+// what the stanza substantiates as a fix (SuggestedRemediation). It exists so a
+// caller — the TUI shell, which must not run subprocesses or read kubeconfigs
+// itself — asks one question off its update loop and renders the answer (AUTH-04b).
+//
+// It carries Diagnose's contract: a **diagnostic on an already-failed request**,
+// never a pre-flight. Call it after a request classified KindExecPlugin.
+//
+// A context that uses no exec plugin is not an error — it is the common case — and
+// returns the zero report (Plugin nil), which a renderer falls back from rather than
+// renders. The error is non-nil only when the diagnosis could not be *attempted*: an
+// unreadable kubeconfig, or a plugin that could not be started for a reason that is
+// not "missing" or "failed". Those return the zero report too, deliberately: a
+// report holding a plugin but no observation would render as "it worked when re-run"
+// (ExecPluginDiagnosis's zero value does not Fail), which is a claim nothing made.
+func DiagnoseExecPlugin(ctx context.Context, cc ClientConfig) (ExecPluginReport, error) {
+	plugin, err := ExecPluginFor(cc)
+	if err != nil {
+		return ExecPluginReport{}, err
+	}
+	if plugin == nil {
+		return ExecPluginReport{}, nil
+	}
+	d, err := plugin.Diagnose(ctx)
+	if err != nil {
+		return ExecPluginReport{}, err
+	}
+	rep := ExecPluginReport{Plugin: plugin, Diagnosis: d}
+	rep.Remediation, rep.Suggested = plugin.SuggestedRemediation(d)
+	return rep, nil
+}
+
 // awsSSOExpiryMarkers are the AWS CLI's own words for an SSO session that is
 // expired or absent, matched case-insensitively as substrings:
 //

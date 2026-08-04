@@ -167,6 +167,11 @@ func runTUI(opts runOptions) error {
 		tui.WithClusterConnector(contextConnector{kubeconfig: opts.kubeconfig}),
 		tui.WithContextLister(contextLister{kubeconfig: opts.kubeconfig}),
 		tui.WithContextStateLoader(contextStateLoader{}),
+		// The credential-plugin diagnosis (AUTH-04b). It goes in here rather than in the
+		// cluster bundle because it asks about the *kubeconfig*, not about a connected
+		// client: it is handed the context to look up at call time, so it keeps working
+		// across a switch without being repointed.
+		tui.WithAuthDiagnoser(tui.AuthDiagnoserFunc(kube.DiagnoseExecPlugin)),
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithPinPersister(pinner),

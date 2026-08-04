@@ -2,6 +2,9 @@
 
 - Created: 2026-08-02
 - By: CRD-01
+- Amended: 2026-08-04 by AUTH-04b — item 6 added (the credential-plugin pane). Same surface,
+  same question ("does the empty pane say the true thing?"), different failure, and it needs
+  an expired SSO session rather than a broken webhook — do whichever you can.
 - Priority: normal
 - Blocks: none (advisory — every claim in CRD-01 is covered by hermetic tests, including
   the wording, the wrap and the clear-on-recovery. The single thing a sandbox cannot supply
@@ -47,6 +50,32 @@ should start failing; that is the state kubecom needs to be opened in.
 5. **The 403 case, which needs no broken cluster.** Any kind your user cannot list (or a
    `kubectl auth can-i`-negative one on a restricted context) should show "You are not
    allowed to list it here — RBAC denied the request…". Cheap to check while you are there.
+
+6. **The credential-plugin pane (AUTH-04b, 2026-08-04) — the one thing hermetic tests cannot
+   reach.** Different failure, same surface. On a context that authenticates through an exec
+   credential plugin (`aws eks get-token` and friends), let the session expire — for AWS SSO,
+   `aws sso logout`, or just wait it out — then open any kind in kubecom. What the pane should
+   do is: show the kind's generic sentence ("The credential plugin in your kubeconfig failed
+   …") for a moment, then **replace it**, within a second or two, with the diagnosed version:
+   the profile named, `aws sso login --profile <yours>` as the fix, the failed invocation with
+   its exit code, and the AWS CLI's own stderr underneath.
+   Three ways this can go wrong, and all three are worth a line back:
+   - **The pane never changes.** Then the failure did not classify as the plugin's — kubecom
+     matches client-go's own two message shapes (`exec: executable aws failed with exit code
+     N`, `… not found`) and nothing else (D195/AUTH-01). Paste the `Server:` line from the
+     pane, or the `surfaced error` line from `~/.cache/kubecom/kubecom.log`: that text is the
+     whole answer.
+   - **It says it has no command to suggest.** Either the stderr wording is one the SSO
+     markers miss, or your kubeconfig's stanza names no `--profile`/`AWS_PROFILE` (kubecom
+     will not guess one, D212). The log carries a `credential plugin diagnosed` line with the
+     captured stderr verbatim — paste that.
+   - **It says the re-run worked.** Legitimate if something renewed the credentials in
+     between; suspicious if the rows never arrive. Note which.
+   Also worth saying: how long the pane sat on the generic sentence before the diagnosis
+   landed (the re-run is bounded at 15s, and a slow `aws` is exactly the case that bound is
+   for), and whether anything is *missing* off the bottom of the pane at your terminal size —
+   the fix is printed above the stderr precisely so that truncation costs evidence rather than
+   the answer (D213 pt 2).
 
 ## Result
 
