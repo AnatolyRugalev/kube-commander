@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — PAL-05c-2 claimed (`C` → the palette's `:context ` stage, the last mechanical PAL-05 conversion). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — PAL-05c-2 done; every argument key now opens the palette's stage and no standalone value picker is left (D209). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-05c-2** `C` opens the palette's `:context ` stage
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -340,18 +339,7 @@ has a second entry point the others do not (the menu's namespace-seam row,
 kubeconfig read. One key per slice, as PAL-05a/b established.
 
 - [x] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage — done 2026-08-04 (D208)
-- [ ] **PAL-05c-2** `C` opens the palette's `:context ` stage
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: The last mechanical conversion. Retiring `ctxPicker` collapses
-      `contextsLoadedMsg.dest` to one destination exactly as PAL-05c-1 did for
-      `namespacesLoadedMsg` (keep `awaitingPaletteArg` — D208 pt 3), so
-      `handleContextsLoaded` loses its two-surface routing;
-      `ctxByLabel` stays (the stage resolves through it) and must **not** join
-      `closePalette` — `applyPaletteArg` closes before it resolves the label (the PAL-05a
-      note about `themeByLabel`, now true of two maps). The one thing `C` carries that `R`
-      did not is D158's marker rule: the `*` follows the **shell's** context, not the
-      kubeconfig's, and `contextItems` is where that lives — it moves nowhere, like D203
-      did not.
+- [x] **PAL-05c-2** `C` opens the palette's `:context ` stage — done 2026-08-04 (D209)
 - [ ] **PAL-05d** `a` opens the palette's row verbs — and the last two open questions
       status: todo | owner: — | added: 2026-08-02 | added: 2026-08-02
       notes: The one slice that is not a mechanical conversion, because `a` has no argument

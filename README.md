@@ -169,9 +169,10 @@ usual reason a kind is missing from the menu). `tail -f ~/.cache/kubecom/kubecom
 in a second terminal while you reproduce, and paste what you see into the bug report.
 
 `--context` only picks the context to *start* on: press `C` (`ctx.switch`) to
-switch to any other context in the kubeconfig without restarting. The picker marks
-the one you are on; picking it again does nothing, and a context that fails to
-connect leaves you exactly where you were. Switching does not rewrite your
+switch to any other context in the kubeconfig without restarting — it opens the
+command palette already reading `:context `. The list marks the one you are on;
+picking it again does nothing, and a context that fails to connect leaves you
+exactly where you were. Switching does not rewrite your
 kubeconfig's `current-context` — it applies to this session only. A switch also
 picks up everything else that is per-context: you land in the namespace that
 context was last left in (below), and its own [menu file](#per-context-menu) is
@@ -211,12 +212,12 @@ prompt does; the box says `— loading…` until it lands, and anything you type
 still narrows it.
 
 A verb's own key is a **shortcut into the same line**: `T` opens the palette already
-reading `:theme `, `R` opens it reading `:resource ` and `Ctrl+n` opens it reading
-`:namespace `, so the key saves you the typing without taking you to a different box.
-The namespace row in the left menu opens the same line. Backspace or `Esc` from there
-rewinds to the full verb list, so a key pressed by mistake still leaves you one
-keystroke from everything else. (`C` still opens its own pop-up for now; it is
-converted next.)
+reading `:theme `, `R` reading `:resource `, `Ctrl+n` reading `:namespace ` and `C`
+reading `:context `, so the key saves you the typing without taking you to a different
+box. The namespace row in the left menu opens the same line. Backspace or `Esc` from
+there rewinds to the full verb list, so a key pressed by mistake still leaves you one
+keystroke from everything else. Every value verb now works this way — there is no
+second switcher pop-up left to learn.
 
 With a row selected in the table, the palette also lists **what you can do to that
 row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the
@@ -240,9 +241,9 @@ groups define the same Kind — a `Cluster` per operator is common — both are 
 each with its group beside it (`Cluster (postgresql.cnpg.io)`), so you can tell them
 apart and pick either.
 
-**Every pop-up picker filters as you type** — the command palette (including `T`, `R`
-and `Ctrl+n`, which open it on `:theme `, `:resource ` and `:namespace `), the context
-switcher (`C`), the actions menu (`a`) and the container picker. There is
+**Every pop-up picker filters as you type** — the command palette (including `T`, `R`,
+`Ctrl+n` and `C`, which open it on `:theme `, `:resource `, `:namespace ` and
+`:context `), the actions menu (`a`) and the container picker. There is
 no filter key to press first: the matching is the same one cluster search uses, so a
 typo-free abbreviation finds its
 value (`ksys` → `kube-system`) and exact matches always rank above fuzzy ones. `Esc`

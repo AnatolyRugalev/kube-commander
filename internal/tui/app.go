@@ -583,11 +583,6 @@ type Model struct {
 	// dispatched through handleAction. Like the theme picker it is seeded from neither
 	// the cluster nor a file — the verb list is compiled in — so `:` opens it always.
 	cmdPicker picker.Model
-	// ctxPicker offers the kubeconfig's contexts as choices (M4-04b); its selection
-	// is resolved back to a context name through ctxByLabel and handed to
-	// switchContext. Unlike every other picker here it is not seeded from the
-	// cluster, so it stays usable when the current cluster is unreachable.
-	ctxPicker picker.Model
 	// portPicker offers a port-forward target's declared ports as choices
 	// (FB-pf-port-picker-b); its selection is stashed against mutateRes/mutateRef.
 	portPicker picker.Model
@@ -628,11 +623,11 @@ type Model struct {
 	// Zero outside a switch, which is why a launch-time discovery logs nothing.
 	ctxSwitch switchTiming
 
-	// ctxLister seeds the context picker from the kubeconfig (M4-04b); nil → the
-	// ctx.switch action is inert. ctxByLabel maps each open picker row back to its
-	// context name, the resByLabel/actByLabel pattern (the picker's SelectedMsg
-	// carries only the label, D65). Both are kubeconfig-scoped, not cluster-scoped,
-	// so neither is part of the Cluster bundle or of what a switch tears down.
+	// ctxLister seeds the palette's `:context ` stage from the kubeconfig (M4-04b);
+	// nil → the ctx.switch action is inert. ctxByLabel maps each listed row back to
+	// its context name, the resByLabel/actByLabel pattern (a SelectedMsg carries only
+	// the label, D65). Both are kubeconfig-scoped, not cluster-scoped, so neither is
+	// part of the Cluster bundle or of what a switch tears down.
 	ctxLister  ContextLister
 	ctxByLabel map[string]string
 
@@ -1050,7 +1045,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	// and an always-open query field swallows every text-carrying key (D140 pt 1), so
 	// it keeps the opt-in `/` filter every picker had before PAL-01.
 	m.portPicker = picker.New(s, portPickerKind, picker.WithOptInFilter())
-	m.ctxPicker = picker.New(s, contextPickerKind)
 	m.viewer = viewer.New(s, viewerKindDescribe)
 	m.modal = modal.New(s)
 	m.welcome = welcome.New(s)
@@ -1060,7 +1054,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
-	m.ctxPicker.SetTitle("Switch context")
 	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
 	m.menu.AddPinned(m.menuPinned) // then this context's pins, behind them (D193 pt 3 / D202)
 	m.menu.Focus()
@@ -1272,8 +1265,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleContainerSelected(msg)
 		case portPickerKind:
 			return m.handlePortSelected(msg)
-		case contextPickerKind:
-			return m.handleContextSelected(msg)
 		}
 		// No default arm since PAL-05c-1: it used to mean "the namespace picker",
 		// which was the one surface whose Kind nothing branched on. With that picker
@@ -1302,9 +1293,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ctrByLabel = nil
 		case portPickerKind:
 			m.portPicker.Hide()
-		case contextPickerKind:
-			m.ctxPicker.Hide()
-			m.ctxByLabel = nil
 		}
 		// No default arm — see picker.SelectedMsg above.
 		return m, nil
@@ -1753,17 +1741,12 @@ func (m *Model) resetCluster() {
 	// values are not per-cluster in either direction; it is dismissed anyway rather than
 	// special-cased, because "one surface" means one teardown rule for it (D207).
 	m.closePalette()
-	// The context picker holds kubeconfig data, not the departing cluster's, so it
-	// is dismissed for a different reason than the rest: its rows mark the context
+	// closePalette closes the surface; the `:context ` stage's row map is state behind
+	// it and is cleared for a different reason than the rest: its rows mark the context
 	// the shell is on, and a switch is exactly what makes that marker wrong. (In
-	// practice it is already closed — the pick that started the switch closed it —
-	// so this is about the state, not the surface.)
-	m.ctxPicker.Hide()
+	// practice the stage is already closed — the pick that started the switch closed
+	// it — so this is about the state, not the surface.)
 	m.ctxByLabel = nil
-	// The theme picker is deliberately *not* dismissed: alone among the pickers it
-	// shows neither cluster nor context data (the palettes are compiled in, M4-12b-2),
-	// so a switch says nothing about it and closing it would yank an overlay the
-	// reader opened for an unrelated reason.
 	m.forwardsPanel = false
 	m.forwardsSel = 0
 
@@ -1950,8 +1933,6 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.cmdPicker
 	case m.portPicker.Active():
 		return &m.portPicker
-	case m.ctxPicker.Active():
-		return &m.ctxPicker
 	}
 	return nil
 }
@@ -3819,7 +3800,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -3990,7 +3971,6 @@ func (m *Model) resize() {
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
-	m.ctxPicker.SetSize(m.width, bodyH)
 	// The viewer is the large overlay; it too centers within the body area (above the
 	// status bar) so the top status line and bottom hint line stay visible around it.
 	m.viewer.SetSize(m.width, bodyH)
@@ -4133,17 +4113,16 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil // the overlay swallows navigation while it is open.
 	}
 	switch a {
-	case keymap.ActionContext:
-		return m.openContextPicker()
-	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace:
-		// The shortcut keys converted to pre-typed palette lines so far (D207): `T`
-		// opens the palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b) and
-		// `ctrl+n` on `:namespace ` (PAL-05c-1), none on a modal of its own. One arm
-		// rather than one per key, because the conversion is the *same* fact about
-		// every one of them — the key names the verb, enterPaletteArg produces the
-		// stage, and the values, the inertness and the rendered frame are the typed
-		// line's, whether the values were in hand or had to be fetched. PAL-05c-2
-		// adds `C` here.
+	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace, keymap.ActionContext:
+		// The shortcut keys converted to pre-typed palette lines (D207): `T` opens the
+		// palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b), `ctrl+n` on
+		// `:namespace ` (PAL-05c-1) and `C` on `:context ` (PAL-05c-2), none on a modal
+		// of its own. One arm rather than one per key, because the conversion is the
+		// *same* fact about every one of them — the key names the verb, enterPaletteArg
+		// produces the stage, and the values, the inertness and the rendered frame are
+		// the typed line's, whether the values were in hand or had to be fetched. The
+		// four argument keys are now all here; `a` (PAL-05d) is the one that is not a
+		// conversion, because it has no argument word to pre-type.
 		return m.openPaletteArg(a)
 	case keymap.ActionPalette:
 		// `:` opens the palette (PAL-02). Reached from a key only: the palette skips
@@ -4360,8 +4339,6 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.cmdPicker.View(), m.width, m.bodyHeight())
 	case m.portPicker.Active():
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
-	case m.ctxPicker.Active():
-		body = overlayCenter(body, m.ctxPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
 	case m.forwardsPanel:

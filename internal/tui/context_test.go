@@ -12,6 +12,7 @@ import (
 	"github.com/AnatolyRugalev/kube-commander/internal/config"
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
 
 // fakeConnector is a hermetic ClusterConnector: it records the context names it was
@@ -230,10 +231,10 @@ func (f *fakeContextLister) Contexts() ([]kube.ContextInfo, error) {
 	return f.contexts, f.err
 }
 
-// twoContexts is the list the picker tests are seeded with. `dev` is flagged
-// Current on purpose while the tests run a shell that is on `prod`: the kubeconfig's
-// current-context is the one the reader *launched* from, and kubecom never rewrites
-// it, so it is precisely the wrong thing to mark (D158).
+// twoContexts is the list the `:context ` stage tests are seeded with. `dev` is
+// flagged Current on purpose while the tests run a shell that is on `prod`: the
+// kubeconfig's current-context is the one the reader *launched* from, and kubecom never
+// rewrites it, so it is precisely the wrong thing to mark (D158).
 func twoContexts() []kube.ContextInfo {
 	return []kube.ContextInfo{
 		{Name: "dev", Cluster: "dev", Current: true},
@@ -241,9 +242,28 @@ func twoContexts() []kube.ContextInfo {
 	}
 }
 
-// pickerLabels reads the open picker's rows back out through the label map, which is
-// the only thing a pick can resolve through — the picker's SelectedMsg carries a
-// label, not a context (D65).
+// capitalC is the ctx.switch default key.
+var capitalC = tea.Key{Code: 'C', Text: "C"}
+
+// openContextStage presses `C` through the real key path (D11 — the binding is
+// registry-resolved, never matched raw) and delivers the context listing the stage asks
+// for, returning the shell with the palette on its seeded `:context ` stage. Since
+// PAL-05c-2 that is the only context-switching surface there is, so every test that used
+// to open the standalone picker reaches it this way — the way a reader does, rather than
+// by calling an opener.
+func openContextStage(t *testing.T, m Model) Model {
+	t.Helper()
+	m, cmd := press(t, m, capitalC)
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionContext {
+		t.Fatalf("`C` should open the palette on its context stage, stage = %q", m.palArg)
+	}
+	next, _ := m.Update(pickerMsg(t, cmd))
+	return next.(Model)
+}
+
+// pickerLabelFor reads the open stage's rows back out through the label map, which is
+// the only thing a pick can resolve through — a SelectedMsg carries a label, not a
+// context (D65).
 func pickerLabelFor(t *testing.T, m Model, context string) string {
 	t.Helper()
 	for label, name := range m.ctxByLabel {
@@ -251,21 +271,26 @@ func pickerLabelFor(t *testing.T, m Model, context string) string {
 			return label
 		}
 	}
-	t.Fatalf("no picker row maps to context %q (rows: %v)", context, m.ctxByLabel)
+	t.Fatalf("no stage row maps to context %q (rows: %v)", context, m.ctxByLabel)
 	return ""
 }
 
-// TestContextKeyOpensThePickerAndListsOffTheUpdateLoop drives the whole gesture
-// through the real key path (D11 — no raw-key matching, the binding is registry
-// resolved): `C` opens the picker immediately and issues the listing as a Cmd, so a
-// kubeconfig read never blocks the update loop, and the rows land when it returns.
-func TestContextKeyOpensThePickerAndListsOffTheUpdateLoop(t *testing.T) {
+// TestContextKeyOpensThePaletteContextStage is PAL-05c-2's headline assertion: `C` no
+// longer opens a modal of its own, it opens the one palette with the context verb
+// already committed. Like ctrl+n the values are not in hand, so the stage opens empty
+// and titled as loading (PAL-03b) and the kubeconfig read happens off the update loop —
+// the difference from a stage whose values were compiled in is invisible in the line,
+// which is the point.
+func TestContextKeyOpensThePaletteContextStage(t *testing.T) {
 	fl := &fakeContextLister{contexts: twoContexts()}
 	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
 
-	m, cmd := press(t, m, tea.Key{Code: 'C', Text: "C"})
-	if !m.ctxPicker.Active() {
-		t.Fatal("ctx.switch should open the context picker")
+	m, cmd := press(t, m, capitalC)
+	if !m.cmdPicker.Active() {
+		t.Fatal("ctx.switch should open the command palette")
+	}
+	if m.palArg != keymap.ActionContext {
+		t.Fatalf("`C` should commit the context verb, stage = %q", m.palArg)
 	}
 	if cmd == nil {
 		t.Fatal("the listing should be issued as a Cmd")
@@ -280,28 +305,39 @@ func TestContextKeyOpensThePickerAndListsOffTheUpdateLoop(t *testing.T) {
 		t.Errorf("Contexts called %d times, want 1", fl.calls)
 	}
 	if len(m.ctxByLabel) != 2 {
-		t.Errorf("picker rows = %d, want 2 (%v)", len(m.ctxByLabel), m.ctxByLabel)
+		t.Errorf("stage rows = %d, want 2 (%v)", len(m.ctxByLabel), m.ctxByLabel)
 	}
-	if !m.ctxPicker.Active() {
-		t.Error("the picker should stay open once the rows land")
+	if !m.cmdPicker.Active() {
+		t.Error("the stage should stay open once the rows land")
 	}
-	if view := m.View().Content; !strings.Contains(view, "Switch context") {
-		t.Errorf("the open picker should be composited over the browse body:\n%s", view)
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, palettePrompt+"context ") {
+		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
+	}
+
+	// The key is sugar, not a second surface: typing the line by hand must land on the
+	// very same stage (D207) — same verb committed, same prompt, same rows.
+	typed := sizedWith(t, WithContextLister(&fakeContextLister{contexts: twoContexts()}), WithContext("prod"))
+	typed, _ = press(t, typed, colon)
+	typed = typeInto(t, typed, "context")
+	typed, spaceCmd := press(t, typed, tea.Key{Code: ' ', Text: " "})
+	next, _ = typed.Update(pickerMsg(t, spaceCmd))
+	typed = next.(Model)
+	if got, want := stripANSI(typed.View().Content), view; got != want {
+		t.Errorf("`C` and `:context ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
-// TestContextPickerMarksTheShellsContextNotTheKubeconfigs is the D158 assertion. The
-// list flags `dev` as the kubeconfig's current-context while the shell is on `prod`;
-// the marker must follow the shell. Getting this backwards is invisible at launch
-// (they agree) and wrong after every switch, which is exactly when a reader reaches
-// for the picker to check where they are.
-func TestContextPickerMarksTheShellsContextNotTheKubeconfigs(t *testing.T) {
+// TestContextStageMarksTheShellsContextNotTheKubeconfigs is the D158 assertion, and the
+// one thing PAL-05c-2 carried that no other converted key had. The list flags `dev` as
+// the kubeconfig's current-context while the shell is on `prod`; the marker must follow
+// the shell. Getting this backwards is invisible at launch (they agree) and wrong after
+// every switch, which is exactly when a reader reaches for the switcher to check where
+// they are. It lives in contextPickerItems, which the stage was already seeded from, so
+// the conversion moved it nowhere.
+func TestContextStageMarksTheShellsContextNotTheKubeconfigs(t *testing.T) {
 	fl := &fakeContextLister{contexts: twoContexts()}
-	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
-
-	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(pickerMsg(t, cmd))
-	m = next.(Model)
+	m := openContextStage(t, sizedWith(t, WithContextLister(fl), WithContext("prod")))
 
 	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
 		t.Errorf("the shell's own context should be marked, row = %q", got)
@@ -319,24 +355,22 @@ func TestContextPickerMarksTheShellsContextNotTheKubeconfigs(t *testing.T) {
 	}
 }
 
-// TestContextPickRoutesIntoSwitchContext closes the loop the leg exists to close: a
-// picked row resolves back to its context name and reaches switchContext (M4-04a),
-// which connects. The picker closes and drops its label map either way.
+// TestContextPickRoutesIntoSwitchContext closes the loop M4-04b exists to close: a
+// picked row resolves back to its context name and reaches switchContext (M4-04a), which
+// connects. The stage closes and drops its label map either way — and the map is read
+// *after* the close (applyPaletteArg closes first), which is why closePalette must not
+// clear it.
 func TestContextPickRoutesIntoSwitchContext(t *testing.T) {
 	fl := &fakeContextLister{contexts: twoContexts()}
 	fc := &fakeConnector{}
 	fc.cluster, _, _ = newClusterFake()
-	m := sizedWith(t, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
-
-	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(pickerMsg(t, cmd))
-	m = next.(Model)
+	m := openContextStage(t, sizedWith(t, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod")))
 	label := pickerLabelFor(t, m, "dev")
 
-	next, cmd = m.Update(picker.SelectedMsg{Kind: contextPickerKind, Value: label})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: label})
 	m = next.(Model)
-	if m.ctxPicker.Active() || m.ctxByLabel != nil {
-		t.Error("the picker should close and drop its label map on a pick")
+	if m.cmdPicker.Active() || m.ctxByLabel != nil {
+		t.Error("the stage should close and drop its label map on a pick")
 	}
 	if cmd == nil {
 		t.Fatal("a pick should issue the connect Cmd")
@@ -351,18 +385,14 @@ func TestContextPickRoutesIntoSwitchContext(t *testing.T) {
 
 // TestPickingTheCurrentContextCostsNothing: the marked row is choosable rather than
 // hidden, so choosing it must be a no-op — not a teardown and rebuild of the working
-// cluster (D157's scope note). The picker still closes, as any pick does.
+// cluster (D157's scope note). The stage still closes, as any pick does.
 func TestPickingTheCurrentContextCostsNothing(t *testing.T) {
 	fl := &fakeContextLister{contexts: twoContexts()}
 	fc := &fakeConnector{}
 	fw := &fakeWatcher{}
-	m := browsingModel(t, fw, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod"))
+	m := openContextStage(t, browsingModel(t, fw, WithContextLister(fl), WithClusterConnector(fc), WithContext("prod")))
 
-	next, cmd := m.openContextPicker()
-	next, _ = next.(Model).Update(pickerMsg(t, cmd))
-	m = next.(Model)
-
-	next, cmd = m.Update(picker.SelectedMsg{Kind: contextPickerKind, Value: pickerLabelFor(t, m, "prod")})
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: pickerLabelFor(t, m, "prod")})
 	m = next.(Model)
 	if cmd != nil {
 		t.Error("picking the live context should issue no work")
@@ -376,14 +406,14 @@ func TestPickingTheCurrentContextCostsNothing(t *testing.T) {
 	if !m.hasCurrent || fw.ctxs[0].Err() != nil {
 		t.Error("picking the live context must not disturb the running cluster")
 	}
-	if m.ctxPicker.Active() {
-		t.Error("the picker should close on a pick, no-op or not")
+	if m.cmdPicker.Active() {
+		t.Error("the stage should close on a pick, no-op or not")
 	}
 }
 
 // TestContextListingDegradesRatherThanBlocking covers the two ways the list can be
-// unusable. Both close the picker and say something — an empty modal a reader can
-// only escape from is the failure mode this avoids (principle 3).
+// unusable. Both close the palette and say something — an empty stage a reader can only
+// escape from is the failure mode this avoids (principle 3).
 func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -396,11 +426,11 @@ func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := sizedWith(t, WithContextLister(tc.lister), WithContext("prod"))
-			next, cmd := m.openContextPicker()
-			next, cmd = next.(Model).Update(pickerMsg(t, cmd))
+			m, cmd := press(t, m, capitalC)
+			next, cmd := m.Update(pickerMsg(t, cmd))
 			m = next.(Model)
-			if m.ctxPicker.Active() {
-				t.Error("the picker should close rather than sit empty")
+			if m.cmdPicker.Active() {
+				t.Error("the stage should close rather than sit empty")
 			}
 			if cmd == nil {
 				t.Fatal("the failure should say something rather than close silently")
@@ -422,41 +452,77 @@ func TestContextListingDegradesRatherThanBlocking(t *testing.T) {
 	}
 }
 
-// TestContextPickerIsInertWithoutALister: no seam wired (every hermetic test, and
-// any build whose launcher supplies none) means the gesture opens nothing at all
-// rather than an empty modal — the ns.switch precedent.
-func TestContextPickerIsInertWithoutALister(t *testing.T) {
+// TestContextSwitchInertWithoutALister: no seam wired (every hermetic test, and any
+// build whose launcher supplies none) means the gesture opens nothing at all rather than
+// an empty stage — the ns.switch precedent. Since PAL-05c-2 the check that makes the key
+// inert is enterPaletteArg's, the same one that makes the typed `:context ` line inert,
+// so the two cannot drift apart.
+func TestContextSwitchInertWithoutALister(t *testing.T) {
 	m := sizedWith(t, WithContext("prod"))
-	m, cmd := press(t, m, tea.Key{Code: 'C', Text: "C"})
-	if m.ctxPicker.Active() || cmd != nil {
+	m, cmd := press(t, m, capitalC)
+	if m.cmdPicker.Active() {
+		t.Fatal("ctx.switch without a lister should not open the palette")
+	}
+	if m.palArg != "" {
+		t.Fatalf("an inert verb should not commit a stage, stage = %q", m.palArg)
+	}
+	if cmd != nil {
 		t.Error("ctx.switch should be inert with no context lister wired")
 	}
 }
 
-// TestLateContextListIsDropped: the listing is not generation-tagged (it describes
-// the kubeconfig, not a cluster, so it cannot go stale), which leaves exactly one
-// guard to get right — a result that lands after the picker was dismissed must not
-// re-seed a closed picker or resurrect it.
+// TestLateContextListIsDropped: the listing is not generation-tagged (it describes the
+// kubeconfig, not a cluster, so it cannot go stale), which leaves exactly one guard to
+// get right, and it is the guard the collapsed `dest` left behind (D208 pt 3) — *which*
+// surface asked stopped being a question, *whether that stage is still up* did not. Both
+// ways out of the stage are covered: rewinding the line to the verbs must not paint
+// contexts over them, and closing the palette outright must not resurrect it or seed
+// rows behind it.
 func TestLateContextListIsDropped(t *testing.T) {
-	fl := &fakeContextLister{contexts: twoContexts()}
-	m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
+	t.Run("rewound to the verbs", func(t *testing.T) {
+		fl := &fakeContextLister{contexts: twoContexts()}
+		m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
 
-	next, cmd := m.openContextPicker()
-	m = next.(Model)
-	next, _ = m.Update(picker.CancelledMsg{Kind: contextPickerKind}) // dismissed first
-	m = next.(Model)
-	if m.ctxPicker.Active() {
-		t.Fatal("nav.back should close the context picker")
-	}
+		m, cmd := press(t, m, capitalC)
+		// Backspace on the empty argument rewinds to the verb list (D207 pt 2).
+		m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+		if m.palArg != "" {
+			t.Fatalf("backspace should rewind to the verbs, stage = %q", m.palArg)
+		}
+		verbs := m.cmdPicker.Len()
 
-	next, _ = m.Update(pickerMsg(t, cmd))
-	m = next.(Model)
-	if m.ctxPicker.Active() {
-		t.Error("a list landing after dismissal must not reopen the picker")
-	}
-	if m.ctxByLabel != nil {
-		t.Errorf("a list landing after dismissal must not seed rows: %v", m.ctxByLabel)
-	}
+		next, _ := m.Update(pickerMsg(t, cmd))
+		m = next.(Model)
+		if got := m.cmdPicker.Len(); got != verbs {
+			t.Fatalf("a late listing seeded the rewound verb list: %d rows, want %d", got, verbs)
+		}
+		if m.ctxByLabel != nil {
+			t.Errorf("a late listing must not seed rows behind the verbs: %v", m.ctxByLabel)
+		}
+	})
+
+	t.Run("palette closed", func(t *testing.T) {
+		fl := &fakeContextLister{contexts: twoContexts()}
+		m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
+
+		m, cmd := press(t, m, capitalC)
+		next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind}) // rewinds to the verbs
+		m = next.(Model)
+		next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind}) // then closes
+		m = next.(Model)
+		if m.cmdPicker.Active() {
+			t.Fatal("two nav.backs should close the palette")
+		}
+
+		next, _ = m.Update(pickerMsg(t, cmd))
+		m = next.(Model)
+		if m.cmdPicker.Active() {
+			t.Error("a listing landing after dismissal must not reopen the palette")
+		}
+		if m.ctxByLabel != nil {
+			t.Errorf("a listing landing after dismissal must not seed rows: %v", m.ctxByLabel)
+		}
+	})
 }
 
 // fakeStateLoader is a hermetic ContextStateLoader: it records the context names it

@@ -52,7 +52,6 @@ func (m *Model) applyStyles(s styles.Styles) {
 	// there must not be the one overlay left on the departed palette next time it opens.
 	m.cmdPicker.SetStyles(s)
 	m.portPicker.SetStyles(s)
-	m.ctxPicker.SetStyles(s)
 
 	m.viewer.SetStyles(s)
 	m.modal.SetStyles(s)

@@ -58,7 +58,10 @@ import (
 // already committed (openPaletteArg). The key keeps working and keeps its meaning —
 // what changes is that there is one surface behind it instead of two (D207). It lands
 // one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b),
-// `ctrl+n` → `:namespace ` (PAL-05c-1).
+// `ctrl+n` → `:namespace ` (PAL-05c-1), `C` → `:context ` (PAL-05c-2). With PAL-05c-2
+// every key whose verb takes an argument opens this surface, and no standalone value
+// picker is left: actPicker/ctrPicker/portPicker pick from a *row's* own data, not
+// from a verb's argument list, so they are not conversions PAL-05 owes.
 //
 // PAL-05b is the slice that shows what the conversion is worth rather than merely what
 // it costs. `R`'s picker was the surface CRD-PIN-04 hardened (aliases, group
@@ -75,6 +78,12 @@ import (
 // row. Retiring nsPicker also collapses namespacesLoadedMsg's `dest` (D199): with one
 // destination left, *which* surface asked stopped being a question, and only "is that
 // stage still up?" (awaitingPaletteArg) remains.
+//
+// PAL-05c-2 makes the identical collapse to contextsLoadedMsg and carries the one thing
+// no other converted key had: D158's marker rule. The `*` on a context row follows the
+// **shell's** live context rather than the kubeconfig's `current-context`, and that
+// lives in contextPickerItems, which the stage was already seeded from — so, like D203
+// on `R`, it moved nowhere.
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
@@ -346,11 +355,13 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		}
 		load, pending = m.loadNamespaces(), true
 	case keymap.ActionContext:
+		// Context-switch-inert. Since PAL-05c-2 this one check is also what makes `C`
+		// inert, rather than the key deciding for itself.
 		if m.ctxLister == nil {
-			return m, nil, false // context-switch-inert, exactly as `C` is.
+			return m, nil, false
 		}
 		m.ctxByLabel = nil // a stale map would resolve a row this stage never listed.
-		load, pending = m.loadContexts(commandPickerKind), true
+		load, pending = m.loadContexts(), true
 	default:
 		return m, nil, false
 	}

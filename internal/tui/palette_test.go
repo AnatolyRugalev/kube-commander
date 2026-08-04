@@ -361,8 +361,8 @@ func TestPaletteContextArgumentSwitchesContext(t *testing.T) {
 	}
 	next, _ := m.Update(pickerMsg(t, cmd))
 	m = next.(Model)
-	if m.ctxPicker.Active() {
-		t.Fatal("the argument stage should be the palette itself, not the standalone context picker")
+	if got := m.cmdPicker.Len(); got != 2 {
+		t.Fatalf("the argument stage should be seeded with the two contexts, got %d rows", got)
 	}
 	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
 		t.Errorf("the stage should mark the context the shell is on, row = %q", got)
@@ -427,8 +427,11 @@ func TestPaletteFetchedVerbsStayInertWithoutTheirSeam(t *testing.T) {
 			if cmd != nil {
 				t.Fatalf("an inert verb should issue no command, got %v", pickerMsgs(cmd))
 			}
-			if m.ctxPicker.Active() {
-				t.Fatal("an inert verb should open no standalone picker either")
+			// Since PAL-05c-2 there is no standalone switcher left for an inert verb
+			// to open *instead*, so the palette's own verb list — the one it was
+			// picked from — is the only overlay that may still be up.
+			if p := m.activePicker(); p != &m.cmdPicker {
+				t.Fatal("an inert verb should leave the verb list up and open nothing else")
 			}
 		})
 	}

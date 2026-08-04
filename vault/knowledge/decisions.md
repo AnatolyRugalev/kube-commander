@@ -5640,3 +5640,26 @@ second entry point and the first verb whose values are fetched.
    question, but *whether that stage is still up* did not — a list landing after the line
    rewound to the verbs must not seed the verb list with namespaces. The same applies to
    `contextsLoadedMsg` when PAL-05c-2 collapses it.
+
+## D209 — A verb's argument list is a palette stage; no verb gets a modal of its own (2026-08-04, PAL-05c-2)
+
+PAL-05 is finished: `T`, `R`, `ctrl+n` and `C` all open the one palette on their verb's
+stage, and no standalone value picker survives. That makes the rule general rather than
+a per-key backlog, so it is stated once as the constraint future legs must not
+contradict.
+
+1. **A new verb that takes an argument gets a `:verb ` stage, not a picker.** Add it to
+   `paletteArgVerbs` and give `enterPaletteArg` an arm; if it deserves a key, put the
+   key in the `handleAction` arm that already holds the four. Building a modal of its own
+   re-creates exactly the two-surface split the PAL line spent five slices removing, and
+   the second surface is the one that drifts (D197/D207 pt 3).
+2. **Inertness and the value list live in that arm, not in the key.** A key is a name for
+   a verb (D207 pt 1); the arm is where "can this verb be offered at all" is decided, so
+   the key and the typed line cannot come to disagree. A key that checks a seam itself is
+   the drift, whatever it returns.
+3. **The remaining pickers are not conversions this rule owes.** `actPicker`, `ctrPicker`
+   and `portPicker` list a *selected row's* own data — its actions, its containers, its
+   declared ports — not a verb's argument values, and they are reached from a row, not
+   from a verb word. They stay modals. The test for which one a surface is: could a
+   reader name the value on the palette line before seeing the list? If not, it is
+   row data.
