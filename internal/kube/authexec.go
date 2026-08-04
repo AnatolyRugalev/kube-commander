@@ -507,6 +507,56 @@ type ExecPluginReport struct {
 	Suggested bool
 }
 
+// RemediationCommand is a remediation resolved to something a surface can
+// actually execute once the user has approved it (AUTH-05): the argv to run
+// **verbatim** — never through a shell — the environment to run it in, and the
+// rendering of it the user was shown.
+//
+// It exists so that composing the command stays in the kube layer even though
+// running it does not: a suspend belongs to the TUI (only it owns the terminal),
+// but which binary, which arguments and which environment is the same question
+// the catalogue already answers, and a shell that assembled its own argv could
+// run something the confirm prompt did not name (D195 pt 4).
+type RemediationCommand struct {
+	// Argv is the command and its arguments, argv[0] first. Passed straight to
+	// os/exec: no shell, no expansion, no word splitting.
+	Argv []string
+	// Env is the full environment for the run, already merged — hand it to
+	// exec.Cmd.Env as-is rather than appending to the process environment.
+	Env []string
+	// Line is Remediation.CommandLine(): what a prompt quoted and therefore what
+	// the user approved. Carried along so the surface reporting the outcome names
+	// the same command the surface asking did.
+	Line string
+	// Cause is the remediation's one-line statement of what is wrong, for a
+	// surface that asks before running (Remediation.Cause).
+	Cause string
+}
+
+// RemediationCommand resolves the report's remediation into a runnable command in
+// the given base environment (the caller's os.Environ()), or false when the
+// report substantiates none — in which case there is nothing to offer and nothing
+// to run.
+//
+// The environment is the **plugin's**, not the caller's: the stanza's own
+// overrides are applied exactly as they are for the plugin's own runs
+// (ExecPlugin.environ, which client-go mirrors). This matters for more than
+// tidiness — a stanza that redirects AWS_CONFIG_FILE or AWS_SHARED_CREDENTIALS_FILE
+// authenticates against that file, so a login run without the override would write
+// its session for a profile the plugin never reads.
+func (rep ExecPluginReport) RemediationCommand(baseEnv []string) (RemediationCommand, bool) {
+	if !rep.Suggested || rep.Plugin == nil || strings.TrimSpace(rep.Remediation.Command) == "" {
+		return RemediationCommand{}, false
+	}
+	r := rep.Remediation
+	return RemediationCommand{
+		Argv:  append([]string{r.Command}, r.Args...),
+		Env:   rep.Plugin.environ(baseEnv),
+		Line:  r.CommandLine(),
+		Cause: r.Cause,
+	}, true
+}
+
 // DiagnoseExecPlugin is the whole diagnosis in one call over a ClientConfig: name
 // the context's credential plugin (ExecPluginFor), re-run it (Diagnose), and ask
 // what the stanza substantiates as a fix (SuggestedRemediation). It exists so a

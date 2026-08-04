@@ -658,6 +658,17 @@ type Model struct {
 	authDiagCancel context.CancelFunc
 	authDiagGen    int
 
+	// reauthCmd is the remediation a diagnosis substantiated, resolved to an argv and
+	// an environment by the kube layer and armed for the reader to approve (AUTH-05a,
+	// reauth.go); reauthRes is the resource whose request failed, retried once the
+	// remediation succeeds. hasReauth is the arming flag — false means there is
+	// nothing to offer and nothing to run, which is every state until AUTH-05b's
+	// confirm arms one. Cleared by the run that consumes it and by resetCluster: the
+	// pair names a context's credentials and a resource on one cluster.
+	reauthCmd kube.RemediationCommand
+	reauthRes kube.Resource
+	hasReauth bool
+
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
 	// before discovery so a discovered twin dedupes against them. startupErr is a
@@ -1347,6 +1358,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editDoneMsg:
 		return m.handleEditDone(msg)
 
+	case reauthDoneMsg:
+		return m.handleReauthDone(msg)
+
 	case drainMsg:
 		return m.handleDrainMsg(msg)
 
@@ -1773,6 +1787,7 @@ func (m *Model) resetCluster() {
 	m.pfPorts, m.pfPort = nil, kube.Port{}
 	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
 	m.searchTarget, m.hasSearchTarget = kube.ObjectRef{}, false
+	m.clearReauth() // an armed remediation names the departing context's credentials.
 	m.resByLabel = nil
 	m.clearChildScope() // the scope names an owner on the departing cluster.
 

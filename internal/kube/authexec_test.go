@@ -790,3 +790,91 @@ func TestDiagnoseExecPluginRespectsTheCallersContext(t *testing.T) {
 		t.Errorf("report = %+v, want the zero value alongside an error", rep)
 	}
 }
+
+// ssoExpiryStderr is the botocore wording for an expired SSO session, one of the
+// three AUTH-03 recognises — enough to substantiate a remediation.
+const ssoExpiryStderr = "The SSO session associated with this profile has expired or is otherwise invalid."
+
+// reportFor is the report the shell holds when it comes to offer a remediation:
+// built the way DiagnoseExecPlugin builds it, so a test cannot assert a command the
+// real producer would not compose.
+func reportFor(p *ExecPlugin, d ExecPluginDiagnosis) ExecPluginReport {
+	rep := ExecPluginReport{Plugin: p, Diagnosis: d}
+	rep.Remediation, rep.Suggested = p.SuggestedRemediation(d)
+	return rep
+}
+
+// The argv is the remediation verbatim — argv[0] plus its arguments, nothing shelled
+// and nothing added — and the Line is what a prompt quotes, so the command that runs
+// and the command the user approved cannot diverge (D195 pt 4).
+func TestRemediationCommandIsTheArgvAndTheLineTheUserApproved(t *testing.T) {
+	rep := reportFor(awsPlugin([]string{"--profile", "acme-prod"}, nil), failed(ssoExpiryStderr))
+	rc, ok := rep.RemediationCommand(nil)
+	if !ok {
+		t.Fatal("RemediationCommand declined a substantiated remediation")
+	}
+	want := []string{"aws", "sso", "login", "--profile", "acme-prod"}
+	if !slices.Equal(rc.Argv, want) {
+		t.Errorf("Argv = %q, want %q", rc.Argv, want)
+	}
+	if rc.Line != rep.Remediation.CommandLine() {
+		t.Errorf("Line = %q, want the remediation's own rendering %q", rc.Line, rep.Remediation.CommandLine())
+	}
+	if rc.Cause != rep.Remediation.Cause {
+		t.Errorf("Cause = %q, want %q", rc.Cause, rep.Remediation.Cause)
+	}
+}
+
+// The login runs in the *plugin's* environment, not the caller's: a stanza that
+// redirects AWS_CONFIG_FILE authenticates against that file, so a login without the
+// override would write its session where the plugin never looks.
+func TestRemediationCommandRunsInThePluginsEnvironment(t *testing.T) {
+	plugin := awsPlugin([]string{"--profile", "acme-prod"}, map[string]string{
+		"AWS_CONFIG_FILE": "/work/aws-config",
+	})
+	rep := reportFor(plugin, failed(ssoExpiryStderr))
+	rc, ok := rep.RemediationCommand([]string{"PATH=/bin", "AWS_CONFIG_FILE=/home/u/.aws/config", "HOME=/home/u"})
+	if !ok {
+		t.Fatal("RemediationCommand declined a substantiated remediation")
+	}
+	if !slices.Contains(rc.Env, "AWS_CONFIG_FILE=/work/aws-config") {
+		t.Errorf("Env = %q, want the stanza's override applied", rc.Env)
+	}
+	// Overlaid, not appended: the base value must be gone rather than shadowed, and
+	// the rest of the base environment must survive (the login needs PATH and HOME).
+	if slices.Contains(rc.Env, "AWS_CONFIG_FILE=/home/u/.aws/config") {
+		t.Errorf("Env = %q, want the base value replaced, not duplicated", rc.Env)
+	}
+	for _, want := range []string{"PATH=/bin", "HOME=/home/u"} {
+		if !slices.Contains(rc.Env, want) {
+			t.Errorf("Env = %q, want %q kept", rc.Env, want)
+		}
+	}
+}
+
+// Nothing to run is the common case, and each way of reaching it must decline rather
+// than hand back a half-command an exec would try to start.
+func TestRemediationCommandDeclinesWithoutASubstantiatedFix(t *testing.T) {
+	unrecognised := reportFor(awsPlugin([]string{"--profile", "acme-prod"}, nil),
+		failed("An error occurred (ExpiredTokenException): The security token included in the request is expired"))
+	unsubstantiated := reportFor(awsPlugin(nil, nil), failed(ssoExpiryStderr))
+	suggestedButEmpty := ExecPluginReport{
+		Plugin:      awsPlugin(nil, nil),
+		Diagnosis:   failed(ssoExpiryStderr),
+		Remediation: Remediation{Cause: "somehow"},
+		Suggested:   true,
+	}
+	cases := map[string]ExecPluginReport{
+		"unrecognised failure":            unrecognised,
+		"recognised but no profile":       unsubstantiated,
+		"no plugin at all":                {},
+		"suggested with an empty command": suggestedButEmpty,
+	}
+	for name, rep := range cases {
+		t.Run(name, func(t *testing.T) {
+			if rc, ok := rep.RemediationCommand(nil); ok {
+				t.Errorf("RemediationCommand = %+v, true; want it declined", rc)
+			}
+		})
+	}
+}

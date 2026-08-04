@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-04b done, so a credential-plugin failure is now diagnosed on screen: one re-run per browse selection, written back only into the pane that asked (D214). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-05a done: an approved remediation runs through the existing suspend on a single-use approval, and its success retries the failed request rather than the connection (D215); nothing arms it until AUTH-05b. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
+_(none)_
 
 ## Blocked
 
@@ -394,14 +393,8 @@ telling the reader to go to another terminal. Bottom-up as usual (D52): the runn
 the offer calls it. **Nothing can run until 05b** — until then `runReauth` is reachable only
 from tests, which is the point: no code path arms it, so nothing executes unasked (D195 pt 4).
 
-- [ ] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
-      notes: The **existing** suspend — the `$EDITOR`/exec one (`tea.Exec`, `internal/tui/edit.go`,
-      D125) — because `aws sso login` opens a browser and prints a verification code; do not invent
-      a second suspend. The remediation runs verbatim (never shelled) in the *plugin's* environment,
-      because a stanza that redirects `AWS_CONFIG_FILE` must log in against the same config it
-      authenticates from. On return: exit 0 → retry the failed request (re-start that resource's
-      watch, not the launch); non-zero → the toast names what it printed.
+- [x] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
+      — done 2026-08-04 (D215)
 - [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
       status: todo | owner: — | added: 2026-08-01
       notes: One confirm prompt per occurrence naming the exact command (D195 pt 4), opened when a

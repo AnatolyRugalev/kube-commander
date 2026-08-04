@@ -253,6 +253,13 @@ nothing useful; attach is the way.)
   - `Cmd.Env` is the process environment **plus** the stanza's `env:`; the stanza's own
     `args`/`env` are the only place a remediation's detail (`--profile`, `AWS_PROFILE`) may
     be substantiated from (D195 pt 5).
+  - **A failed plugin is not negatively cached** (v0.31 `exec.go`: `getCreds` →
+    `refreshCredsLocked`, which assigns `a.cachedCreds` only *after* a successful run). So
+    the next request through the same client runs the plugin again and picks up whatever a
+    re-authentication wrote in between — no client rebuild, no reconnect. That is what makes
+    "retry the failed request" a complete recovery after a remediation (AUTH-05a/D215), and
+    it is also why a cluster whose session expired emits a failure per watch retry rather
+    than one and then silence (the AUTH-04b latch).
 - **AWS CLI wordings for an expired/absent SSO session** (what `aws eks get-token` prints
   on stderr; matched by `awsSSOExpiryMarkers`, AUTH-03). All three name SSO, which is what
   keeps the match narrow:

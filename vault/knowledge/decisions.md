@@ -5853,3 +5853,41 @@ and what it is allowed to overwrite are all fixed here — not by whoever adds t
    log (D159) — never to a second toast. The reader asked to browse a resource; they already
    have the failure's own toast, and a diagnostic they did not request must not start
    reporting on itself.
+
+## D215 — The one subprocess kubecom composes runs through the existing suspend, on a single-use approval, and its success retries the *request* (2026-08-04, AUTH-05a)
+
+D213 pt 1 said the shell never runs a subprocess. AUTH-05 is the exception the AUTH line was
+always going to need — a remediation has to actually run — so the exception is fenced here
+rather than by whoever wires the next one. This is the first and only place kubecom executes a
+command it **composed** (the diagnostic re-run only ever re-invokes the kubeconfig's own
+command, D195 pt 3), and every clause below exists to keep that from widening.
+
+1. **Composed in the kube layer, run by the shell.** `ExecPluginReport.RemediationCommand(env)`
+   resolves argv + environment; `internal/tui/reauth.go` only runs what it is handed. A shell
+   that assembled its own argv could run something the confirm prompt did not name, which is
+   the whole of D195 pt 4's protection. The argv goes to `os/exec` **verbatim** — never a
+   shell, never expansion.
+2. **The existing suspend, and no timeout.** It runs through `tea.Exec` on the released
+   terminal's own streams, exactly as `$EDITOR` does (D125); no second suspend mechanism is
+   invented and no background execution is permitted, because every catalogue entry is
+   interactive (`aws sso login` opens a browser and prints a verification code). It is
+   deliberately unbounded in time: the reader is watching it, and a browser round-trip is
+   legitimately slow. This is the reason a remediation may never be triggered by anything but
+   a person — a suspend nobody asked for blanks the terminal.
+3. **The remediation runs in the *plugin's* environment**, i.e. the process environment with
+   the failing stanza's `env:` overlaid (`ExecPlugin.environ`, what client-go itself does).
+   A stanza that redirects `AWS_CONFIG_FILE`/`AWS_SHARED_CREDENTIALS_FILE` authenticates
+   against that file, so a login run without the override writes a session the plugin never
+   reads — a "successful" re-authentication that fixes nothing.
+4. **An approval is single-use.** The run consumes the armed stash, so success, failure and an
+   abandoned login all leave nothing armed: a second run needs a second offer, which needs a
+   second diagnosis. Nothing may re-fire a remediation off a retry, a timer, or a repeated
+   failure (D195 pt 4: never retried automatically). The stash is also cluster-scoped state —
+   `resetCluster` drops it, since it names the departing context's credentials.
+5. **Success retries the failed *request*, never the connection or the launch.** The failed
+   resource's watch is restarted, which re-issues exactly the request that could not
+   authenticate; client-go caches nothing for a plugin that failed, so the retry re-runs the
+   plugin and picks up the new session (`vault/knowledge/stack.md`). Restarting is also what
+   re-arms the AUTH-04b diagnosis latch, so a login that did not actually fix the credentials
+   produces a fresh diagnosis rather than silence. A failure retries nothing at all: it would
+   fail the same way, and the pane already says what is wrong.
