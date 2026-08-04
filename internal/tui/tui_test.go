@@ -868,18 +868,40 @@ func (f *fakeLister) Namespaces(context.Context) ([]string, error) {
 // ctrlN is the ns.switch default key.
 var ctrlN = tea.Key{Code: 'n', Mod: tea.ModCtrl}
 
-// TestNamespaceSwitchOpensAndSeeds proves ctrl+n (ns.switch) opens the picker and
-// issues an async list whose result seeds it.
-func TestNamespaceSwitchOpensAndSeeds(t *testing.T) {
+// openNamespaceStage presses ctrl+n through the real key path (D11 — the binding is
+// registry-resolved, never matched raw) and delivers the namespace list the stage
+// asks for, returning the shell with the palette on its seeded `:namespace ` stage.
+// Since PAL-05c-1 that is the only namespace-switching surface there is, so every
+// test that used to open the standalone picker reaches it this way — the way a reader
+// does, rather than by calling an opener.
+func openNamespaceStage(t *testing.T, m Model) Model {
+	t.Helper()
+	m, cmd := press(t, m, ctrlN)
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionNamespace {
+		t.Fatalf("ctrl+n should open the palette on its namespace stage, stage = %q", m.palArg)
+	}
+	next, _ := m.Update(pickerMsg(t, cmd))
+	return next.(Model)
+}
+
+// TestNamespaceKeyOpensThePaletteNamespaceStage is PAL-05c-1's headline assertion:
+// ctrl+n no longer opens a modal of its own, it opens the one palette with the
+// namespace verb already committed. Unlike `T`/`R` the values are not in hand, so the
+// stage opens empty and titled as loading (PAL-03b) and the async list seeds it — the
+// difference is invisible in the line, which is the point.
+func TestNamespaceKeyOpensThePaletteNamespaceStage(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
 
 	m, cmd := press(t, m, ctrlN)
-	if !m.nsPicker.Active() {
-		t.Fatal("ns.switch should open the namespace picker")
+	if !m.cmdPicker.Active() {
+		t.Fatal("ns.switch should open the command palette")
+	}
+	if m.palArg != keymap.ActionNamespace {
+		t.Fatalf("ctrl+n should commit the namespace verb, stage = %q", m.palArg)
 	}
 	if cmd == nil {
-		t.Fatal("opening the picker should issue a namespace list command")
+		t.Fatal("opening the stage should issue a namespace list command")
 	}
 	lm, ok := pickerMsg(t, cmd).(namespacesLoadedMsg)
 	if !ok {
@@ -888,21 +910,42 @@ func TestNamespaceSwitchOpensAndSeeds(t *testing.T) {
 	next, _ := m.Update(lm)
 	m = next.(Model)
 	// 2 concrete namespaces + the pinned all-namespaces sentinel at the top.
-	if got := m.nsPicker.Len(); got != 3 {
-		t.Fatalf("picker seeded with %d entries, want 3 (2 namespaces + all-namespaces sentinel)", got)
+	if got := m.cmdPicker.Len(); got != 3 {
+		t.Fatalf("stage seeded with %d entries, want 3 (2 namespaces + all-namespaces sentinel)", got)
 	}
-	if v, _ := m.nsPicker.Selected(); v != namespaceAllItem {
+	if v, _ := m.cmdPicker.Selected(); v != namespaceAllItem {
 		t.Fatalf("sentinel should be pinned at the top, got %q", v)
+	}
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, palettePrompt+"namespace ") {
+		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
+	}
+
+	// The key is sugar, not a second surface: typing the line by hand must land on the
+	// very same stage (D207) — same verb committed, same prompt, same rows.
+	typed := sizedWith(t, WithNamespaceLister(&fakeLister{ns: []string{"default", "kube-system"}}))
+	typed, _ = press(t, typed, colon)
+	typed = typeInto(t, typed, "namespace")
+	typed, spaceCmd := press(t, typed, tea.Key{Code: ' ', Text: " "})
+	next, _ = typed.Update(pickerMsg(t, spaceCmd))
+	typed = next.(Model)
+	if got, want := stripANSI(typed.View().Content), view; got != want {
+		t.Errorf("ctrl+n and `:namespace ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 // TestNamespaceSwitchInertWithoutLister proves a model with no lister is
-// namespace-switch-inert: ctrl+n opens nothing and issues no command.
+// namespace-switch-inert: ctrl+n opens nothing and issues no command. The stage
+// decides that before it shows anything (D197), so the key does not open an empty
+// palette that would imply the verb was available.
 func TestNamespaceSwitchInertWithoutLister(t *testing.T) {
 	m := sized(t) // no WithNamespaceLister
 	m, cmd := press(t, m, ctrlN)
-	if m.nsPicker.Active() {
-		t.Fatal("ns.switch without a lister should not open the picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("ns.switch without a lister should not open the palette")
+	}
+	if m.palArg != "" {
+		t.Fatalf("an inert verb should not commit a stage, stage = %q", m.palArg)
 	}
 	if cmd != nil {
 		t.Fatal("ns.switch without a lister should issue no command")
@@ -910,21 +953,43 @@ func TestNamespaceSwitchInertWithoutLister(t *testing.T) {
 }
 
 // TestNamespaceListErrorClosesPicker proves a failed namespace list surfaces an
-// error and closes the picker (degrade, don't crash — principle 3).
+// error and closes the palette (degrade, don't crash — principle 3).
 func TestNamespaceListErrorClosesPicker(t *testing.T) {
 	fl := &fakeLister{err: context.DeadlineExceeded}
 	m := sizedWith(t, WithNamespaceLister(fl))
 	m, cmd := press(t, m, ctrlN)
 	next, errCmd := m.Update(pickerMsg(t, cmd)) // deliver namespacesLoadedMsg{err:…}
 	m = next.(Model)
-	if m.nsPicker.Active() {
-		t.Fatal("a failed list should close the picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("a failed list should close the palette")
 	}
 	if errCmd == nil {
 		t.Fatal("a failed list should surface an error")
 	}
 	if _, ok := errCmd().(ErrorMsg); !ok {
 		t.Fatalf("expected ErrorMsg, got %T", errCmd())
+	}
+}
+
+// TestNamespaceListLandingAfterRewindIsDropped proves the guard the collapsed `dest`
+// left behind: with one destination, *which* surface asked stopped being a question,
+// but *whether that stage is still up* did not. A list that lands after the reader
+// backspaced the line to the verbs belongs to a stage that no longer exists, so it
+// must not overwrite the verb list with namespaces.
+func TestNamespaceListLandingAfterRewindIsDropped(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+	m, cmd := press(t, m, ctrlN)
+	// Backspace on the empty argument rewinds to the verb list (D207 pt 2).
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.palArg != "" {
+		t.Fatalf("backspace should rewind to the verbs, stage = %q", m.palArg)
+	}
+	verbs := m.cmdPicker.Len()
+	next, _ := m.Update(pickerMsg(t, cmd)) // the list lands late
+	m = next.(Model)
+	if got := m.cmdPicker.Len(); got != verbs {
+		t.Fatalf("a late list seeded the rewound verb list: %d rows, want %d", got, verbs)
 	}
 }
 
@@ -943,20 +1008,18 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 		t.Fatalf("initial watch namespace = %q, want all (\"\")", fw.ns[0])
 	}
 
-	// Open + seed the picker.
-	m, cmd := press(t, m, ctrlN)
-	next, _ = m.Update(pickerMsg(t, cmd))
-	m = next.(Model)
+	// Open + seed the stage.
+	m = openNamespaceStage(t, m)
 
-	// The filter is open the moment the picker is (PAL-01) — no `/` first: typing
+	// The filter is open the moment the stage is (PAL-01) — no `/` first: typing
 	// narrows straight away.
-	if !m.nsPicker.Filtering() {
-		t.Fatal("opening the picker should open its filter")
+	if !m.cmdPicker.Filtering() {
+		t.Fatal("opening the stage should open its filter")
 	}
 	for _, r := range "mon" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
 	}
-	if got := m.nsPicker.Len(); got != 1 {
+	if got := m.cmdPicker.Len(); got != 1 {
 		t.Fatalf("filter to 'mon' left %d items, want 1", got)
 	}
 
@@ -972,8 +1035,8 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 	next, _ = m.Update(sel)
 	m = next.(Model)
 
-	if m.nsPicker.Active() {
-		t.Fatal("selecting a namespace should close the picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("selecting a namespace should close the palette")
 	}
 	if m.namespace != "monitoring" {
 		t.Fatalf("m.namespace = %q, want monitoring", m.namespace)
@@ -983,24 +1046,31 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 	}
 }
 
-// TestNamespacePickerCancels proves nav.back (esc) dismisses the picker without
-// changing the namespace.
+// TestNamespacePickerCancels proves nav.back (esc) leaves the stage without changing
+// the namespace. Since PAL-05c-1 that takes two esc presses, exactly as it does for a
+// stage reached by typing (D207 pt 2): the first rewinds the line to the verb list,
+// the second closes the palette.
 func TestNamespacePickerCancels(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
-	m, cmd := press(t, m, ctrlN)
-	next, _ := m.Update(cmd())
-	m = next.(Model)
+	m = openNamespaceStage(t, m)
 
 	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
-	// esc → nav.back → picker emits CancelledMsg; delivering it hides the picker.
+	// esc → nav.back → the picker emits CancelledMsg; delivering it rewinds the line.
 	if cancelCmd == nil {
 		t.Fatal("back should emit a cancel command")
 	}
+	next, _ := m.Update(cancelCmd())
+	m = next.(Model)
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("the first esc should rewind to the verbs, stage = %q", m.palArg)
+	}
+
+	m, cancelCmd = press(t, m, tea.Key{Code: tea.KeyEsc})
 	next, _ = m.Update(cancelCmd())
 	m = next.(Model)
-	if m.nsPicker.Active() {
-		t.Fatal("nav.back should close the picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("the second esc should close the palette")
 	}
 	if m.namespace != "" {
 		t.Fatalf("cancelling should not change the namespace, got %q", m.namespace)
@@ -1202,9 +1272,12 @@ func TestResourceStageCancelRewindsThenCloses(t *testing.T) {
 }
 
 // TestMenuSeamOpensNamespacePicker proves the namespace-seam row in the left menu
-// opens the namespace picker on drill-in — the same effect as ctrl+n — driven
-// through the real update loop: walk the menu cursor down to the seam, press enter,
-// and the emitted menu.NamespaceRequestedMsg opens and seeds the picker.
+// opens the palette's `:namespace ` stage on drill-in — the same effect as ctrl+n —
+// driven through the real update loop: walk the menu cursor down to the seam, press
+// enter, and the emitted menu.NamespaceRequestedMsg opens and seeds the stage.
+//
+// This is PAL-05c-1's second door, and the reason it has its own assertion: a leg that
+// converted only the key would leave the retired picker alive behind this menu row.
 func TestMenuSeamOpensNamespacePicker(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
@@ -1232,11 +1305,11 @@ func TestMenuSeamOpensNamespacePicker(t *testing.T) {
 	}
 	next, openCmd := m.Update(menu.NamespaceRequestedMsg{})
 	m = next.(Model)
-	if !m.nsPicker.Active() {
-		t.Fatal("the seam should open the namespace picker")
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionNamespace {
+		t.Fatalf("the seam should open the palette's namespace stage, stage = %q", m.palArg)
 	}
 	if openCmd == nil {
-		t.Fatal("opening the picker should issue a namespace list command")
+		t.Fatal("opening the stage should issue a namespace list command")
 	}
 	if _, ok := pickerMsg(t, openCmd).(namespacesLoadedMsg); !ok {
 		t.Fatalf("list command produced %T, want namespacesLoadedMsg", pickerMsg(t, openCmd))
@@ -1251,7 +1324,8 @@ func TestNamespaceSelectionUpdatesMenuSeam(t *testing.T) {
 	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}))
 	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	m := sz.(Model)
-	next, _ := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m = openNamespaceStage(t, m)
+	next, _ := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	m = next.(Model)
 	if got := menuSeamNamespace(t, m); got != "kube-system" {
 		t.Fatalf("menu seam namespace = %q, want kube-system", got)
@@ -1266,13 +1340,15 @@ func TestNamespaceAllSentinelResetsScope(t *testing.T) {
 	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	m := sz.(Model)
 	// Scope into a concrete namespace first.
-	next, _ := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m = openNamespaceStage(t, m)
+	next, _ := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	m = next.(Model)
 	if m.namespace != "kube-system" {
 		t.Fatalf("precondition: scope = %q, want kube-system", m.namespace)
 	}
 	// Selecting the sentinel returns to the unscoped view.
-	next, _ = m.Update(picker.SelectedMsg{Value: namespaceAllItem})
+	m = openNamespaceStage(t, m)
+	next, _ = m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: namespaceAllItem})
 	m = next.(Model)
 	if m.namespace != "" {
 		t.Fatalf("all-namespaces sentinel = %q scope, want empty (unscoped)", m.namespace)
@@ -1308,8 +1384,8 @@ func namespacePersisterModel(fp *fakePersister) Model {
 // persister seam (M2-11b-2), off the update loop — so the next launch restores it.
 func TestNamespaceSelectionPersists(t *testing.T) {
 	fp := &fakePersister{}
-	m := namespacePersisterModel(fp)
-	_, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m := openNamespaceStage(t, namespacePersisterModel(fp))
+	_, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	if cmd == nil {
 		t.Fatal("selecting a namespace should issue a persist command")
 	}
@@ -1323,8 +1399,8 @@ func TestNamespaceSelectionPersists(t *testing.T) {
 // persists the empty (unscoped) scope, not the literal sentinel label.
 func TestNamespaceSentinelPersistsUnscoped(t *testing.T) {
 	fp := &fakePersister{}
-	m := namespacePersisterModel(fp)
-	_, cmd := m.Update(picker.SelectedMsg{Value: namespaceAllItem})
+	m := openNamespaceStage(t, namespacePersisterModel(fp))
+	_, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: namespaceAllItem})
 	if cmd == nil {
 		t.Fatal("selecting the sentinel should issue a persist command")
 	}
@@ -1339,8 +1415,8 @@ func TestNamespaceSentinelPersistsUnscoped(t *testing.T) {
 func TestNamespacePersistInertWithoutPersister(t *testing.T) {
 	base := New(WithNamespaceLister(&fakeLister{ns: []string{"kube-system"}}))
 	sz, _ := base.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
-	m := sz.(Model)
-	next, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m := openNamespaceStage(t, sz.(Model))
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	if cmd != nil {
 		t.Fatal("no persister should issue no persist command")
 	}
@@ -1354,8 +1430,8 @@ func TestNamespacePersistInertWithoutPersister(t *testing.T) {
 // still applies for the session.
 func TestNamespacePersistErrorSurfacesToast(t *testing.T) {
 	fp := &fakePersister{err: context.DeadlineExceeded}
-	m := namespacePersisterModel(fp)
-	next, cmd := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m := openNamespaceStage(t, namespacePersisterModel(fp))
+	next, cmd := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	if cmd == nil {
 		t.Fatal("selecting a namespace should issue a persist command")
 	}
@@ -1390,9 +1466,7 @@ func menuSeamNamespace(t *testing.T, m Model) string {
 func TestNamespacePickerCapturesInput(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
-	m, cmd := press(t, m, ctrlN)
-	next, _ := m.Update(pickerMsg(t, cmd))
-	m = next.(Model)
+	m = openNamespaceStage(t, m)
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("menu should start at cursor 0, got %d", m.menu.Cursor())
 	}
@@ -1403,7 +1477,7 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture nav.down; menu moved to %d", m.menu.Cursor())
 	}
-	if v, _ := m.nsPicker.Selected(); v != "default" {
+	if v, _ := m.cmdPicker.Selected(); v != "default" {
 		t.Fatalf("nav.down should move the picker cursor to default, got %q", v)
 	}
 	// A vim letter now types into the always-open query instead of navigating: the
@@ -1412,7 +1486,7 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture a letter too; menu moved to %d", m.menu.Cursor())
 	}
-	if v, _ := m.nsPicker.Selected(); v != "kube-system" {
+	if v, _ := m.cmdPicker.Selected(); v != "kube-system" {
 		t.Fatalf("typing 'k' should filter to kube-system, got %q", v)
 	}
 }

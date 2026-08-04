@@ -352,8 +352,8 @@ func TestLogsQuitClosesViewNotApp(t *testing.T) {
 func TestLogsViewSwallowsBrowseActions(t *testing.T) {
 	m := openLogsWithLines(t, "hello")
 	m, _ = press(t, m, tea.Key{Code: 'n', Mod: tea.ModCtrl})
-	if m.nsPicker.Active() {
-		t.Fatal("the logs view should swallow ns.switch, not open the namespace picker")
+	if m.cmdPicker.Active() {
+		t.Fatal("the logs view should swallow ns.switch, not open the namespace stage")
 	}
 	if !m.logsView.Active() {
 		t.Fatal("an unhandled action should not close the logs view")

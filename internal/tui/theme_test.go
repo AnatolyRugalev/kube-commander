@@ -107,8 +107,8 @@ var themeSurfaces = []struct {
 	}},
 	{"picker overlay", func(t *testing.T, opts ...Option) Model {
 		m := sizedWith(t, opts...)
-		m.nsPicker.SetItems([]string{"default", "kube-system", "web"})
-		m.nsPicker.Show()
+		m.actPicker.SetItems([]string{"Describe", "View YAML", "Logs"})
+		m.actPicker.Show()
 		return m
 	}},
 	{"viewer overlay", func(t *testing.T, opts ...Option) Model {
@@ -215,10 +215,10 @@ func TestApplyStylesChangesOnlyColors(t *testing.T) {
 // their filter, their sort, their place in a list or their log buffer.
 func TestApplyStylesKeepsComponentState(t *testing.T) {
 	m := browsingModel(t, &fakeWatcher{}) // rows + a filter + a sort
-	m.nsPicker.SetItems([]string{"default", "kube-system", "web"})
-	m.nsPicker.Show()
-	m.nsPicker, _ = m.nsPicker.Update(keymap.ActionDown) // move off the first row
-	cursor, _ := m.nsPicker.Selected()
+	m.actPicker.SetItems([]string{"Describe", "View YAML", "Logs"})
+	m.actPicker.Show()
+	m.actPicker, _ = m.actPicker.Update(keymap.ActionDown) // move off the first row
+	cursor, _ := m.actPicker.Selected()
 	m.logsView.Show()
 	m.logsView.Append("", "GET /healthz 200")
 	m.logsView.Append("", "POST /api/v1 500")
@@ -233,10 +233,10 @@ func TestApplyStylesKeepsComponentState(t *testing.T) {
 		t.Errorf("the table's sort did not survive the restyle: col=%d desc=%v, want col=%d desc=%v",
 			col, desc, wantCol, wantDesc)
 	}
-	if got, _ := m.nsPicker.Selected(); got != cursor {
+	if got, _ := m.actPicker.Selected(); got != cursor {
 		t.Errorf("the picker's cursor moved on restyle: %q, want %q", got, cursor)
 	}
-	if !m.nsPicker.Active() || !m.logsView.Active() {
+	if !m.actPicker.Active() || !m.logsView.Active() {
 		t.Error("a restyle must not dismiss an open surface")
 	}
 	if m.logsView.Empty() || !m.logsView.Following() {

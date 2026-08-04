@@ -576,7 +576,6 @@ type Model struct {
 	// message that does not move input ownership re-renders nothing.
 	hintCtx keymap.HelpContext
 
-	nsPicker  picker.Model
 	actPicker picker.Model
 	ctrPicker picker.Model
 	// cmdPicker is the command palette (PAL-02): a picker over the app's verbs rather
@@ -738,8 +737,8 @@ type Model struct {
 	// nsPersister records a picked namespace to the per-context state file so the next
 	// launch restores it (nil → persistence-inert, M2-11b-2). It is bound to one
 	// context's state path, not to the cluster client, so it is not part of the
-	// Cluster bundle — M4-05 rebinds it on a context switch. The picker it feeds
-	// (nsPicker, with the other components) is seeded by the bundle's nsLister.
+	// Cluster bundle — M4-05 rebinds it on a context switch. The surface it feeds
+	// (the palette's `:namespace ` stage) is seeded by the bundle's nsLister.
 	nsPersister NamespacePersister
 
 	// pinner records a kind pinned with menu.pin to the per-context state file so
@@ -1043,7 +1042,6 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.table = table.New(s)
 	m.status = statusbar.New(s)
 	m.hintbar = hintbar.New(s)
-	m.nsPicker = picker.New(s, namespacePickerKind)
 	m.actPicker = picker.New(s, actionPickerKind)
 	m.ctrPicker = picker.New(s, containerPickerKind)
 	m.cmdPicker = picker.New(s, commandPickerKind)
@@ -1219,9 +1217,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.selectResource(msg.Resource)
 
 	case menu.NamespaceRequestedMsg:
-		// Drilling into the menu's namespace-seam row opens the namespace picker —
-		// the same effect as the ns.switch (ctrl+n) shortcut.
-		return m.openNamespacePicker()
+		// Drilling into the menu's namespace-seam row opens the palette's
+		// `:namespace ` stage — the same effect as the ns.switch (ctrl+n) shortcut,
+		// which is the whole point of routing it through the same opener (PAL-05c-1).
+		// This is the second door D207 pt 1 does not cover on its own: a key names its
+		// verb, but so does this row, and leaving it on a picker of its own would keep
+		// the retired surface alive behind a menu row.
+		return m.openPaletteArg(keymap.ActionNamespace)
 
 	case ErrorMsg:
 		// A classified error from any async seam (watch start, namespace list, a
@@ -1272,9 +1274,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handlePortSelected(msg)
 		case contextPickerKind:
 			return m.handleContextSelected(msg)
-		default:
-			return m.handleNamespaceSelected(msg)
 		}
+		// No default arm since PAL-05c-1: it used to mean "the namespace picker",
+		// which was the one surface whose Kind nothing branched on. With that picker
+		// retired every remaining picker is named above, so an unrecognised Kind is a
+		// message from a surface that no longer exists (a list that landed after a
+		// context switch) and is dropped rather than applied to whichever picker the
+		// default happened to name.
+		return m, nil
 
 	case picker.CancelledMsg:
 		switch msg.Kind {
@@ -1298,9 +1305,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case contextPickerKind:
 			m.ctxPicker.Hide()
 			m.ctxByLabel = nil
-		default:
-			m.nsPicker.Hide()
 		}
+		// No default arm — see picker.SelectedMsg above.
 		return m, nil
 
 	case rowActionMsg:
@@ -1737,7 +1743,6 @@ func (m *Model) resetCluster() {
 	m.logsView.Reset()
 	m.viewer.Hide()
 	m.modal.Hide() // a pending confirm targets an object on the cluster being left.
-	m.nsPicker.Hide()
 	m.actPicker.Hide()
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
@@ -1808,65 +1813,46 @@ func (m *Model) resetCluster() {
 	m.syncHints() // focus is back on the menu → menu-context hints.
 }
 
-// namespacePickerKind is the Kind stamped on the standalone namespace picker
-// (ctrl+n). It is also a namespacesLoadedMsg's dest, naming that picker as the
-// surface a pending list belongs to.
-const namespacePickerKind = "namespace"
-
-// namespacesLoadedMsg carries the outcome of the async namespace list issued when a
-// surface that needs namespaces opens (M2-08c). Listing happens off the update loop
-// so opening that surface never blocks on the network.
+// namespacesLoadedMsg carries the outcome of the async namespace list issued when the
+// palette's `:namespace ` stage opens (M2-08c, on the palette since PAL-05c-1).
+// Listing happens off the update loop so opening that stage never blocks on the
+// network.
 //
-// dest names **which** surface asked (PAL-03b): the standalone picker
-// (namespacePickerKind) or the command palette's argument stage (commandPickerKind).
-// Two surfaces now issue this load, and a result carries no other way to tell them
-// apart — routing on "whichever one happens to be open" would let a list ordered by
-// one surface land in the other when the first was dismissed while it was in flight.
+// It carried a `dest` from PAL-03b until PAL-05c-1: two surfaces issued this load (the
+// standalone ctrl+n picker and the stage) and a result had no other way to say which
+// one asked. Retiring the picker leaves one destination, so the field went with it —
+// *which* surface is no longer a question, though *whether* it is still open is, and
+// that is what awaitingPaletteArg answers below.
 type namespacesLoadedMsg struct {
 	namespaces []string
 	err        error
-	dest       string
 }
 
-// loadNamespaces is the off-loop list itself, addressed to the surface that asked.
-// Both callers — the standalone picker and the palette's `:namespace ` stage — go
-// through it, so neither can drift into listing namespaces its own way.
-func (m Model) loadNamespaces(dest string) tea.Cmd {
+// loadNamespaces is the off-loop list itself. One caller since PAL-05c-1 — the
+// palette's `:namespace ` stage — reached from `ctrl+n`, the menu's namespace-seam row
+// and the typed line alike, so none of the three can drift into listing namespaces its
+// own way.
+func (m Model) loadNamespaces() tea.Cmd {
 	lister := m.nsLister
 	if lister == nil {
 		return nil
 	}
 	return func() tea.Msg {
 		ns, err := lister.Namespaces(context.Background())
-		return namespacesLoadedMsg{namespaces: ns, err: err, dest: dest}
+		return namespacesLoadedMsg{namespaces: ns, err: err}
 	}
 }
 
-// openNamespacePicker shows the namespace picker and kicks off the async list that
-// seeds it. With no lister wired the model is namespace-switch-inert and this is a
-// no-op (the picker never opens). The picker is shown immediately (empty, then
-// populated when the list lands) so the gesture feels instant; a stale item set
-// from a previous open is cleared first.
-func (m Model) openNamespacePicker() (tea.Model, tea.Cmd) {
-	if m.nsLister == nil {
-		return m, nil
-	}
-	m.nsPicker.SetItems(nil)
-	show := m.nsPicker.Show()
-	return m, tea.Batch(show, m.loadNamespaces(namespacePickerKind))
-}
-
-// namespaceAllItem is the sentinel entry pinned at the top of the namespace picker.
+// namespaceAllItem is the sentinel entry pinned at the top of the namespace list.
 // Selecting it re-scopes the watch to every namespace (empty scope) — the app
-// launches unscoped, so without this entry the picker (which lists only concrete
+// launches unscoped, so without this entry the list (which holds only concrete
 // namespaces) is a one-way door: once a namespace is picked there is no way back to
 // the all-namespaces view short of restarting (dogfood-09). A concrete namespace can
 // never collide with it: DNS-label names cannot contain a space.
 const namespaceAllItem = "all namespaces"
 
-// namespaceItems renders the picker rows for a listed namespace set: the
-// all-namespaces sentinel pinned at the top, then the namespaces as listed. Shared
-// by both surfaces so the sentinel cannot go missing from one of them.
+// namespaceItems renders the rows for a listed namespace set: the all-namespaces
+// sentinel pinned at the top, then the namespaces as listed.
 func namespaceItems(namespaces []string) []string {
 	items := make([]string, 0, len(namespaces)+1)
 	items = append(items, namespaceAllItem)
@@ -1874,44 +1860,23 @@ func namespaceItems(namespaces []string) []string {
 	return items
 }
 
-// handleNamespacesLoaded seeds whichever surface asked for the list — the standalone
-// picker or the palette's `:namespace ` stage (PAL-03b) — with the listed namespaces.
-// A list failure surfaces a classified error and dismisses that surface (principle 3
-// — the switcher degrades, the app does not crash). A result that arrives after the
-// surface moved on (dismissed, or the palette line rewound to its verbs) is dropped:
-// it belongs to a stage that no longer exists.
+// handleNamespacesLoaded seeds the palette's `:namespace ` stage with the listed
+// namespaces. A list failure surfaces a classified error and dismisses the palette
+// (principle 3 — the switcher degrades, the app does not crash). A result that
+// arrives after the stage moved on (the palette closed, or the line rewound to its
+// verbs) is dropped: it belongs to a stage that no longer exists.
 func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.Cmd) {
-	waiting := m.nsPicker.Active()
-	if msg.dest == commandPickerKind {
-		waiting = m.awaitingPaletteArg(keymap.ActionNamespace)
-	}
+	waiting := m.awaitingPaletteArg(keymap.ActionNamespace)
 	if msg.err != nil {
 		if waiting {
-			if msg.dest == commandPickerKind {
-				m.closePalette()
-			} else {
-				m.nsPicker.Hide()
-			}
+			m.closePalette()
 		}
 		return m, func() tea.Msg { return NewErrorMsg("list namespaces", msg.err) }
 	}
 	if !waiting {
 		return m, nil // dismissed before the list arrived; ignore.
 	}
-	items := namespaceItems(msg.namespaces)
-	if msg.dest == commandPickerKind {
-		return m.fillPaletteArg(keymap.ActionNamespace, items), nil
-	}
-	m.nsPicker.SetItems(items)
-	return m, nil
-}
-
-// handleNamespaceSelected applies a namespace picked from the standalone picker: it
-// closes the picker and hands the row to applyNamespaceValue, the same apply the
-// palette's `:namespace ` stage ends in (D198 pt 2).
-func (m Model) handleNamespaceSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd) {
-	m.nsPicker.Hide()
-	return m.applyNamespaceValue(msg.Value)
+	return m.fillPaletteArg(keymap.ActionNamespace, namespaceItems(msg.namespaces)), nil
 }
 
 // applyNamespaceValue applies a picked namespace row: it records the new scope on the
@@ -1936,8 +1901,8 @@ func (m Model) applyNamespaceValue(value string) (tea.Model, tea.Cmd) {
 // setNamespace applies a watch scope to the model and to the three surfaces that
 // show it ("" = all namespaces, which every one of them renders as nothing). It is
 // display state only: it starts no watch and persists nothing, so the two callers
-// pair it with what they each need — the namespace picker with a re-select and a
-// persist (handleNamespaceSelected), a context switch with neither, since the reset
+// pair it with what they each need — a picked namespace with a re-select and a
+// persist (applyNamespaceValue), a context switch with neither, since the reset
 // left no resource open and the scope it restores came out of the state file it
 // would be written back to (M4-05).
 //
@@ -1969,15 +1934,14 @@ func (m Model) persistNamespace(ns string) tea.Cmd {
 }
 
 // activePicker returns a pointer to whichever modal picker is currently open (the
-// namespace switcher or the resource command palette), or nil when none is. At most
+// command palette, the actions menu, the container/port pickers or the context
+// switcher), or nil when none is. At most
 // one is ever active — opening one does not open the other — so the root can route
 // input and composite the overlay through this single accessor rather than branching
 // on each picker. The pointer aliases into the value-receiver copy, so mutations
 // through it persist in the returned model exactly like a direct field assignment.
 func (m *Model) activePicker() *picker.Model {
 	switch {
-	case m.nsPicker.Active():
-		return &m.nsPicker
 	case m.actPicker.Active():
 		return &m.actPicker
 	case m.ctrPicker.Active():
@@ -3852,10 +3816,10 @@ func (m *Model) syncFilterStatus() {
 // (View then sets MouseModeCellMotion, as it sets AltScreen).
 
 // overlayActive reports whether a modal/overlay is capturing input (help overlay,
-// namespace picker, or the live filter field). Mouse events are inert while one is
+// any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.nsPicker.Active() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.actPicker.Active() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.ctxPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -4022,7 +3986,6 @@ func (m *Model) resize() {
 	// The picker and the help overlay both overlay the body area (above the status
 	// bar) and center themselves within it, so the status line stays visible below
 	// the modal.
-	m.nsPicker.SetSize(m.width, bodyH)
 	m.actPicker.SetSize(m.width, bodyH)
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
@@ -4170,17 +4133,17 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil // the overlay swallows navigation while it is open.
 	}
 	switch a {
-	case keymap.ActionNamespace:
-		return m.openNamespacePicker()
 	case keymap.ActionContext:
 		return m.openContextPicker()
-	case keymap.ActionTheme, keymap.ActionResources:
+	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace:
 		// The shortcut keys converted to pre-typed palette lines so far (D207): `T`
-		// opens the palette on `:theme ` (PAL-05a) and `R` on `:resource ` (PAL-05b),
-		// neither on a modal of its own. One arm rather than one per key, because the
-		// conversion is the *same* fact about every one of them — the key names the
-		// verb, enterPaletteArg produces the stage, and the values, the inertness and
-		// the rendered frame are the typed line's. PAL-05c adds `ctrl+n` and `C` here.
+		// opens the palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b) and
+		// `ctrl+n` on `:namespace ` (PAL-05c-1), none on a modal of its own. One arm
+		// rather than one per key, because the conversion is the *same* fact about
+		// every one of them — the key names the verb, enterPaletteArg produces the
+		// stage, and the values, the inertness and the rendered frame are the typed
+		// line's, whether the values were in hand or had to be fetched. PAL-05c-2
+		// adds `C` here.
 		return m.openPaletteArg(a)
 	case keymap.ActionPalette:
 		// `:` opens the palette (PAL-02). Reached from a key only: the palette skips
@@ -4389,8 +4352,6 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.modal.View(), m.width, m.bodyHeight())
 	case m.help.Visible():
 		body = overlayCenter(body, m.help.View(), m.width, m.bodyHeight())
-	case m.nsPicker.Active():
-		body = overlayCenter(body, m.nsPicker.View(), m.width, m.bodyHeight())
 	case m.actPicker.Active():
 		body = overlayCenter(body, m.actPicker.View(), m.width, m.bodyHeight())
 	case m.ctrPicker.Active():

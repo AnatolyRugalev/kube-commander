@@ -5614,3 +5614,29 @@ the same thing. The rule for each conversion, starting with `T`:
    at the stage (through the key, `press(t, m, T)`) instead of deleted. Only the
    assertions about the *picker as a surface* are rewritten. A conversion that deletes
    its tests has silently narrowed the guarantee, whatever the diff looks like.
+
+## D208 — A converted key's other doors convert with it; the picker `Kind` switch keeps no default arm (2026-08-04, PAL-05c-1)
+
+Two constraints D207 does not state, found by converting the first key that had a
+second entry point and the first verb whose values are fetched.
+
+1. **Every door onto a retired surface converts in the same leg.** D207 pt 1 is written
+   about keys, but a picker can be opened by something that is not a key — `ctrl+n`'s was
+   also opened by the menu's namespace-seam row (`menu.NamespaceRequestedMsg`). Converting
+   the key alone leaves the retired picker alive behind that row, which is D207 pt 3's
+   dormant second surface by another name. So: before retiring a picker, find every
+   opener, and route them all through `openPaletteArg`. The seam row keeps its own
+   message and its own meaning — what changes is only the surface it lands on.
+2. **The `picker.SelectedMsg`/`CancelledMsg` switches have no default arm.** Until
+   PAL-05c-1 `default:` meant "the namespace picker" — one surface routed by falling
+   through rather than by its Kind. Every remaining picker names its Kind, so an
+   unrecognised Kind is now **dropped**, not applied to whichever picker the default
+   happened to name. The consequence a future leg must respect: a new picker that does
+   not stamp and branch on its own Kind is silently inert, not misrouted. Do not
+   reintroduce a default arm to "handle" that — name the Kind.
+3. **A collapsed `dest` is not a dropped guard.** Retiring the second surface reduced
+   `namespacesLoadedMsg` to one destination, so the D199 `dest` field went with it. What
+   must not go with it is `awaitingPaletteArg`: *which* surface asked stopped being a
+   question, but *whether that stage is still up* did not — a list landing after the line
+   rewound to the verbs must not seed the verb list with namespaces. The same applies to
+   `contextsLoadedMsg` when PAL-05c-2 collapses it.

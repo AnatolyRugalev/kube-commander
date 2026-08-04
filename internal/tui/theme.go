@@ -45,7 +45,6 @@ func (m *Model) applyStyles(s styles.Styles) {
 
 	// Every picker is the same component in a different role, so they restyle
 	// together; missing one would leave a single overlay off-theme.
-	m.nsPicker.SetStyles(s)
 	m.actPicker.SetStyles(s)
 	m.ctrPicker.SetStyles(s)
 	// Including the command palette, which is the surface a theme is picked from since

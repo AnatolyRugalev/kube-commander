@@ -22,7 +22,7 @@ import (
 //   - **It resolves to an Action and dispatches it.** handleCommandSelected ends in
 //     handleAction — the same entry point a key press reaches — so a verb picked here
 //     and its key are the same code path by construction. A palette that called
-//     openNamespacePicker directly would work today and drift the first time a key's
+//     a verb's opener directly would work today and drift the first time a key's
 //     handler grows a precondition.
 //   - **A verb is inert here exactly as its key is.** The palette does not filter its
 //     list by what is currently possible: `:` with no cluster still lists "Switch
@@ -57,7 +57,8 @@ import (
 // an argument stops opening a modal of its own and opens *this* one with its verb
 // already committed (openPaletteArg). The key keeps working and keeps its meaning —
 // what changes is that there is one surface behind it instead of two (D207). It lands
-// one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b).
+// one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b),
+// `ctrl+n` → `:namespace ` (PAL-05c-1).
 //
 // PAL-05b is the slice that shows what the conversion is worth rather than merely what
 // it costs. `R`'s picker was the surface CRD-PIN-04 hardened (aliases, group
@@ -66,6 +67,14 @@ import (
 // picker deletes the *second* place those guarantees had to hold, not the guarantees.
 // What `R` gains in exchange is the rest of the line: backspace rewinds to the verb
 // list, so a kind you cannot find is one keystroke from every other verb.
+//
+// PAL-05c-1 is the first conversion of a verb whose values are **fetched**, and the
+// first with a second door: besides `ctrl+n`, the menu's namespace-seam row opens the
+// same surface, so it routes through openPaletteArg too — a converted key with an
+// unconverted second entry point would keep the retired picker alive behind a menu
+// row. Retiring nsPicker also collapses namespacesLoadedMsg's `dest` (D199): with one
+// destination left, *which* surface asked stopped being a question, and only "is that
+// stage still up?" (awaitingPaletteArg) remains.
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
@@ -329,10 +338,13 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		labels, m.themeByLabel = themeItems(styles.Themes(), m.styles.Theme.Name)
 		items = picker.Labels(labels)
 	case keymap.ActionNamespace:
+		// Namespace-switch-inert. Since PAL-05c-1 this one check is also what makes
+		// `ctrl+n` and the menu's namespace-seam row inert, rather than each of the
+		// three entry points deciding for itself.
 		if m.nsLister == nil {
-			return m, nil, false // namespace-switch-inert, exactly as ctrl+n is.
+			return m, nil, false
 		}
-		load, pending = m.loadNamespaces(commandPickerKind), true
+		load, pending = m.loadNamespaces(), true
 	case keymap.ActionContext:
 		if m.ctxLister == nil {
 			return m, nil, false // context-switch-inert, exactly as `C` is.

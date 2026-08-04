@@ -273,10 +273,9 @@ func commitVerb(t *testing.T, m Model, verb string) (Model, tea.Cmd) {
 
 // TestPaletteNamespaceArgumentLoadsThenSeeds is the PAL-03b headline: a verb whose
 // values are fetched enters the argument stage *immediately* — the reader never waits
-// for the network to see the line advance — on an empty list that says so, and the
-// list is addressed to the palette rather than to the standalone picker. Typing while
-// it is in flight is kept, so a fast typist's query narrows the values the moment they
-// land instead of being discarded.
+// for the network to see the line advance — on an empty list that says so. Typing
+// while it is in flight is kept, so a fast typist's query narrows the values the
+// moment they land instead of being discarded.
 func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
@@ -284,9 +283,6 @@ func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 	m, cmd := commitVerb(t, m, "namespace")
 	if m.palArg != keymap.ActionNamespace {
 		t.Fatalf("space should commit the namespace verb, stage = %q", m.palArg)
-	}
-	if m.nsPicker.Active() {
-		t.Fatal("the argument stage should be the palette itself, not the standalone picker")
 	}
 	if got := m.cmdPicker.Len(); got != 0 {
 		t.Fatalf("the stage should open empty while the list is in flight, got %d entries", got)
@@ -300,9 +296,6 @@ func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 	lm, ok := pickerMsg(t, cmd).(namespacesLoadedMsg)
 	if !ok {
 		t.Fatalf("the commit produced %T, want namespacesLoadedMsg", pickerMsg(t, cmd))
-	}
-	if lm.dest != commandPickerKind {
-		t.Fatalf("the load is addressed to %q, want %q — it must seed the surface that asked", lm.dest, commandPickerKind)
 	}
 
 	m = typeInto(t, m, "sys") // type ahead of the answer
@@ -324,9 +317,9 @@ func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 }
 
 // TestPaletteNamespaceArgumentAppliesTheScope closes the namespace line: the pick
-// re-scopes the app exactly as the standalone picker's does, because both end in
-// applyNamespaceValue (D198 pt 2) — including the all-namespaces sentinel, which must
-// be offered here too or the palette line would be a one-way door.
+// re-scopes the app exactly as ctrl+n's does, because since PAL-05c-1 they are the one
+// surface ending in applyNamespaceValue (D198 pt 2) — including the all-namespaces
+// sentinel, which must be offered here too or the palette line would be a one-way door.
 func TestPaletteNamespaceArgumentAppliesTheScope(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	fp := &fakePersister{}
@@ -347,9 +340,6 @@ func TestPaletteNamespaceArgumentAppliesTheScope(t *testing.T) {
 	}
 	if got := m.namespace; got != "kube-system" {
 		t.Fatalf("namespace = %q, want kube-system", got)
-	}
-	if m.nsPicker.Active() {
-		t.Fatal("the namespace argument stage should never open the standalone picker")
 	}
 }
 
@@ -437,7 +427,7 @@ func TestPaletteFetchedVerbsStayInertWithoutTheirSeam(t *testing.T) {
 			if cmd != nil {
 				t.Fatalf("an inert verb should issue no command, got %v", pickerMsgs(cmd))
 			}
-			if m.nsPicker.Active() || m.ctxPicker.Active() {
+			if m.ctxPicker.Active() {
 				t.Fatal("an inert verb should open no standalone picker either")
 			}
 		})

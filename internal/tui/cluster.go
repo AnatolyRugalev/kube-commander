@@ -32,7 +32,7 @@ type Cluster struct {
 	watcher    ResourceWatcher
 	discoverer Discoverer
 
-	// nsLister seeds the namespace picker (nil → ns.switch inert). The namespace the
+	// nsLister seeds the palette's `:namespace ` stage (nil → ns.switch inert). The namespace the
 	// user picks is *state*, not a client, and stays on the Model — as does the
 	// persister that writes it, which is bound to the context's state file rather
 	// than to the cluster (M4-05).

@@ -35,7 +35,10 @@ func (f *fakeConnector) ConnectCluster(name string) (Cluster, error) {
 func newClusterFake() (Cluster, *fakeWatcher, *fakeDiscoverer) {
 	w := &fakeWatcher{}
 	d := &fakeDiscoverer{ch: make(chan kube.DiscoveryResult, 1)}
-	return Cluster{watcher: w, discoverer: d}, w, d
+	// The bundle carries a namespace lister because a switched-to cluster has one:
+	// since PAL-05c-1 it is what makes ctrl+n open the palette's `:namespace ` stage,
+	// so a test that picks a namespace after a switch drives the real surface.
+	return Cluster{watcher: w, discoverer: d, nsLister: &fakeLister{ns: []string{"kube-system"}}}, w, d
 }
 
 // TestSwitchContextConnectsOffTheUpdateLoop pins the ordering the whole slice turns
@@ -546,7 +549,8 @@ func TestSwitchRebindsPerContextState(t *testing.T) {
 
 	// And the persister is rebound: a namespace picked now goes to the new context's
 	// state file, never the departed one's.
-	_, persist := m.Update(picker.SelectedMsg{Value: "kube-system"})
+	m = openNamespaceStage(t, m)
+	_, persist := m.Update(picker.SelectedMsg{Kind: commandPickerKind, Value: "kube-system"})
 	if persist == nil {
 		t.Fatal("picking a namespace should still issue a persist command after a switch")
 	}
