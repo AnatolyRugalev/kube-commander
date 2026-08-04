@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-02 done; the plugin's stderr is recoverable by a bounded diagnostic re-run whose stdout is never captured (D211). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-03 done; an AWS SSO expiry in the plugin's stderr now yields `aws sso login --profile x`, composed only from the stanza (D212). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01 | claimed: 2026-08-04
+_(none)_
 
 ## Blocked
 
@@ -371,13 +370,8 @@ runs anything.
       — done 2026-08-01 (D195)
 - [x] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
       — done 2026-08-04 (D211)
-- [ ] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
-      status: todo | owner: — | added: 2026-08-01
-      notes: The only provider-specific slice. Over AUTH-02's stderr, match the AWS CLI's own
-      SSO-expiry wording **narrowly**; resolve the profile from the stanza's `--profile` arg
-      or `AWS_PROFILE` env, and when neither is present return no remediation rather than a
-      guessed one (D195 pt 5). Shape it as one entry in a small `plugin → remediation` table,
-      not a provider framework — `gcloud`/`az` are future entries, not a design goal now.
+- [x] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
+      — done 2026-08-04 (D212)
 - [ ] **AUTH-04** Show the plugin failure legibly, with the remediation printed
       status: todo | owner: — | added: 2026-08-01
       notes: The first slice with a runtime surface, and the smallest thing that delivers
@@ -389,6 +383,12 @@ runs anything.
       one obligation from AUTH-02/D211 pt 5: a diagnostic re-run that *succeeds*
       (`ExecPluginDiagnosis.Failed() == false`, the user re-authenticated in another terminal
       meanwhile) is a case this surface must be willing to say, not one it may assume away.
+      Both halves are now in the kube layer: `ExecPlugin.Diagnose` (AUTH-02) then
+      `SuggestedRemediation` (AUTH-03). It returns false in **two** cases this surface should
+      not conflate — not recognised (show the stderr and stop) and recognised but the stanza
+      names no profile (still show the stderr; do **not** substitute a profile from the
+      ambient env or `~/.aws/config`, D212 pt 3). Live-cluster only to see for real, so
+      expect to add a line to a dogfood human task rather than tick M-anything.
 - [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
       status: todo | owner: — | added: 2026-08-01
       notes: The last slice, and the only one that executes anything. One confirm prompt per

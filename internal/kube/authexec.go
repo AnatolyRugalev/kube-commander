@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -60,8 +61,15 @@ func (p *ExecPlugin) CommandLine() string {
 	if p == nil {
 		return ""
 	}
-	parts := make([]string, 0, len(p.Args)+1)
-	for _, tok := range append([]string{p.Command}, p.Args...) {
+	return renderCommandLine(p.Command, p.Args)
+}
+
+// renderCommandLine is the display rendering shared by ExecPlugin.CommandLine and
+// Remediation.CommandLine, so a suggested command is quoted exactly like the
+// failed one a user reads it next to.
+func renderCommandLine(command string, args []string) string {
+	parts := make([]string, 0, len(args)+1)
+	for _, tok := range append([]string{command}, args...) {
 		if strings.ContainsAny(tok, " \t") {
 			tok = "'" + tok + "'"
 		}
@@ -385,3 +393,189 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 }
 
 func (c *cappedBuffer) String() string { return c.buf.String() }
+
+// Remediation is a command the **user** could run to fix a diagnosed credential
+// plugin failure — not a command kubecom runs. It is composed entirely from the
+// kubeconfig's own `user.exec` stanza (D195 pt 5): when the stanza does not
+// substantiate every part of it, no remediation is produced at all rather than a
+// guessed one.
+//
+// Every entry in the catalogue today is an *interactive* re-authentication (it
+// opens a browser and prints a verification code), so a caller that eventually
+// runs one must do so through the existing suspend rather than in the background
+// (D195 pt 4, AUTH-05).
+type Remediation struct {
+	// Cause is a one-line, user-facing statement of what the plugin's stderr was
+	// recognised as. A complete sentence: it is printed as-is.
+	Cause string
+	// Command is the executable the user would run, spelled the way the stanza
+	// spells the plugin's own command (a bare name, resolved on their PATH).
+	Command string
+	// Args are its arguments, in order.
+	Args []string
+}
+
+// CommandLine renders the suggested invocation for display, quoted exactly like
+// ExecPlugin.CommandLine renders the failed one.
+func (r Remediation) CommandLine() string {
+	return renderCommandLine(r.Command, r.Args)
+}
+
+// pluginRemediation is one entry in the plugin → remediation catalogue. It stays
+// a table with a handful of entries and deliberately does **not** grow into a
+// provider framework until a second provider actually lands (D195 pt 5):
+// `gcloud`/`az` are future entries here, not an abstraction to design for now.
+type pluginRemediation struct {
+	// name identifies the entry in test failures; it is not user-facing.
+	name string
+	// recognises reports whether this entry recognises the plugin *and* what its
+	// diagnosis says. Both halves matter: the stderr wording alone is not enough
+	// (any binary could print it), and the command alone says nothing about why
+	// this run failed.
+	recognises func(p *ExecPlugin, d ExecPluginDiagnosis) bool
+	// build composes the remediation from the stanza, or reports false when the
+	// stanza does not substantiate one.
+	build func(p *ExecPlugin) (Remediation, bool)
+}
+
+// pluginRemediations is the catalogue, in match order. AWS SSO is its only entry.
+var pluginRemediations = []pluginRemediation{
+	{
+		name:       "aws-sso",
+		recognises: isAWSSSOExpiry,
+		build:      awsSSOLogin,
+	},
+}
+
+// SuggestedRemediation reports the command a user could run to fix the failure d
+// describes, or false when kubecom does not recognise the failure or cannot
+// substantiate a fix from the kubeconfig.
+//
+// It only *suggests*. Nothing here runs anything — the name says so because the
+// rule it protects is that kubecom never runs an auth command the user did not
+// just approve (D195 pt 4).
+//
+// A diagnosis that did not fail yields nothing: the credential may have been
+// renewed between the failed request and the diagnosis (D211 pt 5), and there is
+// nothing to remediate when the plugin now works.
+func (p *ExecPlugin) SuggestedRemediation(d ExecPluginDiagnosis) (Remediation, bool) {
+	if p == nil || !d.Failed() {
+		return Remediation{}, false
+	}
+	for _, entry := range pluginRemediations {
+		if !entry.recognises(p, d) {
+			continue
+		}
+		if r, ok := entry.build(p); ok {
+			return r, true
+		}
+		// Recognised but unsubstantiated: show the failure and stop (D195 pt 5).
+		// No later entry can claim a plugin this one recognised.
+		return Remediation{}, false
+	}
+	return Remediation{}, false
+}
+
+// awsSSOExpiryMarkers are the AWS CLI's own words for an SSO session that is
+// expired or absent, matched case-insensitively as substrings:
+//
+//	The SSO session associated with this profile has expired or is otherwise
+//	invalid. To refresh this SSO session run aws sso login with the corresponding
+//	profile.                                    (botocore UnauthorizedSSOTokenError)
+//	Error when retrieving token from sso: Token has expired and refresh failed
+//	Error loading SSO Token: Token for https://acme.awsapps.com/start does not exist
+//
+// Every marker names SSO, which is the property that keeps the match narrow: no
+// non-SSO AWS credential failure can trip it — an expired STS token
+// (`ExpiredTokenException`), a missing credentials file (`Unable to locate
+// credentials`) or a denied `eks:DescribeCluster` all need a *different* fix, and
+// offering `aws sso login` for them would be the guess D195 pt 2/5 forbids. A leg
+// that adds a marker must keep that property.
+var awsSSOExpiryMarkers = []string{
+	"sso session associated with this profile has expired",
+	"error when retrieving token from sso",
+	"error loading sso token",
+	"run aws sso login",
+}
+
+// isAWSSSOExpiry reports whether p is the AWS CLI and d's stderr is the CLI
+// saying its SSO session is expired or absent.
+//
+// The plugin gate is the command's **base name**, exactly `aws`: the stanza may
+// spell it as a bare name or an absolute path, but a wrapper script around it is
+// deliberately not recognised — its stderr is its own, and what it would need
+// re-run is unknowable from the kubeconfig.
+func isAWSSSOExpiry(p *ExecPlugin, d ExecPluginDiagnosis) bool {
+	if filepath.Base(p.Command) != "aws" {
+		return false
+	}
+	stderr := strings.ToLower(d.Stderr)
+	for _, marker := range awsSSOExpiryMarkers {
+		if strings.Contains(stderr, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// awsSSOLogin composes `aws sso login --profile <profile>` for the profile the
+// stanza runs under, or reports false when the stanza names none — in which case
+// the profile that needs re-authenticating is whatever the user's environment or
+// AWS config resolves to, which the kubeconfig does not know and kubecom will not
+// guess (D195 pt 5).
+func awsSSOLogin(p *ExecPlugin) (Remediation, bool) {
+	profile, ok := awsProfileOf(p)
+	if !ok {
+		return Remediation{}, false
+	}
+	return Remediation{
+		Cause:   fmt.Sprintf("The AWS SSO session for profile %q is expired or missing.", profile),
+		Command: p.Command,
+		Args:    []string{"sso", "login", "--profile", profile},
+	}, true
+}
+
+// awsProfileOf resolves the AWS profile the stanza runs under, in the AWS CLI's
+// own precedence: an explicit `--profile` on the command line beats `AWS_PROFILE`
+// in the environment, which beats the legacy `AWS_DEFAULT_PROFILE`.
+//
+// Only the **stanza** is consulted — never the process environment (D195 pt 5).
+// client-go passes the plugin both, so an `AWS_PROFILE` exported in the user's
+// shell does reach the real invocation; but a remediation composed from it would
+// be a claim about the kubeconfig that the kubeconfig does not make, and the
+// shell kubecom inherited need not be the one the user reads the suggestion in.
+// Absent from the stanza therefore means absent.
+func awsProfileOf(p *ExecPlugin) (string, bool) {
+	if profile, ok := flagValue(p.Args, "--profile"); ok {
+		return profile, true
+	}
+	for _, name := range []string{"AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
+		if v := strings.TrimSpace(p.Env[name]); v != "" {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// flagValue reads a GNU-style flag's value out of args, in either spelling:
+// `--flag value` or `--flag=value`. A flag that is the final token, or whose
+// value is empty or itself another flag, has no value — the stanza is malformed
+// in a way that makes the plugin's own run ambiguous too, so it reads as absent
+// rather than as a value to salvage. The last occurrence wins, as it does for
+// every CLI parser worth matching.
+func flagValue(args []string, flag string) (string, bool) {
+	value, found := "", false
+	for i, arg := range args {
+		switch {
+		case arg == flag:
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				value, found = args[i+1], true
+			}
+		case strings.HasPrefix(arg, flag+"="):
+			if v := strings.TrimPrefix(arg, flag+"="); v != "" {
+				value, found = v, true
+			}
+		}
+	}
+	return value, found
+}

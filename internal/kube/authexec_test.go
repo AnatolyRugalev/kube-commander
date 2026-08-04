@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -429,5 +430,223 @@ func TestCappedBufferReportsFullWrites(t *testing.T) {
 	empty := &cappedBuffer{limit: 0}
 	if n, err := empty.Write(nil); n != 0 || err != nil || empty.truncated {
 		t.Errorf("empty write = %d, %v, truncated=%v; want 0, nil, false", n, err, empty.truncated)
+	}
+}
+
+// --- AUTH-03: recognising an expired AWS SSO session -------------------------
+
+// awsPlugin is an EKS-shaped stanza: the AWS CLI minting a token, with the
+// profile wherever the caller puts it.
+func awsPlugin(args []string, env map[string]string) *ExecPlugin {
+	return &ExecPlugin{
+		Context: "eks", User: "sso-user",
+		Command: "aws",
+		Args:    append([]string{"--region", "eu-central-1", "eks", "get-token", "--cluster-name", "prod"}, args...),
+		Env:     env,
+	}
+}
+
+// failed is a diagnosis that reproduced a failure, saying what the AWS CLI says.
+func failed(stderr string) ExecPluginDiagnosis {
+	return ExecPluginDiagnosis{CommandLine: "aws eks get-token", Stderr: stderr, ExitCode: 255}
+}
+
+// The three wordings the AWS CLI actually uses, in both --profile spellings and
+// from the stanza's env — each must yield `aws sso login --profile <profile>`.
+func TestSuggestedRemediationRecognisesAWSSSOExpiry(t *testing.T) {
+	stderrs := map[string]string{
+		"unauthorized-sso-token": "An error occurred (UnauthorizedException): The SSO session associated with this profile has expired or is otherwise invalid. To refresh this SSO session run aws sso login with the corresponding profile.",
+		"refresh-failed":         "Error when retrieving token from sso: Token has expired and refresh failed",
+		"token-missing":          "Error loading SSO Token: Token for https://acme.awsapps.com/start does not exist",
+	}
+	sources := map[string]*ExecPlugin{
+		"--profile flag":      awsPlugin([]string{"--profile", "acme-prod"}, nil),
+		"--profile=flag":      awsPlugin([]string{"--profile=acme-prod"}, nil),
+		"AWS_PROFILE":         awsPlugin(nil, map[string]string{"AWS_PROFILE": "acme-prod"}),
+		"AWS_DEFAULT_PROFILE": awsPlugin(nil, map[string]string{"AWS_DEFAULT_PROFILE": "acme-prod"}),
+		"absolute path":       {Command: "/usr/local/bin/aws", Args: []string{"eks", "get-token", "--profile", "acme-prod"}},
+	}
+	for stderrName, stderr := range stderrs {
+		for srcName, p := range sources {
+			t.Run(stderrName+"/"+srcName, func(t *testing.T) {
+				r, ok := p.SuggestedRemediation(failed(stderr))
+				if !ok {
+					t.Fatalf("SuggestedRemediation() = _, false; want a remediation")
+				}
+				if r.Command != p.Command {
+					t.Errorf("Command = %q, want the stanza's own %q", r.Command, p.Command)
+				}
+				if got, want := r.Args, []string{"sso", "login", "--profile", "acme-prod"}; !slices.Equal(got, want) {
+					t.Errorf("Args = %q, want %q", got, want)
+				}
+				if !strings.Contains(r.Cause, `"acme-prod"`) {
+					t.Errorf("Cause = %q, want it to name the profile", r.Cause)
+				}
+				if !strings.Contains(r.CommandLine(), "sso login --profile acme-prod") {
+					t.Errorf("CommandLine() = %q, want the pasteable command", r.CommandLine())
+				}
+			})
+		}
+	}
+}
+
+// Matching is case-insensitive: the wording is a sentence, not a protocol, and
+// the CLI has capitalised it differently across versions.
+func TestSuggestedRemediationMatchesCaseInsensitively(t *testing.T) {
+	p := awsPlugin([]string{"--profile", "acme-prod"}, nil)
+	if _, ok := p.SuggestedRemediation(failed("ERROR LOADING SSO TOKEN: token for https://acme.awsapps.com/start does not exist")); !ok {
+		t.Error("SuggestedRemediation() = _, false for the marker in upper case")
+	}
+}
+
+// The narrowness that D195 pt 2/5 asks for: every other AWS credential failure
+// needs a *different* fix, so offering `aws sso login` for it would be a guess.
+func TestSuggestedRemediationIgnoresNonSSOFailures(t *testing.T) {
+	p := awsPlugin([]string{"--profile", "acme-prod"}, nil)
+	for name, stderr := range map[string]string{
+		"expired STS token": "An error occurred (ExpiredTokenException) when calling the DescribeCluster operation: The security token included in the request is expired",
+		"no credentials":    "Unable to locate credentials. You can configure credentials by running \"aws configure\".",
+		"access denied":     "An error occurred (AccessDeniedException) when calling the DescribeCluster operation: User is not authorized to perform: eks:DescribeCluster",
+		"cluster not found": "An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation: No cluster found for name: prod.",
+		"nothing on stderr": "",
+		"unrelated mention": "usage: aws [options] <command> <subcommand>",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if r, ok := p.SuggestedRemediation(failed(stderr)); ok {
+				t.Errorf("SuggestedRemediation() = %+v, true; want no remediation", r)
+			}
+		})
+	}
+}
+
+// The plugin gate: the SSO wording only means "run aws sso login" when the thing
+// that printed it *is* the AWS CLI. A wrapper's stderr is its own.
+func TestSuggestedRemediationOnlyRecognisesTheAWSCLI(t *testing.T) {
+	stderr := "Error when retrieving token from sso: Token has expired and refresh failed"
+	for name, p := range map[string]*ExecPlugin{
+		"wrapper script":   {Command: "get-eks-token.sh", Args: []string{"--profile", "acme-prod"}},
+		"shelled out":      {Command: "sh", Args: []string{"-c", "aws eks get-token --profile acme-prod"}},
+		"another provider": {Command: "gcloud", Args: []string{"config", "config-helper", "--profile", "acme-prod"}},
+		"aws-lookalike":    {Command: "awsx", Args: []string{"--profile", "acme-prod"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if r, ok := p.SuggestedRemediation(failed(stderr)); ok {
+				t.Errorf("SuggestedRemediation() = %+v, true; want no remediation", r)
+			}
+		})
+	}
+}
+
+// Recognised, but the kubeconfig does not say *which* profile: show the failure
+// and stop rather than guessing one (D195 pt 5).
+func TestSuggestedRemediationWithoutAProfileOffersNothing(t *testing.T) {
+	stderr := "The SSO session associated with this profile has expired or is otherwise invalid."
+	for name, p := range map[string]*ExecPlugin{
+		"no profile anywhere": awsPlugin(nil, nil),
+		"dangling --profile":  awsPlugin([]string{"--profile"}, nil),
+		"--profile then flag": awsPlugin([]string{"--profile", "--debug"}, nil),
+		"empty --profile=":    awsPlugin([]string{"--profile="}, nil),
+		"blank AWS_PROFILE":   awsPlugin(nil, map[string]string{"AWS_PROFILE": "  "}),
+		"other env only":      awsPlugin(nil, map[string]string{"AWS_REGION": "eu-central-1"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if r, ok := p.SuggestedRemediation(failed(stderr)); ok {
+				t.Errorf("SuggestedRemediation() = %+v, true; want no remediation", r)
+			}
+		})
+	}
+}
+
+// The process environment is deliberately not consulted: a remediation composed
+// from kubecom's own shell would be a claim the kubeconfig does not make, and the
+// shell kubecom inherited need not be the one the user reads the suggestion in.
+func TestSuggestedRemediationIgnoresTheProcessEnvironment(t *testing.T) {
+	t.Setenv("AWS_PROFILE", "whatever-kubecom-inherited")
+	p := awsPlugin(nil, nil)
+	if r, ok := p.SuggestedRemediation(failed("Error loading SSO Token: Token does not exist")); ok {
+		t.Errorf("SuggestedRemediation() = %+v, true; want no remediation from the ambient env", r)
+	}
+}
+
+// The AWS CLI's own precedence: an explicit --profile beats AWS_PROFILE, which
+// beats the legacy AWS_DEFAULT_PROFILE.
+func TestAWSProfilePrecedenceFollowsTheCLI(t *testing.T) {
+	both := awsPlugin([]string{"--profile", "from-flag"}, map[string]string{
+		"AWS_PROFILE": "from-env", "AWS_DEFAULT_PROFILE": "from-legacy-env",
+	})
+	if got, _ := awsProfileOf(both); got != "from-flag" {
+		t.Errorf("awsProfileOf() = %q with a flag present, want from-flag", got)
+	}
+	envs := awsPlugin(nil, map[string]string{"AWS_PROFILE": "from-env", "AWS_DEFAULT_PROFILE": "from-legacy-env"})
+	if got, _ := awsProfileOf(envs); got != "from-env" {
+		t.Errorf("awsProfileOf() = %q with both envs, want from-env", got)
+	}
+	// The last --profile wins, as it does for the plugin's own run.
+	repeated := awsPlugin([]string{"--profile", "first", "--profile=last"}, nil)
+	if got, _ := awsProfileOf(repeated); got != "last" {
+		t.Errorf("awsProfileOf() = %q with a repeated flag, want last", got)
+	}
+}
+
+// A re-run that *succeeded* has nothing to remediate — the credential was renewed
+// between the failed request and the diagnosis (D211 pt 5). The stderr may still
+// carry the old complaint, so the Failed() gate is what has to hold.
+func TestSuggestedRemediationNeedsAFailedDiagnosis(t *testing.T) {
+	p := awsPlugin([]string{"--profile", "acme-prod"}, nil)
+	ok0 := ExecPluginDiagnosis{Stderr: "Error when retrieving token from sso: Token has expired and refresh failed", ExitCode: 0}
+	if r, ok := p.SuggestedRemediation(ok0); ok {
+		t.Errorf("SuggestedRemediation() = %+v, true for a diagnosis that did not fail", r)
+	}
+	// The same stderr, but the run failed: now it is a remediation.
+	if _, ok := p.SuggestedRemediation(failed(ok0.Stderr)); !ok {
+		t.Error("SuggestedRemediation() = _, false for the failing counterpart")
+	}
+}
+
+// A missing binary needs installing, not re-authenticating — and it printed
+// nothing, so there is no wording to match. A nil plugin is not a panic.
+func TestSuggestedRemediationNotFoundAndNilPlugin(t *testing.T) {
+	p := awsPlugin([]string{"--profile", "acme-prod"}, nil)
+	if r, ok := p.SuggestedRemediation(ExecPluginDiagnosis{NotFound: true}); ok {
+		t.Errorf("SuggestedRemediation() = %+v, true for a missing binary", r)
+	}
+	var nilPlugin *ExecPlugin
+	if r, ok := nilPlugin.SuggestedRemediation(failed("Error loading SSO Token: nope")); ok {
+		t.Errorf("SuggestedRemediation() = %+v, true on a nil plugin", r)
+	}
+}
+
+// The suggestion is quoted like the failure it is read next to.
+func TestRemediationCommandLineQuotesLikeThePlugin(t *testing.T) {
+	r := Remediation{Command: "aws", Args: []string{"sso", "login", "--profile", "acme prod"}}
+	if got, want := r.CommandLine(), "aws sso login --profile 'acme prod'"; got != want {
+		t.Errorf("CommandLine() = %q, want %q", got, want)
+	}
+}
+
+// The catalogue is ordered and first-match-wins: an entry that recognises the
+// plugin but cannot substantiate a fix ends the search rather than letting a
+// later, laxer entry claim it. Unobservable with one real entry, so the test
+// installs a second — the rule is for when `gcloud`/`az` land.
+func TestRemediationCatalogueStopsAtTheFirstMatch(t *testing.T) {
+	catchAll := pluginRemediation{
+		name:       "catch-all",
+		recognises: func(*ExecPlugin, ExecPluginDiagnosis) bool { return true },
+		build: func(*ExecPlugin) (Remediation, bool) {
+			return Remediation{Cause: "guessed", Command: "true"}, true
+		},
+	}
+	original := pluginRemediations
+	pluginRemediations = append(slices.Clone(original), catchAll)
+	t.Cleanup(func() { pluginRemediations = original })
+
+	// aws-sso recognises this and finds no profile: the catch-all must not run.
+	p := awsPlugin(nil, nil)
+	if r, ok := p.SuggestedRemediation(failed("Error loading SSO Token: Token does not exist")); ok {
+		t.Errorf("SuggestedRemediation() = %+v, true; a later entry claimed a recognised plugin", r)
+	}
+	// A plugin aws-sso does *not* recognise still reaches the later entry.
+	if _, ok := (&ExecPlugin{Command: "gcloud"}).SuggestedRemediation(failed("whatever")); !ok {
+		t.Error("SuggestedRemediation() = _, false; an unrecognised plugin should fall through")
 	}
 }

@@ -5740,3 +5740,39 @@ failed is the kind of thing that grows scope quietly, so the shape is fixed here
    returns an error only when the diagnostic could not be *attempted* (no stanza — tagged
    `KindBadContext` — or a cancelled caller); a plugin that ran and failed is a successful
    diagnosis, with the detail in the struct.
+
+## D212 — A remediation is recognised by plugin **and** stderr, is composed only from the stanza, and a recognised-but-unsubstantiated failure ends the search (2026-08-04, AUTH-03)
+
+D195 pt 5 promised the plugin → remediation catalogue would be a small explicit table rather
+than a provider framework. AUTH-03 writes its only entry (AWS SSO), which is where the
+table's rules have to be fixed — the next entry (`gcloud`, `az`) will be written by someone
+reading this, not the code.
+
+1. **Recognition takes both halves, and neither alone is enough.** The plugin gate is the
+   command's **base name, exactly `aws`** (a bare name or an absolute path); the stderr gate
+   is a substring list. A wrapper script around the AWS CLI is deliberately *not* recognised
+   even when it forwards the CLI's stderr verbatim: the stderr is the wrapper's now, and what
+   the wrapper would need re-run is unknowable from the kubeconfig. Widening the gate to a
+   substring (`awsx`, `my-aws-helper`) is the failure this rule prevents.
+2. **Every stderr marker must name SSO.** That property, not the length of the list, is what
+   keeps the match narrow as D195 pt 2/5 requires: an expired STS token
+   (`ExpiredTokenException`), a missing credentials file, a denied `eks:DescribeCluster` each
+   need a *different* fix, and offering `aws sso login` for them is the guess the feedback
+   itself told us not to make. A leg that adds a marker keeps this property or states the
+   replacement.
+3. **Only the stanza substantiates the command — never the process environment.** client-go
+   passes the plugin the process env *plus* the stanza's, so an `AWS_PROFILE` exported in the
+   user's shell really does reach the failing invocation. A suggestion composed from it is
+   still forbidden: it is a claim about the kubeconfig the kubeconfig does not make, and the
+   shell kubecom was launched in need not be the one the user reads the suggestion in.
+   Absent from the stanza means absent, and absent means **no remediation** (D195 pt 5), not
+   a guessed one.
+4. **The catalogue is first-match-wins, and a recognised entry ends the search.** An entry
+   that recognises the plugin but cannot substantiate a fix returns "no remediation" rather
+   than falling through — otherwise adding a laxer entry later silently changes what an
+   existing plugin is offered. Ordering the table therefore matters; it is not a set.
+5. **Suggesting is not running, and the API name says so.** `SuggestedRemediation` composes
+   a command and nothing else — no execution, no PATH probe, no dry run (D195 pt 4 holds
+   until AUTH-05's confirm). It also yields nothing for a diagnosis that did not
+   `Failed()` (D211 pt 5) and nothing for a missing binary, whose fix is installing the
+   plugin, not re-authenticating.

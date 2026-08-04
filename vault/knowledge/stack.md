@@ -253,6 +253,21 @@ nothing useful; attach is the way.)
   - `Cmd.Env` is the process environment **plus** the stanza's `env:`; the stanza's own
     `args`/`env` are the only place a remediation's detail (`--profile`, `AWS_PROFILE`) may
     be substantiated from (D195 pt 5).
+- **AWS CLI wordings for an expired/absent SSO session** (what `aws eks get-token` prints
+  on stderr; matched by `awsSSOExpiryMarkers`, AUTH-03). All three name SSO, which is what
+  keeps the match narrow:
+  - `The SSO session associated with this profile has expired or is otherwise invalid. To
+    refresh this SSO session run aws sso login with the corresponding profile.` —
+    botocore's `UnauthorizedSSOTokenError`; the cached token exists but the server rejected it.
+  - `Error when retrieving token from sso: Token has expired and refresh failed` — the
+    cached token is past its expiry and the refresh grant did not work either.
+  - `Error loading SSO Token: Token for https://acme.awsapps.com/start does not exist` —
+    never logged in (or the cache was cleared). Same remediation, different cause.
+  - **Not** SSO expiry, and needing different fixes: `ExpiredTokenException` (an STS session
+    token, refreshed by the plugin itself), `Unable to locate credentials` (no profile
+    configured), `AccessDeniedException … eks:DescribeCluster` (an IAM policy).
+  - The CLI's own profile precedence, which `awsProfileOf` mirrors: `--profile` on the
+    command line > `AWS_PROFILE` > the legacy `AWS_DEFAULT_PROFILE`.
 - **`os/exec` gotcha: killing a process does not unblock `Wait`.** With a non-`*os.File`
   `Stdout`/`Stderr`, `os/exec` copies through a pipe in a goroutine and `Wait` blocks on it.
   A killed process that spawned a child leaves the child holding the write end, so `Wait`
