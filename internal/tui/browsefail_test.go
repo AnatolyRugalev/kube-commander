@@ -120,6 +120,285 @@ func TestBrowseFailureFlattensTheServerText(t *testing.T) {
 	}
 }
 
+// --- the diagnosed credential-plugin failure (AUTH-04a) ---------------------
+
+// awsStanza is the exec stanza an EKS kubeconfig carries, as ExecPluginFor would
+// return it: the command kubecom re-ran, and the profile a remediation is
+// composed from.
+func awsStanza() *kube.ExecPlugin {
+	return &kube.ExecPlugin{
+		Context: "acme-prod",
+		User:    "acme-prod-user",
+		Command: "aws",
+		Args:    []string{"--region", "eu-west-1", "eks", "get-token", "--cluster-name", "acme", "--profile", "acme-prod"},
+	}
+}
+
+// ssoStderr is the botocore wording AUTH-03 recognises, as the AWS CLI prints it:
+// several lines, which is why this surface exists at all.
+const ssoStderr = "The SSO session associated with this profile has expired or is otherwise invalid.\n" +
+	"To refresh this SSO session run aws sso login with the corresponding profile."
+
+// diagnosedReport builds the report the shell will hand the renderer in AUTH-04b:
+// the stanza, the diagnosis of re-running it, and whatever remediation the kube
+// layer substantiates from the stanza — asked for here exactly as the shell will
+// ask, so the test cannot drift from the real answer.
+func diagnosedReport(t *testing.T, p *kube.ExecPlugin, d kube.ExecPluginDiagnosis) kube.ExecPluginReport {
+	t.Helper()
+	if d.CommandLine == "" {
+		d.CommandLine = p.CommandLine()
+	}
+	rep := kube.ExecPluginReport{Plugin: p, Diagnosis: d}
+	rep.Remediation, rep.Suggested = p.SuggestedRemediation(d)
+	return rep
+}
+
+// execPluginErr is the error client-go returns for a plugin that ran and failed —
+// the one that classifies KindExecPlugin and used to be all the pane had.
+func execPluginErr() error {
+	return fmt.Errorf("kube: listing pods: %w",
+		errors.New("getting credentials: exec: executable aws failed with exit code 255"))
+}
+
+// TestAuthFailurePutsTheFixAboveTheEvidence is the headline claim, and the one the
+// pane's geometry forces: the notice is rendered into the rows available and the
+// remainder is dropped, so a remediation printed after a multi-line stderr is a
+// remediation the reader may never see.
+func TestAuthFailurePutsTheFixAboveTheEvidence(t *testing.T) {
+	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{Stderr: ssoStderr, ExitCode: 255})
+	if !rep.Suggested {
+		t.Fatal("precondition: the kube layer should substantiate a remediation for this stanza")
+	}
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+	head, _, _ := strings.Cut(got, "\n")
+	if head != "Cannot list Pod" {
+		t.Fatalf("headline = %q, want the kind named", head)
+	}
+	fix := strings.Index(got, "aws sso login --profile acme-prod")
+	if fix < 0 {
+		t.Fatalf("the suggested command is not printed\ngot:\n%s", got)
+	}
+	evidence := strings.Index(got, "The SSO session associated")
+	if evidence < 0 {
+		t.Fatalf("the plugin's own words are not shown\ngot:\n%s", got)
+	}
+	if fix > evidence {
+		t.Errorf("the fix must precede the stderr the pane may drop\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, `profile "acme-prod" is expired`) {
+		t.Errorf("the recognised cause is not stated\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "another terminal") {
+		t.Errorf("the pane must say where to run it (kubecom does not, until AUTH-05)\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureNamesTheCommandAndItsExit pins the two facts the generic
+// KindExecPlugin sentence could not carry: which invocation failed, and how.
+func TestAuthFailureNamesTheCommandAndItsExit(t *testing.T) {
+	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{Stderr: ssoStderr, ExitCode: 255})
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+	if !strings.Contains(got, "Plugin: aws --region eu-west-1 eks get-token --cluster-name acme --profile acme-prod (exit 255)") {
+		t.Errorf("the failed invocation is not quoted with its exit status\ngot:\n%s", got)
+	}
+	// The stderr keeps its line structure: the line break is the CLI's own, and
+	// flattening it would run two sentences together.
+	if n := strings.Count(got, "\n  "); n != 3 {
+		t.Errorf("indented quote lines = %d, want 3 (the command + two stderr lines)\ngot:\n%s", n, got)
+	}
+	// client-go's own text adds nothing the diagnosis does not say better, and a
+	// row spent on it is a row of stderr lost.
+	if strings.Contains(got, "exec: executable aws failed") {
+		t.Errorf("the client-go error should not be restated\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureWithoutARemediationSuggestsNothing covers the two cases
+// SuggestedRemediation says no to, which this surface renders identically
+// (D212 pt 3): a plugin kubecom knows nothing about, and an AWS SSO expiry whose
+// stanza names no profile. Neither may produce a guessed command.
+func TestAuthFailureWithoutARemediationSuggestsNothing(t *testing.T) {
+	gcloud := &kube.ExecPlugin{Context: "gke-dev", Command: "gcloud", Args: []string{"config", "config-helper"}}
+	noProfile := &kube.ExecPlugin{Context: "acme-prod", Command: "aws", Args: []string{"eks", "get-token"}}
+	cases := []struct {
+		name   string
+		plugin *kube.ExecPlugin
+		stderr string
+	}{
+		{"unrecognised", gcloud, "ERROR: (gcloud.config.config-helper) You do not currently have an active account selected."},
+		{"recognised but unsubstantiated", noProfile, ssoStderr},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := diagnosedReport(t, tc.plugin, kube.ExecPluginDiagnosis{Stderr: tc.stderr, ExitCode: 1})
+			if rep.Suggested {
+				t.Fatalf("precondition: no remediation should be substantiated, got %q", rep.Remediation.CommandLine())
+			}
+			got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+			// The remediation block is absent entirely. Asserted on the block's own
+			// lines rather than on the string "sso login", which legitimately
+			// appears in the *stderr* of the unsubstantiated case — the AWS CLI
+			// tells you to run it, and quoting the CLI is not suggesting a command.
+			if strings.Contains(got, "Run this in another terminal") {
+				t.Errorf("a command was suggested for a failure kubecom cannot substantiate\ngot:\n%s", got)
+			}
+			if strings.Contains(got, "\n  aws sso login") || strings.Contains(got, "is expired or missing") {
+				t.Errorf("the remediation block leaked into the pane\ngot:\n%s", got)
+			}
+			if !strings.Contains(got, "no command it can suggest") {
+				t.Errorf("the pane must admit it has no fix\ngot:\n%s", got)
+			}
+			if !strings.Contains(got, tc.stderr[:20]) {
+				t.Errorf("the plugin's own words must still be shown\ngot:\n%s", got)
+			}
+		})
+	}
+}
+
+// TestAuthFailureSaysTheRerunWorked is AUTH-02/D211 pt 5's obligation: the user
+// re-authenticated in another terminal between the failed request and the
+// diagnosis, so the plugin now works. Reporting that as a failure — or offering a
+// fix for it — would be the most confusing possible output.
+func TestAuthFailureSaysTheRerunWorked(t *testing.T) {
+	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: 0})
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+	if !strings.Contains(got, "running it again just now worked") {
+		t.Fatalf("the successful re-run is not reported\ngot:\n%s", got)
+	}
+	for _, unwanted := range []string{"sso login", "re-authenticate", "no command it can suggest", "It said:"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("a working plugin must not be given a fix (%q)\ngot:\n%s", unwanted, got)
+		}
+	}
+	if !strings.Contains(got, "keeps retrying") {
+		t.Errorf("the pane recovers on its own here; say so\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureMissingBinaryDoesNotSayReauthenticate is the case AUTH-01's
+// NotFound flag was created for: the remediation is "install it", and telling a
+// user to re-authenticate would send them to fix a session that is not the problem.
+func TestAuthFailureMissingBinaryDoesNotSayReauthenticate(t *testing.T) {
+	p := awsStanza()
+	p.InstallHint = "aws-cli is required to authenticate to EKS.\nSee https://example.test/install"
+	rep := diagnosedReport(t, p, kube.ExecPluginDiagnosis{NotFound: true})
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+	if !strings.Contains(got, "Install it") {
+		t.Fatalf("a missing binary must be reported as missing\ngot:\n%s", got)
+	}
+	if strings.Contains(got, "re-authenticate the way") {
+		t.Errorf("re-authenticating cannot fix a missing binary\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "(not found)") {
+		t.Errorf("the Plugin line must carry the outcome\ngot:\n%s", got)
+	}
+	// The operator wrote InstallHint for exactly this failure — and it is free
+	// text, so it must arrive as one detail line, not as several.
+	if !strings.Contains(got, "install hint: aws-cli is required to authenticate to EKS. See https://example.test/install") {
+		t.Errorf("the stanza's install hint is missing or unflattened\ngot:\n%s", got)
+	}
+	if strings.Contains(got, "printed nothing") {
+		t.Errorf("a binary that never ran did not stay silent — it was absent\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureTimedOut: a wedged plugin (one waiting on a terminal prompt it
+// will never get, the case Diagnose closes stdin for) is neither a bad credential
+// nor a missing binary, and the pane must not name a cause it cannot see.
+func TestAuthFailureTimedOut(t *testing.T) {
+	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{TimedOut: true})
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+
+	if !strings.Contains(got, "did not answer and was killed") {
+		t.Fatalf("the timeout is not reported\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "(killed: no answer)") {
+		t.Errorf("the Plugin line must carry the outcome\ngot:\n%s", got)
+	}
+	if strings.Contains(got, "printed nothing") {
+		t.Errorf("a killed plugin's silence is not evidence\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureStderrShape covers what happens to the evidence itself: a capped
+// capture says so, blank lines are dropped (a pane row says nothing), and a plugin
+// that failed *silently* is reported as silent rather than as a missing quote.
+func TestAuthFailureStderrShape(t *testing.T) {
+	t.Run("truncated", func(t *testing.T) {
+		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{
+			Stderr: ssoStderr, ExitCode: 255, Truncated: true})
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		if !strings.HasSuffix(got, "(truncated)") {
+			t.Fatalf("a capped capture must say so, and last\ngot:\n%s", got)
+		}
+	})
+	t.Run("blank lines dropped", func(t *testing.T) {
+		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{
+			Stderr: "first\n\n   \nsecond\n", ExitCode: 255})
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		if !strings.HasSuffix(got, "It said:\n  first\n  second") {
+			t.Fatalf("blank quote lines were not dropped\ngot:\n%s", got)
+		}
+	})
+	t.Run("silent failure", func(t *testing.T) {
+		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: 3})
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		if !strings.Contains(got, "printed nothing on stderr") {
+			t.Fatalf("silence is the diagnosis here; say it\ngot:\n%s", got)
+		}
+		if !strings.Contains(got, "(exit 3)") {
+			t.Errorf("the exit status is all there is; it must be shown\ngot:\n%s", got)
+		}
+	})
+	t.Run("killed by a signal", func(t *testing.T) {
+		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: -1})
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		if !strings.Contains(got, "(killed by a signal)") {
+			t.Fatalf("-1 is a signal, not exit -1\ngot:\n%s", got)
+		}
+	})
+}
+
+// TestAuthFailureFallsBackWithoutAPlugin: the diagnosis can fail to name a plugin
+// at all (an unreadable kubeconfig, or a context that authenticates some other
+// way). There is then nothing to add, and the pane must still read as a sentence
+// rather than as a half-rendered report (principle 3).
+func TestAuthFailureFallsBackWithoutAPlugin(t *testing.T) {
+	e := NewErrorMsg("watch pods", execPluginErr())
+	got := authFailure("Pod", e, kube.ExecPluginReport{})
+
+	if got != browseFailure("Pod", e) {
+		t.Fatalf("a plugin-less report must render exactly the undiagnosed notice\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "credential plugin in your kubeconfig failed") {
+		t.Fatalf("the kind's own sentence is missing\ngot:\n%s", got)
+	}
+}
+
+// TestAuthFailureDegradesWithoutAKind mirrors browseFailure's guard: a failure
+// that arrives before the browsed kind is known still reads as a sentence.
+func TestAuthFailureDegradesWithoutAKind(t *testing.T) {
+	rep := diagnosedReport(t, &kube.ExecPlugin{Command: "aws"}, kube.ExecPluginDiagnosis{ExitCode: 255})
+	got := authFailure("", ErrorMsg{Context: "watch", Kind: kube.KindExecPlugin}, rep)
+
+	if !strings.HasPrefix(got, "Cannot list this resource\n") {
+		t.Fatalf("unknown kind should degrade to a generic subject\ngot:\n%s", got)
+	}
+	// No Context on the stanza either: the sentence must not contain an empty
+	// quoted name.
+	if strings.Contains(got, `context ""`) {
+		t.Fatalf("an unnamed context must not be quoted as empty\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, "for this context") {
+		t.Fatalf("the nameless fallback is missing\ngot:\n%s", got)
+	}
+}
+
 // --- the shell wiring -------------------------------------------------------
 
 // TestWatchErrorWritesTheReasonIntoTheTable is the end-to-end claim: a LIST that

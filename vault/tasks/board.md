@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-03 done; an AWS SSO expiry in the plugin's stderr now yields `aws sso login --profile x`, composed only from the stanza (D212). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-04 — AUTH-04 split on pickup; AUTH-04a done, so the diagnosed plugin failure has its copy — the fix above the stderr, because the pane drops its tail (D213). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-04a** The copy for a diagnosed credential-plugin failure
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
+_(none)_
 
 ## Blocked
 
@@ -381,17 +380,11 @@ present, unrecognised or unsubstantiated), while the wiring is a new seam, an as
 generation guard and a launcher line. Bottom-up as usual (D52): the renderer first, since the
 wiring calls it. Nothing reaches the screen until 04b.
 
-- [ ] **AUTH-04a** The copy for a diagnosed credential-plugin failure
-      status: todo | owner: — | added: 2026-08-04
-      notes: `kube.ExecPluginReport` (the stanza + its diagnosis + the remediation it
-      substantiates — the value 04b's seam carries across the layer boundary) and the
-      renderer that turns one into the browse pane's notice, extending `browseFailure`'s
-      rules (`internal/tui/browsefail.go`). Order matters here in a way it did not for
-      CRD-01: the pane **drops** notice text past its height (`table.noticeBody`), so the
-      actionable line goes above the plugin's stderr, not below it.
+- [x] **AUTH-04a** The copy for a diagnosed credential-plugin failure — done 2026-08-04 (D213)
 - [ ] **AUTH-04b** Wire the diagnosis into the browse surface
-      status: todo | owner: — | added: 2026-08-04 | blocked-on: AUTH-04a
-      notes: The runtime half: a `kube` producer (`ExecPluginFor` → `Diagnose` →
+      status: todo | owner: — | added: 2026-08-04
+      notes: The runtime half, and now the top unblocked AUTH item: a `kube` producer
+      (`ExecPluginFor` → `Diagnose` →
       `SuggestedRemediation` in one call over a `ClientConfig`), an `AuthDiagnoser` seam on
       the shell, an async Cmd fired when a browse failure classifies `KindExecPlugin`, and
       the result re-writing the pane's notice through AUTH-04a's renderer. The seam takes
@@ -400,24 +393,13 @@ wiring calls it. Nothing reaches the screen until 04b.
       Cmd with `watchGen` so a diagnosis for the resource the user just left cannot overwrite
       the new pane, and re-check the pane is still empty before writing. Live-cluster only to
       see for real, so expect to add a line to a dogfood human task rather than tick
-      M-anything.
-- [ ] **AUTH-04 (parent)** Show the plugin failure legibly, with the remediation printed
-      status: todo | owner: — | added: 2026-08-01
-      notes: The first slice with a runtime surface, and the smallest thing that delivers
-      most of the feedback's value: on `KindExecPlugin`, say which command failed, show its
-      stderr, and **print** the suggested `aws sso login --profile x` without offering to run
-      it. Also fixes the misleading message AUTH-01's kind was created for — a plugin failure
-      previously read as "cluster unreachable". Needs a home bigger than a status-bar toast
-      (stderr is multi-line); check what the existing error surfaces can carry first. Inherits
-      one obligation from AUTH-02/D211 pt 5: a diagnostic re-run that *succeeds*
-      (`ExecPluginDiagnosis.Failed() == false`, the user re-authenticated in another terminal
-      meanwhile) is a case this surface must be willing to say, not one it may assume away.
-      Both halves are now in the kube layer: `ExecPlugin.Diagnose` (AUTH-02) then
-      `SuggestedRemediation` (AUTH-03). It returns false in **two** cases this surface should
-      not conflate — not recognised (show the stderr and stop) and recognised but the stanza
-      names no profile (still show the stderr; do **not** substitute a profile from the
-      ambient env or `~/.aws/config`, D212 pt 3). Live-cluster only to see for real, so
-      expect to add a line to a dogfood human task rather than tick M-anything.
+      M-anything. It carries the whole of the parent AUTH-04's remaining value: the copy exists
+      and is tested (`tui.authFailure`, D213), so this slice adds no wording — it decides
+      *when* to diagnose and *which* pane the result lands in, and it is what finally replaces
+      the misleading message AUTH-01's kind was created for (a plugin failure read as "cluster
+      unreachable"). Both obligations the parent listed are already discharged by 04a: a re-run
+      that succeeded has its own sentence (D211 pt 5), and the two ways a remediation can be
+      absent render identically without inventing a profile (D212 pt 3, D213 pt 4).
 - [ ] **AUTH-05** Offer to run it: confirm, suspend, re-authenticate, retry
       status: todo | owner: — | added: 2026-08-01
       notes: The last slice, and the only one that executes anything. One confirm prompt per

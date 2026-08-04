@@ -476,6 +476,37 @@ func (p *ExecPlugin) SuggestedRemediation(d ExecPluginDiagnosis) (Remediation, b
 	return Remediation{}, false
 }
 
+// ExecPluginReport is one diagnosed exec-credential-plugin failure gathered into
+// the single value a surface renders: the stanza that failed, what re-running it
+// said, and the remediation that stanza substantiates — if any.
+//
+// It exists so that the shell never runs a subprocess and never matches provider
+// text: the kube layer diagnoses (Diagnose) and recognises (SuggestedRemediation),
+// and the TUI only renders. The three pieces travel together because none of them
+// is legible alone — an exit code without the stderr says nothing, and a suggested
+// command without the failure it answers is a non sequitur.
+type ExecPluginReport struct {
+	// Plugin is the kubeconfig stanza that failed. Nil means no plugin could be
+	// named at all — the context authenticates some other way, or the kubeconfig
+	// would not load — which is a report to fall back from rather than render:
+	// there is no command to quote and no stderr to show.
+	Plugin *ExecPlugin
+	// Diagnosis is what the diagnostic re-run observed. Check its Failed(): a
+	// re-run that *succeeded* is a real and common outcome (D211 pt 5), not an
+	// empty diagnosis, and a surface must be willing to say so.
+	Diagnosis ExecPluginDiagnosis
+	// Remediation is the command the user could run. Meaningful only when
+	// Suggested is true; the zero value otherwise.
+	Remediation Remediation
+	// Suggested reports whether Remediation was substantiated. It collapses the
+	// two ways SuggestedRemediation says no — the failure was not recognised, and
+	// it was recognised but the stanza named no profile — because a *renderer*
+	// treats them identically (show the failure, suggest nothing). Anything that
+	// would act on the difference must ask SuggestedRemediation itself, not this
+	// flag (D212 pt 3).
+	Suggested bool
+}
+
 // awsSSOExpiryMarkers are the AWS CLI's own words for an SSO session that is
 // expired or absent, matched case-insensitively as substrings:
 //

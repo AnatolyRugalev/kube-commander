@@ -5776,3 +5776,43 @@ reading this, not the code.
    until AUTH-05's confirm). It also yields nothing for a diagnosis that did not
    `Failed()` (D211 pt 5) and nothing for a missing binary, whose fix is installing the
    plugin, not re-authenticating.
+
+## D213 — The diagnosed plugin failure travels as one report, and its notice puts the fix above the evidence (2026-08-04, AUTH-04a)
+
+AUTH-01…03 left three separate values in the kube layer (the stanza, the diagnosis, the
+remediation) and no surface. AUTH-04a fixes how they cross into the TUI and what the TUI is
+allowed to do with them.
+
+1. **`kube.ExecPluginReport` is the boundary value, and the shell renders only.** The three
+   pieces travel together because none is legible alone: an exit code without the stderr says
+   nothing, and a suggested command without the failure it answers is a non sequitur. The
+   consequence is the rule: **the shell never runs a subprocess and never matches provider
+   text.** Diagnosing is `Diagnose`'s (D211), recognising is `SuggestedRemediation`'s (D212),
+   and a future provider entry changes no TUI code. A `nil` `Plugin` is a report to fall back
+   from, not one to render half of.
+2. **The notice orders the fix above the plugin's stderr, because the pane drops its tail.**
+   `table.noticeBody` renders a notice into the rows available and silently discards the rest
+   — no ellipsis, no scroll. The stderr is the only unbounded part of this notice (8 KiB), so
+   a remediation printed after it is a remediation the reader may never see, on exactly the
+   small pane where they are most likely squinting at a problem. Order: headline, cause,
+   remediation, the invocation, the stderr. Any future surface that carries this report
+   either keeps that order or is a real viewer that scrolls.
+3. **The diagnosis supersedes client-go's error; it does not join it.** `browseFailure` quotes
+   the server's own text as its last line, and `authFailure` deliberately does not: `exec:
+   executable aws failed with exit code 255` states nothing the `Plugin:` line and the stderr
+   do not state better, and a row spent on it is a row of evidence lost. The unwrapped error
+   is still in the toast and in `surfaceError`'s log line (D159), which is where a bug report
+   is assembled from.
+4. **`ExecPluginReport.Suggested` is for renderers, not for actors.** It collapses the two
+   ways `SuggestedRemediation` says no — not recognised, and recognised but unsubstantiated —
+   because a renderer treats them identically (show the failure, suggest nothing). Anything
+   that *acts* on the difference — AUTH-05's confirm prompt above all — must ask
+   `SuggestedRemediation` rather than read this flag, and user-facing copy driven by it must
+   be true of **both** cases: "kubecom has no command it can suggest", never "does not
+   recognise" (D212 pt 3).
+5. **The cause sentence branches on the diagnosis, and a plugin that now works is offered
+   nothing.** Four outcomes, four different actions by four different people: non-zero exit →
+   re-authenticate; binary absent → *install* it, and say that re-authenticating cannot help
+   (this is where the stanza's `InstallHint` is printed, flattened, and nowhere else); timed
+   out → the plugin is wedged, run it in a terminal and watch; did not fail → nothing at all,
+   which is D211 pt 5's obligation made visible rather than assumed away.
