@@ -7,7 +7,8 @@ _Last updated: 2026-08-04 — AUTH-04 split on pickup; AUTH-04a done, so the dia
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-04b** Wire the diagnosis into the browse surface
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
 
 ## Blocked
 
@@ -382,7 +383,7 @@ wiring calls it. Nothing reaches the screen until 04b.
 
 - [x] **AUTH-04a** The copy for a diagnosed credential-plugin failure — done 2026-08-04 (D213)
 - [ ] **AUTH-04b** Wire the diagnosis into the browse surface
-      status: todo | owner: — | added: 2026-08-04
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-04
       notes: The runtime half, and now the top unblocked AUTH item: a `kube` producer
       (`ExecPluginFor` → `Diagnose` →
       `SuggestedRemediation` in one call over a `ClientConfig`), an `AuthDiagnoser` seam on
