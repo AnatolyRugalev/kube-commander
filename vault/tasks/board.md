@@ -7,7 +7,8 @@ _Last updated: 2026-08-04 — AUTH-05a done: an approved remediation runs throug
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
 
 ## Blocked
 
@@ -396,7 +397,7 @@ from tests, which is the point: no code path arms it, so nothing executes unaske
 - [x] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
       — done 2026-08-04 (D215)
 - [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
-      status: todo | owner: — | added: 2026-08-01
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
       notes: One confirm prompt per occurrence naming the exact command (D195 pt 4), opened when a
       landed diagnosis substantiates a remediation; accept → AUTH-05a's `runReauth`, decline →
       nothing but the notice. Also the copy: with the offer on screen the notice must stop saying
