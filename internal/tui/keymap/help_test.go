@@ -217,6 +217,67 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
+	// The confirm modal (HINT-02) is the one context whose keys are not browse keys:
+	// they resolve in the confirm key context (D132), and the hint must render *their*
+	// bindings — `y`/`n` — not the browse meanings of those chords.
+	confirm := descs(hm.ShortHelpContext(HelpConfirm))
+	for _, a := range []Action{ActionConfirmAccept, ActionConfirmDecline} {
+		if !confirm[a.Describe()] {
+			t.Errorf("confirm context should offer %q — it is what answers the modal", a)
+		}
+	}
+	for _, a := range []Action{ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionHelp} {
+		if confirm[a.Describe()] {
+			t.Errorf("%q is swallowed by an open confirm modal; the hint must not offer it", a)
+		}
+	}
+	if keys := hm.ShortHelpContext(HelpConfirm)[0].Help().Key; keys != "y/enter" {
+		t.Errorf("confirm accept should be hinted with its confirm-context keys, got %q", keys)
+	}
+
+	// The prompt modal is the same modal with a text field open, so it keeps the
+	// *browse* control pair and drops the confirm answers: `y`/`n` type there.
+	prompt := descs(hm.ShortHelpContext(HelpPrompt))
+	for _, a := range []Action{ActionDrillIn, ActionBack} {
+		if !prompt[a.Describe()] {
+			t.Errorf("prompt context should offer %q — it carries no text and still acts", a)
+		}
+	}
+	for _, a := range []Action{ActionConfirmAccept, ActionConfirmDecline, ActionQuit, ActionHelp} {
+		if prompt[a.Describe()] {
+			t.Errorf("%q types into an open prompt field; the hint must not offer it", a)
+		}
+	}
+
+	// The keybindings overlay advertises the ways out and nothing else — it swallows
+	// navigation and does not scroll.
+	overlay := descs(hm.ShortHelpContext(HelpKeybindings))
+	for _, a := range []Action{ActionBack, ActionHelp, ActionQuit} {
+		if !overlay[a.Describe()] {
+			t.Errorf("keybindings-overlay context should offer %q — it closes the overlay", a)
+		}
+	}
+	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionNamespace} {
+		if overlay[a.Describe()] {
+			t.Errorf("%q is swallowed by the open keybindings overlay; it must not be hinted", a)
+		}
+	}
+
+	// The shared viewer is a pager: scroll plus the two ways to close it. Its
+	// kind-specific gestures stay out — a context names an input state, not content
+	// (D206 pt 3).
+	view := descs(hm.ShortHelpContext(HelpViewer))
+	for _, a := range []Action{ActionDown, ActionUp, ActionBack, ActionQuit} {
+		if !view[a.Describe()] {
+			t.Errorf("viewer context should offer %q — the viewer honours it", a)
+		}
+	}
+	for _, a := range []Action{ActionRevealSecret, ActionCopySecret, ActionFilter, ActionHelp} {
+		if view[a.Describe()] {
+			t.Errorf("%q is not honoured by every viewer; the hint must not promise it", a)
+		}
+	}
+
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
 	if err != nil {

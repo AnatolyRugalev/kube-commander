@@ -3766,10 +3766,30 @@ func (m *Model) hintContext() keymap.HelpContext {
 			return keymap.HelpPickerFilter
 		}
 		return keymap.HelpPicker
+	case m.modal.Prompting():
+		// The modal's text field takes every text-producing key, so only the no-text
+		// control keys act — enter submits, esc cancels (routeModalPromptKey). Resolved
+		// before the confirm case for the same reason Update routes it first: a prompting
+		// modal is also Active().
+		return keymap.HelpPrompt
+	case m.modal.Active():
+		// The confirm modal captures all input and answers in the confirm key context
+		// (D132), so the keys that act here are not browse keys at all (HINT-02).
+		return keymap.HelpConfirm
 	case m.logsView.Active():
 		// The logs mini-app with its grep closed honours every key it advertises, `q`
 		// included — quit closes the view, as it does in any pager.
 		return keymap.HelpLogs
+	case m.viewer.Active():
+		// The shared read-only viewer is a pager overlay: it scrolls on navigation and
+		// closes on back/quit, swallowing the rest (handleViewerAction). Below the logs
+		// view for the same reason handleAction orders them so.
+		return keymap.HelpViewer
+	case m.help.Visible():
+		// The keybindings overlay swallows navigation while it is open, so the only
+		// promise left to make is how to close it. Last of the capturing surfaces, as it
+		// is in handleAction — an overlay that owns input wins the hint over it.
+		return keymap.HelpKeybindings
 	case m.table.Focused():
 		return keymap.HelpTable
 	}

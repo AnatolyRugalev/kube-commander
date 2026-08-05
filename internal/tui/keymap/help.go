@@ -81,6 +81,19 @@ const (
 	// a WithOptInFilter picker (the port picker, D139), where the letter keys are free
 	// and `/` opens the field.
 	HelpPicker
+	// HelpConfirm is the yes/no confirm modal (M3-09/D132), which captures all input:
+	// its two answers resolve in the confirm key context, and everything else is
+	// swallowed so the panes underneath never move.
+	HelpConfirm
+	// HelpPrompt is the same modal in prompt mode, whose text field takes every
+	// text-producing key — so only the no-text control keys act: submit and cancel.
+	HelpPrompt
+	// HelpKeybindings is the `?` keybindings overlay, which swallows navigation while
+	// it is up: the only keys that act are the ways back out of it.
+	HelpKeybindings
+	// HelpViewer is the shared read-only viewer (YAML/describe/secret, M3-03): it
+	// scrolls on navigation and closes on back/quit, swallowing everything else.
+	HelpViewer
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
@@ -157,6 +170,37 @@ const (
 // hinted here even though they act: a HelpContext names an input state, not a picker
 // kind, and this set is shared by any future opt-in picker that does not bind them.
 // They stay in `?` and in the port picker's own title.
+//
+// The four HINT-02 contexts are the rest of the capturing surfaces, each one the same
+// rule as the pickers: what the surface's own router honours, nothing else.
+//
+// The confirm modal is the one set that cannot be read off the browse registry, because
+// its answers live in the **confirm key context** (D132): `y`/`enter` and `n`/`esc`
+// resolve through ConfirmAction, which is why `n` can mean "decline" here and
+// app.searchNext everywhere else. It needs no special handling all the same — `bindings`
+// is keyed by action regardless of context, so `Binding(ActionConfirmAccept)` renders the
+// user's own accept keys and the hint stays registry-generated (D11). `q` also dismisses
+// (handleModalAction), and is left out for the reason paging is: the decline entry
+// already names the way out, and a two-entry line that reads "y accept · n decline"
+// mirrors the question in the box.
+//
+// The prompt modal keeps the *browse* drill-in/back pair instead, and that difference is
+// the honest one: an open text field takes every text-producing key, so `y`/`n` type a
+// character there and only the no-text control keys — enter to submit, esc to cancel —
+// still act. It is the picker-filter rule (D206 pt 3) applied to the other text field.
+//
+// The keybindings overlay advertises only the ways out. It swallows navigation while it
+// is up and does not scroll (it renders the whole grouped table at once), so back, the
+// `?` that toggles it, and quit — which dismisses the overlay rather than exiting, as it
+// does over any overlay — are the complete set of keys that act. The overlay's own body
+// lists every binding in the app, so the line underneath has nothing else to add.
+//
+// The shared viewer is a pager: it scrolls on nav.up/down and closes on back or quit,
+// exactly like the logs view with its grep closed, and is hinted to match. The
+// viewer-kind gestures — secret.reveal and secret.copy, which act only while the Secret
+// viewer is up (M3-08a/b) — are deliberately absent for the reason the port picker's
+// `p`/`0` are (D206 pt 3): a HelpContext names an input state, not which content the
+// surface happens to be showing. They stay in `?` and in the secret viewer's own title.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:         {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:        {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
@@ -165,6 +209,10 @@ var contextShortHelpActions = map[HelpContext][]Action{
 	HelpLogsFilter:   {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
 	HelpPickerFilter: {ActionDown, ActionUp, ActionDrillIn, ActionBack},
 	HelpPicker:       {ActionDown, ActionUp, ActionFilter, ActionDrillIn, ActionBack},
+	HelpConfirm:      {ActionConfirmAccept, ActionConfirmDecline},
+	HelpPrompt:       {ActionDrillIn, ActionBack},
+	HelpKeybindings:  {ActionBack, ActionHelp, ActionQuit},
+	HelpViewer:       {ActionDown, ActionUp, ActionBack, ActionQuit},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

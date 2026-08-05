@@ -5924,3 +5924,25 @@ The offer is the only modal in kubecom that no keypress opens.
    showing what the offer wrote, since by then it may be explaining something else. The pane
    keeps quoting the command in full either way: the confirm box clips to sixty cells, so the
    wrapped copy behind it is the only place a long invocation is legible.
+
+## D217 — Every input-capturing surface has a hint context, and a context whose keys live outside the browse keymap still reads them from the registry (2026-08-05, HINT-02)
+
+D206 made the hint derived rather than pushed and left the rule for *which* surfaces get a
+case implicit. HINT-02 closes the set the picker work started, and hits the one context whose
+keys are not browse keys, so both halves are worth pinning.
+
+1. **A surface that captures input gets a `HelpContext`; it never falls through to the
+   browse set.** `ShortHelpContext`'s fallback to the focus-agnostic set is for an *unknown*
+   context, not for an overlay nobody wrote a case for — falling through is exactly the lie
+   HINT-01/02 exist to remove, and it fails silently (a hint that looks plausible and is
+   wrong). A surface that swallows almost everything is still hinted: the keybindings overlay
+   advertises the ways out of it, which is the only promise left to make. Two capturing
+   surfaces are still uncovered and are named on the board as HINT-03 (the browse filter
+   field and the port-forward panel) — do not add a third.
+2. **A context-scoped action is hinted through the registry, like every other.** The confirm
+   modal answers in the confirm key context (D132), so `n`/`enter`/`esc` mean something there
+   that they do not mean in browse. `Keymap.bindings` is keyed by action rather than by key
+   context, so `Binding(ActionConfirmAccept)` renders the user's own accept keys: the hint
+   stays generated (D11) and a rebind reaches it. Never write `y/n` — or any literal key —
+   into a hint set, and never hint the browse meanings of a chord the open surface has
+   redefined.

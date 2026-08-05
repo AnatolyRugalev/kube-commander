@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — AUTH-05b done, closing the AUTH line: a diagnosed credential-plugin failure now offers to run the fix, in one confirm that no keypress opens and that never displaces another surface (D216). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — HINT-02 done: the hint line now tells the truth under both modals, the keybindings overlay and the shared viewer, and the last two liars are filed as HINT-03 (D217). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HINT-02** The same for the modals, the help overlay and the shared viewer
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
+_(none)_
 
 ## Blocked
 
@@ -284,16 +283,19 @@ time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shap
 
 - [x] **HINT-01** The hint line tells the truth while a picker is open
       — done 2026-08-02 (D206)
-- [ ] **HINT-02** The same for the modals, the help overlay and the shared viewer
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
-      notes: The neighbours HINT-01 left: a confirm modal swallows everything but
-      `y`/`n`/esc/enter, a prompt modal captures text, and the help overlay and shared
-      viewer each capture input too — all four still show the browse hint underneath.
-      Now a one-case change each in `hintContext` (D206 pt 1), so the work is deciding the
-      honest *sets*, not the wiring. The confirm set is the open question: its keys come
-      from the separate `ConfirmAction` table (D132), so its hint cannot be sourced from
-      the browse registry the way every other context is. Not urgent — a confirm modal
-      names its own choices in its body — so it ranks below PAL-05 and the AUTH line.
+- [x] **HINT-02** The same for the modals, the help overlay and the shared viewer
+      — done 2026-08-05 (D217)
+- [ ] **HINT-03** The last two liars: the browse filter field and the port-forward panel
+      status: todo | owner: — | added: 2026-08-05
+      notes: Found while doing HINT-02, which covered the four surfaces it named. Two
+      capturing surfaces are still hinted with the browse set: the **browse filter field**
+      (`/`), which types every letter it advertises — the logs-grep problem one pane over,
+      so `HelpLogsFilter`'s reasoning transfers and the honest set is the no-text keys
+      `routeFilterKey` honours; and the **port-forward panel** (`F`), which swallows
+      everything but its own cursor/stop/close keys (`handleForwardsPanelAction`). Two
+      more cases in `hintContext`, in the precedence Update routes them (the filter field
+      sits between the pickers and the modals; the panel after the viewer). D217 pt 1 says
+      this is the whole remaining set — a third would mean a surface was added without one.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs

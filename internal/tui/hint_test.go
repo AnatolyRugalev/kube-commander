@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 )
@@ -105,6 +106,95 @@ func TestHintBarPickerContextFollowsFilterState(t *testing.T) {
 	}
 	hintHides(t, m.hintbar.View(), "an opened picker filter", keymap.ActionFilter)
 	hintOffers(t, m.hintbar.View(), "an opened picker filter", keymap.ActionDrillIn, keymap.ActionBack)
+}
+
+// wide re-sizes an already-built model to a terminal that elides nothing, so a test that
+// opens a surface through the real gestures can still read the whole hint line.
+func wide(t *testing.T, m Model) Model {
+	t.Helper()
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 300, Height: 24})
+	return next.(Model)
+}
+
+// TestHintBarTracksTheConfirmModal is HINT-02 on the surface whose keys are not browse
+// keys at all: the confirm modal answers in the confirm key context (D132), so while it
+// is up the browse set underneath is entirely unreachable and the hint must show `y`/`n`.
+func TestHintBarTracksTheConfirmModal(t *testing.T) {
+	m := wide(t, deleteTableModel(t, &fakeDeleter{}))
+	browse := m.hintbar.View()
+
+	m = openDeleteModal(t, m)
+	if !m.modal.Active() || m.modal.Prompting() {
+		t.Fatal("the delete key should open a confirm-mode modal")
+	}
+	hint := m.hintbar.View()
+	hintOffers(t, hint, "an open confirm modal",
+		keymap.ActionConfirmAccept, keymap.ActionConfirmDecline)
+	hintHides(t, hint, "an open confirm modal",
+		keymap.ActionFilter, keymap.ActionSort, keymap.ActionActions, keymap.ActionHelp, keymap.ActionQuit)
+
+	// Declining closes it, and the browse hint must come back byte for byte.
+	next, _ := m.Update(modal.CancelledMsg{Kind: deleteModalKind})
+	if got := next.(Model).hintbar.View(); got != browse {
+		t.Errorf("closing the confirm modal should restore the browse hint: %q, want %q", got, browse)
+	}
+}
+
+// TestHintBarTracksThePromptModal proves the prompt mode gets its own set rather than the
+// confirm one — it is the same modal, and Active() is true for both, so the ordering in
+// hintContext is what makes this right. An open field types `y`/`n`; only enter and esc act.
+func TestHintBarTracksThePromptModal(t *testing.T) {
+	m := wide(t, workloadModel(t, WithScaler(&fakeScaler{})))
+
+	m, _ = dispatchRowAction(t, m, rowActionScale)
+	if !m.modal.Prompting() {
+		t.Fatal("the scale intent should open the modal in prompt mode")
+	}
+	hint := m.hintbar.View()
+	hintOffers(t, hint, "an open prompt modal", keymap.ActionDrillIn, keymap.ActionBack)
+	hintHides(t, hint, "an open prompt modal",
+		keymap.ActionConfirmAccept, keymap.ActionConfirmDecline, keymap.ActionQuit, keymap.ActionFilter)
+}
+
+// TestHintBarTracksTheKeybindingsOverlay covers the overlay that swallows navigation: the
+// only promise left to make under it is how to get back out.
+func TestHintBarTracksTheKeybindingsOverlay(t *testing.T) {
+	m := wideSized(t)
+	browse := m.hintbar.View()
+
+	m, _ = press(t, m, tea.Key{Code: '?', Text: "?"})
+	if !m.help.Visible() {
+		t.Fatal("`?` should open the keybindings overlay")
+	}
+	hint := m.hintbar.View()
+	hintOffers(t, hint, "the open keybindings overlay",
+		keymap.ActionBack, keymap.ActionHelp, keymap.ActionQuit)
+	hintHides(t, hint, "the open keybindings overlay",
+		keymap.ActionDown, keymap.ActionUp, keymap.ActionDrillIn, keymap.ActionNamespace, keymap.ActionPin)
+
+	m, _ = press(t, m, tea.Key{Code: '?', Text: "?"})
+	if got := m.hintbar.View(); got != browse {
+		t.Errorf("closing the overlay should restore the browse hint: %q, want %q", got, browse)
+	}
+}
+
+// TestHintBarTracksTheSharedViewer covers the read-only viewer (M3-03), a pager overlay:
+// it scrolls and closes, and every browse gesture underneath it is swallowed.
+func TestHintBarTracksTheSharedViewer(t *testing.T) {
+	m := wide(t, describeViewerModel(t, &fakeDescriber{text: "Name: web-1\n"}))
+
+	_, cmd := press(t, m, describeKey)
+	next, fetch := m.Update(cmd().(rowActionMsg))
+	next, _ = next.(Model).Update(fetch().(describeLoadedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("the describe key should open the shared viewer")
+	}
+	hint := m.hintbar.View()
+	hintOffers(t, hint, "the open viewer",
+		keymap.ActionDown, keymap.ActionUp, keymap.ActionBack, keymap.ActionQuit)
+	hintHides(t, hint, "the open viewer",
+		keymap.ActionFilter, keymap.ActionSort, keymap.ActionActions, keymap.ActionNamespace, keymap.ActionHelp)
 }
 
 // TestHintBarRefreshesWithoutAnExplicitSync is the structural half of HINT-01 (D206):
