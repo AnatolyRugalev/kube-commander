@@ -7,7 +7,14 @@ _Last updated: 2026-08-05 — BOX-01 done: the confirm/prompt modal now renders 
 
 ## In Progress
 
-_(none)_
+- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
+      notes: `forwardsPanelView` (`internal/tui/app.go`) clamps its width to 64 and its height
+      not at all: title + one row per active forward + the HINT-04 footer, composited onto the
+      fixed `width×bodyHeight` canvas that clips bottom-first (D220). Enough forwards on a
+      short terminal push the footer and the bottom border off screen, and — unlike the modal —
+      the panel has a **cursor**, so a tail-drop can hide the selection. Give it a rows-visible
+      window that follows `m.forwardsSel`, and say what is off-screen.
 
 ## Blocked
 
@@ -317,14 +324,8 @@ their own viewport. Note for all three items that a unit test reading `View()`'s
 cannot catch this class of bug — the string is complete; only the composited frame is short
 (D220 pt 1).
 
-- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards
-      status: todo | owner: — | added: 2026-08-05
-      notes: `forwardsPanelView` (`internal/tui/app.go`) clamps its width to 64 and its height
-      not at all: title + one row per active forward + the HINT-04 footer. Fifteen forwards on
-      a short terminal push the footer and the bottom border off the canvas, and the selection
-      can scroll out of the visible region with no way to see it. It is the panel with a
-      *cursor*, so unlike the modal a marker is not enough — it wants the picker's answer
-      (a rows-visible window that follows `m.forwardsSel`), which is why this is its own leg.
+- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards — **in progress**
+      (claimed 2026-08-05, `claude-opus-5`; see In Progress)
 - [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
       status: todo | owner: — | added: 2026-08-05
       notes: `help.View` constrains width (`helpMargin`) and ignores `m.height`, which it is
