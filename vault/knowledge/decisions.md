@@ -5989,3 +5989,34 @@ The hatch stays open; its price is this rule.
    disappears.** A verb with no key beside it is worse than silence: it promises a gesture
    the reader cannot perform and cannot discover. Rendering nothing is the honest floor —
    the `?` overlay and the hint line still carry whatever is bound.
+
+## D220 — An overlay renders no taller than the box it computes, and elides its explanation before its ask (2026-08-05, BOX-01)
+
+`overlayCenter` composites a box onto a fixed `width×bodyHeight` canvas (D95), so a box
+bigger than the body is not shrunk, scrolled or scaled — it is **clipped, bottom-first, in
+silence**. `modal.View` computed `innerSize()` and used only the width, so a confirm whose
+message wrapped to nineteen rows rendered nineteen rows on every screen, and the canvas ate
+the bottom border and — in prompt mode, where the input is rendered under the message — the
+text field itself. Nothing in the build or the tests noticed, because every unit test read
+`View()`'s own string, which is complete; only the composited frame is short.
+
+1. **A component that renders free-form content into a fixed-size box bounds that content
+   itself.** The geometry helper is not advisory: if `modalSize`/`innerSize` says the box is
+   twelve rows, `View` returns at most twelve rows, at every screen size the model accepts.
+   The picker has always been safe by accident of composition (its list is a bubble sized to
+   `innerSize`); a hand-rolled body has no such component and must clamp. A test that reads
+   only `View()` cannot see this class of bug — assert against the height the geometry
+   promised, or read the box through the canvas that will clip it.
+2. **What is elided is the explanation, never the ask.** The title and, in prompt mode, the
+   input line are rendered first-class and the message takes what is left, so a modal can
+   lose its reasoning but never the field it is asking the reader to fill in. A surface that
+   drops the interactive control to make room for prose is not degraded, it is broken
+   (principle 3 cuts the other way here).
+3. **Dropped content says it was dropped.** The elided block ends in `… (truncated)` — the
+   same wording `browsefail.go` uses for a clipped stderr, so one convention covers both.
+   Silent elision inside a *question* is the failure worth naming: the reader agrees to
+   something whose text they were never shown.
+4. **A geometry minimum must fit what the surface always renders.** `modalMinHeight` is 4,
+   not the picker's 3, because a prompt's frame is four rows before any message. A minimum
+   smaller than the mandatory chrome makes pt 1 unsatisfiable on a small terminal, which is
+   exactly where it matters.

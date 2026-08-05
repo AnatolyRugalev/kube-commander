@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — HINT-04 done: the port-forward panel's footer now names resolved keys, so no view in kubecom spells a key in its own body (D219). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — BOX-01 done: the confirm/prompt modal now renders no taller than the box it computes, so a long question no longer costs a prompt its input line (D220); BOX-02/03 filed for the two overlays with the same defect. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOX-01** The confirm/prompt modal renders no taller than the box it computes
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: `modal.View` computes `innerSize()` and discards the height, so the box is as
-      tall as its message wraps — 19 rows for a long confirm, on any screen. `overlayCenter`
-      composites onto a fixed `width×bodyHeight` canvas, so the excess is **clipped**: the
-      bottom border disappears and, in prompt mode, the text input (rendered last) goes with
-      it — a reader asked for a replica count with no visible field. Bound the message to the
-      inner height with a truncation marker, keeping the title and the input line.
+_(none)_
 
 ## Blocked
 
@@ -315,7 +308,32 @@ construction (its list is a component sized to `innerSize`), and the viewer and 
 pagers. The confirm/prompt modal is the outlier: it renders a free-form message that nothing
 bounds. Found while reading `modal.View` for the wrapping question AUTH-05b left open.
 
-- [ ] **BOX-01** The modal renders no taller than the box it computes — see In Progress
+- [x] **BOX-01** The modal renders no taller than the box it computes — done 2026-08-05 (D220)
+
+**Two more overlays are unbounded**, measured while closing BOX-01 — filed rather than folded
+in, since each is a different view with its own tests. The safe ones are safe by composition:
+the pickers size their list to `innerSize`, and the viewer and the logs view are pagers with
+their own viewport. Note for all three items that a unit test reading `View()`'s own string
+cannot catch this class of bug — the string is complete; only the composited frame is short
+(D220 pt 1).
+
+- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards
+      status: todo | owner: — | added: 2026-08-05
+      notes: `forwardsPanelView` (`internal/tui/app.go`) clamps its width to 64 and its height
+      not at all: title + one row per active forward + the HINT-04 footer. Fifteen forwards on
+      a short terminal push the footer and the bottom border off the canvas, and the selection
+      can scroll out of the visible region with no way to see it. It is the panel with a
+      *cursor*, so unlike the modal a marker is not enough — it wants the picker's answer
+      (a rows-visible window that follows `m.forwardsSel`), which is why this is its own leg.
+- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
+      status: todo | owner: — | added: 2026-08-05
+      notes: `help.View` constrains width (`helpMargin`) and ignores `m.height`, which it is
+      already given. `bubbles/help` with `ShowAll` lays the sixteen namespace columns out at
+      whatever height the tallest one needs — 15 rows today, and it grows with the registry,
+      which is the part that will not stay noticed. Any terminal whose body area is shorter
+      loses the bottom rows and the border silently. Cheapest honest fix in the D220 shape:
+      clamp to the height it holds and mark the elision; a scrolling overlay is a bigger leg
+      and needs a key context (HINT/D217) it does not have.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs

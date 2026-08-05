@@ -95,9 +95,15 @@ func (m *Model) offerReauth(res kube.Resource, rep kube.ExecPluginReport) bool {
 // because accepting blanks the TUI and hands the terminal over, which is a surprise
 // worth spending a line on.
 //
-// The box clips each line to sixty cells, so a long invocation is truncated here;
-// the pane behind it carries the same command wrapped in full (remediationLead),
-// which is why the notice quotes it rather than deferring to the prompt.
+// The box is sixty cells wide and wraps rather than clipping (lipgloss hard-wraps a
+// token too long to break), but it is bounded in height (D220): a long cause plus a
+// long invocation can push the command past the box and into its "… (truncated)"
+// line — elision runs bottom-up, and the command is the last line here. That is the
+// reason the pane behind the box keeps quoting the command in full (remediationLead)
+// rather than deferring to the prompt: on a short terminal the pane is where the
+// command is guaranteed to be legible. If a reader ever meets a prompt whose command
+// is elided, the fix is to shorten the cause, not to reorder — a question read after
+// the command it is asking about is worse than a question with its reason cut.
 func reauthQuestion(rc kube.RemediationCommand) string {
 	lines := make([]string, 0, 4)
 	if rc.Cause != "" {

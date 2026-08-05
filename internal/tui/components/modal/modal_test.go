@@ -5,10 +5,17 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
+
+// longMessage is a message that wraps well past any box the geometry admits —
+// the shape of a confirm whose question quotes a server error or a remediation
+// command, which is where the D220 clipping was found.
+var longMessage = strings.Repeat("this question is long enough to wrap several times. ", 12)
 
 // msgFrom runs a command (if any) and returns the message it produced, or nil.
 func msgFrom(cmd tea.Cmd) tea.Msg {
@@ -145,6 +152,98 @@ func TestUpdatePromptInertInConfirmMode(t *testing.T) {
 	}
 	if got := m.Value(); got != "" {
 		t.Fatalf("confirm-mode Value() = %q, want empty (typing swallowed)", got)
+	}
+}
+
+// A long message used to make the box as tall as its text wrapped — 19 rows for
+// this one, on any screen — and overlayCenter clips the excess against a fixed
+// canvas, so the box lost its bottom border. The rendered height must never
+// exceed what modalSize computed, on a roomy screen or a cramped one (D220).
+func TestBoxNeverOutgrowsItsComputedHeight(t *testing.T) {
+	for _, screen := range [][2]int{{80, 24}, {100, 40}, {80, 12}, {80, 8}, {60, 5}} {
+		for _, prompt := range []bool{false, true} {
+			m := New(styles.Default())
+			m.SetSize(screen[0], screen[1])
+			if prompt {
+				m.ShowPrompt("scale", "Scale deployment", longMessage, "3")
+			} else {
+				m.ShowConfirm("delete", "Delete pod", longMessage)
+			}
+			_, want := m.modalSize()
+			if got := lipgloss.Height(m.View()); got > want {
+				t.Fatalf("screen %dx%d prompt=%v: box is %d rows, modalSize says %d",
+					screen[0], screen[1], prompt, got, want)
+			}
+		}
+	}
+}
+
+// onCanvas is what overlayCenter's fixed canvas keeps of a box: it composites at
+// y = max(0, (height-boxHeight)/2), so a box taller than the body starts at row 0
+// and everything past row height-1 is dropped. Reading the box through this is the
+// difference between "View emitted the input line" (true even unclamped) and "the
+// reader can see it", which is the claim D220 is about.
+func onCanvas(box string, height int) string {
+	lines := strings.Split(box, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// The message is what gets elided, never the field the modal is asking the reader
+// to fill in: the input line is rendered under the message, so an unbounded box
+// clipped it away and left a prompt with no visible input (D220).
+func TestPromptKeepsItsInputWhenTheMessageIsTooTall(t *testing.T) {
+	const screenH = 12
+	m := New(styles.Default())
+	m.SetSize(80, screenH)
+	m.ShowPrompt("scale", "Scale deployment", longMessage, "7")
+	v := onCanvas(m.View(), screenH)
+	// The input renders its prompt and value in separate styles, so the box is read
+	// with the escapes stripped — what a reader sees, not what lipgloss emitted.
+	plain := ansi.Strip(v)
+	if !strings.Contains(plain, "Scale deployment") {
+		t.Fatalf("View() dropped the title; got:\n%s", v)
+	}
+	if !strings.Contains(plain, "> 7") {
+		t.Fatalf("View() dropped the input line; got:\n%s", v)
+	}
+	if !strings.Contains(plain, truncatedMarker) {
+		t.Fatalf("View() elided the message without saying so; got:\n%s", v)
+	}
+	if !strings.Contains(plain, "╰") {
+		t.Fatalf("the box lost its bottom border to the canvas; got:\n%s", v)
+	}
+}
+
+// A message that fits is untouched — the marker is evidence that content was
+// dropped, so it must not appear on a modal that dropped nothing.
+func TestShortMessageIsNotMarkedTruncated(t *testing.T) {
+	m := New(styles.Default())
+	m.SetSize(80, 24)
+	m.ShowConfirm("delete", "Delete pod", "Delete pod nginx-abc?")
+	if v := m.View(); strings.Contains(v, truncatedMarker) {
+		t.Fatalf("a one-line message was marked truncated; got:\n%s", v)
+	}
+}
+
+func TestClampLines(t *testing.T) {
+	block := "a\nb\nc\nd"
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{
+		{n: -1, want: ""},
+		{n: 0, want: ""},
+		{n: 1, want: "…"},
+		{n: 3, want: "a\nb\n…"},
+		{n: 4, want: block},
+		{n: 9, want: block},
+	} {
+		if got := clampLines(block, tc.n, "…"); got != tc.want {
+			t.Fatalf("clampLines(%q, %d) = %q, want %q", block, tc.n, got, tc.want)
+		}
 	}
 }
 

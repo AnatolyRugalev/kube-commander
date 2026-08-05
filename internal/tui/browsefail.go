@@ -136,8 +136,10 @@ func authFailure(kind string, e ErrorMsg, rep kube.ExecPluginReport, offered boo
 // owes to whether an offer is open. With the prompt up the reader's next keystroke
 // is the answer to it, so the pane names the prompt and quotes the command it is
 // asking about — the command is still printed either way, because the prompt box
-// clips to sixty cells and this pane wraps, so a long invocation is legible here
-// and only here. With no prompt up (declined, answered, or never offered because
+// is sixty cells wide and bounded in height (D220), so a long invocation can lose
+// its tail to the box's own elision while this pane, which wraps and scrolls with
+// the table, always carries it whole. With no prompt up (declined, answered, or
+// never offered because
 // something else held the screen) the fix is the reader's to run.
 func remediationLead(offered bool) string {
 	if offered {

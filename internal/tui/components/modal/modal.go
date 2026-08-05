@@ -24,6 +24,8 @@
 package modal
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -60,9 +62,13 @@ const (
 // centered over whatever is behind it. Mirrors the picker's geometry so the two
 // overlays read as one family.
 const (
-	modalMinWidth  = 24
-	modalMaxWidth  = 60
-	modalMinHeight = 3
+	modalMinWidth = 24
+	modalMaxWidth = 60
+	// modalMinHeight is 4 rather than the picker's 3 because a prompt's frame is
+	// four rows before any message (border ×2 + title + input), and View's D220
+	// invariant — never render taller than modalSize says — can only hold if the
+	// smallest box the geometry admits still fits what is rendered first-class.
+	modalMinHeight = 4
 	modalMaxHeight = 12
 	screenMargin   = 4 // cells kept clear around the modal on each axis
 	titleHeight    = 1 // the title line at the top of the box
@@ -256,17 +262,50 @@ func clamp(v, lo, hi int) int {
 // prompt mode — the text input below it. Same overlay approach as the picker and
 // help modals: the root model composites the box centered over the base browse
 // view (overlayCenter, D95) so the layout behind it stays put.
+//
+// The box never renders taller than modalSize computed (D220). The message is a
+// free-form string that lipgloss wraps — and hard-wraps a token too long to
+// break — so its line count comes from the caller's text, not from the geometry,
+// and overlayCenter flattens onto a fixed width×height canvas: anything past the
+// bottom is clipped, not scrolled. Unbounded, a long message therefore costs the
+// box its bottom border and, in prompt mode, the input line rendered under it —
+// the field the modal is asking the reader to fill in. So the title and the input
+// are rendered first-class (innerSize already reserves both) and the message takes
+// what is left: only the explanation is ever elided.
 func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	iw, _ := m.innerSize()
-	title := m.styles.Header.Width(iw).MaxWidth(iw).Render(m.title)
-	message := m.styles.App.Width(iw).MaxWidth(iw).Render(m.message)
-	parts := []string{title, message}
+	iw, ih := m.innerSize()
+	parts := []string{m.styles.Header.Width(iw).MaxWidth(iw).Render(m.title)}
+	if ih > 0 {
+		message := m.styles.App.Width(iw).MaxWidth(iw).Render(m.message)
+		marker := m.styles.App.Width(iw).MaxWidth(iw).Render(truncatedMarker)
+		parts = append(parts, clampLines(message, ih, marker))
+	}
 	if m.mode == modePrompt {
 		parts = append(parts, m.styles.App.Width(iw).MaxWidth(iw).Render(m.input.View()))
 	}
-	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	return m.styles.PaneFocus.Render(body)
+	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+}
+
+// truncatedMarker replaces the last visible line of a message too tall for the
+// box. It is the wording browsefail.go already uses when it drops the tail of a
+// credential plugin's stderr — a reader who meets both should meet one convention —
+// and it is a sentence rather than a bare ellipsis because a modal is a question:
+// text silently missing from what is being agreed to is the thing worth naming.
+const truncatedMarker = "… (truncated)"
+
+// clampLines truncates a rendered block to at most n lines, spending the last one
+// on marker so the cut is visible. n <= 0 yields ""; a block that already fits is
+// returned untouched, so the marker appears only when content was actually dropped.
+func clampLines(block string, n int, marker string) string {
+	if n <= 0 {
+		return ""
+	}
+	lines := strings.Split(block, "\n")
+	if len(lines) <= n {
+		return block
+	}
+	return strings.Join(append(lines[:n-1:n-1], marker), "\n")
 }
