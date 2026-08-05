@@ -73,7 +73,8 @@ in one run, each in a fresh subagent, within time/leg budgets (D21).
    the milestone's `Status:` line current. **The journal is the changelog** —
    `Status:`, the board's `Last updated:` line, and each **Done entry** are one
    line each, never a per-leg narrative (D67/D102). A Done entry is `- [x] **ID**
-   <short title> — done YYYY-MM-DD (Dnn, …)`.
+   <short title> — done YYYY-MM-DD (Dnn, …)` — and `make check` now enforces that
+   shape and a length backstop on the Done list (`internal/vault`, D224).
 8. **Commit + push** to `v1` with a clear message. Stop; report the next suggested leg.
 
 ## Decision authority

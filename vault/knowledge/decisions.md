@@ -6094,3 +6094,32 @@ That is the exact lie the HINT line exists to remove, arriving silently, with ev
    `Update`'s precedence deliberately (D206), so a context that no state can produce means its
    surface has no arm in the switch, or a case above shadows it — in which case the router
    above very likely shadows it too. Fix the precedence; do not reorder the test to pass.
+
+## D224 — A vault rule that a leg can break silently is checked by `make check` (2026-08-05, BOARD-01)
+
+D102 established that a board **Done entry is one line** and re-collapsed the list by hand
+(~50KB → ~17KB). It drifted back: by 2026-08-05 the board was 94KB with 52 of 202 entries
+between 400 and 712 runes — journal paragraphs pasted onto the board. Twice is the finding.
+The rule was never unclear; it was unenforced, and its cost is asymmetric — the leg that
+writes the paragraph pays nothing, every later Orient pays for it.
+
+1. **D102 is now a gate, not a convention.** `internal/vault` holds the drift guards for the
+   `vault/` tree; `TestBoardDoneEntriesAreOneLine` and
+   `TestBoardDoneSectionHoldsNothingButEntries` fail `make check` on an entry that is not the
+   `- [x] **ID** <short title> — done YYYY-MM-DD (Dnn, …)` shape, on one over 400 runes, and
+   on any non-blank line in the `## Done` section that is not an entry. The rune cap is a
+   **backstop, not a target** — the median entry is ~150 runes and D102's example is ~70 — so
+   do not read 400 as room to fill, and do not raise it to make an entry fit: shorten the
+   entry, and put the detail in the journal, which is what D67 makes the changelog.
+2. **The guard covers the Done list only.** Everything above `## Done` — In Progress, Blocked
+   and the per-line planning prose — is a live working area whose paragraphs carry why a line
+   was split and what a slice deliberately left, which the journal does *not* duplicate. It is
+   deliberately unchecked, and it is now the larger half of the file (BOARD-02). A leg that
+   compacts it is making a judgement about what is still load-bearing, so it may not be done
+   mechanically or on the strength of this decision.
+3. **This is the general shape, not a one-off.** A rule about a repository file that a human
+   or an agent must keep true belongs in a test — the precedent already existed for the
+   generated keybindings doc (D51), the release config (D175/D176/D185) and the screencast
+   tape (D181), and `internal/vault` is where the vault's own join it. Writing the rule into
+   `CLAUDE.md` or a skill is necessary and has now twice been shown to be insufficient on its
+   own.

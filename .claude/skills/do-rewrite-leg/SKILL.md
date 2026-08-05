@@ -106,8 +106,10 @@ if not already in context. Follow these steps in order.
 
 - Move the task to **Done** in `board.md` as a **one-line entry** — `- [x] **ID**
   <short title> — done YYYY-MM-DD (Dnn, …)` — never a paragraph; the full detail
-  lives in the journal (D67/D102). If part remains, split the remainder back into
-  Backlog as new small items.
+  lives in the journal (D67/D102). `make check` fails on a Done entry that is not
+  that shape, that runs past ~400 runes, or that spills onto a second line
+  (`internal/vault`, D224) — shorten the entry, never the guard. If part remains,
+  split the remainder back into Backlog as new small items.
 - Write one new journal file `vault/journal/YYYY-MM-DD.N.md` (`N` = next unused
   sequence number for today) using the template below.
 - Update the active **milestone file**: tick exit criteria now met; keep its
