@@ -7,7 +7,8 @@ _Last updated: 2026-08-05 — AUTH-05b done, closing the AUTH line: a diagnosed 
 
 ## In Progress
 
-_(none)_
+- [ ] **HINT-02** The same for the modals, the help overlay and the shared viewer
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
 
 ## Blocked
 
@@ -284,7 +285,7 @@ time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shap
 - [x] **HINT-01** The hint line tells the truth while a picker is open
       — done 2026-08-02 (D206)
 - [ ] **HINT-02** The same for the modals, the help overlay and the shared viewer
-      status: todo | owner: — | added: 2026-08-02
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-02
       notes: The neighbours HINT-01 left: a confirm modal swallows everything but
       `y`/`n`/esc/enter, a prompt modal captures text, and the help overlay and shared
       viewer each capture input too — all four still show the browse hint underneath.
