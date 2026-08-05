@@ -7,7 +7,14 @@ _Last updated: 2026-08-05 — HINT-04 done: the port-forward panel's footer now 
 
 ## In Progress
 
-_(none)_
+- [ ] **BOX-01** The confirm/prompt modal renders no taller than the box it computes
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
+      notes: `modal.View` computes `innerSize()` and discards the height, so the box is as
+      tall as its message wraps — 19 rows for a long confirm, on any screen. `overlayCenter`
+      composites onto a fixed `width×bodyHeight` canvas, so the excess is **clipped**: the
+      bottom border disappears and, in prompt mode, the text input (rendered last) goes with
+      it — a reader asked for a replica count with no visible field. Bound the message to the
+      inner height with a truncation marker, keeping the title and the input line.
 
 ## Blocked
 
@@ -299,6 +306,16 @@ a plausible wrong hint and every test still passes. HINT-04 cleared the residue 
 behind, so no view in kubecom writes a key into its own body any more (D219).
 
 - [x] **HINT-04** The port-forward panel's footer spells its keys literally — done 2026-08-05 (D219)
+
+### Overlay geometry (BOX — agent-found)
+Every overlay in kubecom is a bordered box centered over the browse body by `overlayCenter`,
+which flattens onto a fixed `width×bodyHeight` canvas — so a box larger than the body is not
+scrolled or shrunk, it is **silently clipped**, bottom-first. The picker is safe by
+construction (its list is a component sized to `innerSize`), and the viewer and logs view are
+pagers. The confirm/prompt modal is the outlier: it renders a free-form message that nothing
+bounds. Found while reading `modal.View` for the wrapping question AUTH-05b left open.
+
+- [ ] **BOX-01** The modal renders no taller than the box it computes — see In Progress
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
