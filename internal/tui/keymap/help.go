@@ -94,6 +94,13 @@ const (
 	// HelpViewer is the shared read-only viewer (YAML/describe/secret, M3-03): it
 	// scrolls on navigation and closes on back/quit, swallowing everything else.
 	HelpViewer
+	// HelpTableFilter is the browse table's filter field while it is open (`/`), which
+	// captures text exactly as the logs grep and the picker filters do — so only the
+	// no-text keys act: move through the live-narrowed rows, commit, clear-and-close.
+	HelpTableFilter
+	// HelpForwards is the port-forward panel (M3-13b), a global overlay that captures
+	// input: move the cursor, stop the selected forward or all of them, close.
+	HelpForwards
 )
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
@@ -201,6 +208,28 @@ const (
 // viewer is up (M3-08a/b) — are deliberately absent for the reason the port picker's
 // `p`/`0` are (D206 pt 3): a HelpContext names an input state, not which content the
 // surface happens to be showing. They stay in `?` and in the secret viewer's own title.
+//
+// The last two capturing surfaces are HINT-03's, and D217 pt 1 makes them the *last*:
+// a third would mean a surface was added without a hint case.
+//
+// The browse filter field is the third text field, and it takes the same set as the
+// other two for the same reason (D206 pt 3): `routeFilterKey` acts only on a mapped key
+// with `Text == ""`, so `/` `n` `s` `a` `?` and `q` all type a character into the query
+// while the browse table set underneath advertises every one of them. What survives is
+// move (the selection steps through the live-narrowed rows so a match can be previewed
+// while typing), enter (commit the narrowing and close), esc (clear it and close). Its
+// esc carries two meanings in sequence — clear, then close — and is hinted as the one
+// entry the registry has, because a hint names a key that acts, not a state machine.
+//
+// The port-forward panel is the one capturing surface with no text field, so its set is
+// simply what `handleForwardsPanelAction` honours: move the cursor, stop the selected
+// forward, stop all of them, and the ways out. `forwards.panel` (`F`) also closes it and
+// is left out for the reason `q` is left out of the confirm set — back and quit already
+// name the way out, and a third is an inventory. nav.drillIn is hinted under its global
+// description ("Open / drill into selection") though what it does here is *stop* the
+// selected forward: a description is global (D147 pt 3), the panel's own footer says
+// "stop" one line up, and the same trade is already made by the prompt modal, where
+// enter submits. The hint's promise is which keys act, not a gloss of each verb.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:         {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:        {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
@@ -213,6 +242,8 @@ var contextShortHelpActions = map[HelpContext][]Action{
 	HelpPrompt:       {ActionDrillIn, ActionBack},
 	HelpKeybindings:  {ActionBack, ActionHelp, ActionQuit},
 	HelpViewer:       {ActionDown, ActionUp, ActionBack, ActionQuit},
+	HelpTableFilter:  {ActionDown, ActionUp, ActionDrillIn, ActionBack},
+	HelpForwards:     {ActionDown, ActionUp, ActionDrillIn, ActionStopForwards, ActionBack, ActionQuit},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

@@ -5946,3 +5946,26 @@ keys are not browse keys, so both halves are worth pinning.
    stays generated (D11) and a rebind reaches it. Never write `y/n` — or any literal key —
    into a hint set, and never hint the browse meanings of a chord the open surface has
    redefined.
+
+## D218 — The hint-context set is closed by the router, and a repurposed key is still hinted under its global description (2026-08-05, HINT-03)
+
+HINT-03 covered the last two capturing surfaces D217 pt 1 named, so the enumeration is
+complete. Two rules keep it that way.
+
+1. **`hintContext` is the router's mirror, and a new capturing surface ships its case in
+   the same leg that adds it.** The list is complete *today* — every branch of `Update`
+   and `handleAction` that swallows input has a case, in the order those routers test
+   them, which is what makes the case list auditable by reading the router rather than
+   the board. There is no registry to forget to register with and no test that fails when
+   a surface is added, so the only defence is the rule: a surface that captures input is
+   not finished until its `HelpContext` exists. Adding one later is not a follow-up — it
+   is shipping a known lie, since the fallback renders a plausible browse hint (D217 pt 1).
+2. **A hint entry promises that the key acts, not what it does there.** The port-forward
+   panel's `enter` stops the selected forward and is hinted "Open / drill into selection";
+   the prompt modal's `enter` submits and is hinted the same. Do **not** fix this with
+   per-context descriptions: a description is global and is what the `?` overlay and the
+   generated doc render, so lengthening it to cover every surface widens that column until
+   the next one no longer fits (D147 pt 3), and per-context overrides would put a second,
+   diverging source of copy next to the registry (D11). Where a surface's verb genuinely
+   needs saying, the surface says it in its own body — the panel's footer reads "enter:
+   stop" one line above the hint.

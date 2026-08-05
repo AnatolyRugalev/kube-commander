@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — HINT-02 done: the hint line now tells the truth under both modals, the keybindings overlay and the shared viewer, and the last two liars are filed as HINT-03 (D217). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — HINT-03 done, closing the HINT line: every input-capturing surface in kubecom now has a hint context, and D218 says a new one ships its case in the same leg. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HINT-03** The last two liars: the browse filter field and the port-forward panel
-      status: in-progress | owner: claude-opus | claimed: 2026-08-05
+_(none)_
 
 ## Blocked
 
@@ -286,17 +285,27 @@ time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shap
       — done 2026-08-02 (D206)
 - [x] **HINT-02** The same for the modals, the help overlay and the shared viewer
       — done 2026-08-05 (D217)
-- [ ] **HINT-03** The last two liars: the browse filter field and the port-forward panel
-      status: in-progress | owner: claude-opus | added: 2026-08-05 | claimed: 2026-08-05
-      notes: Found while doing HINT-02, which covered the four surfaces it named. Two
-      capturing surfaces are still hinted with the browse set: the **browse filter field**
-      (`/`), which types every letter it advertises — the logs-grep problem one pane over,
-      so `HelpLogsFilter`'s reasoning transfers and the honest set is the no-text keys
-      `routeFilterKey` honours; and the **port-forward panel** (`F`), which swallows
-      everything but its own cursor/stop/close keys (`handleForwardsPanelAction`). Two
-      more cases in `hintContext`, in the precedence Update routes them (the filter field
-      sits between the pickers and the modals; the panel after the viewer). D217 pt 1 says
-      this is the whole remaining set — a third would mean a surface was added without one.
+- [x] **HINT-03** The last two liars: the browse filter field and the port-forward panel
+      — done 2026-08-05 (D218)
+
+**The HINT line is closed** as of HINT-03/D218: every surface in kubecom that captures input
+has a `HelpContext`, written where its router tests it, so the two switches read as the same
+list in the same order. The filter field takes the same four keys as the other two text fields
+(D206 pt 3's rule, applied a third time), and the port-forward panel — the only capturing
+surface with no text field — takes a transcript of `handleForwardsPanelAction`. Nothing
+enforces the completeness, which is D218 pt 1: `contextShortHelpActions` has no exhaustiveness
+check and `ShortHelpContext` falls back silently, so a new capturing surface with no case ships
+a plausible wrong hint and every test still passes.
+
+- [ ] **HINT-04** The port-forward panel's footer spells its keys literally
+      status: todo | owner: — | added: 2026-08-05
+      notes: Left deliberately by HINT-03 (see its journal entry). `forwardsPanelView`
+      renders `"enter: stop · X: stop all · esc: close"` — the only view in kubecom that
+      writes a key into its own body, so a rebind silently breaks it (D11). Deleting it is
+      *not* the fix: it is the one place the panel's verbs are stated, and the hint line
+      underneath hints `nav.drillIn` under its global description ("Open / drill into
+      selection"), which D218 pt 2 keeps global. Build the footer from `m.keymap.Keys(...)`
+      and keep its verbs. Small, view-local, its own tests.
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs

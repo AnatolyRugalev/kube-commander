@@ -278,6 +278,34 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
+	// The browse filter field (HINT-03) is the third text field and takes the same set
+	// as the other two: only the no-text keys survive an open query.
+	tblFilter := descs(hm.ShortHelpContext(HelpTableFilter))
+	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionBack} {
+		if !tblFilter[a.Describe()] {
+			t.Errorf("filter-field context should offer %q — it carries no text and still acts", a)
+		}
+	}
+	for _, a := range []Action{ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionHelp, ActionQuit} {
+		if tblFilter[a.Describe()] {
+			t.Errorf("%q types into the open filter field; the hint must not offer it", a)
+		}
+	}
+
+	// The port-forward panel (HINT-03) is the capturing surface with no text field, so
+	// its set is what its router honours — cursor, stop, stop-all, and the ways out.
+	forwards := descs(hm.ShortHelpContext(HelpForwards))
+	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionStopForwards, ActionBack, ActionQuit} {
+		if !forwards[a.Describe()] {
+			t.Errorf("forwards-panel context should offer %q — the panel honours it", a)
+		}
+	}
+	for _, a := range []Action{ActionFilter, ActionSort, ActionActions, ActionNamespace, ActionHelp} {
+		if forwards[a.Describe()] {
+			t.Errorf("%q is swallowed by the open port-forward panel; it must not be hinted", a)
+		}
+	}
+
 	// Disabling an action drops it from the context subset.
 	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
 	if err != nil {

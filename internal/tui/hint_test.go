@@ -197,6 +197,75 @@ func TestHintBarTracksTheSharedViewer(t *testing.T) {
 		keymap.ActionFilter, keymap.ActionSort, keymap.ActionActions, keymap.ActionNamespace, keymap.ActionHelp)
 }
 
+// TestHintBarTracksTheBrowseFilterField is the first of HINT-03's two: the browse
+// filter field is a text field like the logs grep, so the table set underneath it —
+// `/` `n` `s` `a` `?` `q` — types a character instead of firing. Typing into the open
+// field must not widen the hint back out either: the context is the field's state.
+func TestHintBarTracksTheBrowseFilterField(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m = wide(t, m)
+	// The premise: the table hint advertises exactly the keys the open field takes away.
+	table := m.hintbar.View()
+	hintOffers(t, table, "the table hint",
+		keymap.ActionFilter, keymap.ActionSearchNext, keymap.ActionSort, keymap.ActionActions,
+		keymap.ActionHelp, keymap.ActionQuit)
+
+	m, _ = press(t, m, slash)
+	if !m.filtering {
+		t.Fatal("`/` should open the browse filter field")
+	}
+	hint := m.hintbar.View()
+	hintHides(t, hint, "the open filter field",
+		keymap.ActionFilter, keymap.ActionSearchNext, keymap.ActionSort, keymap.ActionActions,
+		keymap.ActionHelp, keymap.ActionQuit, keymap.ActionNamespace)
+	hintOffers(t, hint, "the open filter field",
+		keymap.ActionDown, keymap.ActionUp, keymap.ActionDrillIn, keymap.ActionBack)
+
+	// The keys it hides are keys it *types*: `s` narrows the rows rather than sorting.
+	m = typeStr(t, m, "s")
+	if got := m.hintbar.View(); got != hint {
+		t.Errorf("typing into the field must not change the hint: %q, want %q", got, hint)
+	}
+
+	// enter commits the narrowing and closes the field, so the table set comes back.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if m.filtering {
+		t.Fatal("enter should commit the filter and close the field")
+	}
+	if got := m.hintbar.View(); got != table {
+		t.Errorf("committing the filter should restore the table hint: %q, want %q", got, table)
+	}
+}
+
+// TestHintBarTracksTheForwardsPanel is HINT-03's second, and the one capturing surface
+// with no text field: the panel swallows every browse key and honours only its own
+// cursor / stop / close set (handleForwardsPanelAction).
+func TestHintBarTracksTheForwardsPanel(t *testing.T) {
+	m := wide(t, openPodTable(t, "Pod"))
+	table := m.hintbar.View()
+
+	m, _ = press(t, m, tea.Key{Code: 'F', Text: "F"})
+	if !m.forwardsPanel {
+		t.Fatal("`F` should open the port-forward panel")
+	}
+	hint := m.hintbar.View()
+	hintOffers(t, hint, "the open port-forward panel",
+		keymap.ActionDown, keymap.ActionUp, keymap.ActionDrillIn, keymap.ActionStopForwards,
+		keymap.ActionBack, keymap.ActionQuit)
+	hintHides(t, hint, "the open port-forward panel",
+		keymap.ActionFilter, keymap.ActionSearchNext, keymap.ActionSort, keymap.ActionActions,
+		keymap.ActionNamespace, keymap.ActionHelp)
+
+	// Closing it the way a reader does restores the table hint byte for byte.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.forwardsPanel {
+		t.Fatal("esc should close the port-forward panel")
+	}
+	if got := m.hintbar.View(); got != table {
+		t.Errorf("closing the panel should restore the table hint: %q, want %q", got, table)
+	}
+}
+
 // TestHintBarRefreshesWithoutAnExplicitSync is the structural half of HINT-01 (D206):
 // the hint is derived at the tail of every Update, so a state change that no
 // syncHints call sits next to still lands. `a` is such a path — it opens the palette's

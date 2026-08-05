@@ -3766,6 +3766,12 @@ func (m *Model) hintContext() keymap.HelpContext {
 			return keymap.HelpPickerFilter
 		}
 		return keymap.HelpPicker
+	case m.filtering:
+		// The browse filter field captures text while it is open (routeFilterKey), so
+		// the table set underneath — `/`, `n`, `s`, `a`, `?`, `q` — types instead of
+		// firing; only the no-text keys act (HINT-03). Resolved after the picker and
+		// before the modals, exactly where Update routes it.
+		return keymap.HelpTableFilter
 	case m.modal.Prompting():
 		// The modal's text field takes every text-producing key, so only the no-text
 		// control keys act — enter submits, esc cancels (routeModalPromptKey). Resolved
@@ -3785,6 +3791,11 @@ func (m *Model) hintContext() keymap.HelpContext {
 		// closes on back/quit, swallowing the rest (handleViewerAction). Below the logs
 		// view for the same reason handleAction orders them so.
 		return keymap.HelpViewer
+	case m.forwardsPanel:
+		// The port-forward panel swallows everything but its own cursor/stop/close keys
+		// (handleForwardsPanelAction), so the browse set underneath is unreachable
+		// (HINT-03). Below the viewer and above the overlay, as handleAction orders them.
+		return keymap.HelpForwards
 	case m.help.Visible():
 		// The keybindings overlay swallows navigation while it is open, so the only
 		// promise left to make is how to close it. Last of the capturing surfaces, as it
