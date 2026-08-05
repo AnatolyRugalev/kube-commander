@@ -2996,9 +2996,37 @@ func (m Model) forwardsPanelView() string {
 			lines = append(lines, style.Width(iw).MaxWidth(iw).Render(gutter+row))
 		}
 	}
-	footer := m.styles.Subtle.Width(iw).MaxWidth(iw).Render("enter: stop · X: stop all · esc: close")
-	lines = append(lines, footer)
+	if footer := forwardsPanelFooter(m.keymap); footer != "" {
+		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render(footer))
+	}
 	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// forwardsPanelFooter builds the panel's key footer from the resolved keymap instead
+// of spelling literal keys, so a rebind moves it (D11) — this was the last view in
+// kubecom that wrote a key into its own body (HINT-04). Only the *keys* are generated:
+// the verbs stay here because the registry's descriptions are global (D218 pt 2) and
+// nav.drillIn's is "Open / drill into selection", while in the panel it stops the
+// selected forward — this footer is the one place the panel's verbs are stated, which
+// is why HINT-03 declined to delete it in favour of the hint line. An action the user
+// disabled drops out entirely rather than rendering a bare verb, the same trade
+// portPickerTitle makes; disable all three and the footer line itself disappears.
+func forwardsPanelFooter(km *keymap.Keymap) string {
+	entries := []struct {
+		action keymap.Action
+		verb   string
+	}{
+		{keymap.ActionDrillIn, "stop"},
+		{keymap.ActionStopForwards, "stop all"},
+		{keymap.ActionBack, "close"},
+	}
+	var parts []string
+	for _, e := range entries {
+		if k := firstKey(km, e.action); k != "" {
+			parts = append(parts, k+": "+e.verb)
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it

@@ -5969,3 +5969,23 @@ complete. Two rules keep it that way.
    diverging source of copy next to the registry (D11). Where a surface's verb genuinely
    needs saying, the surface says it in its own body — the panel's footer reads "enter:
    stop" one line above the hint.
+
+## D219 — A view may state its own verbs, but never its own keys: a body that names a gesture reads the key from the resolved keymap (2026-08-05, HINT-04)
+
+D218 pt 2 leaves one escape hatch — where a surface's verb genuinely needs saying, the
+surface says it in its own body — and the port-forward panel's footer was the only place
+that used it. It was also the only view in kubecom that wrote a key into its own body, so a
+user who rebound `forwards.stopAll` read `X: stop all` under a key that no longer acted.
+The hatch stays open; its price is this rule.
+
+1. **The verbs are local, the keys are generated.** A body footer names its actions and
+   pairs each with `firstKey(km, action)` (`portPickerTitle`'s helper — the same trade the
+   port picker title already makes). This is D11 applied to rendering rather than to
+   matching: the registry is the only place keys exist, so a view that spells one is a lie
+   waiting on a rebind, and nothing in the build catches it. If a body would state a key it
+   cannot resolve — a chord, a raw literal — that is the signal the copy belongs in the
+   registry's description instead.
+2. **An action the user unbound drops out of the body, and a body with nothing left
+   disappears.** A verb with no key beside it is worse than silence: it promises a gesture
+   the reader cannot perform and cannot discover. Rendering nothing is the honest floor —
+   the `?` overlay and the hint line still carry whatever is bound.

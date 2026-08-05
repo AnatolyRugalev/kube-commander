@@ -5551,6 +5551,77 @@ func TestForwardsPanelLists(t *testing.T) {
 	}
 }
 
+// TestForwardsPanelFooterFollowsTheKeymap is HINT-04: the panel's footer was the last
+// view in kubecom that wrote literal keys into its own body, so a rebind used to leave
+// it telling the reader to press a key that no longer acts (D11). It now names the
+// resolved keys, and only the verbs are local (D218 pt 2).
+func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
+	km := keymap.DefaultKeymap()
+	// The defaults render exactly the line the literal used to spell — the point of the
+	// leg is where the keys come from, not what they say today.
+	if got, want := forwardsPanelFooter(km), "enter: stop · X: stop all · esc: close"; got != want {
+		t.Fatalf("the default footer = %q, want %q", got, want)
+	}
+
+	// The panel body actually renders it.
+	m := openPodTable(t, "Pod")
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	if view := m.View().Content; !strings.Contains(view, forwardsPanelFooter(m.keymap)) {
+		t.Fatalf("the open panel should render its footer: %q", view)
+	}
+
+	// Rebinding forwards.stopAll moves the footer with it. This is the assertion the
+	// literal footer failed: `X` is gone from the keymap, so naming it would be a lie.
+	rebound, _, err := km.Merge(map[keymap.Action][]string{keymap.ActionStopForwards: {"Z"}})
+	if err != nil {
+		t.Fatalf("rebinding forwards.stopAll: %v", err)
+	}
+	m.keymap = rebound
+	view := m.View().Content
+	if !strings.Contains(view, "Z: stop all") {
+		t.Fatalf("a rebound stop-all should read as `Z` in the footer: %q", view)
+	}
+	if strings.Contains(view, "X: stop all") {
+		t.Fatalf("the footer should not name the key the rebind took away: %q", view)
+	}
+}
+
+// TestForwardsPanelFooterDropsDisabledKeys proves a user who unbinds one of the panel's
+// actions loses that entry rather than reading a verb with no key (the trade
+// portPickerTitle already makes), and that unbinding all three drops the line itself.
+func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
+	km, _, err := keymap.DefaultKeymap().Merge(map[keymap.Action][]string{keymap.ActionStopForwards: {}})
+	if err != nil {
+		t.Fatalf("disabling forwards.stopAll: %v", err)
+	}
+	if got, want := forwardsPanelFooter(km), "enter: stop · esc: close"; got != want {
+		t.Fatalf("a disabled stop-all should drop out: got %q, want %q", got, want)
+	}
+
+	km, _, err = keymap.DefaultKeymap().Merge(map[keymap.Action][]string{
+		keymap.ActionDrillIn:      {},
+		keymap.ActionStopForwards: {},
+		keymap.ActionBack:         {},
+	})
+	if err != nil {
+		t.Fatalf("disabling all three panel actions: %v", err)
+	}
+	if got := forwardsPanelFooter(km); got != "" {
+		t.Fatalf("with nothing bound the footer should be empty, got %q", got)
+	}
+
+	// And the panel then renders without the footer line at all, rather than a blank
+	// styled row under the list.
+	m := openPodTable(t, "Pod")
+	next, _ := m.handleAction(keymap.ActionForwards)
+	m = next.(Model)
+	m.keymap = km
+	if view := m.View().Content; strings.Contains(view, ": stop") || strings.Contains(view, ": close") {
+		t.Fatalf("an all-disabled panel should render no footer entries: %q", view)
+	}
+}
+
 // TestForwardsPanelStopSelected proves nav.drillIn on the selected forward cancels its
 // context; the forwardDoneMsg that follows removes it from the set.
 func TestForwardsPanelStopSelected(t *testing.T) {

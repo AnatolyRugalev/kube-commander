@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — HINT-03 done, closing the HINT line: every input-capturing surface in kubecom now has a hint context, and D218 says a new one ships its case in the same leg. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — HINT-04 done: the port-forward panel's footer now names resolved keys, so no view in kubecom spells a key in its own body (D219). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HINT-04** The port-forward panel's footer spells its keys literally
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05 | claimed: 2026-08-05
+_(none)_
 
 ## Blocked
 
@@ -296,17 +295,10 @@ list in the same order. The filter field takes the same four keys as the other t
 surface with no text field — takes a transcript of `handleForwardsPanelAction`. Nothing
 enforces the completeness, which is D218 pt 1: `contextShortHelpActions` has no exhaustiveness
 check and `ShortHelpContext` falls back silently, so a new capturing surface with no case ships
-a plausible wrong hint and every test still passes.
+a plausible wrong hint and every test still passes. HINT-04 cleared the residue HINT-03 left
+behind, so no view in kubecom writes a key into its own body any more (D219).
 
-- [ ] **HINT-04** The port-forward panel's footer spells its keys literally
-      status: todo | owner: — | added: 2026-08-05
-      notes: Left deliberately by HINT-03 (see its journal entry). `forwardsPanelView`
-      renders `"enter: stop · X: stop all · esc: close"` — the only view in kubecom that
-      writes a key into its own body, so a rebind silently breaks it (D11). Deleting it is
-      *not* the fix: it is the one place the panel's verbs are stated, and the hint line
-      underneath hints `nav.drillIn` under its global description ("Open / drill into
-      selection"), which D218 pt 2 keeps global. Build the footer from `m.keymap.Keys(...)`
-      and keep its verbs. Small, view-local, its own tests.
+- [x] **HINT-04** The port-forward panel's footer spells its keys literally — done 2026-08-05 (D219)
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
