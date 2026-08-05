@@ -6069,3 +6069,28 @@ somewhere they can reach — `docs/keybindings.md`, generated from the same regi
    title the overlay returns `""` and the base view shows through, as the forwards panel
    already did — a clipped border is not a more honest failure than no box, and the hint line
    outside the body still names the toggle that opened it.
+
+## D223 — A `HelpContext` is only real when both of its sides are closed (2026-08-05, HINT-05)
+
+The HINT line (D206/D217/D218) gave every capturing surface in kubecom a `HelpContext`, and
+D218 pt 1 recorded what it could not give them: nothing enforced that a *new* one arrives
+complete. `HelpContext` was a bare `iota` enum and `contextShortHelpActions` a map, so a
+constant with no entry fell through `ShortHelpContext`'s fallback to `shortHelpActions` — the
+**browse** set — on a surface where filter, help and quit type a character or are swallowed.
+That is the exact lie the HINT line exists to remove, arriving silently, with every test green.
+
+1. **The enum is bounded and enumerable, and both sides of a context are checked.** A context
+   is declared above `helpContextCount` and is then subject to two obligations: a curated
+   entry in `contextShortHelpActions` (`TestEveryHelpContextHasItsOwnHintSet`, keymap) and a
+   model state that makes `hintContext()` return it (`TestEveryHelpContextIsReachable`, tui).
+   Neither is generated — the sets stay curated by hand, which is the whole of D143 pt 1;
+   what is mechanical is only that a context cannot ship missing one. A future leg adding a
+   capturing surface adds a row to the reachability table, and that is the intended cost.
+2. **The fallback stays, and is for out-of-range integers only.** `ShortHelpContext` still
+   degrades to the focus-agnostic set for a value outside the enum — a caller passing one
+   should not panic — but it is no longer a way for a *declared* context to be under-specified,
+   because the test catches that first. Degrading and being incomplete are different failures.
+3. **A reachability failure is a routing bug, not a hint bug.** `hintContext()` mirrors
+   `Update`'s precedence deliberately (D206), so a context that no state can produce means its
+   surface has no arm in the switch, or a case above shadows it — in which case the router
+   above very likely shadows it too. Fix the precedence; do not reorder the test to pass.

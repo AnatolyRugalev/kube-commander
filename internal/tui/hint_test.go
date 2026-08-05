@@ -266,6 +266,105 @@ func TestHintBarTracksTheForwardsPanel(t *testing.T) {
 	}
 }
 
+// TestEveryHelpContextIsReachable closes the second half of D218 pt 1 (HINT-05). The
+// keymap package's completeness test proves every declared context has a curated hint
+// set; this one proves the set is ever *shown* — that some state of the root model makes
+// hintContext() return it. The two failures it catches are the two halves of the same
+// mistake: a context declared for a new capturing surface whose case never got added to
+// the switch (the surface ships the browse hint, D218 pt 1's headline), and a context
+// whose case is shadowed by one above it in the precedence order, which is a live bug
+// nothing else would notice — hintContext mirrors Update's routing, so a shadowed hint
+// means a shadowed router arm.
+//
+// Every entry drives the model through the real gesture rather than assigning state, so
+// the table is a transcript of how a reader arrives at each surface. The per-context
+// assertions about *which* keys each set offers stay in the tests above; this one is
+// about coverage, and it is deliberately the only test in the file that must be edited
+// when a context is added.
+func TestEveryHelpContextIsReachable(t *testing.T) {
+	reach := map[keymap.HelpContext]func(t *testing.T) Model{
+		keymap.HelpMenu: func(t *testing.T) Model { return wideSized(t) },
+		keymap.HelpTable: func(t *testing.T) Model {
+			return wide(t, openPodTable(t, "Pod"))
+		},
+		keymap.HelpSearch: func(t *testing.T) Model {
+			return wide(t, openSearchView(t, &fakeSearcher{}))
+		},
+		keymap.HelpLogs: func(t *testing.T) Model {
+			return wide(t, openLogsWithLines(t, "GET /healthz 200"))
+		},
+		keymap.HelpLogsFilter: func(t *testing.T) Model {
+			m := wide(t, openLogsWithLines(t, "GET /healthz 200"))
+			m, _ = press(t, m, filterKey)
+			return m
+		},
+		keymap.HelpPickerFilter: func(t *testing.T) Model {
+			m, _ := press(t, wideSized(t), colon)
+			return m
+		},
+		keymap.HelpPicker: func(t *testing.T) Model {
+			// The only opt-in-filter picker left (D139), so the only way to reach a
+			// picker context with its field closed.
+			pl := &fakePortLister{ports: []kube.Port{{Port: 8080, Name: "http", Container: "app"}}}
+			m := wide(t, openPodTable(t, "Pod",
+				WithPortForwarder(&fakePortForwarder{handle: newFakeForward()}), WithPortLister(pl)))
+			m, cmd := dispatchRowAction(t, m, rowActionPortForward)
+			return loadPorts(t, m, cmd)
+		},
+		keymap.HelpConfirm: func(t *testing.T) Model {
+			return openDeleteModal(t, wide(t, deleteTableModel(t, &fakeDeleter{})))
+		},
+		keymap.HelpPrompt: func(t *testing.T) Model {
+			m, _ := dispatchRowAction(t, wide(t, workloadModel(t, WithScaler(&fakeScaler{}))), rowActionScale)
+			return m
+		},
+		keymap.HelpKeybindings: func(t *testing.T) Model {
+			m, _ := press(t, wideSized(t), tea.Key{Code: '?', Text: "?"})
+			return m
+		},
+		keymap.HelpViewer: func(t *testing.T) Model {
+			m := wide(t, describeViewerModel(t, &fakeDescriber{text: "Name: web-1\n"}))
+			_, cmd := press(t, m, describeKey)
+			next, fetch := m.Update(cmd().(rowActionMsg))
+			next, _ = next.(Model).Update(fetch().(describeLoadedMsg))
+			return next.(Model)
+		},
+		keymap.HelpTableFilter: func(t *testing.T) Model {
+			m, _ := tableWith(t, "web-1", "web-2")
+			m, _ = press(t, wide(t, m), slash)
+			return m
+		},
+		keymap.HelpForwards: func(t *testing.T) Model {
+			m, _ := press(t, wide(t, openPodTable(t, "Pod")), tea.Key{Code: 'F', Text: "F"})
+			return m
+		},
+	}
+
+	for _, ctx := range keymap.HelpContexts() {
+		build, ok := reach[ctx]
+		if !ok {
+			t.Errorf("no model state in this table yields %s — either the surface it was "+
+				"declared for has no case in hintContext (so it ships the browse hint), or "+
+				"the context is dead and should be removed", ctx)
+			continue
+		}
+		t.Run(ctx.String(), func(t *testing.T) {
+			m := build(t)
+			if got := m.hintContext(); got != ctx {
+				t.Fatalf("this state resolves to %s, want %s — a case above it in hintContext "+
+					"shadows it, and Update very likely routes the same way", got, ctx)
+			}
+			// Reachable is not enough: the line the hintbar actually renders must be the
+			// context's, not a stale one from before the surface opened (refreshHints).
+			// Contains rather than equality — the hintbar wraps what it is given in its
+			// own style, and this test is about which bindings reached it.
+			if got, want := m.hintbar.View(), m.help.ShortHelpContextView(ctx); !strings.Contains(got, want) {
+				t.Errorf("the rendered hint is %q, want %s's %q", got, ctx, want)
+			}
+		})
+	}
+}
+
 // TestHintBarRefreshesWithoutAnExplicitSync is the structural half of HINT-01 (D206):
 // the hint is derived at the tail of every Update, so a state change that no
 // syncHints call sits next to still lands. `a` is such a path — it opens the palette's

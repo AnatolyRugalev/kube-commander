@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -101,7 +102,57 @@ const (
 	// HelpForwards is the port-forward panel (M3-13b), a global overlay that captures
 	// input: move the cursor, stop the selected forward or all of them, close.
 	HelpForwards
+
+	// helpContextCount bounds the enum — it is always one past the last real context,
+	// which is what makes the set enumerable and therefore checkable (HINT-05, closing
+	// D218 pt 1). Without it a new capturing surface's context is a bare constant with
+	// no entry in contextShortHelpActions, and ShortHelpContext silently hands back the
+	// *browse* set for a surface where none of those keys act — the exact class of lie
+	// the HINT line exists to remove, with every test still green. Declare new contexts
+	// **above** this line; a constant added below it is invisible to both checks.
+	helpContextCount
 )
+
+// helpContextNames names each context for test failures and diagnostics, indexed by the
+// context itself. It is length-checked against helpContextCount, so a context added
+// without a name here is caught by the same test that catches a missing hint set.
+var helpContextNames = [helpContextCount]string{
+	HelpMenu:         "HelpMenu",
+	HelpTable:        "HelpTable",
+	HelpSearch:       "HelpSearch",
+	HelpLogs:         "HelpLogs",
+	HelpLogsFilter:   "HelpLogsFilter",
+	HelpPickerFilter: "HelpPickerFilter",
+	HelpPicker:       "HelpPicker",
+	HelpConfirm:      "HelpConfirm",
+	HelpPrompt:       "HelpPrompt",
+	HelpKeybindings:  "HelpKeybindings",
+	HelpViewer:       "HelpViewer",
+	HelpTableFilter:  "HelpTableFilter",
+	HelpForwards:     "HelpForwards",
+}
+
+// String names the context, so a failure reads "HelpForwards has no hint set" rather
+// than naming an integer nobody can place. An out-of-range value prints its number
+// rather than panicking — ShortHelpContext degrades on one too.
+func (c HelpContext) String() string {
+	if c < 0 || c >= helpContextCount || helpContextNames[c] == "" {
+		return "HelpContext(" + strconv.Itoa(int(c)) + ")"
+	}
+	return helpContextNames[c]
+}
+
+// HelpContexts returns every declared focus context in declaration order. It exists so
+// the completeness of the two sides of the hint — the set a context offers, and the
+// state that selects it — can be asserted over the whole enum rather than over whichever
+// contexts a test author remembered (HINT-05).
+func HelpContexts() []HelpContext {
+	out := make([]HelpContext, 0, helpContextCount)
+	for c := HelpContext(0); c < helpContextCount; c++ {
+		out = append(out, c)
+	}
+	return out
+}
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
 // is ordered as shown and rendered enabled-only. Filter/search/sort appear only in

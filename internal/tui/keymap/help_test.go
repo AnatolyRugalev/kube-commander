@@ -321,6 +321,52 @@ func TestShortHelpContext(t *testing.T) {
 	}
 }
 
+// TestEveryHelpContextHasItsOwnHintSet closes the first half of D218 pt 1 (HINT-05).
+// The fallback the test above pins is right for an out-of-range integer and wrong for a
+// *declared* context: a new capturing surface whose constant has no entry in
+// contextShortHelpActions gets the focus-agnostic browse set — filter, help, quit — on a
+// surface where none of them act, and nothing goes red. Enumerating the enum is what makes
+// that impossible; the sets themselves stay curated by hand, which is the point of D143 pt 1.
+func TestEveryHelpContextHasItsOwnHintSet(t *testing.T) {
+	hm := DefaultKeymap().HelpMap()
+	for _, ctx := range HelpContexts() {
+		actions, ok := contextShortHelpActions[ctx]
+		if !ok {
+			t.Errorf("%s has no entry in contextShortHelpActions — it would silently fall back "+
+				"to the browse set; add its curated subset", ctx)
+			continue
+		}
+		if len(actions) == 0 {
+			t.Errorf("%s has an empty hint set: a surface that captures input still owes the "+
+				"reader the way back out", ctx)
+		}
+		// The set must survive resolution: an action that no default binding names would
+		// be dropped by enabled() and the hint would render shorter than it reads here.
+		if got := len(hm.ShortHelpContext(ctx)); got != len(actions) {
+			t.Errorf("%s resolves to %d bindings from %d actions — one is unbound in the "+
+				"default keymap", ctx, got, len(actions))
+		}
+	}
+	// The other direction: an entry keyed by a context that no longer exists is dead
+	// curation, and it reads as coverage.
+	for ctx := range contextShortHelpActions {
+		if ctx < 0 || ctx >= helpContextCount {
+			t.Errorf("contextShortHelpActions has an entry for %s, which is not a declared "+
+				"context", ctx)
+		}
+	}
+	// String() is what makes every failure above readable, so it is checked here rather
+	// than in a test of its own: an unnamed context prints as an integer.
+	for _, ctx := range HelpContexts() {
+		if helpContextNames[ctx] == "" {
+			t.Errorf("HelpContext(%d) has no name in helpContextNames", int(ctx))
+		}
+	}
+	if got := HelpContext(99).String(); got != "HelpContext(99)" {
+		t.Errorf("an out-of-range context should print its number, got %q", got)
+	}
+}
+
 // TestHelpMapFullHelp checks FullHelp groups enabled bindings by namespace, in
 // first-seen column order and registry order within a column, dropping disabled.
 func TestHelpMapFullHelp(t *testing.T) {

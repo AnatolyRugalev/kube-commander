@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — BOX-03 done, closing the BOX line: the keybindings overlay clamps to the body height and points at `docs/keybindings.md` for what it cut, with the shared clamp now in `internal/tui/elide` (D222). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — HINT-05 done, closing D218 pt 1: a `HelpContext` now has to arrive with both a curated hint set and a reachable model state, or the tree is red (D223). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HINT-05** Nothing enforces the completeness — close D218 pt 1
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: Filed and claimed in the HINT section below.
+_(none)_
 
 ## Blocked
 
@@ -301,17 +299,14 @@ a plausible wrong hint and every test still passes. HINT-04 cleared the residue 
 behind, so no view in kubecom writes a key into its own body any more (D219).
 
 - [x] **HINT-04** The port-forward panel's footer spells its keys literally — done 2026-08-05 (D219)
-- [ ] **HINT-05** Nothing enforces the completeness — close D218 pt 1
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: The residue D218 pt 1 named and HINT-04 did not clear. `HelpContext` is a bare
-      `iota` enum and `contextShortHelpActions` is a map, so a new constant with no entry
-      falls back to `shortHelpActions` — the *browse* set — on a surface that captures input,
-      which is the exact class of lie the HINT line exists to remove, and every test stays
-      green. The loop needs closing in both directions: a declared context must have a hint
-      set, and it must be **reachable** — some model state must make `hintContext()` return
-      it, or the surface it was declared for has no case in the switch. Keep the
-      `HelpContext(99)` fallback: an out-of-range int from a future caller should degrade,
-      not panic. Hermetic; no cluster.
+- [x] **HINT-05** Nothing enforced the completeness — done 2026-08-05 (D223)
+
+**The HINT line is now enforced as well as closed** (HINT-05/D223): `HelpContext` is bounded
+by `helpContextCount` and enumerable via `HelpContexts()`, and a declared context must both
+carry a curated set (keymap) and be produced by some model state (tui) or one of the two tests
+goes red. The sets stay hand-curated — only their completeness is mechanical. The
+`ShortHelpContext` fallback survives for out-of-range integers, which is the case it was
+always right for.
 
 ### Overlay geometry (BOX — agent-found)
 Every overlay in kubecom is a bordered box centered over the browse body by `overlayCenter`,
