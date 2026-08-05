@@ -94,6 +94,14 @@ func browseFailureCause(e ErrorMsg) string {
 // fixes it. A report with no plugin degrades to browseFailure — there is nothing
 // to add and the kind's sentence is still true.
 //
+// offered says whether kubecom is, at this moment, asking the reader whether to
+// run the remediation itself (AUTH-05b's confirm). It changes one line and it must
+// track the offer rather than the diagnosis: telling a reader to go to another
+// terminal while a prompt on the same screen offers to do it for them is the pane
+// contradicting the modal, and leaving that sentence up after the offer is answered
+// is the pane promising a prompt that is gone. The shell therefore re-renders with
+// offered=false the moment the offer is accepted or declined (restoreReauthNotice).
+//
 // Two rules beyond the ones at the top of this file:
 //
 //   - **Line order is load-bearing.** The pane renders a notice into the rows it
@@ -107,7 +115,7 @@ func browseFailureCause(e ErrorMsg) string {
 //     executable aws failed with exit code 255` says less than the command line and
 //     the stderr do), and a pane row spent restating it is a row of stderr lost.
 //     It is still in the toast and the log line (surfaceError).
-func authFailure(kind string, e ErrorMsg, rep kube.ExecPluginReport) string {
+func authFailure(kind string, e ErrorMsg, rep kube.ExecPluginReport, offered bool) string {
 	if rep.Plugin == nil {
 		return browseFailure(kind, e)
 	}
@@ -117,13 +125,25 @@ func authFailure(kind string, e ErrorMsg, rep kube.ExecPluginReport) string {
 	}
 	lines := append([]string{"Cannot list " + subject}, authFailureCause(rep)...)
 	if rep.Suggested {
-		lines = append(lines,
-			rep.Remediation.Cause,
-			"Run this in another terminal, then reopen the resource:",
+		lines = append(lines, rep.Remediation.Cause, remediationLead(offered),
 			"  "+rep.Remediation.CommandLine())
 	}
 	lines = append(lines, "Plugin: "+authPluginLine(rep))
 	return strings.Join(append(lines, authStderrLines(rep.Diagnosis)...), "\n")
+}
+
+// remediationLead introduces the suggested command, and is the one line the pane
+// owes to whether an offer is open. With the prompt up the reader's next keystroke
+// is the answer to it, so the pane names the prompt and quotes the command it is
+// asking about — the command is still printed either way, because the prompt box
+// clips to sixty cells and this pane wraps, so a long invocation is legible here
+// and only here. With no prompt up (declined, answered, or never offered because
+// something else held the screen) the fix is the reader's to run.
+func remediationLead(offered bool) string {
+	if offered {
+		return "kubecom is asking whether to run this for you:"
+	}
+	return "Run this in another terminal, then reopen the resource:"
 }
 
 // authFailureCause is the sentence (or two) explaining what the diagnostic re-run

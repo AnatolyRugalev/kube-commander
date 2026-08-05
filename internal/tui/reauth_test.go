@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
 )
 
 // recordedRun is what the suspended remediation was asked to run, captured instead of
@@ -333,5 +334,207 @@ func TestResetClusterDropsTheArmedRemediation(t *testing.T) {
 	if m.hasReauth || len(m.reauthCmd.Argv) != 0 || m.reauthRes.GVK.Kind != "" {
 		t.Errorf("stash survived the switch: hasReauth=%v argv=%q res=%+v",
 			m.hasReauth, m.reauthCmd.Argv, m.reauthRes)
+	}
+}
+
+// ---- AUTH-05b: the offer ----------------------------------------------------
+
+// offeredPods drives the whole AUTH line end to end on fakes: browse Pods, fail the
+// watch the way an expired SSO session does, run the diagnosis that failure issues,
+// and feed its answer back — which is the only path that opens an offer. Nothing
+// short of this arms one, which is the property AUTH-05a shipped and this leg keeps.
+func offeredPods(t *testing.T) (Model, *fakeWatcher) {
+	t.Helper()
+	fd := &fakeAuthDiagnoser{rep: ssoReport(t)}
+	m, fw := browsingPods(t, fd)
+	m, cmd := failWatch(t, m, execPluginErr())
+	next, _ := m.Update(firstAuthDiagMsg(t, cmd))
+	return next.(Model), fw
+}
+
+// The headline: a diagnosis that substantiates a fix asks the reader whether to run
+// it, naming the exact command (D195 pt 4) — and the pane stops telling them to go to
+// another terminal, because the prompt in front of them is the other half of the same
+// sentence.
+func TestDiagnosisOffersToRunTheRemediation(t *testing.T) {
+	m, _ := offeredPods(t)
+
+	if !m.modal.Active() || m.modal.Kind() != reauthModalKind {
+		t.Fatalf("no offer opened: active=%v kind=%q", m.modal.Active(), m.modal.Kind())
+	}
+	if !m.hasReauth {
+		t.Error("the offer is on screen with nothing armed for it to approve")
+	}
+	if view := m.modal.View(); !strings.Contains(view, "aws sso login") {
+		t.Errorf("the prompt does not name the command it would run:\n%s", view)
+	}
+	notice := m.table.Notice()
+	if !strings.Contains(notice, "kubecom is asking whether to run this for you:") {
+		t.Errorf("the pane does not name the open prompt:\n%s", notice)
+	}
+	if strings.Contains(notice, "Run this in another terminal") {
+		t.Errorf("the pane still sends the reader to another terminal while offering to do it:\n%s", notice)
+	}
+	if !strings.Contains(notice, "aws sso login --profile acme-prod") {
+		t.Errorf("the pane must still carry the full command — the prompt box clips it:\n%s", notice)
+	}
+}
+
+// Accepting runs the remediation exactly once, and the pane goes back to the
+// self-service copy: the prompt it named is gone the moment it is answered.
+func TestAcceptingTheOfferRunsTheRemediation(t *testing.T) {
+	withReauthRun(t, &recordedRun{})
+	m, _ := offeredPods(t)
+
+	next, cmd := m.Update(modal.ConfirmedMsg{Kind: reauthModalKind})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("accepting the offer issued no suspend")
+	}
+	if m.modal.Active() {
+		t.Error("the offer is still on screen after being answered")
+	}
+	if m.hasReauth {
+		t.Error("the approval survived the run it authorised")
+	}
+	if notice := m.table.Notice(); !strings.Contains(notice, "Run this in another terminal") {
+		t.Errorf("the pane still names a prompt that has closed:\n%s", notice)
+	}
+	if _, again := m.Update(modal.ConfirmedMsg{Kind: reauthModalKind}); again != nil {
+		t.Error("a second confirm ran a second remediation without a second offer")
+	}
+}
+
+// Declining runs nothing at all — and drops the approval, because an unanswered one
+// may not linger (D215 pt 4). The pane returns to the copy that assumes the reader
+// will do it themselves.
+func TestDecliningTheOfferRunsNothing(t *testing.T) {
+	rec := &recordedRun{}
+	withReauthRun(t, rec)
+	m, fw := offeredPods(t)
+	watches := len(fw.res)
+
+	next, cmd := m.Update(modal.CancelledMsg{Kind: reauthModalKind})
+	m = next.(Model)
+	if cmd != nil {
+		t.Errorf("declining issued work: %T", cmd())
+	}
+	if rec.calls != 0 {
+		t.Errorf("the remediation ran %d times after a decline, want 0", rec.calls)
+	}
+	if m.hasReauth {
+		t.Error("a declined approval stayed armed")
+	}
+	if m.modal.Active() {
+		t.Error("the declined offer is still on screen")
+	}
+	if len(fw.res) != watches {
+		t.Error("declining retried the request")
+	}
+	notice := m.table.Notice()
+	if !strings.Contains(notice, "Run this in another terminal") || strings.Contains(notice, "kubecom is asking") {
+		t.Errorf("the pane did not go back to the self-service copy:\n%s", notice)
+	}
+}
+
+// A diagnosis lands whenever it lands; every other surface is one the reader opened
+// deliberately. So an offer never opens over one — and it must not, because a confirm
+// is only ever composited over the plain browse view: an offer opened under the logs
+// view would be an invisible modal swallowing every key.
+func TestOfferDoesNotInterruptAnotherSurface(t *testing.T) {
+	fd := &fakeAuthDiagnoser{rep: ssoReport(t)}
+	m, _ := browsingPods(t, fd)
+	m, cmd := failWatch(t, m, execPluginErr())
+	diag := firstAuthDiagMsg(t, cmd)
+
+	// The reader opened a delete confirm while the plugin was being re-run.
+	m.modal.ShowConfirm(deleteModalKind, "Delete", "Delete Pod default/web-1?")
+	next, _ := m.Update(diag)
+	m = next.(Model)
+
+	if m.modal.Kind() != deleteModalKind {
+		t.Errorf("the offer replaced the question the reader was answering: kind=%q", m.modal.Kind())
+	}
+	if m.hasReauth {
+		t.Error("a remediation was armed with no offer to approve it")
+	}
+	if notice := m.table.Notice(); !strings.Contains(notice, "Run this in another terminal") {
+		t.Errorf("the pane must keep the self-service copy when nothing was offered:\n%s", notice)
+	}
+}
+
+// A diagnosis that substantiates no command has nothing to offer: the pane says so
+// (AUTH-04a) and no prompt appears. Asking "shall I run nothing?" is worse than
+// silence.
+func TestNoOfferWhenNothingIsSubstantiated(t *testing.T) {
+	unrecognised := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{
+		Stderr:   "An error occurred (AccessDeniedException) when calling the DescribeCluster operation",
+		ExitCode: 254,
+	})
+	if unrecognised.Suggested {
+		t.Fatal("precondition: this failure must not be recognised")
+	}
+	fd := &fakeAuthDiagnoser{rep: unrecognised}
+	m, _ := browsingPods(t, fd)
+	m, cmd := failWatch(t, m, execPluginErr())
+	next, _ := m.Update(firstAuthDiagMsg(t, cmd))
+	m = next.(Model)
+
+	if m.modal.Active() {
+		t.Errorf("an offer opened for a report that substantiates nothing: kind=%q", m.modal.Kind())
+	}
+	if m.hasReauth {
+		t.Error("something was armed for a report that substantiates nothing")
+	}
+	if !strings.Contains(m.table.Notice(), "no command it can suggest") {
+		t.Errorf("the pane should say it has nothing to suggest:\n%s", m.table.Notice())
+	}
+}
+
+// The restore is scoped to the text the offer wrote: by the time the reader answers,
+// the pane may be explaining something else entirely, and putting this offer's notice
+// back would resurrect an explanation the shell already retired.
+func TestAnsweringDoesNotOverwriteANewerNotice(t *testing.T) {
+	m, _ := offeredPods(t)
+	m.table.SetNotice("Cannot list Pod\nThe API server could not be reached.")
+
+	next, _ := m.Update(modal.CancelledMsg{Kind: reauthModalKind})
+	m = next.(Model)
+	if !strings.Contains(m.table.Notice(), "could not be reached") {
+		t.Errorf("answering the offer overwrote a newer failure's notice:\n%s", m.table.Notice())
+	}
+	if m.hasReauth {
+		t.Error("the declined approval stayed armed")
+	}
+}
+
+// The question names the cause and the exact invocation, and says where it runs —
+// accepting blanks the TUI and hands the terminal to a browser flow, which is not
+// what a reader expects a confirm to do.
+func TestReauthQuestionNamesTheExactCommand(t *testing.T) {
+	got := reauthQuestion(kube.RemediationCommand{
+		Line:  "aws sso login --profile acme-prod",
+		Cause: "Your AWS SSO session for profile acme-prod has expired.",
+	})
+	for _, want := range []string{"aws sso login --profile acme-prod", "expired", "this terminal"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the question %q does not carry %q", got, want)
+		}
+	}
+	// A remediation with no cause still asks a complete question.
+	bare := reauthQuestion(kube.RemediationCommand{Line: "aws sso login"})
+	if !strings.Contains(bare, "aws sso login") || !strings.Contains(bare, "Run this now") {
+		t.Errorf("the bare question = %q", bare)
+	}
+}
+
+// A context switch drops the offer's pane text along with the approval: both name the
+// departing context, and resetCluster is what hides the prompt itself.
+func TestResetClusterDropsTheOffer(t *testing.T) {
+	m, _ := offeredPods(t)
+	m.resetCluster()
+	if m.modal.Active() || m.hasReauth || m.reauthOffer.shown != "" {
+		t.Errorf("the offer survived the switch: active=%v armed=%v shown=%q",
+			m.modal.Active(), m.hasReauth, m.reauthOffer.shown)
 	}
 }

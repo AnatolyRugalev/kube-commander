@@ -40,6 +40,107 @@ import (
 // stores nothing when the plugin fails, so the next request runs the plugin again
 // and picks up the session the login just wrote (see `vault/knowledge/stack.md`).
 
+// AUTH-05b is the **offer** that arms all of the above: when a landed diagnosis
+// substantiates a remediation, the reader is asked — once, naming the exact command
+// — whether kubecom should run it. Accepting reaches runReauth; declining reaches
+// nothing at all. Two rules it adds:
+//
+//   - **The offer never interrupts.** It opens only over the plain browse view, so a
+//     diagnosis that lands while a picker, a viewer, the logs view or another confirm
+//     holds the screen offers nothing (the pane keeps the self-service copy, and
+//     reopening the resource re-arms the diagnosis). A confirm cannot be composited
+//     over another overlay anyway (View's single-overlay invariant), so an offer that
+//     ignored this would be a modal nobody can see swallowing every key.
+//   - **The pane and the prompt say the same thing.** While the offer is up the
+//     notice names the prompt instead of telling the reader to open another terminal;
+//     the instant it is answered the pane goes back to the self-service copy, because
+//     an answered offer is no longer something the reader can accept.
+
+// reauthModalKind stamps the offer's confirm so modal.ConfirmedMsg/CancelledMsg
+// route back here rather than to one of the mutating actions (the one-modal-many-
+// kinds pattern delete established, D115).
+const reauthModalKind = "reauth"
+
+// reauthOffer is the pane text an open offer is responsible for: shown is the notice
+// installed alongside the prompt, answered is what replaces it once the reader has
+// answered. Holding both makes the restore a comparison rather than a re-render — the
+// pane is only put back if it is still showing what this offer wrote.
+type reauthOffer struct {
+	shown    string
+	answered string
+}
+
+// offerReauth asks the reader whether to run the remediation a diagnosis
+// substantiated, and reports whether it did. False means the pane must keep its
+// self-service copy: nothing to run, or something else is holding the screen.
+//
+// It mutates the receiver (the armed stash and the modal).
+func (m *Model) offerReauth(res kube.Resource, rep kube.ExecPluginReport) bool {
+	// A diagnosis is an async that lands whenever it lands; every other surface here
+	// is one the reader opened deliberately, so it wins. overlayActive covers the
+	// filter field too — a half-typed query is an answer in progress as much as a
+	// confirm is.
+	if m.overlayActive() {
+		return false
+	}
+	if !m.armReauth(res, rep) {
+		return false
+	}
+	m.modal.ShowConfirm(reauthModalKind, "Re-authenticate", reauthQuestion(m.reauthCmd))
+	return true
+}
+
+// reauthQuestion is what the confirm box asks. It names the exact command that will
+// run (D195 pt 4) under the cause the diagnosis established, and says where it runs —
+// because accepting blanks the TUI and hands the terminal over, which is a surprise
+// worth spending a line on.
+//
+// The box clips each line to sixty cells, so a long invocation is truncated here;
+// the pane behind it carries the same command wrapped in full (remediationLead),
+// which is why the notice quotes it rather than deferring to the prompt.
+func reauthQuestion(rc kube.RemediationCommand) string {
+	lines := make([]string, 0, 4)
+	if rc.Cause != "" {
+		lines = append(lines, rc.Cause, "")
+	}
+	return strings.Join(append(lines,
+		"Run this now, in this terminal?",
+		"  "+rc.Line), "\n")
+}
+
+// restoreReauthNotice puts the browse pane back to its self-service copy once an
+// offer has been answered — accepted or declined, the prompt is gone either way and
+// a notice still pointing at it would be describing a surface that no longer exists.
+//
+// It only rewrites a pane that is still showing what the offer wrote: a newer
+// failure, a recovery, or any other notice means this offer's text is not what is on
+// screen, and restoring over it would resurrect a stale explanation.
+//
+// It mutates the receiver.
+func (m *Model) restoreReauthNotice() {
+	if m.reauthOffer.shown != "" && m.table.Notice() == m.reauthOffer.shown {
+		m.table.SetNotice(m.reauthOffer.answered)
+	}
+	m.reauthOffer = reauthOffer{}
+}
+
+// declineReauth is the offer refused: the pane goes back to the self-service copy
+// and the armed remediation is dropped. Nothing runs, nothing is retried, and a
+// second offer needs a second diagnosis — which needs the reader to reopen the
+// resource (D195 pt 4, D214 pt 3).
+func (m Model) declineReauth() (tea.Model, tea.Cmd) {
+	m.restoreReauthNotice()
+	m.clearReauth()
+	return m, nil
+}
+
+// acceptReauth is the offer approved: the pane stops naming a prompt that is about
+// to close, and the remediation runs (runReauth, which consumes the approval).
+func (m Model) acceptReauth() (tea.Model, tea.Cmd) {
+	m.restoreReauthNotice()
+	return m.runReauth()
+}
+
 // reauthStderrLimit caps what a remediation's stderr contributes to the failure
 // report. The output has already gone to the terminal the suspend released; this
 // copy exists only so the toast and the log line can say *why* a login failed
@@ -92,13 +193,17 @@ func (m *Model) armReauth(res kube.Resource, rep kube.ExecPluginReport) bool {
 	return true
 }
 
-// clearReauth drops the armed remediation. Called when a run consumes it, when a
-// diagnosis substantiates none, and from resetCluster — the stash names a context's
-// credentials and a resource on the cluster being left.
+// clearReauth drops the armed remediation, and with it the pane text an open offer
+// would have restored (the modal itself is dismissed by whoever hides it —
+// resetCluster does, and an answered offer closes on its own). Called when a run
+// consumes it, when a diagnosis substantiates none, when the reader declines, and
+// from resetCluster — the stash names a context's credentials and a resource on the
+// cluster being left.
 //
 // It mutates the receiver.
 func (m *Model) clearReauth() {
 	m.reauthCmd, m.reauthRes, m.hasReauth = kube.RemediationCommand{}, kube.Resource{}, false
+	m.reauthOffer = reauthOffer{}
 }
 
 // runReauth suspends into the approved remediation (AUTH-05a). It is a no-op with

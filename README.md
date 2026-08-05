@@ -161,6 +161,17 @@ conversion webhook…), where the fix is — your machine or the cluster — and
 server's own words underneath. It stays until the list succeeds; kubecom keeps
 retrying in the background, and the rows replace it the moment one comes back.
 
+**An expired credential plugin** gets a second look. When the list fails because
+the `user.exec` plugin in your kubeconfig failed (an expired AWS SSO session is
+the usual one), kubecom runs that plugin once more to capture what it printed —
+under the UI you would never see it — and puts its own words in the pane instead
+of "credentials rejected". If it recognises the failure and your kubeconfig
+substantiates the fix, it then asks whether to run it for you, naming the exact
+command (`aws sso login --profile acme-prod`): accept and kubecom suspends into
+it in this terminal the way `e` suspends into `$EDITOR`, then retries the request
+that failed; decline and nothing runs. It never runs anything you were not asked
+about, and each offer is good for exactly one run.
+
 **Hit an error?** Every error kubecom shows you in the status bar is also written
 to that log file, in full — the toast clears after five seconds and is clipped to
 your terminal width, the log line is neither and carries the underlying cause.

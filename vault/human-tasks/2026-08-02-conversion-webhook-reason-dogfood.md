@@ -5,6 +5,9 @@
 - Amended: 2026-08-04 by AUTH-04b — item 6 added (the credential-plugin pane). Same surface,
   same question ("does the empty pane say the true thing?"), different failure, and it needs
   an expired SSO session rather than a broken webhook — do whichever you can.
+- Amended: 2026-08-05 by AUTH-05b — item 7 added: the same expired session now also opens a
+  prompt offering to run the login, and accepting it suspends kubecom into `aws sso login`.
+  It shares item 6's setup, so do the two in one sitting.
 - Priority: normal
 - Blocks: none (advisory — every claim in CRD-01 is covered by hermetic tests, including
   the wording, the wrap and the clear-on-recovery. The single thing a sandbox cannot supply
@@ -76,6 +79,36 @@ should start failing; that is the state kubecom needs to be opened in.
    for), and whether anything is *missing* off the bottom of the pane at your terminal size —
    the fix is printed above the stderr precisely so that truncation costs evidence rather than
    the answer (D213 pt 2).
+
+7. **The offer, and the suspend (AUTH-05b, 2026-08-05) — the only place kubecom runs a
+   command it composed.** Same expired session as item 6, one step further: once the
+   diagnosis lands, a confirm box should open over the browse view titled **Re-authenticate**,
+   naming the cause and the exact command (`aws sso login --profile <yours>`), with the pane
+   underneath saying "kubecom is asking whether to run this for you" instead of sending you
+   to another terminal. `y`/enter accepts, `n`/esc declines.
+   - **Decline first.** Nothing should run, the box closes, and the pane should go back to
+     "Run this in another terminal, then reopen the resource:" with the command still quoted.
+     Reopening the kind re-arms the whole thing (one diagnosis, and so one offer, per
+     selection — D214 pt 3), which is how you get a second offer to accept.
+   - **Then accept.** kubecom should hand you the terminal — the real one, not the alt
+     screen — and `aws sso login` should print its verification code and open your browser
+     exactly as it does from a shell. **This is the claim no test can make**: that the
+     suspend is clean, that the login is interactive, and that the TUI repaints intact when
+     it exits. Say if anything is garbled on the way out or back.
+   - **After a successful login**, the rows should arrive without a keypress: the failed
+     request is retried (the kind's watch restarts, D215 pt 5). Time it roughly — a second or
+     two is expected. If the pane instead sits on the old notice, note that.
+   - **After a failed or abandoned login** (ctrl-C out of the browser flow), expect a
+     status-bar toast naming the command, its exit status and the first line it printed —
+     and *no* second attempt. The full output is in `~/.cache/kubecom/kubecom.log` under
+     `remediation failed`; paste it if the toast said nothing useful.
+   - **The one thing to watch for.** The command in the box is clipped to about sixty cells,
+     so a long profile name may be cut there — the pane behind it carries the same command
+     wrapped in full, on purpose. Say whether that reads acceptably or whether the box needs
+     to wrap instead.
+   - **If the offer never appears** but item 6's diagnosis did: note what was on screen at
+     the time. An offer is deliberately suppressed while any picker, viewer, modal, the logs
+     view or the filter field is open, and it does not queue for later.
 
 ## Result
 

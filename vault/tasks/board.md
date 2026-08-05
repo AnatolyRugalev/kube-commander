@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-04 — AUTH-05a done: an approved remediation runs through the existing suspend on a single-use approval, and its success retries the failed request rather than the connection (D215); nothing arms it until AUTH-05b. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — AUTH-05b done, closing the AUTH line: a diagnosed credential-plugin failure now offers to run the fix, in one confirm that no keypress opens and that never displaces another surface (D216). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
+_(none)_
 
 ## Blocked
 
@@ -396,13 +395,21 @@ from tests, which is the point: no code path arms it, so nothing executes unaske
 
 - [x] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
       — done 2026-08-04 (D215)
-- [ ] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-01
-      notes: One confirm prompt per occurrence naming the exact command (D195 pt 4), opened when a
-      landed diagnosis substantiates a remediation; accept → AUTH-05a's `runReauth`, decline →
-      nothing but the notice. Also the copy: with the offer on screen the notice must stop saying
-      "run this in another terminal". Live-cluster only, so expect to raise a human task for the
-      dogfood rather than tick anything on a fake.
+- [x] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command — done
+      2026-08-05 (D216)
+
+**The AUTH line is closed** as of AUTH-05b/D216: an expired credential plugin is named,
+re-run, explained on the pane, and offered a fix the reader can accept in one key — which is
+the whole of feedback `2026-08-01-eks-sso-reauth`. The offer is the only modal in kubecom no
+keypress opens, so most of the slice is refusals: it opens only from a landed diagnosis, only
+over the plain browse view, never queues, and is dropped rather than deferred when anything
+else holds the screen. Two things it deliberately left, either its own small item: the confirm
+box clips its message at sixty cells, so a long invocation is truncated *in the question* (the
+pane behind it carries the command wrapped in full, which is the mitigation — the fix would be
+`modal` learning to wrap, a component change with every other confirm as a caller); and the
+offer's confirm has no `HelpContext`, which is HINT-02's fifth case. The live claim — the
+suspend into a real `aws sso login`, and the retry after it — is item 7 on
+`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks nothing).
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context

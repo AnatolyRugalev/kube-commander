@@ -5891,3 +5891,36 @@ command, D195 pt 3), and every clause below exists to keep that from widening.
    re-arms the AUTH-04b diagnosis latch, so a login that did not actually fix the credentials
    produces a fresh diagnosis rather than silence. A failure retries nothing at all: it would
    fail the same way, and the pane already says what is wrong.
+
+## D216 — kubecom may *ask* to run a remediation only from a landed diagnosis, only over the plain browse view, and an unanswered offer is dropped rather than deferred (2026-08-05, AUTH-05b)
+
+D215 fenced what an approved remediation may do. This fences the **asking**, which is the
+other half of D195 pt 4 ("offer — never run unasked") and the part a future surface is most
+likely to widen by accident, because an offer looks like copy rather than like an action.
+The offer is the only modal in kubecom that no keypress opens.
+
+1. **A landed diagnosis is the only thing that may open one.** The trigger is
+   `handleAuthDiagMsg` — a report that named a plugin, survived the generation guard and the
+   pane's still-failing re-check (D214 pt 4), and substantiated a command. Nothing else may
+   arm one: not a classification, not a retry, not a timer. That chain already bounds the
+   offer to one per browse selection (D214 pt 3), so "one confirm per occurrence" is inherited
+   rather than separately enforced.
+2. **It opens only over the plain browse view, and never queues.** If any other surface is
+   capturing input (`overlayActive`: a picker, a modal, the viewer, the logs or search view,
+   the help overlay, the filter field) the diagnosis offers nothing and arms nothing. Two
+   reasons, either sufficient: a confirm is composited only over the browse body (`View`'s
+   single-overlay switch), so an offer opened under a full-screen view would be an invisible
+   modal swallowing every key; and a prompt that displaces a question the reader is already
+   answering is worse than no prompt. It is not deferred to when the screen clears — reopening
+   the resource re-arms the diagnosis, which is a gesture the reader makes deliberately.
+3. **Answering it, either way, ends it.** Accept consumes the approval (D215 pt 4) and
+   declines nothing else; decline drops the stash outright. No path leaves an armed
+   remediation with no offer on screen, which is what keeps "nothing runs unasked" a property
+   of the code shape rather than of each caller's care.
+4. **The pane and the prompt say the same thing, and the pane goes back when the prompt
+   goes.** While an offer is open the browse notice names it (`kubecom is asking whether to
+   run this for you:`) instead of telling the reader to open another terminal; the moment it
+   is answered the pane is restored to the self-service copy — and only if the pane is still
+   showing what the offer wrote, since by then it may be explaining something else. The pane
+   keeps quoting the command in full either way: the confirm box clips to sixty cells, so the
+   wrapped copy behind it is the only place a long invocation is legible.

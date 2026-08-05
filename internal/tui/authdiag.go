@@ -78,14 +78,19 @@ const authDiagTimeout = 25 * time.Second
 
 // authDiagMsg carries one completed diagnosis back onto the update loop. It is
 // tagged with the watchGen of the browse selection that failed, and carries both the
-// kind and the ErrorMsg that started it: the renderer needs the kind for its
+// resource and the ErrorMsg that started it: the renderer needs the kind for its
 // headline and the error for the degrade path (a report with no plugin renders as
 // browseFailure), and re-reading either off the model when the message lands would
 // read the *current* pane's, which is exactly what the generation guard exists to
 // distinguish.
+//
+// The whole kube.Resource rather than its kind (AUTH-05b), because a remediation
+// armed off this message retries the request that failed — and m.current is not that
+// resource on the path where the watch never started: it still names the resource the
+// reader came *from*, since watchResource assigns it only after the watch is running.
 type authDiagMsg struct {
 	gen  int
-	kind string
+	res  kube.Resource
 	fail ErrorMsg
 	rep  kube.ExecPluginReport
 	err  error
@@ -97,7 +102,7 @@ type authDiagMsg struct {
 //
 // It mutates the receiver (the latch and the cancel), so callers pass the addressable
 // model value they are about to return.
-func (m *Model) diagnoseAuth(kind string, e ErrorMsg) tea.Cmd {
+func (m *Model) diagnoseAuth(res kube.Resource, e ErrorMsg) tea.Cmd {
 	if m.authDiagnoser == nil || e.Kind != kube.KindExecPlugin {
 		return nil
 	}
@@ -117,7 +122,7 @@ func (m *Model) diagnoseAuth(kind string, e ErrorMsg) tea.Cmd {
 	cc := kube.ClientConfig{Kubeconfig: m.kubeconfig, Context: m.context}
 	return func() tea.Msg {
 		rep, err := diagnoser.DiagnoseExecPlugin(ctx, cc)
-		return authDiagMsg{gen: gen, kind: kind, fail: e, rep: rep, err: err}
+		return authDiagMsg{gen: gen, res: res, fail: e, rep: rep, err: err}
 	}
 }
 
@@ -183,6 +188,19 @@ func (m Model) handleAuthDiagMsg(msg authDiagMsg) (tea.Model, tea.Cmd) {
 	if m.table.TotalRowCount() > 0 || m.table.Notice() == "" {
 		return m, nil
 	}
-	m.table.SetNotice(authFailure(msg.kind, msg.fail, msg.rep))
+	// The offer, if this diagnosis substantiates one and the screen is free to carry
+	// it (AUTH-05b). It is decided before the notice is written because the notice
+	// says which of the two it is: a prompt the reader is about to answer, or a
+	// command they will run themselves.
+	offered := m.offerReauth(msg.res, msg.rep)
+	notice := authFailure(msg.res.GVK.Kind, msg.fail, msg.rep, offered)
+	m.table.SetNotice(notice)
+	if offered {
+		// What the pane goes back to once the offer is answered, either way. Kept as
+		// text rather than as the report it came from: restoring it must not depend on
+		// the diagnosis still being reachable, and re-rendering later would re-read a
+		// report that by then describes a failure the reader may have left behind.
+		m.reauthOffer = reauthOffer{shown: notice, answered: authFailure(msg.res.GVK.Kind, msg.fail, msg.rep, false)}
+	}
 	return m, nil
 }

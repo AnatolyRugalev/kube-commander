@@ -181,8 +181,8 @@ func TestWatchStartFailureIsDiagnosedToo(t *testing.T) {
 	m = next.(Model)
 
 	diag := firstAuthDiagMsg(t, cmd)
-	if diag.kind != "Pod" {
-		t.Errorf("diagnosis carries kind %q, want Pod", diag.kind)
+	if diag.res.GVK.Kind != "Pod" {
+		t.Errorf("diagnosis carries kind %q, want Pod", diag.res.GVK.Kind)
 	}
 	next, _ = m.Update(diag)
 	m = next.(Model)
@@ -203,7 +203,7 @@ func TestOnlyPluginFailuresAreDiagnosed(t *testing.T) {
 		"webhook":   conversionWebhookErr(),
 		"plain":     errors.New("kube: listing pods: something else"),
 	} {
-		if cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", err)); cmd != nil {
+		if cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", err)); cmd != nil {
 			t.Errorf("%s: a non-plugin failure must not re-run the credential plugin", name)
 		}
 	}
@@ -220,16 +220,16 @@ func TestDiagnosisRunsOncePerSelection(t *testing.T) {
 	fd := &fakeAuthDiagnoser{rep: ssoReport(t)}
 	m, fw := browsingPods(t, fd)
 
-	if cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", execPluginErr())); cmd == nil {
+	if cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", execPluginErr())); cmd == nil {
 		t.Fatal("the first plugin failure of a selection must be diagnosed")
 	}
-	if cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", execPluginErr())); cmd != nil {
+	if cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", execPluginErr())); cmd != nil {
 		t.Error("the retry's failure re-ran the plugin a second time")
 	}
 
 	// A fresh selection is a fresh question.
 	m = drillInto(t, m, fw, gvrResource("configmaps"))
-	if cmd := m.diagnoseAuth("ConfigMap", NewErrorMsg("watch configmaps", execPluginErr())); cmd == nil {
+	if cmd := m.diagnoseAuth(gvrResource("configmaps"), NewErrorMsg("watch configmaps", execPluginErr())); cmd == nil {
 		t.Error("a new selection must re-arm the diagnosis")
 	}
 }
@@ -241,7 +241,7 @@ func TestStaleDiagnosisDoesNotOverwriteTheNewPane(t *testing.T) {
 	fd := &fakeAuthDiagnoser{rep: ssoReport(t)}
 	m, fw := browsingPods(t, fd)
 
-	cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", execPluginErr()))
+	cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", execPluginErr()))
 	diag, ok := cmd().(authDiagMsg)
 	if !ok {
 		t.Fatalf("diagnosis produced %T, want authDiagMsg", cmd())
@@ -266,7 +266,7 @@ func TestDiagnosisDroppedOnceThePaneRecovered(t *testing.T) {
 	m, _ := browsingPods(t, fd)
 
 	m, _ = failWatch(t, m, execPluginErr())
-	diag := authDiagMsg{gen: m.watchGen, kind: "Pod", fail: NewErrorMsg("watch pods", execPluginErr()), rep: fd.rep}
+	diag := authDiagMsg{gen: m.watchGen, res: podResource(), fail: NewErrorMsg("watch pods", execPluginErr()), rep: fd.rep}
 
 	// Recovery: a re-List that worked, and rows.
 	next, _ := m.Update(watchMsg{gen: m.watchGen, msg: ResourceEventMsg{Event: resetEvent("nginx", "u1")}})
@@ -308,7 +308,7 @@ func TestDiagnosisFailureKeepsTheGenericSentence(t *testing.T) {
 
 			next, cmd := m.Update(authDiagMsg{
 				gen:  m.watchGen,
-				kind: "Pod",
+				res:  podResource(),
 				fail: NewErrorMsg("watch pods", execPluginErr()),
 				rep:  diagnosis.rep,
 				err:  diagnosis.err,
@@ -332,7 +332,7 @@ func TestDiagnosisInertWithoutTheSeam(t *testing.T) {
 	m := drillInto(t, sizedWith(t, WithWatcher(fw)), fw, podResource())
 
 	m, _ = failWatch(t, m, execPluginErr())
-	if cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", execPluginErr())); cmd != nil {
+	if cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", execPluginErr())); cmd != nil {
 		t.Error("an unwired shell must not diagnose")
 	}
 	if !strings.Contains(m.table.Notice(), "The credential plugin in your kubeconfig failed") {
@@ -347,7 +347,7 @@ func TestDiagnosisStoppedByClusterTeardown(t *testing.T) {
 	fd := &fakeAuthDiagnoser{rep: ssoReport(t)}
 	m, _ := browsingPods(t, fd)
 
-	cmd := m.diagnoseAuth("Pod", NewErrorMsg("watch pods", execPluginErr()))
+	cmd := m.diagnoseAuth(podResource(), NewErrorMsg("watch pods", execPluginErr()))
 	if cmd == nil {
 		t.Fatal("precondition: the failure should have started a diagnosis")
 	}

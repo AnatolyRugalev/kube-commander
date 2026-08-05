@@ -169,7 +169,7 @@ func TestAuthFailurePutsTheFixAboveTheEvidence(t *testing.T) {
 	if !rep.Suggested {
 		t.Fatal("precondition: the kube layer should substantiate a remediation for this stanza")
 	}
-	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 	head, _, _ := strings.Cut(got, "\n")
 	if head != "Cannot list Pod" {
@@ -198,7 +198,7 @@ func TestAuthFailurePutsTheFixAboveTheEvidence(t *testing.T) {
 // KindExecPlugin sentence could not carry: which invocation failed, and how.
 func TestAuthFailureNamesTheCommandAndItsExit(t *testing.T) {
 	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{Stderr: ssoStderr, ExitCode: 255})
-	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 	if !strings.Contains(got, "Plugin: aws --region eu-west-1 eks get-token --cluster-name acme --profile acme-prod (exit 255)") {
 		t.Errorf("the failed invocation is not quoted with its exit status\ngot:\n%s", got)
@@ -236,7 +236,7 @@ func TestAuthFailureWithoutARemediationSuggestsNothing(t *testing.T) {
 			if rep.Suggested {
 				t.Fatalf("precondition: no remediation should be substantiated, got %q", rep.Remediation.CommandLine())
 			}
-			got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+			got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 			// The remediation block is absent entirely. Asserted on the block's own
 			// lines rather than on the string "sso login", which legitimately
@@ -264,7 +264,7 @@ func TestAuthFailureWithoutARemediationSuggestsNothing(t *testing.T) {
 // fix for it — would be the most confusing possible output.
 func TestAuthFailureSaysTheRerunWorked(t *testing.T) {
 	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: 0})
-	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 	if !strings.Contains(got, "running it again just now worked") {
 		t.Fatalf("the successful re-run is not reported\ngot:\n%s", got)
@@ -286,7 +286,7 @@ func TestAuthFailureMissingBinaryDoesNotSayReauthenticate(t *testing.T) {
 	p := awsStanza()
 	p.InstallHint = "aws-cli is required to authenticate to EKS.\nSee https://example.test/install"
 	rep := diagnosedReport(t, p, kube.ExecPluginDiagnosis{NotFound: true})
-	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 	if !strings.Contains(got, "Install it") {
 		t.Fatalf("a missing binary must be reported as missing\ngot:\n%s", got)
@@ -312,7 +312,7 @@ func TestAuthFailureMissingBinaryDoesNotSayReauthenticate(t *testing.T) {
 // nor a missing binary, and the pane must not name a cause it cannot see.
 func TestAuthFailureTimedOut(t *testing.T) {
 	rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{TimedOut: true})
-	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+	got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 
 	if !strings.Contains(got, "did not answer and was killed") {
 		t.Fatalf("the timeout is not reported\ngot:\n%s", got)
@@ -332,7 +332,7 @@ func TestAuthFailureStderrShape(t *testing.T) {
 	t.Run("truncated", func(t *testing.T) {
 		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{
 			Stderr: ssoStderr, ExitCode: 255, Truncated: true})
-		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 		if !strings.HasSuffix(got, "(truncated)") {
 			t.Fatalf("a capped capture must say so, and last\ngot:\n%s", got)
 		}
@@ -340,14 +340,14 @@ func TestAuthFailureStderrShape(t *testing.T) {
 	t.Run("blank lines dropped", func(t *testing.T) {
 		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{
 			Stderr: "first\n\n   \nsecond\n", ExitCode: 255})
-		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 		if !strings.HasSuffix(got, "It said:\n  first\n  second") {
 			t.Fatalf("blank quote lines were not dropped\ngot:\n%s", got)
 		}
 	})
 	t.Run("silent failure", func(t *testing.T) {
 		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: 3})
-		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 		if !strings.Contains(got, "printed nothing on stderr") {
 			t.Fatalf("silence is the diagnosis here; say it\ngot:\n%s", got)
 		}
@@ -357,7 +357,7 @@ func TestAuthFailureStderrShape(t *testing.T) {
 	})
 	t.Run("killed by a signal", func(t *testing.T) {
 		rep := diagnosedReport(t, awsStanza(), kube.ExecPluginDiagnosis{ExitCode: -1})
-		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep)
+		got := authFailure("Pod", NewErrorMsg("watch pods", execPluginErr()), rep, false)
 		if !strings.Contains(got, "(killed by a signal)") {
 			t.Fatalf("-1 is a signal, not exit -1\ngot:\n%s", got)
 		}
@@ -370,7 +370,7 @@ func TestAuthFailureStderrShape(t *testing.T) {
 // rather than as a half-rendered report (principle 3).
 func TestAuthFailureFallsBackWithoutAPlugin(t *testing.T) {
 	e := NewErrorMsg("watch pods", execPluginErr())
-	got := authFailure("Pod", e, kube.ExecPluginReport{})
+	got := authFailure("Pod", e, kube.ExecPluginReport{}, false)
 
 	if got != browseFailure("Pod", e) {
 		t.Fatalf("a plugin-less report must render exactly the undiagnosed notice\ngot:\n%s", got)
@@ -384,7 +384,7 @@ func TestAuthFailureFallsBackWithoutAPlugin(t *testing.T) {
 // that arrives before the browsed kind is known still reads as a sentence.
 func TestAuthFailureDegradesWithoutAKind(t *testing.T) {
 	rep := diagnosedReport(t, &kube.ExecPlugin{Command: "aws"}, kube.ExecPluginDiagnosis{ExitCode: 255})
-	got := authFailure("", ErrorMsg{Context: "watch", Kind: kube.KindExecPlugin}, rep)
+	got := authFailure("", ErrorMsg{Context: "watch", Kind: kube.KindExecPlugin}, rep, false)
 
 	if !strings.HasPrefix(got, "Cannot list this resource\n") {
 		t.Fatalf("unknown kind should degrade to a generic subject\ngot:\n%s", got)

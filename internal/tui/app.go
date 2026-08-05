@@ -668,6 +668,10 @@ type Model struct {
 	reauthCmd kube.RemediationCommand
 	reauthRes kube.Resource
 	hasReauth bool
+	// reauthOffer is the browse-pane text an open offer owns (AUTH-05b): what it
+	// wrote while the confirm is up, and what the pane goes back to once the reader
+	// answers. Zero while no offer is open, which is every state but the one.
+	reauthOffer reauthOffer
 
 	// menuExtras are the current context's per-context menu customizations (D83),
 	// merged into the seed menu at construction (WithMenuExtras → menu.AddExtras)
@@ -1332,6 +1336,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The confirm modal was declined (nav.back) or dismissed. Hide it; the stashed
 		// delete target is left untouched (harmless — runDelete only fires on accept).
 		m.modal.Hide()
+		if msg.Kind == reauthModalKind {
+			// The one stash a decline must actually drop, because it is the one nothing
+			// else gates: an approval is single-use and an unanswered one may not linger
+			// (D215 pt 4). The pane goes back to saying the reader can run it themselves.
+			return m.declineReauth()
+		}
 		return m, nil
 
 	case deleteDoneMsg:
@@ -1510,7 +1520,7 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 		m.table.SetNotice(browseFailure(r.GVK.Kind, e))
 		// A credential plugin's failure has more to say than that sentence, but only a
 		// re-run can say it, so the pane is rewritten when the diagnosis lands (AUTH-04b).
-		diag := m.diagnoseAuth(r.GVK.Kind, e)
+		diag := m.diagnoseAuth(r, e)
 		return m, tea.Batch(func() tea.Msg { return e }, diag)
 	}
 	m.watchCancel = cancel
@@ -1612,7 +1622,7 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 		// And if it was the credential plugin that failed, re-run it and rewrite the
 		// notice with what it printed — once per selection, however often the loop
 		// retries (AUTH-04b).
-		diag := m.diagnoseAuth(m.current.GVK.Kind, inner)
+		diag := m.diagnoseAuth(m.current, inner)
 		return m, tea.Batch(clear, diag, m.pumpWatch())
 	case WatchClosedMsg:
 		m.watchCh = nil
@@ -2205,6 +2215,11 @@ func (m Model) handleModalConfirmed(msg modal.ConfirmedMsg) (tea.Model, tea.Cmd)
 		return m.runPortForward(msg.Value)
 	case localPortModalKind:
 		return m.runLocalPortForward(msg.Value)
+	case reauthModalKind:
+		// The one kind whose confirm was opened by kubecom rather than by a keypress
+		// (AUTH-05b): accepting it suspends the TUI into the remediation the prompt
+		// named, which is the only place the shell runs a command it composed (D215).
+		return m.acceptReauth()
 	}
 	return m, nil
 }
