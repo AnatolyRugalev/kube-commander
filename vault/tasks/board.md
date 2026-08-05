@@ -7,7 +7,8 @@ _Last updated: 2026-08-05 — HINT-02 done: the hint line now tells the truth un
 
 ## In Progress
 
-_(none)_
+- [ ] **HINT-03** The last two liars: the browse filter field and the port-forward panel
+      status: in-progress | owner: claude-opus | claimed: 2026-08-05
 
 ## Blocked
 
@@ -286,7 +287,7 @@ time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shap
 - [x] **HINT-02** The same for the modals, the help overlay and the shared viewer
       — done 2026-08-05 (D217)
 - [ ] **HINT-03** The last two liars: the browse filter field and the port-forward panel
-      status: todo | owner: — | added: 2026-08-05
+      status: in-progress | owner: claude-opus | added: 2026-08-05 | claimed: 2026-08-05
       notes: Found while doing HINT-02, which covered the four surfaces it named. Two
       capturing surfaces are still hinted with the browse set: the **browse filter field**
       (`/`), which types every letter it advertises — the logs-grep problem one pane over,
