@@ -16,17 +16,31 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
 // helpTitle labels the modal box; helpMargin is the horizontal room kept clear of
 // the box (its border plus a small gap) so the framed, centered modal never
-// exceeds the screen width.
+// exceeds the screen width. helpBorder and helpTitleHeight are what the box spends
+// before a single binding is on screen, and are what View subtracts from the height
+// it is given (BOX-03).
 const (
-	helpTitle  = "Keybindings"
-	helpMargin = 6
+	helpTitle       = "Keybindings"
+	helpMargin      = 6
+	helpBorder      = 2 // the pane frame: one row at the top, one at the bottom
+	helpTitleHeight = 1 // the title line under the top border
 )
+
+// helpTruncated marks a keymap too tall for the box. It departs from elide.Marker
+// deliberately: the modal's elided text is an explanation the reader cannot get at
+// any other way, so naming the loss is the whole remedy — but every row cut here is
+// a binding someone opened this overlay to look up, and the full list is committed
+// at docs/keybindings.md, generated from this same registry (D11). A marker that
+// only said "truncated" would leave the reader stuck; this one says where the rest
+// is.
+const helpTruncated = "… (truncated — full list in docs/keybindings.md)"
 
 // Model is the help overlay. The root model owns one, toggles it when the
 // app.help action resolves, and feeds it window-size updates. It holds no shared
@@ -92,6 +106,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // is framed with the focused-pane style and titled; the root model composites it
 // centered over the base browse view (overlayCenter, D95), so the two-pane layout
 // stays visible underneath rather than the whole TUI being replaced.
+//
+// The box bounds its own height (D220 pt 1). bubbles/help with ShowAll lays the
+// registry's namespaces out as columns and elides them *horizontally* to the width
+// it is given, so the height is whatever the tallest column needs — a number this
+// package does not choose and that grows with the action registry (fifteen rows
+// including the frame when BOX-03 measured it, at every screen size from 200×60
+// down to 60×6). overlayCenter flattens onto a fixed width×bodyHeight canvas and
+// clips bottom-first, so on any shorter body the overlay silently lost its bottom
+// bindings and its border. The title is rendered first-class and the bindings take
+// what is left; there is no cursor here, so the elision is marked rather than
+// scrolled (D221 covers the surfaces that can be walked).
 func (m Model) View() string {
 	if !m.visible || m.width <= 0 || m.height <= 0 {
 		return ""
@@ -107,8 +132,18 @@ func (m Model) View() string {
 	}
 	inner.SetWidth(innerW)
 
+	// Rows left for the bindings once the frame and the title are paid for. At zero
+	// the box would be nothing but a clipped border, which is not more honest than
+	// no box — the hint line one row below still says `?` toggles this overlay, so
+	// the reader is not left without a way back (the forwards panel does the same).
+	ih := m.height - helpBorder - helpTitleHeight
+	if ih <= 0 {
+		return ""
+	}
+	marker := m.styles.App.MaxWidth(innerW).Render(helpTruncated)
+
 	title := m.styles.Header.Render(helpTitle)
-	body := lipgloss.JoinVertical(lipgloss.Left, title, inner.View(m.keys))
+	body := lipgloss.JoinVertical(lipgloss.Left, title, elide.Lines(inner.View(m.keys), ih, marker))
 	return m.styles.PaneFocus.Render(body)
 }
 

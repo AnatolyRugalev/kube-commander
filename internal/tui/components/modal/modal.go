@@ -24,12 +24,11 @@
 package modal
 
 import (
-	"strings"
-
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -280,8 +279,8 @@ func (m Model) View() string {
 	parts := []string{m.styles.Header.Width(iw).MaxWidth(iw).Render(m.title)}
 	if ih > 0 {
 		message := m.styles.App.Width(iw).MaxWidth(iw).Render(m.message)
-		marker := m.styles.App.Width(iw).MaxWidth(iw).Render(truncatedMarker)
-		parts = append(parts, clampLines(message, ih, marker))
+		marker := m.styles.App.Width(iw).MaxWidth(iw).Render(elide.Marker)
+		parts = append(parts, elide.Lines(message, ih, marker))
 	}
 	if m.mode == modePrompt {
 		parts = append(parts, m.styles.App.Width(iw).MaxWidth(iw).Render(m.input.View()))
@@ -289,23 +288,9 @@ func (m Model) View() string {
 	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
-// truncatedMarker replaces the last visible line of a message too tall for the
-// box. It is the wording browsefail.go already uses when it drops the tail of a
-// credential plugin's stderr — a reader who meets both should meet one convention —
-// and it is a sentence rather than a bare ellipsis because a modal is a question:
-// text silently missing from what is being agreed to is the thing worth naming.
-const truncatedMarker = "… (truncated)"
-
-// clampLines truncates a rendered block to at most n lines, spending the last one
-// on marker so the cut is visible. n <= 0 yields ""; a block that already fits is
-// returned untouched, so the marker appears only when content was actually dropped.
-func clampLines(block string, n int, marker string) string {
-	if n <= 0 {
-		return ""
-	}
-	lines := strings.Split(block, "\n")
-	if len(lines) <= n {
-		return block
-	}
-	return strings.Join(append(lines[:n-1:n-1], marker), "\n")
-}
+// The clamp and its marker live in internal/tui/elide: BOX-03 gave the keybindings
+// overlay the same treatment, and a second copy of a wording convention is how a
+// convention stops being one. elide.Marker is the phrase browsefail.go already uses
+// when it drops the tail of a credential plugin's stderr — a sentence rather than a
+// bare ellipsis because a modal is a question, and text silently missing from what
+// is being agreed to is the thing worth naming.

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
 )
 
 // This file is kubecom's user-facing copy for a browse table that has nothing to
@@ -240,7 +241,7 @@ func authStderrLines(d kube.ExecPluginDiagnosis) []string {
 	}
 	out := append([]string{"It said:"}, body...)
 	if d.Truncated {
-		out = append(out, "  … (truncated)")
+		out = append(out, "  "+elide.Marker)
 	}
 	return out
 }

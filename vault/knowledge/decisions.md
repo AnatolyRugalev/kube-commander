@@ -6045,3 +6045,27 @@ and the box looks complete while doing it.
    always renders and the footer only while a content row survives it, so the smallest boxes
    degrade title → title + one row → title + row + footer rather than into a box that lists
    its keys and no forwards.
+
+## D222 — The elision marker names where the rest is, and the clamp has one home (2026-08-05, BOX-03)
+
+D220 pt 3 fixed *that* a cut is announced and, with only the modal to go on, fixed the
+sentence too. The keybindings overlay is the case that separates the two: every row it elides
+is a binding the reader opened it to look up, and unlike a modal's message that content exists
+somewhere they can reach — `docs/keybindings.md`, generated from the same registry (D11).
+
+1. **When elided content is reachable elsewhere, the marker says where.** `… (truncated —
+   full list in docs/keybindings.md)` rather than the bare phrase. The invariant from D220 pt 3
+   is that a cut is announced; the wording is the surface's to choose, and a marker that leaves
+   a reader stuck when a complete answer is one file away is a worse read than a longer one.
+   `elide.Marker` stays the default for content that exists nowhere else (the modal,
+   `browsefail.go`'s clipped stderr) — a reader who meets those two still meets one phrase.
+2. **The clamp lives in `internal/tui/elide`, and a bounded overlay uses it rather than
+   re-deriving it.** `elide.Lines` is the whole of it: the marker *replaces* the last surviving
+   line instead of being appended (an appended row makes the block n+1 tall, which is the bug
+   D220 exists to prevent), and a block that fits comes back untouched so the marker stays
+   evidence rather than furniture. It renders nothing, so it is safe on styled blocks and the
+   caller keeps control of width-capping its own marker.
+3. **A box with no room for content renders nothing rather than a frame.** Below border +
+   title the overlay returns `""` and the base view shows through, as the forwards panel
+   already did — a clipped border is not a more honest failure than no box, and the hint line
+   outside the body still names the toggle that opened it.

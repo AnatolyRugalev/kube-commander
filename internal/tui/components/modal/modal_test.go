@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
@@ -209,7 +210,7 @@ func TestPromptKeepsItsInputWhenTheMessageIsTooTall(t *testing.T) {
 	if !strings.Contains(plain, "> 7") {
 		t.Fatalf("View() dropped the input line; got:\n%s", v)
 	}
-	if !strings.Contains(plain, truncatedMarker) {
+	if !strings.Contains(plain, elide.Marker) {
 		t.Fatalf("View() elided the message without saying so; got:\n%s", v)
 	}
 	if !strings.Contains(plain, "╰") {
@@ -223,27 +224,8 @@ func TestShortMessageIsNotMarkedTruncated(t *testing.T) {
 	m := New(styles.Default())
 	m.SetSize(80, 24)
 	m.ShowConfirm("delete", "Delete pod", "Delete pod nginx-abc?")
-	if v := m.View(); strings.Contains(v, truncatedMarker) {
+	if v := m.View(); strings.Contains(v, elide.Marker) {
 		t.Fatalf("a one-line message was marked truncated; got:\n%s", v)
-	}
-}
-
-func TestClampLines(t *testing.T) {
-	block := "a\nb\nc\nd"
-	for _, tc := range []struct {
-		n    int
-		want string
-	}{
-		{n: -1, want: ""},
-		{n: 0, want: ""},
-		{n: 1, want: "…"},
-		{n: 3, want: "a\nb\n…"},
-		{n: 4, want: block},
-		{n: 9, want: block},
-	} {
-		if got := clampLines(block, tc.n, "…"); got != tc.want {
-			t.Fatalf("clampLines(%q, %d) = %q, want %q", block, tc.n, got, tc.want)
-		}
 	}
 }
 

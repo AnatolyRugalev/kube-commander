@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — BOX-02 done: the port-forward panel now bounds its height and scrolls a window that keeps the selected forward on screen, counting what it hides in its title (D221). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — BOX-03 done, closing the BOX line: the keybindings overlay clamps to the body height and points at `docs/keybindings.md` for what it cut, with the shared clamp now in `internal/tui/elide` (D222). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: `help.View` (`internal/tui/help/help.go`) constrains width (`helpMargin`) and
-      ignores the `m.height` it is already given, so `bubbles/help` with `ShowAll` lays the
-      namespace columns out at whatever height the tallest one needs — 15 rows today, growing
-      with the registry — and `overlayCenter` clips the excess bottom-first (D220). Clamp the
-      body to the height the box holds and mark the elision (D220 pt 3 shape; no cursor here,
-      so D221's window does not apply).
+_(none)_
 
 ## Blocked
 
@@ -327,8 +320,12 @@ cannot catch this class of bug — the string is complete; only the composited f
 (D221 vs D220 pt 3). BOX-03 is the latter shape.
 
 - [x] **BOX-02** The port-forward panel is as tall as the number of forwards — done 2026-08-05 (D221)
-- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen — **in progress**
-      (claimed 2026-08-05, `claude-opus-5`; see In Progress)
+- [x] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen — done 2026-08-05 (D222)
+
+**The BOX line is closed** (01/02/03 done 2026-08-05): every overlay now bounds its own height,
+the two shapes are settled (marker for a static box, window + counter for one with a cursor),
+and the clamp itself lives in `internal/tui/elide` so a fourth overlay inherits it rather than
+re-deriving it (D222 pt 2).
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
