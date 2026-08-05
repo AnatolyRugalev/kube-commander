@@ -7,7 +7,8 @@ _Last updated: 2026-08-05 — HINT-03 done, closing the HINT line: every input-c
 
 ## In Progress
 
-_(none)_
+- [ ] **HINT-04** The port-forward panel's footer spells its keys literally
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05 | claimed: 2026-08-05
 
 ## Blocked
 
