@@ -7,7 +7,12 @@ _Last updated: 2026-08-05 — HINT-05 done, closing D218 pt 1: a `HelpContext` n
 
 ## In Progress
 
-_(none)_
+- [ ] **BOARD-01** The Done list is one line per entry again, and a guard keeps it there
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
+      notes: D102 collapsed the Done section once (~50KB → ~17KB) and named the rule; it has
+      drifted back — the board is 94KB and 52 of 202 Done entries are paragraphs. Re-collapse
+      them, then make D102 mechanical with a guard test rather than leaving it a convention
+      that has now failed twice.
 
 ## Blocked
 
