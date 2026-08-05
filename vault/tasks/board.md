@@ -7,7 +7,14 @@ _Last updated: 2026-08-05 — BOX-02 done: the port-forward panel now bounds its
 
 ## In Progress
 
-_(none)_
+- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
+      notes: `help.View` (`internal/tui/help/help.go`) constrains width (`helpMargin`) and
+      ignores the `m.height` it is already given, so `bubbles/help` with `ShowAll` lays the
+      namespace columns out at whatever height the tallest one needs — 15 rows today, growing
+      with the registry — and `overlayCenter` clips the excess bottom-first (D220). Clamp the
+      body to the height the box holds and mark the elision (D220 pt 3 shape; no cursor here,
+      so D221's window does not apply).
 
 ## Blocked
 
@@ -320,15 +327,8 @@ cannot catch this class of bug — the string is complete; only the composited f
 (D221 vs D220 pt 3). BOX-03 is the latter shape.
 
 - [x] **BOX-02** The port-forward panel is as tall as the number of forwards — done 2026-08-05 (D221)
-- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
-      status: todo | owner: — | added: 2026-08-05
-      notes: `help.View` constrains width (`helpMargin`) and ignores `m.height`, which it is
-      already given. `bubbles/help` with `ShowAll` lays the sixteen namespace columns out at
-      whatever height the tallest one needs — 15 rows today, and it grows with the registry,
-      which is the part that will not stay noticed. Any terminal whose body area is shorter
-      loses the bottom rows and the border silently. Cheapest honest fix in the D220 shape:
-      clamp to the height it holds and mark the elision; a scrolling overlay is a bigger leg
-      and needs a key context (HINT/D217) it does not have.
+- [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen — **in progress**
+      (claimed 2026-08-05, `claude-opus-5`; see In Progress)
 
 ### Command palette (PAL — feedback-driven)
 Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
