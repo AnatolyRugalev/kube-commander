@@ -2968,6 +2968,16 @@ func (m Model) handleForwardsPanelAction(a keymap.Action) (tea.Model, tea.Cmd) {
 // ready — with the cursor row highlighted, plus a footer of the panel's keys. With no
 // active forwards it shows an empty-state line. Composited centered over the browse
 // view by View (overlayCenter, D95), like the modal.
+//
+// The box bounds its own height (D220 pt 1): overlayCenter flattens onto a fixed
+// width×bodyHeight canvas and clips bottom-first, so an unbounded list used to cost
+// the panel its footer and its bottom border, and — because this is the one overlay
+// with a *cursor* — could hide the selected row with nothing on screen saying so
+// (BOX-02). The rows therefore scroll rather than truncate: a window of what fits
+// that follows m.forwardsSel, derived from the cursor alone so the panel keeps no
+// scroll state of its own to resize, clamp, or forget. The title and the footer are
+// rendered first-class like the modal's title and input; only the list is elided,
+// and the title says so by counting (see forwardsPanelTitle).
 func (m Model) forwardsPanelView() string {
 	iw := m.width - 6 // leave a margin; the box border adds 2 back.
 	if iw > 64 {
@@ -2976,12 +2986,29 @@ func (m Model) forwardsPanelView() string {
 	if iw < 20 {
 		iw = 20
 	}
-	title := m.styles.Header.Width(iw).MaxWidth(iw).Render("Port-forwards")
-	lines := []string{title}
-	if len(m.forwards) == 0 {
-		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render("No active port-forwards."))
+	ih := m.bodyHeight() - 2 // the border takes one row at the top and one at the bottom
+	if ih <= 0 {
+		return "" // nothing the compositor would not clip away entirely
+	}
+	// The title always takes a row; the footer only when a content row survives it —
+	// a box listing nothing but its keys is worse than one with no footer.
+	rows := ih - 1
+	footer := forwardsPanelFooter(m.keymap)
+	if footer != "" && rows >= 2 {
+		rows--
 	} else {
-		for i, f := range m.forwards {
+		footer = ""
+	}
+
+	start, end := forwardsWindow(len(m.forwards), m.forwardsSel, rows)
+	lines := []string{m.styles.Header.Width(iw).MaxWidth(iw).Render(forwardsPanelTitle(len(m.forwards), start, end))}
+	switch {
+	case rows <= 0: // title-only box: the screen has room for nothing else
+	case len(m.forwards) == 0:
+		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render("No active port-forwards."))
+	default:
+		for i := start; i < end; i++ {
+			f := m.forwards[i]
 			status := "starting…"
 			if f.ready {
 				status = "ready"
@@ -2996,10 +3023,56 @@ func (m Model) forwardsPanelView() string {
 			lines = append(lines, style.Width(iw).MaxWidth(iw).Render(gutter+row))
 		}
 	}
-	if footer := forwardsPanelFooter(m.keymap); footer != "" {
+	if footer != "" {
 		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render(footer))
 	}
 	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// forwardsWindow is the half-open range of forward indices the panel shows when it
+// has room for n rows: everything when it fits, otherwise the least-scrolled window
+// that still contains sel. It is a pure function of the cursor rather than a stored
+// offset, which is what keeps the panel free of scroll state that resize, a stopped
+// forward, or clampForwardsSel would each have to maintain — the list is short enough
+// that the sticky-offset feel a table needs is not worth that.
+func forwardsWindow(total, sel, n int) (int, int) {
+	if n <= 0 || total <= 0 {
+		return 0, 0
+	}
+	if n >= total {
+		return 0, total
+	}
+	start := 0
+	if sel >= n {
+		start = sel - n + 1
+	}
+	if start > total-n {
+		start = total - n
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start, start + n
+}
+
+// forwardsPanelTitle names the panel and, when the window hides rows, which slice of
+// the list is on screen. The count rides the title because that is the one row the
+// panel is guaranteed to have: a marker row (the modal's answer, D220 pt 3) would
+// have to be taken from the list it is describing, and unlike a truncated message
+// this list is scrollable — the reader can reach what is hidden, they just need to
+// be told it is there. A panel showing everything says nothing, so the counter is
+// evidence of elision rather than furniture.
+func forwardsPanelTitle(total, start, end int) string {
+	switch {
+	case total == 0 || end-start >= total:
+		return "Port-forwards"
+	case end <= start:
+		// The box is so short that the title is all of it: no row is on screen to
+		// number, so the title carries the bare count rather than an empty range.
+		return fmt.Sprintf("Port-forwards (%d)", total)
+	default:
+		return fmt.Sprintf("Port-forwards (%d–%d of %d)", start+1, end, total)
+	}
 }
 
 // forwardsPanelFooter builds the panel's key footer from the resolved keymap instead

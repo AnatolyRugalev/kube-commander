@@ -11,6 +11,7 @@ import (
 
 	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -5098,11 +5099,11 @@ func newFakeForward() *fakeForward {
 	return &fakeForward{readyCh: make(chan struct{}), doneCh: make(chan struct{})}
 }
 
-func (f *fakeForward) Ready() <-chan struct{}              { return f.readyCh }
-func (f *fakeForward) Done() <-chan struct{}               { return f.doneCh }
-func (f *fakeForward) Err() error                          { return f.err }
+func (f *fakeForward) Ready() <-chan struct{}               { return f.readyCh }
+func (f *fakeForward) Done() <-chan struct{}                { return f.doneCh }
+func (f *fakeForward) Err() error                           { return f.err }
 func (f *fakeForward) Ports() ([]kube.ForwardedPort, error) { return f.ports, nil }
-func (f *fakeForward) Stop()                               { f.stops++ }
+func (f *fakeForward) Stop()                                { f.stops++ }
 
 // fakePortForwarder is a hermetic PortForwarder: it records the ctx/ref/ports it was
 // asked to forward (so a test can assert the selected row and the parsed specs) and
@@ -5619,6 +5620,144 @@ func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
 	m.keymap = km
 	if view := m.View().Content; strings.Contains(view, ": stop") || strings.Contains(view, ": close") {
 		t.Fatalf("an all-disabled panel should render no footer entries: %q", view)
+	}
+}
+
+// panelWithForwards opens the port-forward panel on a screen of the given size with n
+// synthetic forwards tracked, cursor on sel. The forwards are built directly rather
+// than started through the forwarder: what is under test is the panel's geometry, and
+// twenty real forwards would be twenty fakes saying nothing about it.
+func panelWithForwards(t *testing.T, w, h, n, sel int) Model {
+	t.Helper()
+	next, _ := New().Update(tea.WindowSizeMsg{Width: w, Height: h})
+	m := next.(Model)
+	for i := range n {
+		m.forwards = append(m.forwards, &forward{
+			id:    i + 1,
+			label: fmt.Sprintf("pod/app-%d", i+1),
+			specs: []string{fmt.Sprintf("%d:80", 8000+i)},
+		})
+	}
+	m.forwardsPanel = true
+	m.forwardsSel = sel
+	m.clampForwardsSel()
+	return m
+}
+
+// TestForwardsPanelFitsTheCanvas is BOX-02: the panel used to render one row per
+// forward with no height bound, and overlayCenter composites it onto a fixed
+// width×bodyHeight canvas that clips bottom-first (D220 pt 1) — so a long list cost
+// the panel its footer and its bottom border with nothing saying anything was wrong.
+// The assertion is on the *rendered height* against the canvas the compositor will
+// give it, at sizes from generous down to degenerate.
+func TestForwardsPanelFitsTheCanvas(t *testing.T) {
+	for _, tc := range []struct{ h, forwards int }{
+		{24, 40}, // many more forwards than a normal screen holds
+		{24, 4},  // comfortably fitting: the bound must not shrink what fits
+		{12, 20},
+		{8, 20},
+		{6, 20},
+		{5, 3},
+		{4, 3}, // bodyHeight 2: border only, so the panel renders nothing at all
+	} {
+		m := panelWithForwards(t, 80, tc.h, tc.forwards, 0)
+		box := m.forwardsPanelView()
+		if got, want := lipgloss.Height(box), m.bodyHeight(); box != "" && got > want {
+			t.Errorf("%d forwards on a %d-row screen: panel is %d rows, the canvas is %d",
+				tc.forwards, tc.h, got, want)
+		}
+	}
+}
+
+// TestForwardsPanelKeepsItsFooterAndBorder proves the height bound spends itself on the
+// list rather than on the chrome: on a screen far too short for twenty forwards the box
+// still ends in its bottom border and still carries the HINT-04 footer, read through the
+// composited frame (the clip a component's own View() cannot see, D220 pt 1).
+func TestForwardsPanelKeepsItsFooterAndBorder(t *testing.T) {
+	m := panelWithForwards(t, 80, 12, 20, 0)
+	view := frame(m)
+	if !strings.Contains(view, forwardsPanelFooter(m.keymap)) {
+		t.Fatalf("the clipped panel lost its footer:\n%s", view)
+	}
+	// The box's bottom border is the last thing a bottom-first clip takes, so its
+	// presence is the cheap proof nothing ran off the canvas.
+	if !strings.Contains(view, "╰") {
+		t.Fatalf("the panel lost its bottom border:\n%s", view)
+	}
+}
+
+// TestForwardsPanelWindowFollowsTheCursor is the half of BOX-02 the modal's answer
+// (truncate + marker) could not give: this overlay has a cursor, so dropping the tail
+// of the list would hide the row the reader is about to act on. The window scrolls
+// instead — the selection is on screen wherever it is in the list.
+func TestForwardsPanelWindowFollowsTheCursor(t *testing.T) {
+	const total = 20
+	for _, sel := range []int{0, 1, 9, total - 2, total - 1} {
+		m := panelWithForwards(t, 80, 12, total, sel)
+		view := frame(m)
+		want := m.forwards[sel].label
+		if !strings.Contains(view, "> "+want) {
+			t.Fatalf("cursor at %d: the selected forward %q is not on screen:\n%s", sel, want, view)
+		}
+	}
+
+	// And the window is the *least-scrolled* one that holds the cursor: at the top of
+	// the list the panel starts at the first forward rather than centring on it.
+	m := panelWithForwards(t, 80, 12, total, 0)
+	if view := frame(m); !strings.Contains(view, "pod/app-1 ") {
+		t.Fatalf("a cursor at the top should show the list from its first row:\n%s", view)
+	}
+}
+
+// TestForwardsPanelTitleCountsWhatIsHidden proves the elision announces itself (D220
+// pt 3). The counter rides the title rather than a marker row — the row would have to
+// come out of the list it describes — and it appears only when rows are actually off
+// screen, so it is evidence rather than furniture.
+func TestForwardsPanelTitleCountsWhatIsHidden(t *testing.T) {
+	// A list that fits says nothing.
+	m := panelWithForwards(t, 80, 24, 3, 0)
+	if view := frame(m); !strings.Contains(view, "Port-forwards") || strings.Contains(view, " of 3") {
+		t.Fatalf("a panel showing every forward should not count:\n%s", view)
+	}
+
+	// A windowed list names the slice on screen and the total.
+	m = panelWithForwards(t, 80, 12, 20, 19)
+	view := frame(m)
+	if !strings.Contains(view, "of 20") {
+		t.Fatalf("a windowed panel should say how many forwards there are:\n%s", view)
+	}
+	if !strings.Contains(view, "–20 of 20") {
+		t.Fatalf("the title should name the visible slice, ending at the cursor's row:\n%s", view)
+	}
+}
+
+// TestForwardsWindow pins the window arithmetic directly, including the degenerate
+// sizes the rendered-panel tests cannot reach (a zero-row budget on a screen so short
+// that the box is title-only).
+func TestForwardsWindow(t *testing.T) {
+	for _, tc := range []struct {
+		total, sel, n      int
+		wantStart, wantEnd int
+	}{
+		{total: 0, sel: 0, n: 5, wantStart: 0, wantEnd: 0},     // nothing to show
+		{total: 3, sel: 1, n: 5, wantStart: 0, wantEnd: 3},     // fits: no scrolling
+		{total: 5, sel: 0, n: 5, wantStart: 0, wantEnd: 5},     // exactly fits
+		{total: 20, sel: 0, n: 5, wantStart: 0, wantEnd: 5},    // top of the list
+		{total: 20, sel: 4, n: 5, wantStart: 0, wantEnd: 5},    // last row of the first window
+		{total: 20, sel: 5, n: 5, wantStart: 1, wantEnd: 6},    // one step past it scrolls by one
+		{total: 20, sel: 19, n: 5, wantStart: 15, wantEnd: 20}, // bottom, clamped to the end
+		{total: 20, sel: 3, n: 0, wantStart: 0, wantEnd: 0},    // no room for any row
+		{total: 20, sel: 3, n: -1, wantStart: 0, wantEnd: 0},   // and a negative budget is not a panic
+	} {
+		start, end := forwardsWindow(tc.total, tc.sel, tc.n)
+		if start != tc.wantStart || end != tc.wantEnd {
+			t.Errorf("forwardsWindow(%d, %d, %d) = (%d, %d), want (%d, %d)",
+				tc.total, tc.sel, tc.n, start, end, tc.wantStart, tc.wantEnd)
+		}
+		if tc.wantEnd > tc.wantStart && (tc.sel < start || tc.sel >= end) {
+			t.Errorf("forwardsWindow(%d, %d, %d) = (%d, %d) does not contain the cursor",
+				tc.total, tc.sel, tc.n, start, end)
+		}
 	}
 }
 

@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-05 — BOX-01 done: the confirm/prompt modal now renders no taller than the box it computes, so a long question no longer costs a prompt its input line (D220); BOX-02/03 filed for the two overlays with the same defect. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-05 — BOX-02 done: the port-forward panel now bounds its height and scrolls a window that keeps the selected forward on screen, counting what it hides in its title (D221). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: `forwardsPanelView` (`internal/tui/app.go`) clamps its width to 64 and its height
-      not at all: title + one row per active forward + the HINT-04 footer, composited onto the
-      fixed `width×bodyHeight` canvas that clips bottom-first (D220). Enough forwards on a
-      short terminal push the footer and the bottom border off screen, and — unlike the modal —
-      the panel has a **cursor**, so a tail-drop can hide the selection. Give it a rows-visible
-      window that follows `m.forwardsSel`, and say what is off-screen.
+_(none)_
 
 ## Blocked
 
@@ -317,15 +310,16 @@ bounds. Found while reading `modal.View` for the wrapping question AUTH-05b left
 
 - [x] **BOX-01** The modal renders no taller than the box it computes — done 2026-08-05 (D220)
 
-**Two more overlays are unbounded**, measured while closing BOX-01 — filed rather than folded
+**Two more overlays were unbounded**, measured while closing BOX-01 — filed rather than folded
 in, since each is a different view with its own tests. The safe ones are safe by composition:
 the pickers size their list to `innerSize`, and the viewer and the logs view are pagers with
 their own viewport. Note for all three items that a unit test reading `View()`'s own string
 cannot catch this class of bug — the string is complete; only the composited frame is short
-(D220 pt 1).
+(D220 pt 1). BOX-02 settled the second question these share: a bounded surface with a
+**cursor** scrolls and counts what it hides, where one without a cursor truncates and marks
+(D221 vs D220 pt 3). BOX-03 is the latter shape.
 
-- [ ] **BOX-02** The port-forward panel is as tall as the number of forwards — **in progress**
-      (claimed 2026-08-05, `claude-opus-5`; see In Progress)
+- [x] **BOX-02** The port-forward panel is as tall as the number of forwards — done 2026-08-05 (D221)
 - [ ] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen
       status: todo | owner: — | added: 2026-08-05
       notes: `help.View` constrains width (`helpMargin`) and ignores `m.height`, which it is

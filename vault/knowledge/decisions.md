@@ -6020,3 +6020,28 @@ text field itself. Nothing in the build or the tests noticed, because every unit
    not the picker's 3, because a prompt's frame is four rows before any message. A minimum
    smaller than the mandatory chrome makes pt 1 unsatisfiable on a small terminal, which is
    exactly where it matters.
+
+## D221 — An overlay with a cursor scrolls rather than truncates, and counts what it hides in its title (2026-08-05, BOX-02)
+
+D220 pt 1 says a box bounds its own height; it left open *how* the surplus goes. The modal
+truncates with a marker, which is right for a message nobody can scroll to. The port-forward
+panel is the other shape — a list with a **selection** — and there truncation is not a
+degraded read but a wrong one: dropping the tail hides the row the reader is about to stop,
+and the box looks complete while doing it.
+
+1. **A bounded surface that has a cursor keeps the cursor on screen.** It renders the
+   least-scrolled window of its content that contains the selection, rather than a prefix
+   plus a marker. `forwardsWindow` derives that window from the cursor alone — no stored
+   scroll offset — so nothing has to re-clamp it on resize, on a stopped forward, or
+   alongside `clampForwardsSel`. A stored offset is only worth its maintenance for a surface
+   long enough that sticky scroll position is a feature (the table); a short list is not.
+2. **A scrollable elision announces itself in chrome that always renders, not in a row taken
+   from the content.** The panel's title becomes `Port-forwards (11–16 of 20)` when the
+   window hides rows and stays plain when it does not — D220 pt 3's "dropped content says it
+   was dropped" satisfied without spending a row of the very list being described. It is a
+   *counter* rather than `… (truncated)` because the reader can reach what is hidden: what
+   they need is to know it is there, which the modal's reader never can.
+3. **Chrome is first-class, but a footer is not worth the last content row.** The title
+   always renders and the footer only while a content row survives it, so the smallest boxes
+   degrade title → title + one row → title + row + footer rather than into a box that lists
+   its keys and no forwards.
