@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-07-30) — every agent-performable M5 slice has landed, M5-10's pre-flight included (D185), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access, the recording, one real legacy file, and the branch rename (M5-11, blocked on the tag).
+**Status:** `in-progress` (2026-08-06) — every agent-performable M5 slice has landed (D185) and the legacy-config criterion is closed on the generated fixture (D231, no real file survives), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access, the recording, and the branch rename (M5-11, blocked on the tag).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -143,26 +143,33 @@ raise come back done, not when the config that would produce them compiles.
       particular whether `GITHUB_TOKEN` may create the package on its first push; if GHCR
       refuses, the fallback is to name the package after the repository. M5-10's pre-flight
       carries that, not a human task.)
-- [ ] Migration verified from a real legacy config file.
+- [x] Migration verified from a real legacy config file. **— ticked on the generated fixture,
+      not on a real file (D231).**
       (M5-04 ✅ 2026-07-30 fixed the stale theme report and made the selection actually
       migrate (D179). **M5-05 ✅ 2026-07-30** (D180) closed the agent-side half: the launcher's
       whole migration path — legacy file → `Migrate` → `SaveFile` → `LoadFile` →
       `resolveTheme` — runs green over a fixture the *2020 writer produced*, bound in both
       directions to a verbatim copy of `master:pb/config.proto`, and it caught a hand-typed
-      fixture that had the `rgb` format wrong. This criterion says "real", though, so it stays
-      unticked until the human task `2026-07-30-real-legacy-config-migration` comes back — a
-      generated file cannot exhibit the one failure that matters, an unparseable legacy config
-      degrading silently to no migration at all (D92/D180 pt 4). If no legacy file survives,
-      the closing leg ticks this on the fixture *and records that it did*.)
+      fixture that had the `rgb` format wrong. The "real" half was the human task
+      `2026-07-30-real-legacy-config-migration`, and it came back **done, negative**
+      (2026-08-06): *"I can't test, I don't have old config. Rely on tests."* No legacy
+      `~/.kubecom.yaml` survives, so the file this criterion asks for does not exist to be
+      run — which is the case the task's own "If no legacy file survives" clause anticipated:
+      the closing leg ticks it on the fixture **and records that it did**. HT-dogfood-0806 is
+      that leg and **D231** is that record. What stays unverified is unchanged and named
+      there: an unparseable legacy config degrading *silently* to no migration (D92/D180 pt 4)
+      is the one failure a generated file cannot exhibit, and no evidence for it exists.)
 - [ ] Definition of Done in [`../goals.md`](../goals.md) fully checked.
       (Audited by M5-01 (2026-07-30, D174): **6 of 13 ticked**, each against named tests /
       decisions / milestone criteria, and each unticked box now names the one thing that
-      closes it. The remaining seven are: **three** waiting on open dogfood human-tasks (the
-      Edit → `$EDITOR` check, which since M5-01b carries the logs/describe/YAML box too, and
-      the context switch), one on the CRD-01 bug, one on the migration note (**M5-04 ✅
-      2026-07-30/D179** — the false "themes were dropped" claim is gone from the code *and*
-      the README; the box now waits only on M5-05's real-file verification), and
-      two on release acts that have not happened (M5-02/03/10, plus #28 → M5-06/07/08). Also
+      closes it. **9 of 13 as of HT-dogfood-0806** (2026-08-06): the two `$EDITOR` boxes
+      closed on the maintainer's *"editor is working"* and the migration box on D231's
+      recorded fixture-not-real-file tick. The remaining four are the **context switcher**
+      (human task `2026-07-29-context-switch-live-dogfood`), **CRD//generic listing** (CRD-01
+      landed 2026-08-02/D200; the box now waits on `2026-08-02-conversion-webhook-reason-dogfood`
+      reading the degraded pane on a real cluster), and the **two release boxes**, which are
+      M5-10's tag and the issues it closes — both human acts (D173 pt 1). Nothing waits on
+      agent work any more. Also
       found M5-01a: no surface reached previous-container logs, a 2020 parity gap — **closed
       2026-07-30** by `logs.previous`/`ctrl+p` (D177). **M5-01b ✅ 2026-07-30**: the audit's
       one open *question* — in-TUI YAML viewer vs D135 — is settled, and it needed no

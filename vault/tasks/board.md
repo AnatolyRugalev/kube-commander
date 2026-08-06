@@ -3,16 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — BOARD-02b-3 done: the last four closed lines (LOGS, DIAG, HINT, BOX) are swept against the code and collapsed, closing the BOARD line and filing LOGS-07 — an unbounded logs buffer nothing had noticed (D230). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — HT-dogfood-0806 done: the two human tasks the maintainer finished are folded in and deleted, which completes **M3** (Edit confirmed live) and closes the migration criterion on the generated fixture with the substitution recorded (D231) — DoD now 9 of 13. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **HT-dogfood-0806** Close the two human tasks the maintainer finished on 2026-08-06
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: `2026-07-24-edit-live-cluster-dogfood` ("editor is working") and
-      `2026-07-30-real-legacy-config-migration` ("I can't test, I don't have old config —
-      rely on tests") both came back `Status: done`. Fold each `## Result` into the exit
-      criteria and DoD boxes it gates, then delete both files (D79).
+_(none)_
 
 ## Blocked
 
@@ -85,17 +80,12 @@ messages.
       **M2-07 (root shell) is complete.** Top-unblocked next: **M2-08**.
 
 ### M3 — Actions & Viewers
-M3 makes kubecom *operate*: in-TUI viewers + the curated action set, killing nearly
-all kubectl shell-outs. The **kube layer already has every verb** — logs stream
-(M1-07c/d), describe (M1-07b), YAML (M1-07a), delete/scale/rollout-restart/cordon/
-drain/suspend (M1-06*), background port-forward (M1-08). So M3 is almost entirely
-the **TUI surface**: reusable read-only viewers, wiring actions through the M2-10
-confirm modal (D88), an actions surface off the reserved nav keys (D10), and the two
-sanctioned suspend flows (exec, edit). Built bottom-up (D52 rhythm): the shared
-viewer + the actions surface first, then each viewer/action as its own leg. Every
-overlay composites over the base browse view (D95); zero shared mutable UI state
-(principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
-is a default, not a contract — re-split any slice that proves > ~300 lines.
+_(none — M3 is **done** (2026-08-06): every exit criterion in
+[`../milestones/M3-actions-viewers.md`](../milestones/M3-actions-viewers.md) is ticked
+against named evidence, the last of them — Edit round-tripping through a live `$EDITOR` —
+on the maintainer's own cluster (HT-dogfood-0806). The standalone YAML viewer that was in
+M3's scope never shipped and never will: `e` opens the object's YAML in the user's real
+editor for reading and writing (D135/D178). Per-slice history: `vault/journal/`.)_
 
 ### Cluster search (SEARCH — feedback-driven, D131) — closed
 Feedback `2026-07-24-cluster-search-multi-resource`: `ctrl+s`, type a query, get matching
@@ -417,6 +407,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **HT-dogfood-0806** Closed the two human tasks the maintainer finished — Edit's live `$EDITOR` confirmed, completing **M3**; no legacy config survives, so migration ticks on the generated fixture and says so — done 2026-08-06 (D231)
 
 - [x] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach — done 2026-08-06 (D230)
 

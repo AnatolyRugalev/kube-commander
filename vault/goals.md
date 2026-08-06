@@ -17,15 +17,18 @@ high-value capabilities the original lacked.
 
 ## Definition of Done (v1)
 
-_Audited item by item against named evidence by **M5-01** (2026-07-30, D174): **6 of 13
-ticked**, and every unticked box names the one thing that closes it. A box is ticked only
-when its claim is decidable from the code and its tests, or has been confirmed by a human
-against a real cluster — never to make the list read as finished (D79/D174). Four boxes wait
-on an open dogfood or bug; three wait on work that has not happened yet (the migration
-note — which as of M5-05 waits only on a human's own legacy file — and the two release acts). **M5-01b** (2026-07-30, D178) amended the wording of the
-logs/describe/YAML bullet — the one amendment made to a claim in this list, made on the
-maintainer's own recorded feedback and not on the agent's reading of the code; the original
-text is preserved in that bullet's annotation._
+_Audited item by item against named evidence by **M5-01** (2026-07-30, D174): 6 of 13 ticked
+then, **9 of 13 as of HT-dogfood-0806** (2026-08-06), and every unticked box names the one
+thing that closes it. A box is ticked only when its claim is decidable from the code and its
+tests, or has been confirmed by a human against a real cluster — never to make the list read
+as finished (D79/D174). The three that closed on 2026-08-06 are the two `$EDITOR` boxes, on
+the maintainer's live-cluster confirmation, and the migration box, which closes on the
+generated fixture **and says so** because no real legacy file survives to run it against
+(D231). The four still open: two wait on an open dogfood (the context switch, the CRD
+degraded pane) and two on release acts that have not happened. **M5-01b** (2026-07-30, D178)
+amended the wording of the logs/describe/YAML bullet — the one amendment made to a claim in
+this list, made on the maintainer's own recorded feedback and not on the agent's reading of
+the code; the original text is preserved in that bullet's annotation._
 
 - [x] Two-pane browse UX (resource menu + live-watched table) at parity with the original.
       (M2 exit criteria 1–2: menu drill-in → `kube.Watch` deltas pumped into the table —
@@ -48,7 +51,7 @@ text is preserved in that bullet's annotation._
       claim now: nothing here has been driven against a CRD-heavy cluster by a human beyond
       that one listing check, and the re-scoped CRD-01 — say *why* a group's LIST failed,
       on screen — is what makes the degraded case legible rather than a vanishing toast.)
-- [ ] In-TUI logs and describe viewers; an object's YAML round-trips through your `$EDITOR`
+- [x] In-TUI logs and describe viewers; an object's YAML round-trips through your `$EDITOR`
       (no external pager required).
       (**Wording amended by M5-01b, 2026-07-30, D178.** It read "In-TUI logs, describe, and
       YAML viewers (no external pager required)" until then. M5-01's audit found the YAML
@@ -69,10 +72,10 @@ text is preserved in that bullet's annotation._
       `kubectl describe`-identical output in-process (M3-04, `internal/kube/describe.go`).
       Nothing here requires a pager: the editor is the user's own, invoked once and returned
       from, not a pager kubecom shells out to for reading.
-      **Still unticked — but on missing evidence now, not on an open question**: the YAML
-      third rides the same live `$EDITOR` suspend that leaves the Exec/Edit box below
-      unticked, so it closes with the same human task,
-      `2026-07-24-edit-live-cluster-dogfood`.)
+      **Ticked 2026-08-06 (HT-dogfood-0806).** The YAML third rode the same live `$EDITOR`
+      suspend as the Exec/Edit box below, and the human task that carried both,
+      `2026-07-24-edit-live-cluster-dogfood`, came back done: *"editor is working"*, re-run
+      after EDIT-01/D192 fixed the editor resolution that stopped the first attempt.)
 - [x] Core actions in-process: delete, scale, rollout restart, cordon/drain, port-forward (background), view secrets.
       (M3 exit criteria 2–4, all ticked, all client-go: delete (D115), scale +
       rollout-restart (D117, kubectl's own `restartedAt` annotation so the two tools are
@@ -80,14 +83,19 @@ text is preserved in that bullet's annotation._
       (D121), CronJob suspend/resume (D120), port-forwards that run in the background, are
       listed in a panel and stop cleanly on exit (D122/D123, `forwards.panel`/`stopAll`),
       and secrets with explicit reveal + per-entry clipboard copy (D113/D114, #89).)
-- [ ] Exec shell + `$EDITOR` edit (the only sanctioned TUI-suspending actions).
+- [x] Exec shell + `$EDITOR` edit (the only sanctioned TUI-suspending actions).
       (Exec is done and human-confirmed against a real cluster in a real terminal
       (2026-07-24, HT-exec-dogfood): in-process SPDY with a `kubectl exec` parity fallback
       when the binary is present (D125–D128). Edit is built and hermetically covered —
       temp-file round-trip, no-change detection, identity/conflict guards that refuse rather
-      than clobber (M3-15a/15b, D129/D135) — but its **live** `$EDITOR` suspend has never
-      been driven by a human, so the M3 Edit exit criterion is deliberately unticked and so
-      is this. Closes with the human task `2026-07-24-edit-live-cluster-dogfood`.)
+      than clobber (M3-15a/15b, D129/D135). Its **live** `$EDITOR` suspend is the part no fake
+      can show, and it was **maintainer-confirmed 2026-08-06** — *"editor is working"* — on a
+      re-run after EDIT-01/D192 made the editor resolve at startup (the first attempt, on
+      2026-08-01, never reached step 1: no `vi` on the host, which degraded correctly).
+      Ticked by HT-dogfood-0806, closing the M3 Edit exit criterion and **completing M3**. The
+      confirmation is as wide as those words: the flow works. The reject paths — invalid YAML,
+      renamed `metadata.name`, concurrent change — remain covered hermetically (D129), not by
+      this check.)
 - [ ] Context/cluster switcher; namespace switcher; filter; sort by column.
       (Three of four met: namespace picker (M2-08c) that remembers per-context scope
       (D163), table filter with `n`/`N` search (D80), and any column sortable, stable under
@@ -133,7 +141,8 @@ text is preserved in that bullet's annotation._
       (`TestKubectlExecProcAbsent`, `TestExecRoutesToKubectlWhenPresent`, D128). Every other
       capability the 2020 build shelled out for is client-go now — logs, describe, YAML,
       exec, port-forward, apply, drain, secrets (`internal/kube/`). Closes #68.)
-- [ ] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
+- [x] Plain-YAML config with one-shot migration from the old `~/.kubecom.yaml`.
+      **(Ticked on the generated fixture, not on a real accumulated file — D231.)**
       (The config half is met: plain YAML via `sigs.k8s.io/yaml`, config/state/menus split
       across XDG dirs (D20/D83/D91). The migration half is built and one-shot (M2-12a/12b,
       D92/D93) and degrades rather than blocks on a malformed legacy file. Its report used to
@@ -145,11 +154,15 @@ text is preserved in that bullet's annotation._
       matching claim went with it. **M5-05 ✅ 2026-07-30 (D180)** then ran the whole launcher
       path over a `~/.kubecom.yaml` *generated by the 2020 writer itself* (protojson→YAML over
       a `pb.Config`), pinned key-for-field to a verbatim copy of `master:pb/config.proto` — and
-      caught a hand-typed fixture that had the `rgb` wire format wrong. Unticked only until a
-      human runs it over a file they actually accumulated (human task
-      `2026-07-30-real-legacy-config-migration`), because the failure a generated file cannot
-      exhibit is an unparseable legacy config degrading *silently* to no migration (D92). Still
-      the smallest gap in the list.)
+      caught a hand-typed fixture that had the `rgb` wire format wrong. It stayed unticked
+      waiting for a human to run it over a file they actually accumulated — and on 2026-08-06
+      that human task came back **done and negative**: *"I can't test, I don't have old config.
+      Rely on tests."* No such file survives, so the evidence this box was holding out for is
+      unobtainable rather than merely unproduced, and **HT-dogfood-0806 ticks it on the fixture
+      and records that it did (D231)** — the disposition M5-05 wrote into the task in advance,
+      not one invented after the answer came back. The gap that remains is exactly one thing
+      and D231 names it: an *unparseable* legacy config degrades silently to no migration
+      (D92), and only a file nobody has could show that path being hit in the wild.)
 - [ ] Linux + macOS release artifacts via goreleaser + GitHub Actions; tests green.
       (Tests green is continuous — `make check` (build + test + vet + lint) gates every leg
       and CI runs it (D17). The artifacts half has **not happened**: `.goreleaser.yml`

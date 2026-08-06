@@ -6286,3 +6286,31 @@ and D191 pt 3 already recorded that the dogfood never sat on a stream long enoug
    a buffer prefix without dropping the cache's matching prefix (or rebuilding it) silently
    desynchronises what is shown from what is held — the same coupling D162 pt 1 created when
    it stopped rebuilding on every append. Whatever bounds one bounds the other, in one place.
+
+## D231 — A criterion closed on substitute evidence carries the substitution in the tick (2026-08-06, HT-dogfood-0806)
+
+The M5 criterion "migration verified from a **real** legacy config file" asked for the one
+artifact nobody has: the maintainer's answer to
+`2026-07-30-real-legacy-config-migration` was *"I can't test, I don't have old config. Rely
+on tests."* M5-05 had anticipated this and written the disposition into the task before the
+answer existed — tick it on the generated fixture (`internal/config/testdata/legacy-kubecom.yaml`,
+a `protojson.Marshal` → `yaml.JSONToYAML` file the 2020 writer's own two calls produced) **and
+record that it closed that way**. This is that record, and it generalises, because the same
+shape recurs every time a human task comes back "cannot be done" rather than "done":
+
+1. **The tick and the substitution travel together, in the box itself.** The M5 criterion and
+   the DoD box each carry `— ticked on the generated fixture, not on a real file (D231)` on the
+   `- [x]` line, not only in the paragraph below it. A reader skimming ticks sees the
+   qualification; a reader skimming paragraphs would not, and the paragraph is the part a later
+   collapse (D229) is licensed to shorten.
+2. **No leg may cite this tick as real-file evidence.** What the fixture shows is the *shape* —
+   every key in `master:pb/config.proto` maps, the whole launcher path runs green. What it
+   cannot show is an unparseable legacy config degrading **silently** to no migration (D92/D180
+   pt 4): no toast, no `config.yaml`, no error. That path has no evidence and this decision does
+   not supply any. A leg that touches `Migrate` still owes it hermetic coverage.
+3. **"The human cannot do it" closes a task; it does not close the question.** A `Status: done`
+   whose `## Result` is negative is still done — the task is discharged, the file is deleted,
+   and re-raising it would be asking the same person the same unanswerable question. But the
+   gap it was raised for stays named in the criterion it gated, so a future leg with new
+   access (a user report, a real file turning up) knows what to run rather than re-deriving why
+   the box reads the way it does.

@@ -1,6 +1,6 @@
 # M3 — Actions & Viewers
 
-**Status:** `in-progress`
+**Status:** `done` (2026-08-06) — the last exit criterion, Edit round-tripping through a live `$EDITOR`, was maintainer-confirmed against a real cluster (HT-dogfood-0806).
 **Phase:** REWRITE_PLAN Phase 3
 
 _Scope expanded into ordered, leg-sized Backlog slices **M3-01 … M3-15** on the
@@ -45,7 +45,16 @@ set, killing nearly all kubectl shell-outs.
 - [x] Each workload action works with a confirmation step and reports success/failure to the status bar. (delete M3-09/D115; scale prompt + rollout-restart confirm M3-10/D117; cordon/uncordon M3-11a — direct, no confirm since idempotent, D120; drain M3-11b — confirm + streamed eviction progress, D121; CronJob suspend/resume M3-12 — direct, no confirm since idempotent, D120)
 - [x] Port-forwards run in background, are listed, and stop cleanly on exit.
 - [x] Exec drops into a working shell and restores the TUI afterward. (M3-14a/14b-1…4; maintainer-confirmed against a real cluster in a real terminal 2026-07-24 — shell drops in, TUI restores cleanly, HT-exec-dogfood)
-- [ ] Edit round-trips through `$EDITOR`.
+- [x] Edit round-trips through `$EDITOR`. (M3-15a/15b built it — temp-file round-trip, no-change
+      detection, identity/conflict guards that refuse rather than clobber, D129/D135 — and
+      EDIT-01/D192 made the editor resolve at startup so a user learns which one they get.
+      The **live** suspend is the part no fake can show, so it waited on a human:
+      maintainer-confirmed 2026-08-06, *"editor is working"*, re-run after EDIT-01 landed
+      (HT-dogfood-0806, human task `2026-07-24-edit-live-cluster-dogfood`). Since D135/M5-01b
+      this criterion carries **reading** an object's YAML too — `e` and quit is the read path —
+      so the DoD's logs/describe/YAML box closes here as well. No bug was reported, so the
+      confirmation is exactly as wide as the words: the flow works; the individual reject
+      paths of step 4 stay covered hermetically, not by this check.)
 
 ## Depends on
 M1 actions/streaming + M2 viewport/modal components.
