@@ -6266,3 +6266,23 @@ collapse, not a delete.**
    test can state without one — "a Done entry is one line", "a deferral names a destination".
    A length cap on the working area would be answered by writing shorter prose about open
    lines, which is the opposite of what this decision protects.
+
+## D230 — The logs view bounds what it *fetches* and what a line *costs*, never how much it holds (2026-08-06, BOARD-02b-3)
+
+BOARD-02b-3 collapsed the LOGS line to "closed on features and on cost (D160, D162)" and had
+to check that sentence first. It is true and it is narrow: `LogOptions.TailLines`
+(`defaultLogTail`, 1000) bounds the history the server replays **before** the tail begins, and
+D162's rendered cache plus batched pump bound what **one** appended line costs. Nothing bounds
+the count. `logsview.appendLine` appends to `lines`, `stamps` and — on a match — `shownLines`
+and drops nothing for the life of the view; `Reset` only clears at the next open. At the
+~1,900 lines/sec the 2026-08-01 dogfood measured, a view left following grows without limit,
+and D191 pt 3 already recorded that the dogfood never sat on a stream long enough to see it.
+
+1. **No leg may cite D160 or D162 as evidence that the logs view's memory is bounded.** They
+   are latency decisions. A retention bound is a separate mechanism and, until **LOGS-07**
+   lands, it does not exist — so "logs are closed on cost" means fetch cost and per-line cost.
+2. **A streaming view that keeps a rendered cache alongside its buffer bounds both together.**
+   The cache is derived from the buffer and holds a filtered subset of it, so a trim that drops
+   a buffer prefix without dropping the cache's matching prefix (or rebuilding it) silently
+   desynchronises what is shown from what is held — the same coupling D162 pt 1 created when
+   it stopped rebuilding on every append. Whatever bounds one bounds the other, in one place.

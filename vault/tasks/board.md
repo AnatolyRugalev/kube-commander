@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — BOARD-02b-2 done: the four closed lines BOARD-02b-1 had verified (SEARCH, CRD-PIN, PAL, AUTH) collapse to their outcome, their pointers and their standing answers, taking the board from 82KB to 71KB (D229). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — BOARD-02b-3 done: the last four closed lines (LOGS, DIAG, HINT, BOX) are swept against the code and collapsed, closing the BOARD line and filing LOGS-07 — an unbounded logs buffer nothing had noticed (D230). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+_(none)_
 
 ## Blocked
 
@@ -111,88 +110,60 @@ selector the kind does not support fails its List, and a failed kind is silent b
 found no problem, which is narrower than verified, and D191 pt 2 forbids citing it as
 evidence for keeping them *or* for changing them.
 
-### Logs dedicated view (LOGS — feedback-driven, D134)
-Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
-mini-app** with real-time grep (feedback `2026-07-24-logs-dedicated-view-live-grep`):
-type a `/`-filter that narrows the streamed lines **live while following** (à la
-stern/k9s), full-screen for high throughput, clear `[following]`/`[paused]` + active-filter
-indicator. Built bottom-up (D52): the component first (LOGS-01), then the app wiring that
-retires the shared-viewer logs path (LOGS-02), then regex/highlight (LOGS-03), then the
-nice-to-haves (LOGS-04). Keymap-driven (D11), message-only (principle 1).
+### Logs dedicated view (LOGS — feedback-driven, D134) — reopened on memory (LOGS-07)
+Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
+and `2026-07-29-logs-init-containers`: a **dedicated full-screen logs mini-app** with a
+`/`-filter that narrows the stream live while following. **Closed twice.** On *features* at
+LOGS-04c: the shared viewer has no logs mode any more (D144), the grep is substring or regex
+with its hits highlighted (D145), a long line wraps or scrolls sideways (D146), `nav.bottom`
+rejoins the stream rather than scrolling to it (D147), and `logs.timestamps` is a redraw over
+stamps the stream already carries (D148). On *cost* at LOGS-05b: an open tails the last 1000
+lines instead of replaying a week (D160), and an appended line extends a rendered cache that
+the pump feeds in batches — ~131 ms → ~2 ms for a 1000-line open (D162,
+`BenchmarkStreamLines*`). LOGS-06 reached the init and ephemeral containers, classified and
+marked `name (init)`, since an init container's logs are the only diagnosis a pod stuck in
+`Init:` has (D161). Per-slice history: `vault/journal/`.
 
-LOGS-01 (component), LOGS-02 (wiring) and LOGS-03 (regex + highlighting) are done, so the
-dedicated logs view is live on `res.logs`, the shared viewer no longer has a logs mode
-(D144), and the grep matches by substring or regex with the hits highlighted (D145). Only
-the nice-to-haves are left, split D52-style into **LOGS-04a** (wrap toggle + horizontal
-scroll), **LOGS-04b** (timestamps) and **LOGS-04c** (jump-to-latest) — three unrelated
-surfaces that were one line item. All three are done: long lines wrap on `logs.wrap` or
-scroll sideways on `nav.left`/`nav.right` (D146); `nav.bottom` rejoins the stream rather
-than just scrolling to it (D147); and `logs.timestamps` shows each line's server stamp as
-a pure display toggle over stamps the stream already carries (D148). That closed the line
-on **features**: the dedicated logs view is feature-complete for M3.
+Both closures are on **latency**, and BOARD-02b-3's sweep of the paragraphs above reopened the
+line a third time on **memory**: nothing bounds the buffer at all, which is **LOGS-07** below —
+the one open item here, so everything above it is the collapsed history of closed work (D229
+pt 1). The 2026-08-01 throughput dogfood (~1,900 lines/sec, no degradation) **confirms D162 and
+does not retire it**; what that closure licenses, and the buffer depth it never measured, is
+D191 pt 3, and neither D160 nor D162 is evidence that the depth is bounded (D230).
 
-**LOGS-05 reopens it on cost.** Feedback `2026-07-29-logs-tail-and-perf` (high) names two
-independent costs in the same view, so it triages into two slices rather than one leg:
-opening a log **replayed the container's whole history** (`openLogs` set no `TailLines`,
-so a pod up for a week streamed a week), and **every appended line re-renders the whole
-buffer** (`logsview.Append` → `render` → `shown` joins all lines, so the cost of one line
-grows with the number held — the exact quadratic the LOGS-02 throughput human-task
-predicted). The first bounds what is fetched, the second bounds what a fetched line
-costs; the feedback is explicit that the second must be fixed either way, since a
-followed stream keeps growing the buffer long after the initial tail.
+- [ ] **LOGS-07** Bound the logs buffer — nothing does
+      status: todo | owner: — | added: 2026-08-06
+      notes: Found by BOARD-02b-3's sweep, checking this line's prose against the code.
+      `logsview.appendLine` appends to `lines`, `stamps` and (on a match) `shownLines` and
+      drops nothing ever: a followed stream grows all three for as long as the view is open,
+      at a rate measured at ~1,900 lines/sec, and `Reset` only clears them at the *next*
+      open. LOGS-05a's `TailLines` bounds the initial replay, not the tail; LOGS-05b bounds
+      what a line costs, not how many are held (D230). Wants a cap — `defaultLogTail` (1000)
+      is the obvious default and matches what `-f` readers expect — plus a test that a long
+      stream holds a bounded count. The care is in the trim: `shownLines` holds only the
+      lines the query keeps and `renderLine` indexes `lines`/`stamps`, so dropping a prefix
+      has to drop the matching prefix of the cache (or rebuild it) and keep the scroll
+      position meaning what it did.
 
-LOGS-05a is done: every logs open asks for the last 1000 lines and tails from there, and
-the reconnect path is pinned not to re-tail on top of what the reader already has (D160).
-**LOGS-05b is done too, so the LOGS line is closed again** — on cost this time. Both halves
-landed: the rendered body is a cache an append extends rather than a buffer every append
-re-joins, and the pump drains the log channel so a burst is one render instead of hundreds
-(D162). The measured cost of the 1000-line open LOGS-05a introduced went from ~131 ms to
-~2 ms (`BenchmarkStreamLines*`). The residual cost is the viewport's own re-measure of
-every line it holds, which has no append API — hence the batching, and hence D162 pt 2 for
-whoever builds the next streaming surface.
+### Diagnostics (DIAG — feedback-driven) — closed
+Feedback `2026-07-29-external-secrets-crd-error` ("need to find the actual error"): opening
+the external-secrets `ExternalSecret` CRD errored out, and the report could carry no error
+text because kubecom had **nowhere to put one** — every failure funnelled into a 5-second
+status-bar toast and was gone. **Closed** at CRD-01. DIAG-01 made the error obtainable:
+`surfaceError` logs before it toasts and discovery's deliberately-silent failures (total and
+per-group) log too, so `~/.cache/kubecom/kubecom.log` — documented in the README since
+M2-RUN — finally holds what the user hit (D159). CRD-01 then put the degradation on screen:
+an empty browse pane says why its LIST failed, naming a conversion webhook and a 406 on
+Table conversion apart from the kind that would otherwise misdescribe them (D200). Per-slice
+history: `vault/journal/`.
 
-**The throughput dogfood is closed** (2026-08-01, HT-dogfood-0801): ~1,900 lines/sec from a
-busybox firehose, no degradation, the view responsive to keys throughout. Read it as the
-eyes-on confirmation of LOGS-05b/D162 rather than as "no fix was needed" — the task was
-raised on 2026-07-25 against the pre-D162 build and pre-authorised the incremental render
-*as* the fix, which then landed on 2026-07-29, four days before the measurement. Depth was
-not bounded (no multi-hour tail), and pts 2–5 of the task were not walked separately.
-
-**LOGS-06** (feedback `2026-07-29-logs-init-containers`, normal) is done and separate: the
-container picker only ever offered `spec.containers`, so an init container's logs — the
-only thing there is to read when a pod is stuck in `Init:` — could not be reached at all.
-`kube.PodContainers` now returns the init and ephemeral containers too, classified, each
-consumer narrows the set by what it can act on (exec still skips init containers), and a
-non-regular row is marked `name (init)` (D161).
-
-### Diagnostics (DIAG — feedback-driven)
-Raised by feedback `2026-07-29-external-secrets-crd-error` ("Need to find the actual
-error"): opening the external-secrets `ExternalSecret` CRD errors out. The report carries
-no error text — and it could not, because kubecom **had nowhere to put one**. Every
-runtime failure funnels through `surfaceError` into a 5-second, width-clipped status-bar
-toast and is then gone; the log file (`~/.cache/kubecom/kubecom.log`, documented in the
-README since M2-RUN) held only launcher warnings. So the CRD fix had a prerequisite: make
-the error obtainable. DIAG-01 did that; CRD-01 was to be the fix — and turned out to be
-something else (below).
-
-DIAG-01 is done: `surfaceError` — the shell's single error funnel — now logs before it
-toasts, and discovery's deliberately-silent failures (total and per-group) log too, so the
-file the README already documented finally holds the errors the user actually hit (D159).
-**CRD-01 is re-scoped, not fixed** (2026-08-01, HT-dogfood-0801/D191). Its human task came
-back **not reproducible**: external-secrets installed fresh into the dogfood cluster lists
-normally, with nothing in `~/.cache/kubecom/kubecom.log`. The one variable the clean install
-removed is the conversion webhook — the fresh chart serves only `v1` with
-`spec.conversion.strategy: None`, while the reporting cluster served `v1beta1` *and* `v1`
-behind `strategy: Webhook`. A conversion webhook that is down or serving a bad cert makes
-the **apiserver** fail the LIST, which kills `kubectl` too. So there is no client bug, and a
-leg that "fixes" one would be inventing it (D79). What remained was the degradation path —
-the half DISC-01 (D187) landed in the log file, not yet on screen — and **CRD-01 landed it
-on 2026-08-02 (D200), which closes the DIAG line**: an empty browse pane now carries why its
-LIST failed, with the conversion webhook and a 406 on Table conversion named apart from the
-kind that would otherwise misdescribe them. The wording, not the mechanism, was the leg.
-One claim is unverified against a real broken-webhook cluster and is parked in
-`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks
-nothing).
+Two things the closure does **not** license. There is **no client-side CRD bug**: the report
+is not reproducible, the clean install differs only in serving `strategy: None`, and a
+conversion webhook that is down fails the LIST *in the apiserver*, killing `kubectl` with it
+— so no leg may write a fix to kubecom's CRD handling on the strength of CRD-01's original
+title, which would be inventing a bug (D191 pt 1, D79). And the wording CRD-01 landed is
+still unverified against a real broken-webhook cluster, parked in
+`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks nothing).
 
 ### Custom resources (CRD-PIN — feedback-driven) — closed
 Feedback `2026-08-01-custom-resources-pinning`: on a CRD-heavy cluster, a kind you reach for
@@ -210,67 +181,35 @@ so it wants a user saying the notice is not enough (D226 pt 2). Where both stage
 kinds is **D227**: narrowing what the menu lists takes `:resource ` *and* `:pin ` down with
 it unless `resourcePickerItems` is re-sourced from the discovery result first.
 
-### Hint-line truth (HINT — agent-found)
-The bottom hint line is a promise about which keys act right now (D143 pt 1), and there is
-one place it has been lying since M2-08: **while a modal picker is open**. Every picker
-captures all input and, since PAL-01, opens its filter field with itself — so `/`, `n`, `s`,
-`a`, `?` and `q` all type into the query — yet the hint underneath still shows the browse
-menu/table set. Flagged by PAL-02, PAL-03a, PAL-03b, CRD-PIN-04 and CRD-01 in turn, and each
-time named as the same leg-sized fix: a picker `HelpContext`, the D143 pt 1 shape.
+### Hint-line truth (HINT — agent-found) — closed
+The bottom hint line is a promise about which keys act **right now** (D143 pt 1), and it had
+been lying wherever a surface captures input — a picker opens its filter field with itself,
+so `/`, `n`, `s`, `a`, `?` and `q` type into the query while the hint underneath still showed
+the browse set. **Closed** at HINT-05: every capturing surface has a `HelpContext` written
+where its router tests it — the pickers (D206), the modals, help overlay and shared viewer
+(D217), the browse filter field and the port-forward panel (D218) — no view spells a key into
+its own body any more (D219), and the completeness is **enforced** rather than merely reached:
+`helpContextCount` bounds the enum, `HelpContexts()` enumerates it, and a declared context
+that carries no curated set (keymap) or that no model state produces (tui) turns one of two
+tests red (D223). The sets stay hand-curated; only their completeness is mechanical, and the
+`ShortHelpContext` fallback survives for the out-of-range integer it was always right for.
+Nothing is deferred here. Per-slice history: `vault/journal/`.
 
-- [x] **HINT-01** The hint line tells the truth while a picker is open
-      — done 2026-08-02 (D206)
-- [x] **HINT-02** The same for the modals, the help overlay and the shared viewer
-      — done 2026-08-05 (D217)
-- [x] **HINT-03** The last two liars: the browse filter field and the port-forward panel
-      — done 2026-08-05 (D218)
+### Overlay geometry (BOX — agent-found) — closed
+Every overlay is centered over the browse body by `overlayCenter`, which flattens onto a fixed
+`width×bodyHeight` canvas — so a box taller than the body is not scrolled or shrunk, it is
+**silently clipped, bottom-first**. **Closed** at BOX-03: the confirm/prompt modal (D220), the
+port-forward panel (D221) and the keybindings overlay (D222) each bound their own height, and
+the clamp lives in `internal/tui/elide` so a fourth overlay inherits it instead of re-deriving
+it (D222 pt 2). The two shapes are settled: a bounded surface **without** a cursor truncates
+and marks the cut (`… (truncated)`, or a marker naming where the rest is — D220 pt 3/D222
+pt 1), one **with** a cursor scrolls and counts what it hides in its title (D221). Per-slice
+history: `vault/journal/`.
 
-**The HINT line is closed** as of HINT-03/D218: every surface in kubecom that captures input
-has a `HelpContext`, written where its router tests it, so the two switches read as the same
-list in the same order. The filter field takes the same four keys as the other two text fields
-(D206 pt 3's rule, applied a third time), and the port-forward panel — the only capturing
-surface with no text field — takes a transcript of `handleForwardsPanelAction`. Nothing
-enforces the completeness, which is D218 pt 1: `contextShortHelpActions` has no exhaustiveness
-check and `ShortHelpContext` falls back silently, so a new capturing surface with no case ships
-a plausible wrong hint and every test still passes. HINT-04 cleared the residue HINT-03 left
-behind, so no view in kubecom writes a key into its own body any more (D219).
-
-- [x] **HINT-04** The port-forward panel's footer spells its keys literally — done 2026-08-05 (D219)
-- [x] **HINT-05** Nothing enforced the completeness — done 2026-08-05 (D223)
-
-**The HINT line is now enforced as well as closed** (HINT-05/D223): `HelpContext` is bounded
-by `helpContextCount` and enumerable via `HelpContexts()`, and a declared context must both
-carry a curated set (keymap) and be produced by some model state (tui) or one of the two tests
-goes red. The sets stay hand-curated — only their completeness is mechanical. The
-`ShortHelpContext` fallback survives for out-of-range integers, which is the case it was
-always right for.
-
-### Overlay geometry (BOX — agent-found)
-Every overlay in kubecom is a bordered box centered over the browse body by `overlayCenter`,
-which flattens onto a fixed `width×bodyHeight` canvas — so a box larger than the body is not
-scrolled or shrunk, it is **silently clipped**, bottom-first. The picker is safe by
-construction (its list is a component sized to `innerSize`), and the viewer and logs view are
-pagers. The confirm/prompt modal is the outlier: it renders a free-form message that nothing
-bounds. Found while reading `modal.View` for the wrapping question AUTH-05b left open.
-
-- [x] **BOX-01** The modal renders no taller than the box it computes — done 2026-08-05 (D220)
-
-**Two more overlays were unbounded**, measured while closing BOX-01 — filed rather than folded
-in, since each is a different view with its own tests. The safe ones are safe by composition:
-the pickers size their list to `innerSize`, and the viewer and the logs view are pagers with
-their own viewport. Note for all three items that a unit test reading `View()`'s own string
-cannot catch this class of bug — the string is complete; only the composited frame is short
-(D220 pt 1). BOX-02 settled the second question these share: a bounded surface with a
-**cursor** scrolls and counts what it hides, where one without a cursor truncates and marks
-(D221 vs D220 pt 3). BOX-03 is the latter shape.
-
-- [x] **BOX-02** The port-forward panel is as tall as the number of forwards — done 2026-08-05 (D221)
-- [x] **BOX-03** The keybindings overlay is a fixed 15 rows on every screen — done 2026-08-05 (D222)
-
-**The BOX line is closed** (01/02/03 done 2026-08-05): every overlay now bounds its own height,
-the two shapes are settled (marker for a static box, window + counter for one with a cursor),
-and the clamp itself lives in `internal/tui/elide` so a fourth overlay inherits it rather than
-re-deriving it (D222 pt 2).
+Nothing is deferred, but one warning stands, because this class of bug is invisible to the
+obvious test: a unit test reading `View()`'s own string cannot catch it — the string is
+complete, only the composited frame is short. Assert against the height the geometry promised,
+or read the box through the canvas that will clip it (D220 pt 1).
 
 ### Command palette (PAL — feedback-driven) — closed
 Feedback `2026-08-01-command-palette-unification`: one place you type to make anything
@@ -385,14 +324,17 @@ carry their outcome, their `Dnn` join keys and their standing answers in ~16 lin
 instead of ~55; the board is 71KB, down from 82KB. The other four closed lines (LOGS, DIAG,
 HINT, BOX) have never been swept, and D226 pt 1 forbids compacting a paragraph whose claims
 nobody has checked — that sweep is **BOARD-02b-3**, and it is the same shape as 02b-1.
-- [ ] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: LOGS, DIAG, HINT and BOX are closed and still carry their full narrative (~145
-      lines). Do 02b-1's harvest on each **first** — check every claim against the code, not
-      by reading it — then collapse under D229. Two are already known to have gone stale:
-      HINT's paragraph still says "nothing enforces the completeness" three lines above the
-      one saying HINT-05 enforced it (D223), and DIAG's restates D191 pt 1 at length. Open
-      lines (CTX-WARM, BOARD, M5) are out of scope — D229 pt 1 only licenses closed ones.
+- [x] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach — done 2026-08-06 (D230)
+
+The sweep came back **one stale claim and one real defect**: HINT's paragraph still said
+nothing enforced the hint-context completeness, three lines above the entry saying HINT-05
+enforced it, and checking LOGS' "closed on cost" against the code found that nothing bounds
+the logs buffer at all — filed as **LOGS-07** (D230), the second consecutive harvest to turn
+up a product item the prose had been hiding. DIAG's fourteen lines of D191 pt 1 and BOX's
+paragraphs collapsed as written. The four sections are ~15 lines each instead of ~36. **The
+BOARD line is closed**: the Done list is one line per entry and guarded (D224), the index is
+canonical and guarded (D225), a deferral names its destination and is guarded (D226), and a
+line collapses its own section when it closes (D229, unguarded on purpose).
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
@@ -470,6 +412,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach — done 2026-08-06 (D230)
 
 - [x] **BOARD-02b-2** A closed line collapses to its outcome, its pointers and its standing answers — done 2026-08-06 (D229)
 
