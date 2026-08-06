@@ -7,7 +7,13 @@ _Last updated: 2026-08-06 — AUTH-06 done: the three seams that render text kub
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-07** Esc closes a key-opened palette stage instead of rewinding to a verb
+      list the reader never saw
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Feedback `2026-08-06-action-menu-esc-behavior`. `a` → esc leaves the palette
+      open on the verb list (D207 pt 2's rewind), so esc is not "back" for the five keys
+      that open a stage directly. Supersede that half of D207 pt 2 for the key-opened
+      path; backspace keeps rewinding.
 
 ## Blocked
 
