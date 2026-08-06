@@ -7,7 +7,15 @@ _Last updated: 2026-08-06 — AGE-01 done: the AGE column is re-derived on the c
 
 ## In Progress
 
-_(none)_
+- [ ] **SEARCH-05** Enter is the seam in cluster search: query editing before it,
+      result navigation after it
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Feedback `2026-08-06-cross-search-enter-navigate`. The search view's query
+      field is open for the view's whole life (D140 pt 1), so every rune is text and
+      `hjkl` types instead of navigating — only the arrows move the result cursor.
+      Give the view two focus states, make `nav.drillIn` on the query field commit into
+      the result list (and only drill in from there), and route mapped keys as actions
+      once focus is on the results.
 
 ## Blocked
 
