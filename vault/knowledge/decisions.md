@@ -6519,3 +6519,39 @@ label. What a later leg must not silently contradict:
 5. **Unnamed lists render exactly as before.** Every picker but the palette seeds
    plain values, and none of them may grow an empty gutter — the two-column layout
    exists only where something is named.
+
+## D238 — An editing key with nothing to edit is a cancel: backspace on an empty `/` query resolves to nav.back (2026-08-06, FILT-01)
+
+Feedback `2026-08-06-search-backspace-cancel`: press `/`, press backspace with nothing
+typed, and the query field stays open and empty. D73's control/text split routed it there
+by construction — backspace is an unmapped no-text key, so it is *editing*, so it goes to
+the field — and a field with an empty line has nothing to do with it. This adds the third
+arm the split was missing. It does not change what any key means while there is text to
+erase.
+
+1. **The gesture is the last backspace, not the first.** With characters left it edits and
+   re-narrows live, exactly as before; only a backspace that finds the line already empty
+   is a cancel. The count comes from the line, never from how the field was opened — a `/`
+   reopened on a committed query (`openFilter` seeds it) costs one backspace per character
+   plus one, which is what "past the start" means and is why the predicate reads the field's
+   value rather than a "was anything typed" flag.
+
+2. **It resolves to `nav.back`, it does not get a cancel path of its own.** Each `/` surface
+   already has an unwind ladder and backspace joins it at the step the reader is standing on
+   — the table filter's `clearFilter`, the logs view's `closeFilter`. So the two gestures can
+   never come to mean different things, and a surface that changes what esc does gets the
+   same change for free. In the logs view this is load-bearing: the route is reached only
+   while the grep is open, so backspace can only ever take the ladder's *first* step and can
+   never dismiss the view out from under a stream the reader is watching.
+
+3. **The keymap wins.** The check runs after `m.keymap.Action(key)`, so a config that binds
+   backspace to something keeps it. A leg adding a `/` surface puts the predicate in the same
+   position or the binding stops being honoured on that surface alone.
+
+4. **It applies to a `/` that opened over content, not to a picker's filter.** In a picker
+   the reader opened the *picker*; its filter is incidental, an empty query is already
+   showing everything, and cancelling has nothing to cancel — the palette's own backspace
+   rewinds the line instead (D207 pt 2 / D233 pt 2) and keeps doing so. The cluster-search
+   view is excluded for the opposite reason: its query is not a mode over content but the
+   view itself (D140 pt 1), so "cancel" there means dismissing a whole mini-app, which stays
+   on esc alone (D235 pt 2) until someone asks for otherwise.

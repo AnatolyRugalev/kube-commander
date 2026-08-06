@@ -226,10 +226,18 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 // Keys with the filter *closed* are deliberately not routed here: they go through the
 // sequencer like every browse key, so `gg`/`G` work in a log the way they work
 // everywhere else (handleLogsAction is the action end of that path).
+//
+// The one editing key that is not filter input is a backspace on an empty query: it
+// resolves to nav.back (D238), which here closes the grep and restores the full stream
+// — the same step of the view's own esc ladder, never the step that dismisses the view,
+// because this route is only reached while the filter is open.
 func (m Model) routeLogsFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.Key()
 	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
 		return m.handleLogsAction(action)
+	}
+	if isEmptyLineBackspace(key, m.logsView.Query()) {
+		return m.handleLogsAction(keymap.ActionBack)
 	}
 	var cmd tea.Cmd
 	m.logsView, cmd = m.logsView.UpdateFilter(msg)

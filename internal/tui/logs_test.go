@@ -123,6 +123,37 @@ func TestLogsGrepSwallowsTextKeys(t *testing.T) {
 	}
 }
 
+// TestLogsGrepBackspaceOnEmptyQueryCancels proves D238 reaches the logs view's `/`
+// too: with nothing left to erase, backspace closes the grep and restores the full
+// stream — and stops there. It must never take the second step of the esc ladder and
+// dismiss the view, which would throw away the stream the reader is watching.
+func TestLogsGrepBackspaceOnEmptyQueryCancels(t *testing.T) {
+	m := openLogsWithLines(t, "GET /healthz 200", "POST /api/v1 500")
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "500")
+	if view := frame(m); strings.Contains(view, "/healthz") {
+		t.Fatalf("precondition: the grep should narrow the stream: %q", view)
+	}
+
+	// Three backspaces erase "500"; the fourth finds the line empty and cancels.
+	for range 3 {
+		m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+		if !m.logsView.Filtering() {
+			t.Fatal("erasing the query must not close the grep field")
+		}
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.logsView.Filtering() {
+		t.Fatal("backspace into an empty query should close the grep field")
+	}
+	if !m.logsView.Active() {
+		t.Fatal("the backspace that cancelled the grep must not also close the logs view")
+	}
+	if view := frame(m); !strings.Contains(view, "/healthz") {
+		t.Fatalf("cancelling the grep should restore the full stream: %q", view)
+	}
+}
+
 // TestLogsRegexToggleSurvivesOpenGrep proves the routing consequence of LOGS-03: the
 // regex toggle is bound to a no-text chord (`ctrl+r`), so unlike `f` or `q` it still
 // fires *while the grep field is open* — which is where a reader actually decides their

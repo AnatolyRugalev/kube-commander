@@ -278,6 +278,13 @@ row. Because the picker is always taking text, use the **arrow keys** rather tha
 where `p` and `0` are gestures of their own: it keeps the older behaviour of pressing
 `/` before filtering.
 
+Press `/` (`app.filter`, rebindable) to **search the open table**: typing narrows the
+rows live, `Enter` commits the narrowed view so `n`/`N` step through the matches, and
+`Esc` clears the filter and brings every row back. **Backspace past the start of the
+query cancels the search** — one backspace on an empty line closes the field and
+returns you to the normal view, so `/` pressed by mistake costs one keystroke. The same
+gesture works in the logs view's live grep.
+
 Press `Ctrl+s` (`search.cluster`, rebindable) to search the whole cluster instead of
 one table: type a query and matching objects stream in **across kinds** (Pods,
 Deployments, StatefulSets, DaemonSets, Services, ConfigMaps, Secrets, PVCs, Jobs,
@@ -367,7 +374,8 @@ logs the whole screen rather than a centered box, because throughput is the poin
 header shows the object, the
 container, and `[following]`/`[paused]`. Press `/` to open a **live grep**: typing
 narrows the streamed lines *while the log keeps following*, with a `matched/total`
-count, and nothing is re-fetched — `Esc` clears the filter and the full stream is still
+count, and nothing is re-fetched — `Esc`, or a backspace past the start of the query,
+clears the filter and the full stream is still
 there. Matches are highlighted in the lines they were found in. `Ctrl+R`
 (`logs.regex`) switches that grep between plain substring and **regex** (both
 case-insensitive; the prompt reads `re/` and the header shows `[re]`), and it works

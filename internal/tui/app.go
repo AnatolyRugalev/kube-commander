@@ -3731,6 +3731,17 @@ func (m Model) openFilter() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// isEmptyLineBackspace reports whether a key is a backspace pressed against an empty
+// query — a delete with nothing before the cursor to delete. It is the third arm of
+// D73's control/text split (D238): an editing key with nothing to edit is not input,
+// it is the reader asking to unwind past the start of the line, and the only thing
+// before the first character of a `/` query is the gesture that opened it. Kept as one
+// predicate so every `/` surface tests the same thing, and checked *after* the keymap
+// so a config that binds backspace to an action still wins.
+func isEmptyLineBackspace(key tea.Key, query string) bool {
+	return key.Code == tea.KeyBackspace && key.Text == "" && query == ""
+}
+
 // routeFilterKey resolves one keypress while the filter input is open. It mirrors
 // routePickerKey's control/text split (D73): a mapped key carrying no text
 // (esc/enter/arrows/ctrl+d…) is a control Action the filter mode consumes, while any
@@ -3738,10 +3749,17 @@ func (m Model) openFilter() (tea.Model, tea.Cmd) {
 // is filter input fed to the field — re-narrowing the table live. No view matches a
 // raw key (D11); the open field captures all input, so the sequencer and the panes
 // underneath never see it.
+//
+// The one editing key that is not input is a backspace on an empty query: it resolves
+// to nav.back, which cancels the filter and closes the field (D238), so the line
+// unwinds past its start instead of dead-ending on an empty prompt.
 func (m Model) routeFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.Key()
 	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
 		return m.handleFilterAction(action)
+	}
+	if isEmptyLineBackspace(key, m.filterInput.Value()) {
+		return m.handleFilterAction(keymap.ActionBack)
 	}
 	var cmd tea.Cmd
 	m.filterInput, cmd = m.filterInput.Update(msg)

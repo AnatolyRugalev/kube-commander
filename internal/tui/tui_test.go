@@ -1776,6 +1776,91 @@ func TestFilterLetterKeysTypeNotNavigate(t *testing.T) {
 	}
 }
 
+// TestFilterBackspaceOnEmptyQueryCancels presses the feedback's own repro: `/` then
+// backspace with nothing typed. The field must close and the table go back to normal
+// (D238) instead of leaving an empty prompt open that only esc can dismiss.
+func TestFilterBackspaceOnEmptyQueryCancels(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	before := m.View().Content
+	m, _ = press(t, m, slash)
+	if !m.filtering {
+		t.Fatal("precondition: `/` should open the filter field")
+	}
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.filtering {
+		t.Fatal("backspace on an empty query should cancel the search and close the field")
+	}
+	if m.table.RowCount() != 3 {
+		t.Fatalf("cancelling should leave every row showing, got %d", m.table.RowCount())
+	}
+	// "return to the normal view" is the feedback's own words, so the assertion is the
+	// whole frame: the prompt, the status bar's `/query` segment and the hint context
+	// all have to go back, not just the `filtering` flag.
+	if got := m.View().Content; got != before {
+		t.Fatalf("cancelling should restore the pre-filter frame:\n before: %q\n  after: %q", before, got)
+	}
+}
+
+// TestFilterBackspaceErasesBeforeItCancels proves the gesture is the *last* backspace,
+// not the first: each one with text left erases a character and re-narrows live, and
+// only the one that finds the line already empty cancels (D238). A reader deleting
+// their query never loses the field mid-word.
+func TestFilterBackspaceErasesBeforeItCancels(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "we")
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if !m.filtering {
+		t.Fatal("backspace with text left should edit the query, not close the field")
+	}
+	if m.table.Filter() != "w" {
+		t.Fatalf("backspace should erase one character, filter = %q", m.table.Filter())
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace}) // query now empty, field still open
+	if !m.filtering {
+		t.Fatal("the backspace that empties the query should not also close the field")
+	}
+	if m.table.RowCount() != 3 {
+		t.Fatalf("an emptied query should show every row, got %d", m.table.RowCount())
+	}
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace}) // nothing left to erase → cancel
+	if m.filtering {
+		t.Fatal("backspace into an empty query should cancel the search")
+	}
+	if m.table.Filter() != "" {
+		t.Fatalf("cancelling should leave no filter applied, got %q", m.table.Filter())
+	}
+}
+
+// TestFilterBackspaceCancelsAReopenedQuery covers the seeded case: `/` reopens on the
+// committed query (openFilter seeds the field), so the reader must backspace through
+// what is actually there before the cancel is reached — the count comes from the line,
+// never from how the field was opened.
+func TestFilterBackspaceCancelsAReopenedQuery(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit; `/` will reopen seeded
+	m, _ = press(t, m, slash)
+	if m.filterInput.Value() != "web" {
+		t.Fatalf("precondition: reopening `/` should seed the committed query, got %q", m.filterInput.Value())
+	}
+
+	for range 3 {
+		m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+		if !m.filtering {
+			t.Fatal("erasing the seeded query must not close the field")
+		}
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.filtering || m.table.Filter() != "" {
+		t.Fatalf("backspace past the start should cancel, filtering=%v filter=%q", m.filtering, m.table.Filter())
+	}
+}
+
 // TestSearchWrapsThroughMatches proves n/N step the selection through the matching
 // rows with wrap-around, once a filter is committed (this leg's n/N decision).
 func TestSearchWrapsThroughMatches(t *testing.T) {

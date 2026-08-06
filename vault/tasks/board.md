@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — PAL-08 done: a palette row now names its command beside the description, in two columns, and the name is matched as well as shown (D237); three feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — FILT-01 done: a backspace with nothing left to erase now cancels a `/` search on the table and in the logs grep instead of dead-ending on an empty prompt (D238); two feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FILT-01** Backspace on an empty `/` query cancels the search instead of dead-ending
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Feedback `2026-08-06-search-backspace-cancel`. `/` opens a query field over the
-      resource table and over the logs view's live grep; with nothing left to erase, backspace
-      is currently fed to the field and does nothing, leaving an empty prompt open. Make it
-      resolve to the surface's own cancel (`nav.back`) so the line unwinds past its start —
-      the gesture the palette already has (D207 pt 2 / D233 pt 2).
+_(none)_
 
 ## Blocked
 
@@ -121,6 +115,16 @@ constraints a later leg must not walk into: on the results an **unmapped key is 
 typed** (typing would cancel the fan-out and discard the rows the reader is standing on), and
 the **muted query line is the signal** that typing stopped reaching it — blur only removes a
 cursor, which is an absence nobody notices.
+
+### In-panel `/` search (FILT — feedback-driven) — closed at FILT-01
+Feedback `2026-08-06-search-backspace-cancel`: `/` then backspace with nothing typed left an
+empty prompt open. **Closed** at FILT-01 (**D238**): a backspace that finds the line already
+empty resolves to `nav.back` and takes the surface's own unwind step — `clearFilter` on the
+table, `closeFilter` in the logs grep — so the cancel gesture and esc can never come to mean
+different things. Two constraints a later leg must not walk into: the check runs **after**
+the keymap (a config that binds backspace still wins), and it belongs to a `/` opened **over
+content**, not to a picker's incidental filter or to the cluster-search view whose query *is*
+the view (D140 pt 1/D235 pt 2). Per-leg history: `vault/journal/`.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134) — reopened on memory (LOGS-07)
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
@@ -509,6 +513,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **FILT-01** Backspace past the start of an empty `/` query cancels the search — feedback `2026-08-06-search-backspace-cancel` — done 2026-08-06 (D238)
 
 - [x] **PAL-08** Palette rows show the command's name beside its description, in two columns — feedback `2026-08-06-palette-two-columns` — done 2026-08-06 (D237)
 
