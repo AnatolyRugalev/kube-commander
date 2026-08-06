@@ -7,7 +7,13 @@ _Last updated: 2026-08-06 — HT-dogfood-0806 done: the two human tasks the main
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-06** An auth failure's own text must not be able to move the terminal's cursor
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: feedback `2026-08-06-auth-error-breaks-layout` (Priority: high) — a failed
+      credential plugin's stderr reaches the browse notice and the status bar verbatim, so a
+      plugin that prints `\r`, `\b` or any CSI sequence repaints over the pane border (or
+      clears the screen). Contain it at the render seam, not per call site.
+      → knowledge: knowledge/decisions.md
 
 ## Blocked
 
