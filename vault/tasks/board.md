@@ -7,7 +7,10 @@ _Last updated: 2026-08-06 — SEARCH-05 done: cluster search now has a focus, so
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-01** Survey the popular color schemes, check each one's licence, and land the
+      Catppuccin family
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: First slice of feedback `2026-08-06-more-themes` (see the THEME section below).
 
 ## Blocked
 
