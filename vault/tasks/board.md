@@ -7,7 +7,8 @@ _Last updated: 2026-08-06 — BOARD-02b-1 done: the seven deferrals hidden in cl
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-06** `:action ` marks the verbs that will ask before they act
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
 
 ## Blocked
 
@@ -396,7 +397,7 @@ reorders under you is its own complaint), while the unmarked confirms are a real
 now **PAL-06**.
 
 - [ ] **PAL-06** `:action ` marks the verbs that will ask before they act
-      status: todo | owner: — | added: 2026-08-06
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
       notes: The `:action ` stage lists row verbs as bare labels, so `delete` and `describe`
       read the same until you commit one and a confirm appears — on the stage that exists to
       answer "what can I do right now?" that is the one thing the label should say. The
