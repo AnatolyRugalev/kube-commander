@@ -7,7 +7,14 @@ _Last updated: 2026-08-06 — PAL-07 done: esc now closes a palette stage a shor
 
 ## In Progress
 
-_(none)_
+- [ ] **AGE-01** The AGE column is recomputed from the object's creation timestamp on a
+      clock tick, not frozen at the string the server printed
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Feedback `2026-08-06-age-column-stale`. Every cell in the browse table is a
+      string the API server's printer rendered once, so AGE is only as fresh as the last
+      watch delta for that row — an idle pane drifts stale indefinitely. Carry each row's
+      `creationTimestamp` out of the Table's embedded object metadata and re-derive the
+      age cell locally on a tick, with kubectl's own `duration.HumanDuration`.
 
 ## Blocked
 
