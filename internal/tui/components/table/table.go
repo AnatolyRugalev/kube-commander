@@ -37,6 +37,7 @@ import (
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
@@ -892,6 +893,16 @@ func (m Model) View() string {
 // word-wrapped to the pane and the remainder blank-filled so the frame keeps its
 // height. Text past the available rows is dropped rather than scrolled — the
 // pane is not a viewer, and the headline (the part that must be read) is first.
+//
+// Every source line is sanitized before it is measured (AUTH-06, D232). A notice
+// is the one thing this pane renders that kubecom did not write: it quotes an API
+// server's error text and, for a credential-plugin failure, a subprocess's stderr
+// (browsefail.go). Both may carry control characters and escape sequences, which
+// the wrap and the truncate below measure as zero cells and pass through — so a
+// `\r` in a plugin's progress line repaints over the left border, a `\b` leaves
+// the right one short, and `\x1b[2J` erases the frame this body is inside. It is
+// done here rather than in SetNotice so the stored text stays exactly what the
+// embedder composed (restoreReauthNotice compares against it).
 func (m Model) noticeBody(innerW, rows int) []string {
 	if rows <= 0 || innerW <= 0 {
 		return nil
@@ -902,7 +913,7 @@ func (m Model) noticeBody(innerW, rows int) []string {
 		if i == 0 {
 			style = m.styles.Error
 		}
-		for _, line := range strings.Split(ansi.Wordwrap(src, innerW, ""), "\n") {
+		for _, line := range strings.Split(ansi.Wordwrap(safetext.Line(src), innerW, ""), "\n") {
 			if len(out) == rows {
 				return out
 			}

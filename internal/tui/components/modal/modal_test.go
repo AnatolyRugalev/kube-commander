@@ -229,6 +229,41 @@ func TestShortMessageIsNotMarkedTruncated(t *testing.T) {
 	}
 }
 
+// TestMessageCannotSteerTheTerminal is AUTH-06 at the modal: the re-authenticate
+// confirm quotes the invocation the kubeconfig's exec stanza spells, so the box
+// asking the question renders a string kubecom did not write. A control character
+// in it costs zero cells by every measure the box has — the width clamp, the
+// height elision, the canvas — and would repaint over the border of the box, which
+// is the one surface where what is being agreed to must be legible.
+func TestMessageCannotSteerTheTerminal(t *testing.T) {
+	for name, message := range map[string]string{
+		"carriage return": "Run this now, in this terminal?\n  aws sso login\rrm -rf /",
+		"erase display":   "Run this now?\n  \x1b[2J\x1b[Haws sso login --profile prod",
+		"sgr color":       "Run this now?\n  \x1b[31maws sso login\x1b[0m",
+		"backspace":       "Run this now?\n  aws sso login\b\b\b\b\blogout",
+		"tabs":            "Run this now?\n  aws\tsso\tlogin",
+	} {
+		m := New(styles.Default())
+		m.SetSize(80, 24)
+		m.ShowConfirm("reauth", "Re-authenticate", message)
+
+		v := m.View()
+		for i, l := range strings.Split(ansi.Strip(v), "\n") {
+			for _, r := range l {
+				if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+					t.Errorf("%s: box line %d carries control %q: %q", name, i, r, l)
+				}
+			}
+		}
+		w := lipgloss.Width(v)
+		for i, l := range strings.Split(v, "\n") {
+			if got := lipgloss.Width(l); got != w {
+				t.Errorf("%s: box line %d is %d cells wide, the box is %d: %q", name, i, got, w, l)
+			}
+		}
+	}
+}
+
 func TestHideDismissesAndClearsInput(t *testing.T) {
 	m := New(styles.Default())
 	m.SetSize(80, 24)

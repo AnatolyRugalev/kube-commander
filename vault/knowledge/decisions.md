@@ -6314,3 +6314,32 @@ shape recurs every time a human task comes back "cannot be done" rather than "do
    gap it was raised for stays named in the criterion it gated, so a future leg with new
    access (a user report, a real file turning up) knows what to run rather than re-deriving why
    the box reads the way it does.
+
+## D232 — Text kubecom did not write is sanitized at the seam that renders it, and that is only half of what corrupts the layout (2026-08-06, AUTH-06)
+
+Feedback `2026-08-06-auth-error-breaks-layout` reported an auth failure *distorting the
+surrounding UI* rather than showing as an error. Two separate mechanisms do that, and this
+decision exists so a later leg cannot mistake one for both.
+
+1. **Every surface that displays text kubecom did not write sanitizes it, at the point it
+   renders it, through `internal/tui/safetext`.** A credential plugin's stderr, an API
+   server's message and a kubeconfig's own strings all reach a bordered pane, a one-line bar
+   or a confirm box, and the layer underneath measures them with `ansi.StringWidth` — which
+   counts a control character as **zero cells**, so the wrap, the pad and the clip are all
+   correct and the terminal is steered anyway (`\r` over the left border, `\b` short of the
+   right one, `\x1b[2J` over the frame). `ansi.Strip` alone does not do it: it removes escape
+   sequences and leaves the bare C0 bytes. Three seams carry it today — `table.noticeBody`,
+   `statusbar`'s two transient setters, `modal.View`'s message.
+2. **It is applied to the render, never to the stored string.** The shell compares notices
+   back (`restoreReauthNotice` only rewrites a pane still showing what an answered offer
+   wrote), so a `SetNotice` that cleaned its argument would break that comparison for exactly
+   the notices most likely to need cleaning. The store keeps what the embedder composed; the
+   view is what must be safe.
+3. **No leg may cite this as evidence that an auth failure cannot corrupt the layout.** The
+   larger mechanism is untouched: client-go runs the exec credential plugin with
+   `cmd.Stderr = os.Stderr` (`plugin/pkg/client/auth/exec/exec.go`), so a plugin that prints
+   anything paints it directly onto the terminal the TUI is holding. The alt-screen does not
+   absorb it — the claim in D195 pt 3 and in `kube/authexec.go`'s comments that this text is
+   something "nobody ever sees" is **false**, and is superseded here. That is **AUTH-07**,
+   and until it lands the feedback's complaint is only half answered: this decision bounds
+   what kubecom *renders*, not what is written to fd 2 behind it.

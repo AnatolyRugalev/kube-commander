@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — HT-dogfood-0806 done: the two human tasks the maintainer finished are folded in and deleted, which completes **M3** (Edit confirmed live) and closes the migration criterion on the generated fixture with the substitution recorded (D231) — DoD now 9 of 13. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — AUTH-06 done: the three seams that render text kubecom did not write now sanitize it (D232), and the half of the auth-layout feedback the reader actually sees — client-go painting the plugin's stderr onto the alt screen — is filed as **AUTH-07**, top of the queue. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-06** An auth failure's own text must not be able to move the terminal's cursor
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: feedback `2026-08-06-auth-error-breaks-layout` (Priority: high) — a failed
-      credential plugin's stderr reaches the browse notice and the status bar verbatim, so a
-      plugin that prints `\r`, `\b` or any CSI sequence repaints over the pane border (or
-      clears the screen). Contain it at the render seam, not per call site.
-      → knowledge: knowledge/decisions.md
+_(none)_
 
 ## Blocked
 
@@ -230,7 +224,7 @@ complaint), and marking the *prompts* — Scale and Port-forward — as well as 
 which is a second marker rather than a wider one, because `(confirm)` declares permission
 and not input (D228 pt 3).
 
-### Credential-plugin auth (AUTH — feedback-driven, D195) — closed
+### Credential-plugin auth (AUTH — feedback-driven, D195) — reopened on the layout (AUTH-07)
 Feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaced as a nameless auth
 failure, leaving the user to work out that the fix was `aws sso login --profile x` in another
 terminal. Provider-specific auth is not a non-goal, but the shape was fixed up front — detect
@@ -242,11 +236,32 @@ as a diagnostic to capture its stderr (D211), an expired SSO session recognised 
 and the remediation offered in one confirm per occurrence and run in the suspended terminal
 before the failed request is retried (D215/D216). Per-slice history: `vault/journal/`.
 
-Nothing is deferred: **no item until asked**. The two things this paragraph used to defer
-were both already false when BOARD-02b-1 checked them, which is what D226 pt 1 is written
-against. The live claim — the suspend into a real `aws sso login`, and the retry after it —
-is item 7 on `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory,
-blocks nothing).
+The live claim — the suspend into a real `aws sso login`, and the retry after it — is item 7
+on `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks
+nothing).
+
+**Reopened 2026-08-06** by feedback `2026-08-06-auth-error-breaks-layout`: an auth failure
+*distorts the UI* rather than rendering in it. Two mechanisms do that and AUTH-06 fixed the
+smaller one (D232) — what kubecom renders is now sanitized at the seam. The one the reader
+actually sees is AUTH-07 below: client-go runs the exec plugin with `cmd.Stderr = os.Stderr`,
+so the plugin paints straight onto the terminal the TUI is holding. **No leg may cite AUTH-06
+or D232 as evidence that an auth failure can no longer corrupt the layout** (D232 pt 3).
+
+- [ ] **AUTH-07** Nothing may write to the terminal the TUI is holding — the plugin's stderr
+      least of all
+      status: todo | owner: — | added: 2026-08-06
+      notes: `plugin/pkg/client/auth/exec/exec.go` sets `stderr: os.Stderr` and
+      `cmd.Stderr = a.stderr`, so **every** credential refresh — not only a failing one —
+      streams the plugin's output onto the alt screen, over the panes, where it survives
+      until bubbletea repaints those lines. The same hole passes a panic trace, a cgo
+      library's chatter and anything else that reaches fd 2. Point fd 2 at the log file for
+      the life of the TUI (redirecting the `os.Stderr` *variable* is not enough — client-go
+      captures it when the authenticator is built) and put it back around the suspends that
+      hand the terminal over on purpose (`$EDITOR`, `aws sso login`, exec), which are the
+      one case where the reader must see a subprocess's stderr. What the plugin said is
+      already recovered for display by `kube.Diagnose`'s own capture (D211), so nothing is
+      lost by silencing the raw stream.
+      → knowledge: knowledge/stack.md (TUI rendering) · D232 pt 3
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -413,6 +428,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **AUTH-06** Untrusted text is sanitized where it is rendered, so a plugin's own bytes cannot steer the terminal — half of feedback `2026-08-06-auth-error-breaks-layout`; AUTH-07 is the half the reader sees — done 2026-08-06 (D232)
 
 - [x] **HT-dogfood-0806** Closed the two human tasks the maintainer finished — Edit's live `$EDITOR` confirmed, completing **M3**; no legacy config survives, so migration ticks on the generated fixture and says so — done 2026-08-06 (D231)
 

@@ -20,6 +20,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
@@ -109,7 +110,14 @@ func (m *Model) SetMouse(on bool) { m.mouse = on }
 // multi-line error string can never grow the bar past its one line and scroll the
 // panes (the feedback this fixes: errors must surface inside the fixed layout).
 // The root model schedules the auto-clear; an empty string clears immediately.
-func (m *Model) SetError(text string) { m.errText = strings.Join(strings.Fields(text), " ") }
+//
+// Flattening is not enough on its own: an error toast quotes text kubecom did not
+// write (an API server's message, a credential plugin's account of its own
+// failure), and strings.Fields only splits on whitespace — an escape sequence or a
+// `\b` is neither whitespace nor visible, so it would survive into a line that is
+// measured in runes and clamped by display width, and repaint the bar or the row
+// above it. flatten therefore sanitizes first (AUTH-06, D232).
+func (m *Model) SetError(text string) { m.errText = flatten(text) }
 
 // ClearError removes the transient error message, returning the bar to its normal
 // context · namespace · help content.
@@ -123,7 +131,20 @@ func (m Model) HasError() bool { return m.errText != "" }
 // flattened to a single line and takes over the whole bar while shown, but an error
 // outranks it (View prefers errText) so a failure is never hidden behind a notice.
 // The root model schedules the auto-clear; an empty string clears immediately.
-func (m *Model) SetNotice(text string) { m.noticeText = strings.Join(strings.Fields(text), " ") }
+func (m *Model) SetNotice(text string) { m.noticeText = flatten(text) }
+
+// flatten is what both transient messages are stored as: sanitized (nothing left
+// that can move the cursor or repaint a cell) and then collapsed to a single
+// space-separated line, so the bar's one row is the whole of what a message can
+// occupy.
+//
+// It sanitizes with safetext.Block rather than Line because the flattening is
+// strings.Fields', and Fields needs the newlines to still be there to fold: Line
+// drops a newline as the control character it is, which would run the last word of
+// one line into the first word of the next. Block cleans inside each line and
+// leaves the separators for Fields — which also folds the spaces safetext leaves
+// where a message's tabs were.
+func flatten(text string) string { return strings.Join(strings.Fields(safetext.Block(text)), " ") }
 
 // ClearNotice removes the transient notice, returning the bar to its normal content.
 func (m *Model) ClearNotice() { m.noticeText = "" }

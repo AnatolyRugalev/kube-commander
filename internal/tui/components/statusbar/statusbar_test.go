@@ -179,6 +179,44 @@ func TestViewWithErrorStaysSingleLine(t *testing.T) {
 	}
 }
 
+// TestTransientMessagesCannotSteerTheTerminal is AUTH-06 at this seam. Flattening
+// on whitespace was never enough: an error toast quotes an API server or a
+// credential plugin, and a `\r`, a `\b` or an escape sequence is neither
+// whitespace nor visible — it would survive strings.Fields into a line the bar
+// measures in runes, and repaint the bar or the row above it. Both transient
+// messages are stored sanitized, so the clamp downstream measures what the
+// terminal will draw.
+func TestTransientMessagesCannotSteerTheTerminal(t *testing.T) {
+	for name, tc := range map[string]struct{ in, want string }{
+		"carriage return": {"watch pods: retrying...\rfailed", "watch pods: retrying...failed"},
+		"backspace":       {"scale api: 3\b\b0 replicas", "scale api: 30 replicas"},
+		"sgr color":       {"exec: \x1b[31mplugin failed\x1b[0m", "exec: plugin failed"},
+		"erase display":   {"\x1b[2J\x1b[Hdelete pod: forbidden", "delete pod: forbidden"},
+		"tabs":            {"aws\tsso:\texpired", "aws sso: expired"},
+		"bell and nul":    {"\x07denied\x00", "denied"},
+	} {
+		m := newBar()
+		m.SetError(tc.in)
+		if m.errText != tc.want {
+			t.Errorf("%s: SetError(%q) stored %q, want %q", name, tc.in, m.errText, tc.want)
+		}
+		m.SetNotice(tc.in)
+		if m.noticeText != tc.want {
+			t.Errorf("%s: SetNotice(%q) stored %q, want %q", name, tc.in, m.noticeText, tc.want)
+		}
+
+		m.ClearNotice()
+		m.SetWidth(60)
+		view := m.View()
+		if strings.Contains(view, "\n") {
+			t.Errorf("%s: View = %q, want a single line", name, view)
+		}
+		if w := lipgloss.Width(view); w != 60 {
+			t.Errorf("%s: View width = %d, want 60", name, w)
+		}
+	}
+}
+
 func TestViewInlineWhenWidthUnknown(t *testing.T) {
 	m := newBar()
 	m.SetContext("prod")

@@ -30,6 +30,7 @@ import (
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
 )
 
@@ -278,7 +279,12 @@ func (m Model) View() string {
 	iw, ih := m.innerSize()
 	parts := []string{m.styles.Header.Width(iw).MaxWidth(iw).Render(m.title)}
 	if ih > 0 {
-		message := m.styles.App.Width(iw).MaxWidth(iw).Render(m.message)
+		// Sanitized before it is wrapped and elided (AUTH-06, D232): the message is
+		// the one part of the box composed from text kubecom did not write — an
+		// object's name, and for the re-authenticate confirm the invocation the
+		// kubeconfig's exec stanza spells — and a control character in it would
+		// repaint over the border of the box asking the question.
+		message := m.styles.App.Width(iw).MaxWidth(iw).Render(safetext.Block(m.message))
 		marker := m.styles.App.Width(iw).MaxWidth(iw).Render(elide.Marker)
 		parts = append(parts, elide.Lines(message, ih, marker))
 	}

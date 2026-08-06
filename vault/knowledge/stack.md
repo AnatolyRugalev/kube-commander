@@ -570,3 +570,21 @@ nothing useful; attach is the way.)
   wrapping. See D58; guarded by `table.TestViewFitsPaneNoWrap`. The `menu` and
   `statusbar` panes only render short lines today so they don't visibly hit this,
   but the same total-size rule applies when they need full-width rows.
+- **A control character costs zero cells by every measure the layout has, and does
+  something anyway.** `ansi.StringWidth` — what `lipgloss`'s `Width`/`MaxWidth`,
+  `ansi.Wordwrap` and `ansi.Truncate` all measure with — counts `\r`, `\b`, `\a`,
+  NUL and DEL as width 0, so a pane that wraps, pads and clips correctly still
+  emits them, and the terminal then acts: `\r` repaints from column 0 over the
+  pane's left border, `\b` walks the cursor back so the right border lands short,
+  `\x1b[2J` erases the screen the frame is on. `ansi.Strip` removes escape
+  *sequences* (CSI/OSC, 8-bit C1 included) but **leaves the bare C0 controls**, so
+  it is half the job — `internal/tui/safetext` is both halves. Sanitize any text
+  kubecom did not write before it is measured (D232).
+- **client-go writes an exec credential plugin's stderr straight to the process's
+  `os.Stderr`** (`plugin/pkg/client/auth/exec/exec.go`: `stderr: os.Stderr`,
+  `cmd.Stderr = a.stderr`), on every credential refresh, in-process, while the TUI
+  holds the terminal. Under the alt-screen that is **not invisible** — the alt
+  screen is the same terminal, so the plugin's text paints over the panes and
+  survives until bubbletea repaints the lines it landed on. Anything that writes
+  to fd 2 while the TUI is up (a panic, a cgo library, client-go) corrupts the
+  layout the same way. See D232 pt 3 and **AUTH-07**.

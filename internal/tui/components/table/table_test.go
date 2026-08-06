@@ -1238,3 +1238,58 @@ func TestNoticeWrapsAndClipsToThePane(t *testing.T) {
 		t.Fatalf("headline was not preserved: %q", body[0])
 	}
 }
+
+// TestNoticeCannotSteerTheTerminal is AUTH-06: a notice quotes text kubecom did
+// not write — an API server's message, a credential plugin's stderr — and every
+// control character in it is measured as zero cells by the wrap and the truncate
+// this body is built from. So one that reached the frame would be free: `\r`
+// repaints from column 0 over the left border, `\b` walks back so the right one
+// lands short, `\x1b[2J` erases the screen the frame is on, and an SGR sequence
+// paints the pane in the plugin's colors. The frame is what this asserts — every
+// rendered line exactly as wide as the pane, and nothing left in the body that a
+// terminal would act on.
+func TestNoticeCannotSteerTheTerminal(t *testing.T) {
+	for name, notice := range map[string]string{
+		"carriage return": "Cannot list Pod\nIt said:\n  downloading...\rdone, but auth failed",
+		"backspace":       "Cannot list Pod\nIt said:\n  progress\b\b\b\b\b\b\b\bfailed",
+		"erase display":   "Cannot list Pod\nIt said:\n  \x1b[2J\x1b[Hgone",
+		"sgr color":       "Cannot list Pod\nIt said:\n  \x1b[31mfatal\x1b[0m: token expired",
+		"osc title":       "Cannot list Pod\nIt said:\n  \x1b]0;pwned\x07 failed",
+		"tab columns":     "Cannot list Pod\nIt said:\n  ERROR\tSSO session expired",
+		"bell and nul":    "Cannot list Pod\nIt said:\n  \x07denied\x00",
+		"headline itself": "Cannot list \rPod\nIt said:\n  nothing",
+	} {
+		m := newTestModel()
+		m.SetSize(40, 8)
+		m.SetNotice(notice)
+
+		view := m.View()
+		for i, l := range strings.Split(view, "\n") {
+			if w := ansi.StringWidth(l); w != 40 {
+				t.Errorf("%s: line %d width = %d, want 40: %q", name, i, w, l)
+			}
+		}
+		for i, l := range bodyLines(view) {
+			for _, r := range l {
+				if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+					t.Errorf("%s: body line %d carries control %q: %q", name, i, r, l)
+				}
+			}
+		}
+	}
+}
+
+// TestNoticeSanitizesTheRenderNotTheStore pins where AUTH-06's defence sits: the
+// stored notice is still exactly what the embedder composed, because the shell
+// compares it back (restoreReauthNotice puts the browse pane back only if it is
+// still showing the text an answered offer wrote). Cleaning it in SetNotice would
+// make that comparison fail for every notice carrying a control character.
+func TestNoticeSanitizesTheRenderNotTheStore(t *testing.T) {
+	const raw = "Cannot list Pod\n  aws\tsso: expired\rnow"
+	m := newTestModel()
+	m.SetSize(40, 8)
+	m.SetNotice(raw)
+	if m.Notice() != raw {
+		t.Fatalf("Notice() = %q, want the text as set, %q", m.Notice(), raw)
+	}
+}

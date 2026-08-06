@@ -146,8 +146,12 @@ func execPluginFrom(context, user string, ec *clientcmdapi.ExecConfig) *ExecPlug
 // the plugin failure with %v (`getting credentials: %v`), so the underlying
 // *exec.ExitError does **not** survive in the wrap chain and the plugin's own
 // stderr is not in the error at all — client-go streams that straight to the
-// process's os.Stderr, which under the alt-screen the user never sees. Text is
+// process's os.Stderr, which is not somewhere kubecom can read it back. Text is
 // therefore all there is; anything richer has to re-run the plugin.
+//
+// It is also not somewhere the *user* fails to see it: this comment used to say
+// the alt-screen hid it, and that is false (D232 pt 3). The alt screen is the same
+// terminal, so the plugin paints over the panes — AUTH-07 is the fix.
 type ExecPluginFailure struct {
 	// Command is the executable name as client-go reported it (the kubeconfig's
 	// `command`, not a resolved path).
@@ -261,7 +265,8 @@ func (d ExecPluginDiagnosis) Failed() bool {
 
 // Diagnose re-runs the credential plugin and captures its stderr, which is the
 // only way to learn *why* it failed: client-go streams the plugin's stderr to the
-// process's own os.Stderr — invisible under the alt-screen — and the error it
+// process's own os.Stderr — out of kubecom's reach, and *onto* the terminal the TUI
+// is holding rather than harmlessly behind it (D232 pt 3) — and the error it
 // returns carries nothing but the executable name and an exit code (D195 pt 3).
 //
 // It is a **diagnostic on an already-failed request**, never a pre-flight: call

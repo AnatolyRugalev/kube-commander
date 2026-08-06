@@ -15,8 +15,9 @@ import (
 // The shape follows from what the failure is. client-go runs the kubeconfig's
 // `user.exec` plugin for every request and, when it fails, returns text carrying
 // nothing but the executable's name and an exit code — the plugin's own stderr goes
-// to the process's os.Stderr, which under the alt-screen nobody ever sees (D195
-// pt 3). So the only way to say *why* authentication failed is to re-run the plugin
+// to the process's os.Stderr, which kubecom cannot read back (and which the reader
+// sees only as text painted over the panes, D232 pt 3 / AUTH-07, not as a message).
+// So the only way to say *why* authentication failed is to re-run the plugin
 // and read what it prints, which is a subprocess: it cannot happen inside Update.
 // It is therefore an async Cmd, tagged with watchGen like every other per-cluster
 // async here, and its result is written into the pane only if the pane is still the
