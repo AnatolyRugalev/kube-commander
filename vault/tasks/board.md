@@ -7,7 +7,8 @@ _Last updated: 2026-08-06 — BOARD-02a done: the `## Done` index is the canonic
 
 ## In Progress
 
-_(none)_
+- [ ] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
 
 ## Blocked
 
@@ -506,8 +507,19 @@ call D224 pt 2 refused to authorise. They are done in that order because the ind
 gates nothing and the prose question is the one that can go wrong.
 
 - [x] **BOARD-02a** The `## Done` index is canonical, complete again, and guarded — done 2026-08-06 (D225)
-- [ ] **BOARD-02b** Decide whether the per-line planning prose is worth compacting too
-      status: todo | owner: — | added: 2026-08-05
+BOARD-02b was **split on pickup**, because its own last sentence sequences the work and the
+two halves answer to different standards: "do not touch a paragraph that names a constraint no
+decision records — **move it first**". Moving is mechanical and checkable (**BOARD-02b-1**);
+deciding what narrative is left worth losing is the judgement call D224 pt 2 declined to
+authorise in advance (**BOARD-02b-2**).
+
+- [ ] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Four closed lines end with a "two things it deliberately left" sentence, and none
+      of them is a `- [ ]`. Sweep them, file what is genuinely open, record what is conditional
+      or declined, and strike what a later leg already did — then the paragraph is safe.
+- [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
+      status: todo | owner: — | added: 2026-08-05 | blocked-on: BOARD-02b-1
       notes: With the Done list collapsed, the prose above it is the larger half (~40KB of
       75KB): a narrative paragraph per closed line (SEARCH, LOGS, PAL, AUTH, CRD-PIN, HINT,
       BOX …). Unlike a Done entry it is *not* redundant with the journal — it carries why a
