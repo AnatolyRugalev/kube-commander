@@ -3,17 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — AUTH-06 done: the three seams that render text kubecom did not write now sanitize it (D232), and the half of the auth-layout feedback the reader actually sees — client-go painting the plugin's stderr onto the alt screen — is filed as **AUTH-07**, top of the queue. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — PAL-07 done: esc now closes a palette stage a shortcut key opened instead of rewinding to a verb list the reader never saw, while backspace keeps unwinding the line (D233); seven feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-07** Esc closes a key-opened palette stage instead of rewinding to a verb
-      list the reader never saw
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Feedback `2026-08-06-action-menu-esc-behavior`. `a` → esc leaves the palette
-      open on the verb list (D207 pt 2's rewind), so esc is not "back" for the five keys
-      that open a stage directly. Supersede that half of D207 pt 2 for the key-opened
-      path; backspace keeps rewinding.
+_(none)_
 
 ## Blocked
 
@@ -212,7 +206,7 @@ obvious test: a unit test reading `View()`'s own string cannot catch it — the 
 complete, only the composited frame is short. Assert against the height the geometry promised,
 or read the box through the canvas that will clip it (D220 pt 1).
 
-### Command palette (PAL — feedback-driven) — closed
+### Command palette (PAL — feedback-driven) — closed again at PAL-07
 Feedback `2026-08-01-command-palette-unification`: one place you type to make anything
 happen, instead of five modal pickers on five keys with five opt-in filters. **Closed** at
 PAL-06: every list picker filters as you type, ranked by the cluster-search matcher (D194);
@@ -229,6 +223,14 @@ Two standing answers, both **no item until asked**: ranking the row verbs by fre
 complaint), and marking the *prompts* — Scale and Port-forward — as well as the confirms,
 which is a second marker rather than a wider one, because `(confirm)` declares permission
 and not input (D228 pt 3).
+
+**Reopened and reclosed 2026-08-06** by feedback `2026-08-06-action-menu-esc-behavior`:
+`a` then esc left the palette up. D207 pt 2 had esc and backspace both rewind a key-opened
+stage to the verb list; PAL-07 splits them (**D233**) — esc backs out of the *surface* (a
+key-opened stage closes, a typed one still rewinds, because that is where its reader came
+from), backspace still unwinds the *line* from anywhere, so D207 pt 1's "a key is sugar for
+a stage" is untouched. The one thing a later leg must not undo: a non-empty query still
+costs its own esc first, in this and every picker (D233 pt 3).
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195) — reopened on the layout (AUTH-07)
 Feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaced as a nameless auth
@@ -434,6 +436,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-07** Esc closes a key-opened palette stage; backspace keeps rewinding the line — feedback `2026-08-06-action-menu-esc-behavior` — done 2026-08-06 (D233)
 
 - [x] **AUTH-06** Untrusted text is sanitized where it is rendered, so a plugin's own bytes cannot steer the terminal — half of feedback `2026-08-06-auth-error-breaks-layout`; AUTH-07 is the half the reader sees — done 2026-08-06 (D232)
 

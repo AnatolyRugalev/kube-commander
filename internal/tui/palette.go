@@ -272,6 +272,7 @@ func (m Model) showPaletteVerbs() Model {
 	labels, byLabel := paletteVerbItems()
 	m.cmdByLabel = byLabel
 	m.palArg = ""
+	m.palDirect = false // the reader is on the verb list now, however they got here.
 	title := paletteTitle
 	rowLabels, rowByLabel, target := m.paletteRowVerbs(byLabel)
 	m.palRowByLabel = rowByLabel
@@ -302,11 +303,15 @@ func (m Model) openPalette() (tea.Model, tea.Cmd) {
 //
 // It ends in enterPaletteArg, which is the whole point — the stage a key opens and the
 // stage the line opens are produced by one function, so a shortcut cannot come to offer
-// a different set from the palette's own. Two behaviours follow from that and are the
-// reason this is sugar rather than a re-implementation: backspace on the empty argument
-// rewinds to the verb list (handlePaletteFilterKey), so a key pressed by mistake is one
-// keystroke from every other verb rather than a dead end; and esc rewinds once before it
-// closes, exactly as it does for a stage reached by typing.
+// a different set from the palette's own. That is what keeps this sugar rather than a
+// re-implementation, and backspace on the empty argument still rewinds to the verb list
+// (handlePaletteFilterKey), so a key pressed by mistake is one keystroke from every
+// other verb rather than a dead end.
+//
+// What a key-opened stage does *not* share is esc: it closes the palette outright
+// instead of rewinding (palDirect/D233). Rewinding it put the reader on the verb list,
+// which for someone who pressed `a` is a surface they had never seen — so esc, the app's
+// "back" everywhere else, did not back out of anything.
 //
 // A verb whose values cannot be produced leaves its key exactly as inert as it is today:
 // enterPaletteArg decides that before anything is shown (D197), so a shortcut never
@@ -316,6 +321,9 @@ func (m Model) openPaletteArg(a keymap.Action) (tea.Model, tea.Cmd) {
 	if !entered {
 		return m, nil
 	}
+	// Set after enterPaletteArg, which clears it: this is the one caller that did not
+	// come off the verb list.
+	next.palDirect = true
 	show := next.cmdPicker.Show()
 	return next, tea.Batch(show, load)
 }
@@ -329,6 +337,7 @@ func (m *Model) closePalette() {
 	m.cmdByLabel = nil
 	m.palRowByLabel = nil
 	m.palArg = ""
+	m.palDirect = false
 }
 
 // enterPaletteArg commits a verb into the palette's argument stage: the same modal
@@ -419,6 +428,9 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	m.palArg = a
+	// Committed off the verb list unless openPaletteArg says otherwise — it is the
+	// caller that knows, and it sets the flag back on the model this returns.
+	m.palDirect = false
 	if title == "" {
 		title = a.Describe()
 	}

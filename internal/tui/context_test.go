@@ -506,12 +506,12 @@ func TestLateContextListIsDropped(t *testing.T) {
 		m := sizedWith(t, WithContextLister(fl), WithContext("prod"))
 
 		m, cmd := press(t, m, capitalC)
-		next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind}) // rewinds to the verbs
-		m = next.(Model)
-		next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind}) // then closes
+		// One nav.back closes a key-opened stage — there is no verb list behind `C`
+		// to rewind to (D233).
+		next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind})
 		m = next.(Model)
 		if m.cmdPicker.Active() {
-			t.Fatal("two nav.backs should close the palette")
+			t.Fatal("nav.back should close the key-opened palette")
 		}
 
 		next, _ = m.Update(pickerMsg(t, cmd))

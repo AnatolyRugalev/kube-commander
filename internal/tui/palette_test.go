@@ -218,8 +218,11 @@ func TestPaletteBackspaceLeavesTheArgumentStage(t *testing.T) {
 	}
 }
 
-// TestPaletteEscRewindsThenCloses proves esc walks the same path back out: one esc
-// returns the argument stage to the verb list, the next closes the palette.
+// TestPaletteEscRewindsThenCloses proves esc walks a *typed* line back out the way it
+// was typed: one esc returns the argument stage to the verb list, the next closes the
+// palette. This is the path D233 left alone — the reader was on that verb list a
+// keystroke ago, so rewinding to it is backing out. A stage a shortcut key opened has
+// no such history and closes on the first esc (TestActionStageEscClosesToTheTable).
 func TestPaletteEscRewindsThenCloses(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
 	m, _ = press(t, m, colon)
@@ -737,9 +740,11 @@ func TestActionStageOffersTheVerbStagesOwnRowSet(t *testing.T) {
 }
 
 // TestActionStageRewindsToTheVerbList proves `a` is a way *into* the palette rather
-// than a faster dead end (D207 pt 2): backspace on the empty line uncommits the verb
-// and the full list — globals and row verbs — comes back, so a key pressed by mistake
-// is one keystroke from everything else.
+// than a faster dead end (D207 pt 2, the half D233 kept): backspace on the empty line
+// uncommits the verb and the full list — globals and row verbs — comes back, so a key
+// pressed by mistake is one keystroke from everything else. Backspace, not esc: esc
+// backs out of the surface (TestActionStageEscClosesToTheTable), backspace edits the
+// line, and the gesture that rewinds a line is the editing one.
 func TestActionStageRewindsToTheVerbList(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	want := len(paletteVerbs) + len(rowVerbTitles(t, m))
@@ -754,5 +759,75 @@ func TestActionStageRewindsToTheVerbList(t *testing.T) {
 	}
 	if got := m.cmdPicker.Len(); got != want {
 		t.Fatalf("the returned-to verb stage holds %d entries, want %d", got, want)
+	}
+}
+
+// TestActionStageEscClosesToTheTable is PAL-07's headline assertion and the feedback's
+// exact repro (`2026-08-06-action-menu-esc-behavior`): select a pod, press `a`, press
+// esc — once. The palette is gone and the reader is back on the pod list, rather than
+// left on a verb list they never asked for with a second esc still owed (D233).
+func TestActionStageEscClosesToTheTable(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m = openActionStage(t, m)
+
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("esc should emit a cancel command")
+	}
+	next, _ := m.Update(cancelCmd())
+	m = next.(Model)
+	if m.cmdPicker.Active() {
+		t.Fatal("one esc should close the action menu")
+	}
+	if m.palArg != "" {
+		t.Fatalf("closing should clear the stage, stage = %q", m.palArg)
+	}
+	if m.palRowByLabel != nil {
+		t.Errorf("closing should drop the row map: %v", m.palRowByLabel)
+	}
+	// "Return focus to where I was": the browse table is still the surface under the
+	// closed overlay, with the row that was selected still selected.
+	if !m.hasCurrent {
+		t.Fatal("esc out of the action menu should leave the browse table showing")
+	}
+	if _, ok := m.table.SelectedRow(); !ok {
+		t.Fatal("esc out of the action menu should leave the row selected")
+	}
+	if got := stripANSI(m.View().Content); !strings.Contains(got, "pod-b") {
+		t.Errorf("the pod list should be back on screen:\n%s", got)
+	}
+}
+
+// TestActionStageEscClearsATypedQueryFirst records the product call the feedback asked
+// to be made explicitly (D233 pt 3): with a query typed into the action stage, the
+// first esc clears the query — that is what esc means in a filter field, in this and
+// every other picker — and the *next* one closes. The complaint was never about a typed
+// query; it was that esc bought nothing when nothing had been typed.
+func TestActionStageEscClearsATypedQueryFirst(t *testing.T) {
+	m := openPodTable(t, "Pod")
+	m = openActionStage(t, m)
+	m = typeInto(t, m, "log")
+	if m.cmdPicker.Query() == "" {
+		t.Fatal("typing should reach the stage's query")
+	}
+
+	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd != nil {
+		t.Fatal("the esc that clears the query should not also cancel the picker")
+	}
+	if !m.cmdPicker.Active() || m.palArg != keymap.ActionActions {
+		t.Fatalf("clearing the query should keep the action stage up, stage = %q", m.palArg)
+	}
+	if got := m.cmdPicker.Query(); got != "" {
+		t.Fatalf("esc should clear the query, got %q", got)
+	}
+
+	m, cancelCmd = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("the second esc should emit a cancel command")
+	}
+	next, _ := m.Update(cancelCmd())
+	if next.(Model).cmdPicker.Active() {
+		t.Fatal("the second esc should close the action menu")
 	}
 }

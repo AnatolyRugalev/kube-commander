@@ -1048,33 +1048,44 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 }
 
 // TestNamespacePickerCancels proves nav.back (esc) leaves the stage without changing
-// the namespace. Since PAL-05c-1 that takes two esc presses, exactly as it does for a
-// stage reached by typing (D207 pt 2): the first rewinds the line to the verb list,
-// the second closes the palette.
+// the namespace, in **one** press: `ctrl+n` opens the stage directly, so there is no
+// verb list behind it to rewind to and esc closes the palette outright (D233). The
+// backspace rewind that makes the key a way *into* the palette is unaffected and is
+// pinned by TestNamespaceStageBackspaceRewinds.
 func TestNamespacePickerCancels(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
 	m = openNamespaceStage(t, m)
 
 	m, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
-	// esc → nav.back → the picker emits CancelledMsg; delivering it rewinds the line.
+	// esc → nav.back → the picker emits CancelledMsg; delivering it closes the palette.
 	if cancelCmd == nil {
 		t.Fatal("back should emit a cancel command")
 	}
 	next, _ := m.Update(cancelCmd())
 	m = next.(Model)
-	if !m.cmdPicker.Active() || m.palArg != "" {
-		t.Fatalf("the first esc should rewind to the verbs, stage = %q", m.palArg)
-	}
-
-	m, cancelCmd = press(t, m, tea.Key{Code: tea.KeyEsc})
-	next, _ = m.Update(cancelCmd())
-	m = next.(Model)
 	if m.cmdPicker.Active() {
-		t.Fatal("the second esc should close the palette")
+		t.Fatal("one esc should close a key-opened stage")
+	}
+	if m.palArg != "" {
+		t.Fatalf("closing should clear the stage, stage = %q", m.palArg)
 	}
 	if m.namespace != "" {
 		t.Fatalf("cancelling should not change the namespace, got %q", m.namespace)
+	}
+}
+
+// TestNamespaceStageBackspaceRewinds: the half of D207 pt 2 D233 kept. Backspace on the
+// empty argument uncommits the verb, so `ctrl+n` pressed by mistake is one keystroke
+// from every other verb rather than a dead end.
+func TestNamespaceStageBackspaceRewinds(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default"}}
+	m := sizedWith(t, WithNamespaceLister(fl))
+	m = openNamespaceStage(t, m)
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("backspace should rewind to the verbs, stage = %q", m.palArg)
 	}
 }
 
@@ -1236,12 +1247,11 @@ func TestResourceStageSelectSwitchesResource(t *testing.T) {
 	}
 }
 
-// TestResourceStageCancelRewindsThenCloses: esc out of the key-opened stage behaves
-// exactly as it does for one reached by typing — it rewinds the line to the verb list
-// first and closes on the next esc (D207 pt 2). That is what makes `R` a way *into*
-// the palette rather than a dead end when the kind you want is not in the list, and
-// neither esc may start a watch.
-func TestResourceStageCancelRewindsThenCloses(t *testing.T) {
+// TestResourceStageCancelClosesOutright: one esc out of the key-opened stage closes the
+// palette (D233). What makes `R` a way *into* the palette when the kind you want is not
+// in the list is backspace, which still rewinds — TestResourceStageBackspaceRewinds —
+// and neither key may start a watch.
+func TestResourceStageCancelClosesOutright(t *testing.T) {
 	fw := &fakeWatcher{}
 	m := sizedWith(t, WithWatcher(fw))
 	m = openResourceStage(t, m)
@@ -1252,23 +1262,33 @@ func TestResourceStageCancelRewindsThenCloses(t *testing.T) {
 	}
 	next, _ := m.Update(cancelCmd())
 	m = next.(Model)
-	if !m.cmdPicker.Active() || m.palArg != "" {
-		t.Fatalf("the first esc should rewind to the verb list, stage = %q", m.palArg)
-	}
-	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionTheme.Describe()) {
-		t.Errorf("the rewound palette should show the verbs:\n%s", got)
-	}
-
-	next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind})
-	m = next.(Model)
 	if m.cmdPicker.Active() {
-		t.Fatal("the second esc should close the palette")
+		t.Fatal("one esc should close a key-opened stage")
+	}
+	if m.palArg != "" {
+		t.Fatalf("closing should clear the stage, stage = %q", m.palArg)
 	}
 	if m.hasCurrent {
 		t.Fatal("cancelling should not start a watch")
 	}
 	if len(fw.res) != 0 {
 		t.Fatalf("cancelling should issue no watch, got %v", fw.res)
+	}
+}
+
+// TestResourceStageBackspaceRewinds pins the rewind D233 kept: backspace on the empty
+// argument brings the verb list back, so a kind you cannot find is one keystroke from
+// every other verb.
+func TestResourceStageBackspaceRewinds(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m = openResourceStage(t, m)
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("backspace should rewind to the verb list, stage = %q", m.palArg)
+	}
+	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionTheme.Describe()) {
+		t.Errorf("the rewound palette should show the verbs:\n%s", got)
 	}
 }
 

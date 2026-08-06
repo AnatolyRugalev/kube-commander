@@ -531,34 +531,48 @@ func TestThemeWriteBackFailureKeepsTheTheme(t *testing.T) {
 	}
 }
 
-// TestThemeStageCancelRewindsThenCloses: esc out of a key-opened stage behaves exactly
-// as it does for one reached by typing — it rewinds the line to the verb list first and
-// closes on the next esc (D207 pt 2). That is what makes `T` a way *into* the palette
-// rather than a dead end, and neither esc may touch the theme or the config.
-func TestThemeStageCancelRewindsThenCloses(t *testing.T) {
+// TestThemeStageCancelClosesOutright: one esc out of a key-opened stage closes the
+// palette (D233, superseding D207 pt 2 for esc). `T` is a way into the palette because
+// **backspace** rewinds to the verbs — TestThemeStageBackspaceRewinds below — while esc
+// keeps meaning what it means everywhere else in the app: back out to where you were,
+// which for someone who pressed `T` is the browse view and not a verb list they never
+// saw. The esc may not touch the theme or the config either way.
+func TestThemeStageCancelClosesOutright(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithThemePersister(fp))
 	m = openThemeStage(t, m)
 
 	next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind})
 	m = next.(Model)
-	if !m.cmdPicker.Active() || m.palArg != "" {
-		t.Fatalf("the first esc should rewind to the verb list, stage = %q", m.palArg)
-	}
-	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionResources.Describe()) {
-		t.Errorf("the rewound palette should show the verbs:\n%s", got)
-	}
-
-	next, _ = m.Update(picker.CancelledMsg{Kind: commandPickerKind})
-	m = next.(Model)
 	if m.cmdPicker.Active() {
-		t.Error("the second esc should close the palette")
+		t.Error("esc out of a key-opened stage should close the palette")
+	}
+	if m.palArg != "" {
+		t.Errorf("closing should clear the stage, stage = %q", m.palArg)
 	}
 	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
 		t.Errorf("cancelling changed the theme: %q", got)
 	}
 	if len(fp.names) != 0 {
 		t.Errorf("cancelling wrote the config: %v", fp.names)
+	}
+}
+
+// TestThemeStageBackspaceRewinds keeps the half of D207 pt 2 that D233 did not take:
+// backspace on the empty argument still uncommits the verb and brings the verb list
+// back, so a key pressed by mistake is one keystroke from every other verb. Backspace
+// edits the line — erasing the committed `theme ` word is what it means there — where
+// esc backs out of the surface.
+func TestThemeStageBackspaceRewinds(t *testing.T) {
+	m := sizedWith(t, WithThemePersister(&fakeThemePersister{}))
+	m = openThemeStage(t, m)
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if !m.cmdPicker.Active() || m.palArg != "" {
+		t.Fatalf("backspace should rewind to the verb list, stage = %q", m.palArg)
+	}
+	if got := stripANSI(m.cmdPicker.View()); !strings.Contains(got, keymap.ActionResources.Describe()) {
+		t.Errorf("the rewound palette should show the verbs:\n%s", got)
 	}
 }
 

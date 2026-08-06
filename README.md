@@ -215,8 +215,9 @@ Verbs that need a value complete it **in the same box**, so the whole thing is o
 of typing: type enough of the verb, press **Space** (or Enter), and the list becomes
 that verb's values with the prompt reading `:resource `. So `:res` `␣` `pods` `Enter`
 switches the table to Pods, and `:theme ` `mono` `Enter` changes theme, without a second
-pop-up appearing. Backspace on an empty value takes you back to the verb list, as does
-`Esc`; another `Esc` closes the palette. All five value verbs complete this way —
+pop-up appearing. Backspace on an empty value takes you back to the verb list, and — on
+a line you typed your way into — so does `Esc`, with another `Esc` closing the palette.
+All five value verbs complete this way —
 `resource`, `pin`, `theme`, `namespace` and `context`. The last two have to fetch their values
 (from the cluster and from your kubeconfig), so their list can appear a moment after the
 prompt does; the box says `— loading…` until it lands, and anything you type meanwhile
@@ -226,9 +227,11 @@ A verb's own key is a **shortcut into the same line**: `T` opens the palette alr
 reading `:theme `, `R` reading `:resource `, `Ctrl+n` reading `:namespace `, `C`
 reading `:context ` and `a` reading `:action `, so the key saves you the typing without
 taking you to a different box. The namespace row in the left menu opens the same line.
-Backspace or `Esc` from there rewinds to the full verb list, so a key pressed by mistake
-still leaves you one keystroke from everything else. Every value verb now works this
-way — there is no second switcher pop-up left to learn.
+Backspace from there rewinds to the full verb list, so a key pressed by mistake still
+leaves you one keystroke from everything else; `Esc` closes the palette and puts you
+back where you were, since a verb list you never opened is not somewhere to go "back"
+to. Every value verb now works this way — there is no second switcher pop-up left to
+learn.
 
 With a row selected in the table, the palette also lists **what you can do to that
 row** — Describe, Logs, View / Edit YAML, Exec shell, Port-forward, Delete and the

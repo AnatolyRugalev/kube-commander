@@ -6343,3 +6343,32 @@ decision exists so a later leg cannot mistake one for both.
    something "nobody ever sees" is **false**, and is superseded here. That is **AUTH-07**,
    and until it lands the feedback's complaint is only half answered: this decision bounds
    what kubecom *renders*, not what is written to fd 2 behind it.
+
+## D233 — Esc backs out of the surface, backspace unwinds the line; a key-opened palette stage closes on the first Esc (2026-08-06, PAL-07)
+
+Feedback `2026-08-06-action-menu-esc-behavior`: press `a` on a pod, press `Esc`, and the
+palette is still there. D207 pt 2 made a key-opened argument stage rewind to the verb list
+exactly as a typed one does — deliberately, so a key was "a way *into* the palette rather
+than a faster dead end". That reasoning holds for **backspace** and not for **esc**, and
+this decision splits them. It supersedes D207 pt 2 for esc only.
+
+1. **Esc leaves the surface the reader is on for the one they came from.** For a stage
+   reached by typing (`:` `theme` `␣`) that is the verb list, so esc still rewinds. For a
+   stage a shortcut key opened — `T`, `R`, `ctrl+n`, `C`, `a`, and the menu's namespace-seam
+   row — the reader has *never been on* the verb list, so rewinding to it is not backing
+   out: it swaps one surface for another and still owes a second esc. Those close outright.
+   The distinction is which surface the reader actually came from, not which stage the
+   palette is in, so it is carried by `palDirect` — set only by `openPaletteArg`, cleared by
+   `enterPaletteArg`/`showPaletteVerbs`/`closePalette` — and a new door onto a stage must
+   answer it (a key-like door sets it, a door off the verb list does not).
+2. **Backspace keeps rewinding, from every stage.** It edits the line, and erasing the
+   committed verb word is what it means there — which is also what preserves D207 pt 2's
+   real benefit: a key pressed by mistake is still one keystroke from every other verb. So
+   the D207 pt 1 property is intact (a key is sugar for a stage, not a second surface); what
+   changed is only which gesture pays for the mistake.
+3. **A typed query still costs its own esc, in every picker.** With text in the filter, the
+   first esc clears the query and the picker stays up (`picker.Update`'s ActionBack); only
+   then does esc reach the stage. The feedback asked for this to be an explicit call rather
+   than an accident, and it is: the query is text the reader typed and can see, esc is what
+   discards an input field's contents everywhere, and unwinding the visible thing first is
+   the same ordering as pt 1. No leg may make esc skip a non-empty query to close faster.

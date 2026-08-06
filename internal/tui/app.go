@@ -849,6 +849,17 @@ type Model struct {
 	// touches it.
 	palArg keymap.Action
 
+	// palDirect records that the current argument stage was opened *directly* by its
+	// shortcut key (or the menu's namespace seam) rather than by committing a verb off
+	// the palette's own verb list — i.e. there is no verb stage behind it that the
+	// reader has actually been on. It is what makes esc mean "back" for those five keys
+	// (D233): a stage the reader typed their way into rewinds to the verbs, a stage a
+	// key opened closes outright, because rewinding it would land the reader on a list
+	// they never saw. It is set only by openPaletteArg and cleared by every other way
+	// the stage changes (enterPaletteArg, showPaletteVerbs, closePalette), so it can
+	// never outlive the stage it describes. Only the update loop touches it.
+	palDirect bool
+
 	// palRowByLabel maps the palette's **row-scoped** entries back to their rowAction
 	// (PAL-04). Its source is the row-action registry's own per-kind set
 	// (rowActionTitles), rebuilt whenever the palette shows its verb stage or, since
@@ -1296,12 +1307,20 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case picker.CancelledMsg:
 		switch msg.Kind {
 		case commandPickerKind:
-			// esc in the argument stage rewinds the line one word rather than closing:
-			// the verb is uncommitted and the verb list comes back, so a mistyped
-			// argument costs one key instead of reopening the palette. (The picker
-			// itself already spent an esc clearing a non-empty query, so this is the
-			// second one — and from the verb list the next esc closes.)
-			if m.palArg != "" {
+			// esc in an argument stage the reader *typed* their way into rewinds the
+			// line one word rather than closing: the verb is uncommitted and the verb
+			// list comes back, so a mistyped argument costs one key instead of
+			// reopening the palette. (The picker itself already spent an esc clearing a
+			// non-empty query, so this is the second one — and from the verb list the
+			// next esc closes.)
+			//
+			// A stage a shortcut key opened (palDirect) closes outright instead: the
+			// verb list is not where that reader came from, so rewinding to it was esc
+			// failing to back out of anything — the complaint feedback
+			// `2026-08-06-action-menu-esc-behavior` filed against `a` (D233, superseding
+			// D207 pt 2 for esc). Backspace is unaffected and still rewinds: it edits
+			// the line, and erasing the committed verb word is what it means there.
+			if m.palArg != "" && !m.palDirect {
 				return m.showPaletteVerbs(), nil
 			}
 			m.closePalette()
