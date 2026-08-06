@@ -114,3 +114,25 @@ needs nothing — it is unreachable by construction whether or not anything is r
 Also still in the test cluster for the other open dogfoods: `broken/crashloop` (2,305
 restarts, for the previous-logs stream question), `shop/firehose` (~1,900 lines/sec) and
 `shop/demo-secret` (external-secrets).
+
+## Update (2026-08-06) — still open; pts 3-6 still unexercised
+
+Maintainer: "live context switch is fast, but my pane gets reset." Qualitative,
+no `context switch complete` log lines pasted — pt 7 stays unanswered with hard
+numbers, though "fast" is consistent with CTX-WARM-01/02's expectation that
+`connect=` is cheap.
+
+No report on pts 3 (leak check), 4 (same-context no-op), 5 (unreachable context)
+or 6 (per-context namespace/menu memory) this round either — do not tick the M4
+exit criterion or unblock CTX-WARM-02/03 from this update alone.
+
+New finding, not something pts 1-7 above asked about: the maintainer wants the
+**pane/view** (which resource type is open, scroll position, drill-down) to
+survive a switch away and back too — "similar to window switching in OS," and
+explicitly fine with bounding it (time-based eviction or a cap on N contexts
+held in memory), not unconditional retention. This is a different, larger ask
+than CTX-WARM-02/03 (which retain only the *connector's* client/discovery for
+speed, capped at one entry, with the shell's teardown explicitly untouched per
+D196 pt 1/2) — filed as `../feedback/2026-08-06-context-switch-pane-memory.md`
+since it is a product/design question (does it revise D196's "shell teardown
+never changes"?) rather than something this dogfood task itself can resolve.

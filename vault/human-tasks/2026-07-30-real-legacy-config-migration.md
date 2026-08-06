@@ -6,7 +6,15 @@
 - Blocks: none (advisory — gates only the M5 exit criterion "the migration path is verified
   against a **real** legacy config file", which stays unticked until this is done. M5-06…M5-11
   may proceed; M5-10's pre-flight should just carry this item forward, not wait on it.)
-- Status: open
+- Status: done
+
+## Result (2026-08-06)
+
+Maintainer: "I can't test, I don't have old config. Rely on tests." No real legacy
+`~/.kubecom.yaml` survives. Per "If no legacy file survives" below, the exit criterion
+closes on the generated fixture (`internal/config/testdata/legacy-kubecom.yaml`,
+M5-05) as the strongest evidence obtainable — record it as closing that way, not as
+verified against a real file.
 
 ## What's needed
 

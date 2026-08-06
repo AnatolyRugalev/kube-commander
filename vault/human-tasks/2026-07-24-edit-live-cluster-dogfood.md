@@ -6,7 +6,13 @@
 - Blocks: none (advisory — gates the M3 "Edit round-trips through $EDITOR" exit criterion
   and, since M5-01b/D178, the DoD's logs/describe/YAML box as well, because reading an
   object's YAML now rides this same suspend. No board work is blocked.)
-- Status: open
+- Status: done
+
+## Result (2026-08-06)
+
+Maintainer confirms: "editor is working." Re-run after EDIT-01/D192 landed; no further
+detail volunteered, no bug reported. Folds in as-is — the M3 Edit exit criterion and the
+DoD's logs/describe/YAML box (M5-01b/D178) both close on this.
 
 ## Attempt 1 (2026-08-01) — did not get past launching the editor
 
