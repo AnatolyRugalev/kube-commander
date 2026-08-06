@@ -6153,3 +6153,52 @@ halves looked defensible, so this settles which one is the record.
    `PAL-03` are parents whose work landed entirely in their slices, all of which are indexed.
    Their index lines exist so the parent id resolves, and they say "via its four slices" /
    "via its two slices" rather than restating what the slices did.
+
+## D226 — A board paragraph is not a backlog: deferred work names a destination, and a closed line's prose is a claim that goes stale (2026-08-06, BOARD-02b-1)
+
+Four closed lines (SEARCH, CRD-PIN, PAL, AUTH) ended with a sentence of the form "two things
+it deliberately left, either its own small item if a dogfood wants them". None of the seven
+was a `- [ ]`. So a leg on Orient read five open items, four of them blocked, and reported
+"nothing unblocked" three legs running — while a real, unblocked item sat four lines above
+one it *did* read. Deferring work into prose is invisible in exactly the way the D102 drift
+was: correct-looking to the leg that writes it, unreadable to every leg after.
+
+1. **A closed line's paragraph states current state, and nothing checks it.** Both of AUTH's
+   deferrals were false by the time they were read. "The confirm box clips its message at
+   sixty cells" was never true — sixty is `modalMaxWidth`, the *box*, and `modal.View` has
+   rendered the message through `lipgloss` `.Width(iw)` since M2-10, which wraps and
+   hard-wraps a token too long to break; the only elision is vertical and carries
+   `elide.Marker` (BOX-01/D220). "The offer's confirm has no `HelpContext`" was true when
+   written and was closed by HINT-02/D217 four days later, by a leg that had no reason to
+   look at the AUTH paragraph. A deferral is therefore **checked against the code when it is
+   harvested**, never trusted; and a leg that closes a gap another line's prose names is the
+   leg that should strike the sentence.
+2. **Every deferral names its destination in the same paragraph.** Exactly one of three
+   forms: a filed `- [ ]` id in `**bold**`; the literal **no item until asked**, for work
+   that wants a human to want it (a usage report, a dogfood) before a leg may pick it up; or
+   a `Dn`, when what is being deferred is a constraint rather than a task. Anything else is
+   prose that a future Orient cannot act on and a future compaction cannot safely drop. This
+   is checked — `TestBoardDeferralsNameTheirDestination`, `internal/vault` — under D224 pt 3,
+   with the same standing: the phrase list is a backstop, not the spec, and the answer to a
+   deferral it does not recognise is to name the destination, never to widen the list.
+3. **"No item until asked" is a real answer, and it is not the same as declined.** An item
+   nobody has asked for is not backlog: filing it invites a leg to build it to look busy,
+   which is the failure the leg skill names outright. Declined is stronger — the reasoning
+   against it is recorded (SEARCH's field selector, which would silently drop most of the
+   scope because a failed kind is silent by design, D131 pt 3) — and a future leg must answer
+   that reasoning rather than re-derive it. Neither is an invitation.
+
+## D227 — `:resource ` and `:pin ` share one snapshot, so narrowing the menu re-sources both or takes both down (2026-08-06, BOARD-02b-1)
+
+Carried out of the CRD-PIN paragraph, because it constrains a leg nobody has written yet
+rather than describing one that landed. Both palette stages build their items from the
+menu's item list via `resourcePickerItems` (D203 pt 4, D204 pt 1). That is equivalent to
+"every discovered kind" only because `Reconcile` appends every kind discovery finds — the
+premise, not a guarantee.
+
+The day a slice narrows what the menu lists — which is the CRD-heavy-cluster ask feedback
+`2026-08-01-custom-resources-pinning` opens with, so it is a question of when — both stages
+must be re-sourced from the discovery result at that one snapshot **in the same leg**, or
+the narrowing silently shrinks the picker and the pin verb with it. `:pin ` is the worse
+loss: a narrowed menu is exactly the situation pinning exists for, so a leg that narrows the
+menu and leaves `:pin ` reading from it has removed the way out of the problem it just made.

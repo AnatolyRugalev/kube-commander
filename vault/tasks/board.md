@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — BOARD-02a done: the `## Done` index is the canonical record of a finished item, the 26 entries missing from it were copied back, and `make check` now fails on the next one that is not (D225). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — BOARD-02b-1 done: the seven deferrals hidden in closed lines' prose were checked against the code and given destinations, which surfaced one real unblocked item (PAL-06) and two claims that had stopped being true (D226/D227). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+_(none)_
 
 ## Blocked
 
@@ -124,9 +123,11 @@ scoring *and* a ranking decision that the current arrival-ordered, streamed resu
 does not have a place for. A **field** selector was considered with the label one and
 deliberately left out: per-kind field support varies (`spec.nodeName` is a Pod thing), a
 selector the kind does not support fails its List, and a failed kind is silent by design
-(D131 pt 3) — so a field selector would quietly drop most of the scope. Raise it as its
-own item if it is ever wanted. **SEARCH-04c-1 is done** — `-l app=web` in the query line is
-a server-side label selector (D151).
+(D131 pt 3) — so a field selector would quietly drop most of the scope. That is a
+**declined** deferral, not a pending one: **no item until asked**, and the reason above is
+what a future leg has to answer rather than re-derive (D226 pt 3).
+**SEARCH-04c-1 is done** — `-l app=web` in the query line is a server-side label selector
+(D151).
 
 SEARCH-04c-2 was split on pickup into **SEARCH-04c-2a** (rank the results) and
 **SEARCH-04c-2b** (fuzzy matching), in that order, because doing them the other way round
@@ -259,20 +260,18 @@ stage is what supplied one (D204).
 gesture, the picker that makes a kind findable, and a palette verb that pins one by name.
 The answer to "which surface pins from the picker" was the palette rather than a `ctrl+…`
 chord — `:pin ` takes the kind as its argument, so it needs no key the pickers cannot spare
-and it works from anywhere. Two things it deliberately left, either of which is its own
-small item if a dogfood wants them: the `R` picker still has **no** in-place pin chord (the
-palette verb is the way in), and neither surface **shows** which kinds are already pinned
-(D202 pt 4 keeps provenance off the display; the status-bar notice is what confirms the
-gesture).
+and it works from anywhere. Two things it deliberately left, restated by BOARD-02b-1 in
+today's surfaces — the "`R` picker" it named stopped existing when PAL-05b retired it into
+the palette's `:resource ` stage: that stage still has no in-place pin chord (you retype the
+kind under `:pin `), and neither stage shows which kinds are already pinned. Both are
+**no item until asked** — the second argues with D202 pt 4, which keeps provenance off the
+display on purpose, so it needs a user saying the notice is not enough, not a leg deciding
+it isn't (D226 pt 2).
 
-_Note on where these surfaces get their kinds, carried forward:_ the source is still the
-menu's item list, and `:pin ` now shares it (D204 pt 1). That is equivalent to "every
-discovered kind" **today**, because `Reconcile` appends every kind discovery finds — so the
-premise holds and nothing was re-plumbed for a hypothetical. The day a slice narrows what
-the menu lists (the CRD-heavy-cluster ask the feedback opens with), both must be re-sourced
-from the discovery result instead, at the one snapshot D203 pt 4 names
-(`resourcePickerItems`), or the narrowing takes the picker **and the pin verb** down with
-it — and `:pin ` is the worse loss, since a narrowed menu is exactly when you need to pin.
+_Where these surfaces get their kinds is now **D227**_, because it is a constraint on a leg
+that has not been written yet rather than a note about this line: narrowing what the menu
+lists takes `:resource ` **and** `:pin ` down with it unless both are re-sourced from the
+discovery result at `resourcePickerItems` first.
 
 ### Hint-line truth (HINT — agent-found)
 The bottom hint line is a promise about which keys act right now (D143 pt 1), and there is
@@ -391,9 +390,23 @@ in the leg — `a` opens the row verbs *alone* (narrower is the reason to keep t
 stage's (`enterPaletteArg`), not the key's. D209 pt 3 is superseded for `actions.menu`
 only: its own "could you name the value first?" test says a compiled-in action registry is
 a verb's argument, while `ctrPicker`/`portPicker` list an object's own containers/ports and
-stay modals. Two things it deliberately left, either its own small item if a dogfood wants
-them: the row verbs are still ranked by the shared matcher rather than by frequency, and
-`:action ` does not show which entries carry a confirm before you pick one.
+stay modals. Two things it deliberately left, sorted by BOARD-02b-1: ranking the row verbs
+by frequency is **no item until asked** (it wants usage nobody has reported, and a list that
+reorders under you is its own complaint), while the unmarked confirms are a real gap and are
+now **PAL-06**.
+
+- [ ] **PAL-06** `:action ` marks the verbs that will ask before they act
+      status: todo | owner: — | added: 2026-08-06
+      notes: The `:action ` stage lists row verbs as bare labels, so `delete` and `describe`
+      read the same until you commit one and a confirm appears — on the stage that exists to
+      answer "what can I do right now?" that is the one thing the label should say. The
+      confirm is the row action's own and stays there (D205 pt 3); this is display only.
+      Note the one real cost, checked while filing: **nothing declares which actions
+      confirm** — three `ShowConfirm` calls sit inside `app.go`'s handlers (delete,
+      rollout-restart, drain), so the marker needs a declared set beside the registry and a
+      test pinning it to those call sites, or it is a fourth hand-maintained list that goes
+      stale the way the prose it came from did. Scope: the set, the marker, the test that
+      ties them together — no change to any action's preconditions.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195)
 Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a
@@ -445,12 +458,15 @@ re-run, explained on the pane, and offered a fix the reader can accept in one ke
 the whole of feedback `2026-08-01-eks-sso-reauth`. The offer is the only modal in kubecom no
 keypress opens, so most of the slice is refusals: it opens only from a landed diagnosis, only
 over the plain browse view, never queues, and is dropped rather than deferred when anything
-else holds the screen. Two things it deliberately left, either its own small item: the confirm
-box clips its message at sixty cells, so a long invocation is truncated *in the question* (the
-pane behind it carries the command wrapped in full, which is the mitigation — the fix would be
-`modal` learning to wrap, a component change with every other confirm as a caller); and the
-offer's confirm has no `HelpContext`, which is HINT-02's fifth case. The live claim — the
-suspend into a real `aws sso login`, and the retry after it — is item 7 on
+else holds the screen. The two things it deliberately left were **both already false when
+BOARD-02b-1 checked them**, which is why D226 pt 1 exists: the confirm box does *not* clip its
+message at sixty cells — sixty is `modalMaxWidth`, the box, and the message has been
+`lipgloss`-wrapped (and hard-wrapped mid-token) since M2-10, so a long `aws sso login
+--profile …` renders in full; the only elision is vertical and carries `elide.Marker`
+(BOX-01/D220). And the offer's confirm got its `HelpContext` when HINT-02 landed `HelpConfirm`
+(D217) — the modal answers in the confirm context whatever kind it is holding. Nothing is
+deferred here: **no item until asked**. The live claim — the suspend into a real `aws sso
+login`, and the retry after it — is item 7 on
 `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks nothing).
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
@@ -513,11 +529,13 @@ decision records — **move it first**". Moving is mechanical and checkable (**B
 deciding what narrative is left worth losing is the judgement call D224 pt 2 declined to
 authorise in advance (**BOARD-02b-2**).
 
-- [ ] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Four closed lines end with a "two things it deliberately left" sentence, and none
-      of them is a `- [ ]`. Sweep them, file what is genuinely open, record what is conditional
-      or declined, and strike what a later leg already did — then the paragraph is safe.
+- [x] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items — done 2026-08-06 (D226, D227)
+
+The harvest came back **7 deferrals, 1 item**: two of AUTH's were already false (one never
+true, one closed by HINT-02 four days later), three want a human to ask, one is declined with
+reasons, and one — **PAL-06**, filed under the PAL line — was a real unblocked item that three
+consecutive legs reported did not exist. That is the finding BOARD-02b-2 now has to weigh:
+the prose is not merely long, parts of it have quietly stopped being true (D226 pt 1).
 - [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
       status: todo | owner: — | added: 2026-08-05 | blocked-on: BOARD-02b-1
       notes: With the Done list collapsed, the prose above it is the larger half (~40KB of
@@ -606,6 +624,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items — done 2026-08-06 (D226, D227)
 
 - [x] **BOARD-02a** The `## Done` index is canonical, complete again, and guarded — done 2026-08-06 (D225)
 

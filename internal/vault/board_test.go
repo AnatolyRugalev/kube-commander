@@ -129,6 +129,94 @@ func TestBoardDoneIndexIsComplete(t *testing.T) {
 	}
 }
 
+// deferralPhrases are the ways the board has actually deferred work in prose. It
+// is a backstop and not the spec (D226 pt 2, under D224 pt 3): the reply to a
+// deferral phrased some other way is to name its destination like every other
+// one, never to add the phrase here so the check keeps passing.
+var deferralPhrases = []string{
+	"deliberately left",
+	"its own small item",
+	"is a candidate to",
+	"raise it as",
+}
+
+// boldDestination is the two written-down endings D226 pt 2 allows: a filed item
+// id, or the decision a constraint was moved into. Both must be **bold**, and
+// that is the load-bearing part of the pattern. A bare `Dnn` would not do —
+// almost every paragraph on this board cites one, so accepting an unbolded
+// reference would have passed all four of the paragraphs this test exists for
+// (the CRD-PIN one names D202, the PAL one D209, the AUTH one D216). Bolding is
+// what makes the reference a *destination* rather than a citation.
+//
+// `**no**` and `**shows**` — both real, both in the paragraph this was written
+// against — are emphasis, so an id needs a hyphen and a decision needs its
+// digits. A bold sentence contains spaces and matches neither.
+var (
+	boldDestination = regexp.MustCompile(`\*\*(?:[A-Z][A-Z0-9]*(?:-[A-Za-z0-9]+)+|D\d{1,4})\*\*`)
+	untilAsked      = "no item until asked"
+	blankLine       = regexp.MustCompile(`^\s*$`)
+)
+
+// TestBoardDeferralsNameTheirDestination is the executable half of D226 pt 2.
+//
+// The failure it guards is one an Orient cannot see. Four closed lines had ended
+// with "two things it deliberately left, either its own small item if a dogfood
+// wants them", and none of the seven things named was a `- [ ]`. So the board
+// truthfully showed five open items — four of them blocked — while a real,
+// unblocked one sat in a paragraph, and three consecutive legs reported that
+// nothing unblocked remained.
+//
+// The paragraph, not the line, is the unit: these sentences wrap across four or
+// five lines at the board's margin, and the id that answers them is routinely on
+// a different line from the phrase that raises them.
+func TestBoardDeferralsNameTheirDestination(t *testing.T) {
+	for _, p := range prosePargraphs(t) {
+		joined := strings.Join(strings.Fields(p.text), " ")
+		phrase := ""
+		for _, d := range deferralPhrases {
+			if strings.Contains(joined, d) {
+				phrase = d
+				break
+			}
+		}
+		if phrase == "" {
+			continue
+		}
+		if boldDestination.MatchString(joined) || strings.Contains(joined, untilAsked) {
+			continue
+		}
+		t.Errorf("board.md:%d defers work (%q) without naming where it went (D226 pt 2)\n"+
+			"  want one of: a filed **ID**, a bold **Dnn**, or the words %q\n  got:  %s",
+			p.line, phrase, untilAsked, truncate(joined, 160))
+	}
+}
+
+// prosePargraphs splits the working area into blank-line-separated blocks, each
+// tagged with the line its first line sits on.
+func prosePargraphs(t *testing.T) []boardLine {
+	t.Helper()
+	var out []boardLine
+	cur := boardLine{}
+	flush := func() {
+		if strings.TrimSpace(cur.text) != "" {
+			out = append(out, cur)
+		}
+		cur = boardLine{}
+	}
+	for _, l := range workingArea(t) {
+		if blankLine.MatchString(l.text) {
+			flush()
+			continue
+		}
+		if cur.line == 0 {
+			cur.line = l.line
+		}
+		cur.text += l.text + "\n"
+	}
+	flush()
+	return out
+}
+
 // entryID is the `**ID**` a board entry opens with, or "" if it has none.
 func entryID(text string) string {
 	m := entryIDPattern.FindStringSubmatch(text)
