@@ -57,16 +57,37 @@ const (
 )
 
 // rowActionMeta is one row-action's registry entry: the id, the menu title, the
-// keymap.Action it is bound to as a direct key ("" = menu-only), and the
-// applicability predicate against the browsed resource. The predicate keys on the
-// resource kind (and, for the mutating actions, its verbs) so an action only
-// appears for the kinds it can act on.
+// keymap.Action it is bound to as a direct key ("" = menu-only), the applicability
+// predicate against the browsed resource, and whether committing the action opens a
+// yes/no confirm before anything happens. The predicate keys on the resource kind
+// (and, for the mutating actions, its verbs) so an action only appears for the kinds
+// it can act on.
 type rowActionMeta struct {
-	action  rowAction
-	title   string
-	key     keymap.Action
-	applies func(kube.Resource) bool
+	action   rowAction
+	title    string
+	key      keymap.Action
+	applies  func(kube.Resource) bool
+	confirms bool
 }
+
+// asksFirst / actsAtOnce spell the rowActionMeta.confirms column, which is the
+// registry's declaration of **which verbs ask before they act** (PAL-06/D228): the
+// three that call modal.ShowConfirm from their handler in `app.go` (delete,
+// rollout-restart, drain) against the twelve that do not. It is a column of the
+// registry rather than a list beside it for one reason: `rowActions` is an unkeyed
+// composite literal, so adding an action without answering this question does not
+// compile. TestRowActionConfirmsMatchesTheHandlers then pins each answer to what the
+// handler actually does, so the column cannot drift from the call sites either.
+//
+// `actsAtOnce` is deliberately *not* "asks nothing": Scale and Port-forward open a
+// **prompt** for a value (ShowPrompt), which is a different question — it asks what to
+// do, not whether to do it, and it is visible in the label the moment it opens. What
+// this column marks is the verb that will stop and ask for permission, which is the
+// thing a bare label could not tell you apart from a read-only viewer.
+const (
+	actsAtOnce = false
+	asksFirst  = true
+)
 
 // rowActions is the curated M3 action set, in the order the actions menu lists
 // them: the read-only viewers and the children drill-down first, then the
@@ -77,21 +98,21 @@ type rowActionMeta struct {
 // Adding an M3 action is a row here plus (if it handles the intent) a case in
 // handleRowAction.
 var rowActions = []rowActionMeta{
-	{rowActionDescribe, "Describe", keymap.ActionDescribe, canGet},
-	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController")},
-	{rowActionChildren, "Show pods", keymap.ActionChildren, kube.HasChildren},
-	{rowActionSecret, "Reveal secret", "", kindIn("Secret")},
-	{rowActionScale, "Scale", "", kindIn("Deployment", "ReplicaSet", "StatefulSet", "ReplicationController")},
-	{rowActionRolloutRestart, "Rollout restart", "", kindIn("Deployment", "DaemonSet", "StatefulSet")},
-	{rowActionCordon, "Cordon", "", kindIn("Node")},
-	{rowActionUncordon, "Uncordon", "", kindIn("Node")},
-	{rowActionDrain, "Drain", "", kindIn("Node")},
-	{rowActionSuspend, "Suspend", "", kindIn("CronJob")},
-	{rowActionResume, "Resume", "", kindIn("CronJob")},
-	{rowActionPortForward, "Port-forward", "", kindIn("Pod", "Service")},
-	{rowActionExec, "Exec shell", "", kindIn("Pod")},
-	{rowActionEdit, "View / Edit YAML", keymap.ActionEdit, canGet},
-	{rowActionDelete, "Delete", keymap.ActionDelete, canDelete},
+	{rowActionDescribe, "Describe", keymap.ActionDescribe, canGet, actsAtOnce},
+	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"), actsAtOnce},
+	{rowActionChildren, "Show pods", keymap.ActionChildren, kube.HasChildren, actsAtOnce},
+	{rowActionSecret, "Reveal secret", "", kindIn("Secret"), actsAtOnce},
+	{rowActionScale, "Scale", "", kindIn("Deployment", "ReplicaSet", "StatefulSet", "ReplicationController"), actsAtOnce},
+	{rowActionRolloutRestart, "Rollout restart", "", kindIn("Deployment", "DaemonSet", "StatefulSet"), asksFirst},
+	{rowActionCordon, "Cordon", "", kindIn("Node"), actsAtOnce},
+	{rowActionUncordon, "Uncordon", "", kindIn("Node"), actsAtOnce},
+	{rowActionDrain, "Drain", "", kindIn("Node"), asksFirst},
+	{rowActionSuspend, "Suspend", "", kindIn("CronJob"), actsAtOnce},
+	{rowActionResume, "Resume", "", kindIn("CronJob"), actsAtOnce},
+	{rowActionPortForward, "Port-forward", "", kindIn("Pod", "Service"), actsAtOnce},
+	{rowActionExec, "Exec shell", "", kindIn("Pod"), actsAtOnce},
+	{rowActionEdit, "View / Edit YAML", keymap.ActionEdit, canGet, actsAtOnce},
+	{rowActionDelete, "Delete", keymap.ActionDelete, canDelete, asksFirst},
 }
 
 // keyToRowAction maps a direct-key keymap.Action to its rowAction, built once from
@@ -120,6 +141,33 @@ func rowActionTitles(r kube.Resource) ([]string, map[string]rowAction) {
 		byTitle[meta.title] = meta.action
 	}
 	return titles, byTitle
+}
+
+// confirmMarker is appended to the palette label of an action that asks before it acts
+// (PAL-06). It is a word rather than the GUI ellipsis convention on purpose: "Delete…"
+// is read as "opens a dialog", which would make the *unmarked* Scale and Port-forward
+// say something false, since both open a prompt. "(confirm)" claims only what it marks.
+const confirmMarker = " (confirm)"
+
+// rowActionLabel is the label the command palette lists an action under: its title,
+// plus confirmMarker when committing it opens a confirm rather than acting. It is the
+// one place the marker is added, so the `:action ` stage and the `:` verb stage — which
+// share paletteRowVerbs (D205 pt 1) — cannot come to label the same action differently.
+//
+// The marker is part of the **label**, which is the identity a picker.SelectedMsg
+// resolves by (D203 pt 3), so the maps that resolve a pick are keyed by the marked
+// label too. The title stays bare everywhere else: the toast a dispatched action
+// surfaces names the act ("Delete pod web-1"), not the question that preceded it.
+func rowActionLabel(a rowAction) string {
+	for _, meta := range rowActions {
+		if meta.action == a {
+			if meta.confirms {
+				return meta.title + confirmMarker
+			}
+			return meta.title
+		}
+	}
+	return string(a)
 }
 
 // rowActionApplies reports whether the given action is applicable to r — the guard

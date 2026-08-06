@@ -2343,7 +2343,9 @@ func openActionStage(t *testing.T, m Model) Model {
 func TestActionStageListsApplicableActions(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	m = openActionStage(t, m)
-	for _, title := range []string{"View / Edit YAML", "Describe", "Logs", "Exec shell", "Delete"} {
+	// Delete is asked for by its listed *label*, marker and all (PAL-06): the label is
+	// what the reader picks and what the stage resolves by.
+	for _, title := range []string{"View / Edit YAML", "Describe", "Logs", "Exec shell", rowActionLabel(rowActionDelete)} {
 		if _, ok := m.palRowByLabel[title]; !ok {
 			t.Errorf("the Pod action stage should list %q", title)
 		}
@@ -2369,7 +2371,7 @@ func TestActionStageListsApplicableActions(t *testing.T) {
 func TestActionStageKindSpecific(t *testing.T) {
 	m := openPodTable(t, "Node")
 	m = openActionStage(t, m)
-	for _, title := range []string{"Cordon", "Uncordon", "Drain"} {
+	for _, title := range []string{"Cordon", "Uncordon", rowActionLabel(rowActionDrain)} {
 		if _, ok := m.palRowByLabel[title]; !ok {
 			t.Errorf("the Node action stage should list %q", title)
 		}

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — BOARD-02b-1 done: the seven deferrals hidden in closed lines' prose were checked against the code and given destinations, which surfaced one real unblocked item (PAL-06) and two claims that had stopped being true (D226/D227). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — PAL-06 done: the row-action registry now declares which verbs ask before they act, the palette marks them, and a test drives all fifteen handlers to keep the column honest (D228). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-06** `:action ` marks the verbs that will ask before they act
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+_(none)_
 
 ## Blocked
 
@@ -396,18 +395,15 @@ by frequency is **no item until asked** (it wants usage nobody has reported, and
 reorders under you is its own complaint), while the unmarked confirms are a real gap and are
 now **PAL-06**.
 
-- [ ] **PAL-06** `:action ` marks the verbs that will ask before they act
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: The `:action ` stage lists row verbs as bare labels, so `delete` and `describe`
-      read the same until you commit one and a confirm appears — on the stage that exists to
-      answer "what can I do right now?" that is the one thing the label should say. The
-      confirm is the row action's own and stays there (D205 pt 3); this is display only.
-      Note the one real cost, checked while filing: **nothing declares which actions
-      confirm** — three `ShowConfirm` calls sit inside `app.go`'s handlers (delete,
-      rollout-restart, drain), so the marker needs a declared set beside the registry and a
-      test pinning it to those call sites, or it is a fourth hand-maintained list that goes
-      stale the way the prose it came from did. Scope: the set, the marker, the test that
-      ties them together — no change to any action's preconditions.
+- [x] **PAL-06** `:action ` marks the verbs that will ask before they act — done 2026-08-06 (D228)
+
+The PAL line is closed again, and PAL-06 answered the "declared set" question in the strongest
+available form: the answer is a **column of the registry** (`rowActionMeta.confirms`, spelled
+`asksFirst`/`actsAtOnce`), which an unkeyed composite literal makes impossible to add an action
+without, and it is pinned to the handlers by a test that drives all fifteen actions with every
+seam wired. The one judgement call is recorded in D228 pt 3 and is a constraint, not a note:
+the marker is `(confirm)` and not an ellipsis, because Scale and Port-forward open *prompts*
+and stay unmarked — marking prompts too is a second marker, **no item until asked**.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195)
 Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a
@@ -625,6 +621,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-06** `:action ` marks the verbs that will ask before they act — done 2026-08-06 (D228)
 
 - [x] **BOARD-02b-1** Harvest the work the prose defers into real Backlog items — done 2026-08-06 (D226, D227)
 

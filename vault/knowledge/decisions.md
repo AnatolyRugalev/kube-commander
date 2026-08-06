@@ -6202,3 +6202,31 @@ must be re-sourced from the discovery result at that one snapshot **in the same 
 the narrowing silently shrinks the picker and the pin verb with it. `:pin ` is the worse
 loss: a narrowed menu is exactly the situation pinning exists for, so a leg that narrows the
 menu and leaves `:pin ` reading from it has removed the way out of the problem it just made.
+
+## D228 — A row action declares whether it asks before it acts, in the registry, pinned to its handler (2026-08-06, PAL-06)
+
+1. **The declaration is a column of `rowActions`, not a list beside it.** `rowActionMeta`
+   carries `confirms` (spelled `asksFirst`/`actsAtOnce`), and the registry is an unkeyed
+   composite literal, so a new row action cannot be added without answering the question —
+   it does not compile. This is the whole reason the answer lives there rather than in a
+   set of its own: a separate list is a fourth hand-maintained inventory, and the board's
+   own filing of PAL-06 named that as the cost to avoid.
+2. **The column is pinned to the handlers, not trusted.**
+   `TestRowActionConfirmsMatchesTheHandlers` dispatches **every** registered action over a
+   real selected row with **every** seam wired and asserts a confirm appeared exactly when
+   the column said it would, stamped with the action's own modal kind. Wiring all the seams
+   is what makes the negative half mean anything: an unwired action is inert, so it would
+   pass "no confirm" without its handler ever running. A `ShowConfirm` added to or removed
+   from a handler in `app.go` fails this test, in both directions.
+3. **What is marked is permission, not input.** Scale and Port-forward open a *prompt*
+   (`ShowPrompt`) and stay unmarked: asking *what* to do is a different question from
+   asking *whether* to, and it is visible the moment the prompt opens. So the marker is the
+   word `(confirm)` and **not** the GUI ellipsis — "Delete…" reads as "opens a dialog",
+   which would make the unmarked Scale and Port-forward say something false. A future leg
+   that wants to mark prompts too adds a second marker; it does not widen this one.
+4. **The marker is part of the label, and the label is the identity.** `rowActionLabel` is
+   the one place it is added, and `paletteRowVerbs` — the single computation behind both
+   `:action ` and the `:` verb stage (D205 pt 1) — keys its resolution map by the marked
+   label, because a `picker.SelectedMsg` comes back as the label the reader saw (D203 pt 3).
+   The bare `title` stays the toast's wording: a dispatched action names the act ("Delete
+   Pod default/web-1"), never the question that preceded it.

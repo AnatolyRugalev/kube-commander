@@ -518,7 +518,7 @@ func TestPaletteListsTheSelectedRowsActions(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	m, _ = press(t, m, colon)
 
-	for _, title := range []string{"Describe", "Logs", "Exec shell", "View / Edit YAML", "Delete"} {
+	for _, title := range []string{"Describe", "Logs", "Exec shell", "View / Edit YAML", rowActionLabel(rowActionDelete)} {
 		if _, ok := m.palRowByLabel[title]; !ok {
 			t.Errorf("the palette should offer the row verb %q with a Pod row selected", title)
 		}

@@ -218,7 +218,11 @@ func paletteVerbItems() ([]string, map[string]keymap.Action) {
 // too, so `:` and `a` do not merely agree about a kind's actions — they are one
 // computation.
 //
-// A title already claimed by an app-global verb is dropped rather than shadowing it —
+// The labels are the titles marked by rowActionLabel — an action that will ask before
+// it acts says so here (PAL-06/D228) — and the returned map is keyed by that label,
+// since the label is what a pick comes back as.
+//
+// A label already claimed by an app-global verb is dropped rather than shadowing it —
 // the label is the identity a SelectedMsg resolves by (D203 pt 3), so it must name one
 // thing. Nothing collides today (the globals are sentences, the row titles are
 // imperatives) and a test pins that, which is what makes the drop a guard rather than
@@ -236,17 +240,22 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[st
 	}
 	titles, byTitle := rowActionTitles(m.current)
 	labels := make([]string, 0, len(titles))
+	byLabel := make(map[string]rowAction, len(titles))
 	for _, title := range titles {
-		if _, dup := taken[title]; dup {
-			delete(byTitle, title)
+		// The listed label is the title plus the confirm marker where one applies
+		// (PAL-06/D228), and it is what the resolution map is keyed by — a pick comes
+		// back as the label the reader saw, not as the registry's bare title.
+		label := rowActionLabel(byTitle[title])
+		if _, dup := taken[label]; dup {
 			continue
 		}
-		labels = append(labels, title)
+		labels = append(labels, label)
+		byLabel[label] = byTitle[title]
 	}
 	if len(labels) == 0 {
 		return nil, nil, ""
 	}
-	return labels, byTitle, viewerTitle(m.current, row.Object)
+	return labels, byLabel, viewerTitle(m.current, row.Object)
 }
 
 // showPaletteVerbs puts the palette into its verb stage: the curated verb list, the
