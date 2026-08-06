@@ -7,7 +7,8 @@ _Last updated: 2026-08-06 — BOARD-02b-2 done: the four closed lines BOARD-02b-
 
 ## In Progress
 
-_(none)_
+- [ ] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
 
 ## Blocked
 
@@ -385,7 +386,7 @@ instead of ~55; the board is 71KB, down from 82KB. The other four closed lines (
 HINT, BOX) have never been swept, and D226 pt 1 forbids compacting a paragraph whose claims
 nobody has checked — that sweep is **BOARD-02b-3**, and it is the same shape as 02b-1.
 - [ ] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach
-      status: todo | owner: — | added: 2026-08-06
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
       notes: LOGS, DIAG, HINT and BOX are closed and still carry their full narrative (~145
       lines). Do 02b-1's harvest on each **first** — check every claim against the code, not
       by reading it — then collapse under D229. Two are already known to have gone stale:
