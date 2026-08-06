@@ -7,7 +7,8 @@ _Last updated: 2026-08-06 — PAL-06 done: the row-action registry now declares 
 
 ## In Progress
 
-_(none)_
+- [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
 
 ## Blocked
 
@@ -534,7 +535,7 @@ reasons, and one — **PAL-06**, filed under the PAL line — was a real unblock
 consecutive legs reported did not exist. That is the finding BOARD-02b-2 now has to weigh:
 the prose is not merely long, parts of it have quietly stopped being true (D226 pt 1).
 - [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
-      status: todo | owner: — | added: 2026-08-05 | blocked-on: BOARD-02b-1
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
       notes: With the Done list collapsed, the prose above it is the larger half (~40KB of
       75KB): a narrative paragraph per closed line (SEARCH, LOGS, PAL, AUTH, CRD-PIN, HINT,
       BOX …). Unlike a Done entry it is *not* redundant with the journal — it carries why a
