@@ -7,7 +7,8 @@ _Last updated: 2026-08-05 — BOARD-01 done: the Done list is one line per entry
 
 ## In Progress
 
-_(none)_
+- [ ] **BOARD-02a** Settle the `## Done` index: canonical, backfilled, and guarded
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
 
 ## Blocked
 
@@ -497,7 +498,23 @@ back anyway, which is what BOARD-01 found and fixed — this time with a guard, 
 half is now closed for good (D224).
 
 - [x] **BOARD-01** The Done list is one line per entry again, and `make check` keeps it there — done 2026-08-05 (D224)
-- [ ] **BOARD-02** Decide whether the per-line planning prose is worth compacting too
+BOARD-02 was **split on pickup** into the two unrelated questions its notes had folded
+together: **BOARD-02a**, the `## Done` index's half-appended state — a mechanical question
+with a checkable answer — and **BOARD-02b**, the planning prose, which is the judgement
+call D224 pt 2 refused to authorise. They are done in that order because the index question
+gates nothing and the prose question is the one that can go wrong.
+
+- [ ] **BOARD-02a** Settle the `## Done` index: canonical, backfilled, and guarded
+      status: todo | owner: — | added: 2026-08-06
+      notes: The index has not been appended to since 2026-08-02, so ~two dozen legs
+      (AUTH-02…05b, PAL-01…05d, CRD-PIN-02…05, HINT-02…05, BOX-01…03) exist only as the
+      `- [x]` line in their own section. Decide which half is canonical and make the other
+      follow. BOARD-01 declined to backfill because "eight summaries written by a leg that
+      did not do the work is how a wrong one gets in" — check whether that objection still
+      applies now that every section entry is already in the D102 one-line shape, i.e.
+      whether the backfill can be a **copy** rather than a rewrite. If it can, do it and add
+      the guard, since an unguarded rule in this vault has now drifted three times (D224).
+- [ ] **BOARD-02b** Decide whether the per-line planning prose is worth compacting too
       status: todo | owner: — | added: 2026-08-05
       notes: With the Done list collapsed, the prose above it is the larger half (~40KB of
       75KB): a narrative paragraph per closed line (SEARCH, LOGS, PAL, AUTH, CRD-PIN, HINT,
@@ -508,13 +525,6 @@ half is now closed for good (D224).
       (the line is done, nothing references it) is a candidate to shrink to one sentence
       plus a journal pointer; an open line's is not. Do not touch a paragraph that names a
       constraint no decision records — move it to `decisions.md` first, or leave it.
-      Noticed while collapsing: the `## Done` index has not been appended to since 2026-08-02,
-      so ~a dozen legs since (AUTH-02…05b, PAL-03…05d, CRD-PIN-02…05, HINT-02…05, BOX-01…03)
-      are recorded only as the `- [x]` line in their own section. Either that index is the
-      canonical list and wants backfilling, or the per-line `- [x]` has replaced it and the
-      section should say so — but not half of each, which is what it is today. BOARD-01
-      deliberately did not backfill: eight summaries written by a leg that did not do the work
-      is how a wrong one gets in.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
