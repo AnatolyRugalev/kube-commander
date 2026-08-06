@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — PAL-06 done: the row-action registry now declares which verbs ask before they act, the palette marks them, and a test drives all fifteen handlers to keep the column honest (D228). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — BOARD-02b-2 done: the four closed lines BOARD-02b-1 had verified (SEARCH, CRD-PIN, PAL, AUTH) collapse to their outcome, their pointers and their standing answers, taking the board from 82KB to 71KB (D229). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
+_(none)_
 
 ## Blocked
 
@@ -93,62 +92,23 @@ overlay composites over the base browse view (D95); zero shared mutable UI state
 (principle 1); no raw-key matching — actions are named keymap entries (D11). Ordering
 is a default, not a contract — re-split any slice that proves > ~300 lines.
 
-### Cluster search (SEARCH — feedback-driven, D131)
-Cross-object cluster search (feedback `2026-07-24-cluster-search-multi-resource`): type a
-query → matching objects **across kinds** (Kind · namespace · name), drill into the hit.
-An M4-class capability pulled forward by feedback. One-shot, concurrent, curated-scope by
-default — never "watch everything" (D131). Built bottom-up (D52): kube primitive first
-(done), then the TUI search mini-app, then streaming/progress, then scope-widening/fuzzy.
+### Cluster search (SEARCH — feedback-driven, D131) — closed
+Feedback `2026-07-24-cluster-search-multi-resource`: `ctrl+s`, type a query, get matching
+objects **across kinds** (Kind · namespace · name), drill into a hit. **Closed** at
+SEARCH-04c-2b: one-shot, concurrent, curated-scope by default and never "watch everything"
+(D131/D141); progress and the hit cap on screen (D142/D143); both scopes widenable as
+independent flags — `ctrl+a` kinds over a fan-out bounded to eight lists (D149), `ctrl+w`
+namespaces without touching the app's own scope (D150); `-l app=web` a server-side label
+selector (D151); and exact ranked above fuzzy by a reserved band the view inserts into
+(D152/D153). Per-slice history: `vault/journal/`, by slice id.
 
-SEARCH-02 was split D52-style into the component (**SEARCH-02a**) and the app wiring
-(**SEARCH-02b**), mirroring LOGS-01 → LOGS-02. Both are done: cluster search is live on
-`ctrl+s` (D141) and the remaining slices refine it.
-
-SEARCH-03 was split D52-style into the kube-layer signal (**SEARCH-03a**) and the view
-surfacing (**SEARCH-03b**); both are done, so progress and the cap are on screen and only
-the scope widen (SEARCH-04) is left in this line.
-
-SEARCH-04 was three unrelated surfaces behind one line item, so it was split on pickup
-into **SEARCH-04a** (widen the *kind* scope), **SEARCH-04b** (widen the *namespace*
-scope) and **SEARCH-04c** (richer matching). Both widens are now done, so scope is
-complete: `search.allKinds` (`ctrl+a`) swaps the curated set for every discovered kind
-over a fan-out `kube.Search` bounds to eight concurrent lists (D149), and
-`search.allNamespaces` (`ctrl+w`) searches every namespace without touching the app's own
-namespace scope (D150). They are independent flags, not a cycle, so all four scope
-combinations are reachable.
-
-SEARCH-04c was split on pickup, as its own notes predicted, into **SEARCH-04c-1** (label
-selector) and **SEARCH-04c-2** (fuzzy matching): the selector is a `metav1.ListOptions`
-field the server evaluates and needs no matcher at all, while fuzzy needs client-side
-scoring *and* a ranking decision that the current arrival-ordered, streamed result list
-does not have a place for. A **field** selector was considered with the label one and
-deliberately left out: per-kind field support varies (`spec.nodeName` is a Pod thing), a
+Two standing answers, so a later leg answers them rather than re-deriving them. A **field**
+selector is **declined**: per-kind field support varies (`spec.nodeName` is a Pod thing), a
 selector the kind does not support fails its List, and a failed kind is silent by design
-(D131 pt 3) — so a field selector would quietly drop most of the scope. That is a
-**declined** deferral, not a pending one: **no item until asked**, and the reason above is
-what a future leg has to answer rather than re-derive (D226 pt 3).
-**SEARCH-04c-1 is done** — `-l app=web` in the query line is a server-side label selector
-(D151).
-
-SEARCH-04c-2 was split on pickup into **SEARCH-04c-2a** (rank the results) and
-**SEARCH-04c-2b** (fuzzy matching), in that order, because doing them the other way round
-is a regression: a fuzzy matcher over an arrival-ordered list buries the exact match the
-reader wanted under scattered ones. Ranking first also settles the ordering question the
-old note flagged — see D152: `kube.Search` keeps streaming in arrival order and the *view*
-does the ranking, as a stable ordered insert with the cursor pinned to its row.
-
-Both halves are done, so **the SEARCH line is closed**: the matcher falls back to
-subsequence matching under the band the score reserves for it, and the emit-time hit cap
-budgets scattered hits to a fraction of itself so fuzzy can never starve exact (D153).
-
-**The match-quality dogfood is closed** (2026-08-01, HT-dogfood-0801) as *no problem found*,
-which is narrower than "verified": `strfrnt` scoped to `shop` returned 6 hits, every one a real
-`storefront` object and no junk tail, so the abbreviation case the fallback exists for
-works. But every hit was a true positive, so there was no noise to rank — and short queries,
-the widened scopes and the band-gap invariant were not probed. `searchScatteredShare =
-limit/4` and the absence of a minimum needle length therefore remain **guesses**, not
-findings (D191 pt 2): they are not to be tuned on the strength of this pass, in either
-direction.
+(D131 pt 3) — it would quietly drop most of the scope (D226 pt 3). And `searchScatteredShare
+= limit/4` and the absent minimum needle length stay **open guesses**: the 2026-08-01 dogfood
+found no problem, which is narrower than verified, and D191 pt 2 forbids citing it as
+evidence for keeping them *or* for changing them.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134)
 Logs move off the shared read-only viewer (M3-01) into a **dedicated full-screen logs
@@ -233,46 +193,21 @@ One claim is unverified against a real broken-webhook cluster and is parked in
 `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks
 nothing).
 
-### Custom resources (CRD-PIN — feedback-driven)
-Raised by feedback `2026-08-01-custom-resources-pinning` ("custom resources are really hard
-to use"): a CRD-heavy cluster has hundreds of kinds, so listing them all makes the menu
-useless and listing none makes CRDs unreachable. The ask is that a kind you reach for
-**once** — via search or the picker — is **in your menu for that context** from then on,
-removable with a key on the menu row, stored per context. This is the *usability* half of
-CRDs and is deliberately not CRD-01's degradation half (D191 pt 1 keeps them apart).
+### Custom resources (CRD-PIN — feedback-driven) — closed
+Feedback `2026-08-01-custom-resources-pinning`: on a CRD-heavy cluster, a kind you reach for
+**once** is in your menu for that context from then on. The usability half of CRDs, kept
+apart from CRD-01's degradation half (D191 pt 1). **Closed** at CRD-PIN-05: a per-context
+pin store merged behind the authored menu entries (D193), `*` to pin and to unpin from the
+menu row (D201/D202), a picker that finds a kind by any name it answers to (D203), and
+`:pin <kind>` in the palette — an argument stage needs no key the pickers cannot spare
+(D204). Per-slice history: `vault/journal/`.
 
-Triaged into four slices, bottom-up (D52): the store, then the gesture that writes it, then
-the gesture that removes it, then the discoverability that makes "reach for it once" true.
-The fourth was split on pickup into **CRD-PIN-04** (finding the kind — done) and
-**CRD-PIN-05** (pinning it from where you found it — done), since the two are different
-surfaces and the second wanted a key the picker could not spare; the palette's argument
-stage is what supplied one (D204).
-
-- [x] **CRD-PIN-01** Where a pinned kind is stored, and the store that holds it — done
-      2026-08-01 (D193)
-- [x] **CRD-PIN-02** `*` pins the kind under the cursor for this context — done 2026-08-02 (D201)
-- [x] **CRD-PIN-03** `*` on a pinned row unpins it — done 2026-08-02 (D202)
-- [x] **CRD-PIN-04** The resource picker finds a kind by any name it answers to — done
-      2026-08-02 (D203)
-- [x] **CRD-PIN-05** Pin/unpin a kind by naming it — the palette's `:pin ` verb — done
-      2026-08-02 (D204)
-
-**The CRD-PIN line is closed** as of CRD-PIN-05/D204: the store, both directions of the
-gesture, the picker that makes a kind findable, and a palette verb that pins one by name.
-The answer to "which surface pins from the picker" was the palette rather than a `ctrl+…`
-chord — `:pin ` takes the kind as its argument, so it needs no key the pickers cannot spare
-and it works from anywhere. Two things it deliberately left, restated by BOARD-02b-1 in
-today's surfaces — the "`R` picker" it named stopped existing when PAL-05b retired it into
-the palette's `:resource ` stage: that stage still has no in-place pin chord (you retype the
-kind under `:pin `), and neither stage shows which kinds are already pinned. Both are
-**no item until asked** — the second argues with D202 pt 4, which keeps provenance off the
-display on purpose, so it needs a user saying the notice is not enough, not a leg deciding
-it isn't (D226 pt 2).
-
-_Where these surfaces get their kinds is now **D227**_, because it is a constraint on a leg
-that has not been written yet rather than a note about this line: narrowing what the menu
-lists takes `:resource ` **and** `:pin ` down with it unless both are re-sourced from the
-discovery result at `resourcePickerItems` first.
+Two standing answers, both **no item until asked**: `:resource ` has no in-place pin chord
+(you retype the kind under `:pin `), and neither stage shows which kinds are already pinned
+— the second argues with D202 pt 4, which keeps pin provenance off the display on purpose,
+so it wants a user saying the notice is not enough (D226 pt 2). Where both stages get their
+kinds is **D227**: narrowing what the menu lists takes `:resource ` *and* `:pin ` down with
+it unless `resourcePickerItems` is re-sourced from the discovery result first.
 
 ### Hint-line truth (HINT — agent-found)
 The bottom hint line is a promise about which keys act right now (D143 pt 1), and there is
@@ -336,136 +271,41 @@ the two shapes are settled (marker for a static box, window + counter for one wi
 and the clamp itself lives in `internal/tui/elide` so a fourth overlay inherits it rather than
 re-deriving it (D222 pt 2).
 
-### Command palette (PAL — feedback-driven)
-Raised by feedback `2026-08-01-command-palette-unification`: today every gesture that needs
-a value opens its **own** modal picker on its own key (`ctrl+n` namespace, `:` resource, `C`
-context, `T` theme, `a` actions), each with its own opt-in `/` filter, so muscle memory does
-not transfer between them. The ask is **one place you type to make anything happen** — `:`
-opens a palette, you fuzzy-match a verb, and the verb's argument list narrows in the same
-surface, with the row-scoped actions (logs, edit, describe, port-forward, delete) offered
-there too so `:` answers "what can I do right now?" without memorising the keymap.
+### Command palette (PAL — feedback-driven) — closed
+Feedback `2026-08-01-command-palette-unification`: one place you type to make anything
+happen, instead of five modal pickers on five keys with five opt-in filters. **Closed** at
+PAL-06: every list picker filters as you type, ranked by the cluster-search matcher (D194);
+`:` opens a verb list (D197); a verb commits in place and the list becomes its values,
+including the asynchronous ones (D198/D199); the selected row's verbs are offered there too
+(D205); the five old keys became sugar for a palette stage, one key per slice because
+retiring a picker takes its 20–52 references with it (D207–D210); and `:action ` marks the
+verbs that ask permission before they act (D228). `ctrPicker`/`portPicker` stay modals —
+they list an object's own containers and ports, not a compiled-in set. Per-slice history:
+`vault/journal/`.
 
-Triaged into five slices, shallow-to-deep: the typing behaviour every surface needs first,
-then the palette surface, then arguments, then row context, then the old keys become sugar.
-The letter keys keep working throughout — PAL-05 is the only slice that changes what they
-*are*, and it is last on purpose (D194 pt 4).
+Two standing answers, both **no item until asked**: ranking the row verbs by frequency
+(it wants usage nobody has reported, and a list that reorders under you is its own
+complaint), and marking the *prompts* — Scale and Port-forward — as well as the confirms,
+which is a second marker rather than a wider one, because `(confirm)` declares permission
+and not input (D228 pt 3).
 
-- [x] **PAL-01** Every list picker filters as you type, ranked by the cluster-search matcher
-      — done 2026-08-01 (D194)
-- [x] **PAL-02** The palette shell: `:` opens a verb list — done 2026-08-02 (D197)
-- [x] **PAL-03** `:namespace ` / `:resource ` argument completion in one surface — done
-      2026-08-02 via its two slices, **PAL-03a** (D198) and **PAL-03b** (D199)
-- [x] **PAL-03a** The argument stage: a verb commits in place, the list becomes its values
-      — done 2026-08-02 (D198)
-- [x] **PAL-03b** The asynchronous argument verbs: `:namespace ` and `:context `
-      — done 2026-08-02 (D199)
-- [x] **PAL-04** Contextual verbs for the selected row — done 2026-08-02 (D205)
-**PAL-05 was split on pickup into four slices**, one per key, because the conversion is not
-the line it looks like: `unused` is in the lint gate (`default: standard`), so the moment a
-key stops opening its standalone picker that picker, its Kind, its Selected/Cancelled arms,
-its `activePicker`/`applyStyles`/`SetSize`/`View`/`capturing` sites **and its tests** all go
-in the same leg or the tree is red. That is 20–52 references per picker, so four keys in one
-leg is a ~700-line diff. Bottom-up as usual (D52): the mechanism lands on the cheapest key
-first, then the keys get converted one at a time. The letter keys keep working throughout —
-what changes is which surface they open, never whether they act.
+### Credential-plugin auth (AUTH — feedback-driven, D195) — closed
+Feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaced as a nameless auth
+failure, leaving the user to work out that the fix was `aws sso login --profile x` in another
+terminal. Provider-specific auth is not a non-goal, but the shape was fixed up front — detect
+narrowly, offer, **never run unasked**, and only from a command the kubeconfig's own
+`user.exec` stanza substantiates (D195 pt 4/5), which binds any later leg here. **Closed** at
+AUTH-05b: the plugin behind a context is named and its failure classified (D195), re-run once
+as a diagnostic to capture its stderr (D211), an expired SSO session recognised by profile
+(D212), the diagnosis rendered onto the browse pane over seven distinct cases (D213/D214),
+and the remediation offered in one confirm per occurrence and run in the suspended terminal
+before the failed request is retried (D215/D216). Per-slice history: `vault/journal/`.
 
-- [x] **PAL-05a** `T` opens the palette's `:theme ` stage — and the sugar mechanism
-      — done 2026-08-02 (D207)
-- [x] **PAL-05b** `R` opens the palette's `:resource ` stage — done 2026-08-02 (D207)
-**PAL-05c was split on pickup**, as its own notes allowed, into **PAL-05c-1** (`ctrl+n` →
-`:namespace `) and **PAL-05c-2** (`C` → `:context `). The two verbs are the same *shape* —
-both fetch their values, and retiring each picker collapses that message's `dest` routing
-(D199) — but they are not one diff: `nsPicker` is the most referenced picker of the five and
-has a second entry point the others do not (the menu's namespace-seam row,
-`menu.NamespaceRequestedMsg`), while `ctxPicker` carries M4-04b's marker rule and the
-kubeconfig read. One key per slice, as PAL-05a/b established.
-
-- [x] **PAL-05c-1** `ctrl+n` opens the palette's `:namespace ` stage — done 2026-08-04 (D208)
-- [x] **PAL-05c-2** `C` opens the palette's `:context ` stage — done 2026-08-04 (D209)
-- [x] **PAL-05d** `a` opens the palette's `:action ` stage — done 2026-08-04 (D210)
-
-**The PAL line is closed** as of PAL-05d/D210: one surface, six argument stages, and no
-modal left that lists a set the palette also lists. The three open questions were answered
-in the leg — `a` opens the row verbs *alone* (narrower is the reason to keep the key),
-`ActionActions` survives as the verb that enters that stage, and its inertness is the
-stage's (`enterPaletteArg`), not the key's. D209 pt 3 is superseded for `actions.menu`
-only: its own "could you name the value first?" test says a compiled-in action registry is
-a verb's argument, while `ctrPicker`/`portPicker` list an object's own containers/ports and
-stay modals. Two things it deliberately left, sorted by BOARD-02b-1: ranking the row verbs
-by frequency is **no item until asked** (it wants usage nobody has reported, and a list that
-reorders under you is its own complaint), while the unmarked confirms are a real gap and are
-now **PAL-06**.
-
-- [x] **PAL-06** `:action ` marks the verbs that will ask before they act — done 2026-08-06 (D228)
-
-The PAL line is closed again, and PAL-06 answered the "declared set" question in the strongest
-available form: the answer is a **column of the registry** (`rowActionMeta.confirms`, spelled
-`asksFirst`/`actsAtOnce`), which an unkeyed composite literal makes impossible to add an action
-without, and it is pinned to the handlers by a test that drives all fifteen actions with every
-seam wired. The one judgement call is recorded in D228 pt 3 and is a constraint, not a note:
-the marker is `(confirm)` and not an ellipsis, because Scale and Port-forward open *prompts*
-and stay unmarked — marking prompts too is a second marker, **no item until asked**.
-
-### Credential-plugin auth (AUTH — feedback-driven, D195)
-Raised by feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaces as a
-nameless auth failure, and the user is left to work out that the fix is `aws sso login
---profile x` in another terminal. The ask is that kubecom notice the **exec credential
-plugin** failed, and offer to run the remediation. Provider-specific auth is **not** a
-non-goal (checked against `goals.md`, D195 preamble), but the shape is fixed up front:
-detect narrowly, offer — never run unasked — and only when the command can be
-substantiated from the kubeconfig's own `user.exec` stanza (D195 pt 4/5).
-
-Triaged into five slices, provider-neutral first, AWS last but one. AUTH-01…03 are all
-kube-layer; nothing reaches the screen until AUTH-04, and AUTH-05 is the only slice that
-runs anything.
-
-- [x] **AUTH-01** Name the exec credential plugin behind a context; classify its failure
-      — done 2026-08-01 (D195)
-- [x] **AUTH-02** Capture the plugin's stderr by re-running it as a diagnostic
-      — done 2026-08-04 (D211)
-- [x] **AUTH-03** Recognise an expired AWS SSO session, and name the profile
-      — done 2026-08-04 (D212)
-**AUTH-04 was split on pickup** into **AUTH-04a** (what the surface *says*) and **AUTH-04b**
-(how the diagnosis *gets* there), because the two halves are independently a leg's worth: the
-copy has seven distinct cases to get right (failed re-run with stderr / with none, a re-run
-that succeeded, a missing binary, a timeout, a truncated capture, and a remediation that is
-present, unrecognised or unsubstantiated), while the wiring is a new seam, an async Cmd, a
-generation guard and a launcher line. Bottom-up as usual (D52): the renderer first, since the
-wiring calls it. Nothing reaches the screen until 04b. **Both halves are done** (2026-08-04):
-a `KindExecPlugin` browse failure re-runs the plugin once per selection and rewrites the pane
-with what it printed, so AUTH-05 inherits a diagnosis it only has to *offer to act on*.
-
-- [x] **AUTH-04a** The copy for a diagnosed credential-plugin failure — done 2026-08-04 (D213)
-- [x] **AUTH-04b** Wire the diagnosis into the browse surface — done 2026-08-04 (D214)
-**AUTH-05 was split on pickup** into **AUTH-05a** (the *run*: what happens once a remediation
-has been approved) and **AUTH-05b** (the *offer*: the confirm that approves it), for the same
-reason AUTH-04 was — each half is a leg's worth, and the halves fail differently. The run is a
-suspend, an argv + environment, a captured failure and a retry of the request that failed; the
-offer is a modal kind, a stash, a routing arm, a decline path and the notice copy that stops
-telling the reader to go to another terminal. Bottom-up as usual (D52): the runner first, since
-the offer calls it. **Nothing can run until 05b** — until then `runReauth` is reachable only
-from tests, which is the point: no code path arms it, so nothing executes unasked (D195 pt 4).
-
-- [x] **AUTH-05a** Run an approved remediation in the suspended terminal, then retry the request
-      — done 2026-08-04 (D215)
-- [x] **AUTH-05b** Offer it: one confirm per occurrence, naming the exact command — done
-      2026-08-05 (D216)
-
-**The AUTH line is closed** as of AUTH-05b/D216: an expired credential plugin is named,
-re-run, explained on the pane, and offered a fix the reader can accept in one key — which is
-the whole of feedback `2026-08-01-eks-sso-reauth`. The offer is the only modal in kubecom no
-keypress opens, so most of the slice is refusals: it opens only from a landed diagnosis, only
-over the plain browse view, never queues, and is dropped rather than deferred when anything
-else holds the screen. The two things it deliberately left were **both already false when
-BOARD-02b-1 checked them**, which is why D226 pt 1 exists: the confirm box does *not* clip its
-message at sixty cells — sixty is `modalMaxWidth`, the box, and the message has been
-`lipgloss`-wrapped (and hard-wrapped mid-token) since M2-10, so a long `aws sso login
---profile …` renders in full; the only elision is vertical and carries `elide.Marker`
-(BOX-01/D220). And the offer's confirm got its `HelpContext` when HINT-02 landed `HelpConfirm`
-(D217) — the modal answers in the confirm context whatever kind it is holding. Nothing is
-deferred here: **no item until asked**. The live claim — the suspend into a real `aws sso
-login`, and the retry after it — is item 7 on
-`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks nothing).
+Nothing is deferred: **no item until asked**. The two things this paragraph used to defer
+were both already false when BOARD-02b-1 checked them, which is what D226 pt 1 is written
+against. The live claim — the suspend into a real `aws sso login`, and the retry after it —
+is item 7 on `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory,
+blocks nothing).
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -534,17 +374,24 @@ true, one closed by HINT-02 four days later), three want a human to ask, one is 
 reasons, and one — **PAL-06**, filed under the PAL line — was a real unblocked item that three
 consecutive legs reported did not exist. That is the finding BOARD-02b-2 now has to weigh:
 the prose is not merely long, parts of it have quietly stopped being true (D226 pt 1).
-- [ ] **BOARD-02b-2** Decide whether the per-line planning prose is worth compacting too
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-05
-      notes: With the Done list collapsed, the prose above it is the larger half (~40KB of
-      75KB): a narrative paragraph per closed line (SEARCH, LOGS, PAL, AUTH, CRD-PIN, HINT,
-      BOX …). Unlike a Done entry it is *not* redundant with the journal — it carries why a
-      line was split the way it was, and what a slice deliberately left — so this is a
-      judgement call, not a mechanical pass, and it is **not** covered by D224's guard.
-      What would make it worth a leg: a closed line whose paragraph no future leg can act on
-      (the line is done, nothing references it) is a candidate to shrink to one sentence
-      plus a journal pointer; an open line's is not. Do not touch a paragraph that names a
-      constraint no decision records — move it to `decisions.md` first, or leave it.
+- [x] **BOARD-02b-2** A closed line collapses to its outcome, its pointers and its standing answers — done 2026-08-06 (D229)
+
+The judgement came back **yes, for a closed line only, and not as a delete** (D229): the
+board already collapses a finished section to one sentence — M1, M2 and M4 read that way —
+and the four lines BOARD-02b-1 verified were the ones safe to do it to, because their
+deferrals and constraints had already been harvested out. SEARCH, CRD-PIN, PAL and AUTH now
+carry their outcome, their `Dnn` join keys and their standing answers in ~16 lines each
+instead of ~55; the board is 71KB, down from 82KB. The other four closed lines (LOGS, DIAG,
+HINT, BOX) have never been swept, and D226 pt 1 forbids compacting a paragraph whose claims
+nobody has checked — that sweep is **BOARD-02b-3**, and it is the same shape as 02b-1.
+- [ ] **BOARD-02b-3** Sweep and collapse the four closed lines 02b-1 did not reach
+      status: todo | owner: — | added: 2026-08-06
+      notes: LOGS, DIAG, HINT and BOX are closed and still carry their full narrative (~145
+      lines). Do 02b-1's harvest on each **first** — check every claim against the code, not
+      by reading it — then collapse under D229. Two are already known to have gone stale:
+      HINT's paragraph still says "nothing enforces the completeness" three lines above the
+      one saying HINT-05 enforced it (D223), and DIAG's restates D191 pt 1 at length. Open
+      lines (CTX-WARM, BOARD, M5) are out of scope — D229 pt 1 only licenses closed ones.
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
@@ -622,6 +469,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **BOARD-02b-2** A closed line collapses to its outcome, its pointers and its standing answers — done 2026-08-06 (D229)
 
 - [x] **PAL-06** `:action ` marks the verbs that will ask before they act — done 2026-08-06 (D228)
 

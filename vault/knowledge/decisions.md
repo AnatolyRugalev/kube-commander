@@ -6230,3 +6230,39 @@ menu and leaves `:pin ` reading from it has removed the way out of the problem i
    label, because a `picker.SelectedMsg` comes back as the label the reader saw (D203 pt 3).
    The bare `title` stays the toast's wording: a dispatched action names the act ("Delete
    Pod default/web-1"), never the question that preceded it.
+
+## D229 — A closed line's paragraph collapses to its outcome, its pointers and its standing answers (2026-08-06, BOARD-02b-2)
+
+D224 pt 2 left the working area unchecked on the grounds that its prose "carries why a line
+was split and what a slice deliberately left, which the journal does *not* duplicate", and
+declined to authorise a compaction on the strength of that decision. BOARD-02b-1 then took
+the second half of that sentence away: a deferral now names a filed item, a bold `Dnn` or
+"no item until asked", and both of AUTH's had gone false unnoticed (D226). What is left in a
+**closed** line's paragraph, once its deferrals and its carried constraints are elsewhere, is
+narrative — and the narrative is the journal's job (D67), joined to the board by the slice id
+every Done entry carries. So the judgement 02b-2 was filed to make is: **yes, and it is a
+collapse, not a delete.**
+
+1. **Closed lines only, and the shape is already on this board.** M1, M2 and M4 each read as
+   one italic sentence — `_(none — M2 is **done** …)_` — because the leg that closed them
+   collapsed the section, which is the same move D225 pt 1 describes. The feedback-driven
+   lines (SEARCH, LOGS, DIAG, CRD-PIN, HINT, BOX, PAL, AUTH) never got it. An **open** line's
+   prose is a live working area and stays: it is what the next slice is picked from.
+2. **Three things survive the collapse, and nothing else.** The *outcome* (what the line
+   delivered and which slice closed it); the *pointers* — every `Dnn`, because they are the
+   join key to `decisions.md` and, through the Done index, to the journal; and every
+   **standing answer**, verbatim in substance: a `no item until asked` and a `declined` are
+   the record that stops a later leg re-raising the question (D226 pt 3), so a collapse that
+   drops one converts a considered "no" into an open invitation. Split rationale, verification
+   detail and what a slice measured do not survive — they are in that slice's journal entry.
+3. **A paragraph is collapsed only after its claims have been checked.** D226 pt 1 says a
+   closed line's prose asserts what is true *now* and that nothing checks it. Collapsing an
+   unchecked paragraph launders a stale claim into a short, confident sentence, which is
+   worse than the long one — so the harvest is the prerequisite, not an optional first pass.
+   This is why 02b-2 collapsed exactly the four lines 02b-1 had verified and filed the other
+   four as BOARD-02b-3 rather than finishing the file.
+4. **This stays unchecked, deliberately.** No `internal/vault` guard follows this decision.
+   Which sentence is load-bearing is a judgement, and D224 pt 3's precedent is for rules a
+   test can state without one — "a Done entry is one line", "a deferral names a destination".
+   A length cap on the working area would be answered by writing shorter prose about open
+   lines, which is the opposite of what this decision protects.
