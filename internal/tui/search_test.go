@@ -1015,9 +1015,10 @@ func TestSearchCancelsOnQuit(t *testing.T) {
 	}
 }
 
-// TestSearchNavigatesResults proves navigation inside the view moves the result cursor
-// and that `enter` drills into the highlighted hit (not the first one).
-func TestSearchNavigatesResults(t *testing.T) {
+// searchWithTwoHits opens the view, types "api" and drains the fan-out until both hits
+// have landed — the state every navigation test below starts from.
+func searchWithTwoHits(t *testing.T) Model {
+	t.Helper()
 	s := &fakeSearcher{hits: []kube.SearchHit{
 		searchHit("Pod", "pods", "web", "api-1"),
 		searchHit("Pod", "pods", "web", "api-2"),
@@ -1030,8 +1031,21 @@ func TestSearchNavigatesResults(t *testing.T) {
 		next, pump = m.Update(pump().(searchMsg))
 		m = next.(Model)
 	}
+	return m
+}
+
+// TestSearchNavigatesResults proves navigation inside the view moves the result cursor
+// and that `enter` on the *results* drills into the highlighted hit (not the first one).
+// The first `enter` is the commit (SEARCH-05); the arrows work either side of it, which
+// is why they are the keys this test uses.
+func TestSearchNavigatesResults(t *testing.T) {
+	m := searchWithTwoHits(t)
+	m, commit := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if commit != nil {
+		t.Fatal("the committing enter should emit nothing — it moves focus, it does not open a hit")
+	}
 	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
-	m, drill := press(t, m, tea.Key{Code: tea.KeyEnter})
+	_, drill := press(t, m, tea.Key{Code: tea.KeyEnter})
 	if drill == nil {
 		t.Fatal("nav.drillIn on a hit should emit a SelectedMsg command")
 	}
@@ -1041,6 +1055,73 @@ func TestSearchNavigatesResults(t *testing.T) {
 	}
 	if sel.Hit.Ref.Name != "api-2" {
 		t.Fatalf("nav.drillIn should open the highlighted hit, got %q", sel.Hit.Ref.Name)
+	}
+}
+
+// TestSearchCommittedResultsTakeVimKeys is the feedback
+// (2026-08-06-cross-search-enter-navigate) at the routing seam: `j`/`k` typed themselves
+// into the query before the commit and move the cursor after it, and the query is not
+// re-run by either movement (D235).
+func TestSearchCommittedResultsTakeVimKeys(t *testing.T) {
+	m := searchWithTwoHits(t)
+	// Before the commit `j` is text, exactly as it is in the table filter.
+	before, _ := press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if q := before.searchView.Query(); q != "apij" {
+		t.Fatalf("before the commit `j` should type into the query, got %q", q)
+	}
+
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, cmd := press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if cmd != nil {
+		t.Fatalf("moving the result cursor should not restart the search, got %T", cmd())
+	}
+	if m.searchView.Query() != "api" {
+		t.Fatalf("`j` on the results must not reach the query field, got %q", m.searchView.Query())
+	}
+	hit, ok := m.searchView.Selected()
+	if !ok || hit.Ref.Name != "api-2" {
+		t.Fatalf("`j` on the results should move the cursor down, got %+v", hit)
+	}
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	if hit, _ := m.searchView.Selected(); hit.Ref.Name != "api-1" {
+		t.Fatalf("`k` on the results should move the cursor up, got %q", hit.Ref.Name)
+	}
+}
+
+// TestSearchCommittedResultsDropUnmappedText proves the other half of the routing rule:
+// a key that maps to nothing is dropped rather than typed. Silently editing the committed
+// line would re-run the search and throw away the very rows the reader is standing on.
+func TestSearchCommittedResultsDropUnmappedText(t *testing.T) {
+	m := searchWithTwoHits(t)
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, cmd := press(t, m, tea.Key{Code: 'z', Text: "z"})
+	if cmd != nil {
+		t.Fatalf("an unmapped key on the results should do nothing, got %T", cmd())
+	}
+	if q := m.searchView.Query(); q != "api" {
+		t.Fatalf("an unmapped key on the results must not edit the query, got %q", q)
+	}
+	if m.searchView.Len() != 2 {
+		t.Fatalf("an unmapped key on the results must not drop the hits, got %d", m.searchView.Len())
+	}
+}
+
+// TestSearchEscFromResultsResumesTyping proves the way back: esc returns the keyboard to
+// the query field with the query and its hits intact, so refining a committed search is
+// esc-then-type rather than esc-and-start-over.
+func TestSearchEscFromResultsResumesTyping(t *testing.T) {
+	m := searchWithTwoHits(t)
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEscape})
+	if !m.searchView.Active() {
+		t.Fatal("esc off the results should not close the search view")
+	}
+	if q := m.searchView.Query(); q != "api" {
+		t.Fatalf("esc off the results should keep the query, got %q", q)
+	}
+	m, _ = press(t, m, tea.Key{Code: '-', Text: "-"})
+	if q := m.searchView.Query(); q != "api-" {
+		t.Fatalf("the query field should take typing again after esc, got %q", q)
 	}
 }
 

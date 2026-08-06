@@ -25,15 +25,21 @@
 // at their rank as they stream in, with the cursor carried along with its row (D152). The
 // view still does no matching — it sorts on the score kube already put on every hit.
 //
+// SEARCH-05 gave the view its one mode: **focus**. The query field used to be open for
+// the view's entire life, which made every rune text — so `hjkl` typed instead of moving
+// and only the arrows navigated. Now `nav.drillIn` (enter) is the seam the reader asked
+// for: from the query field it commits into the result list, and only from there does it
+// open a hit; `nav.back` returns focus to the query. The wiring reads Focus to route
+// (D235).
+//
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
 // (M2-08a). Input is keymap-driven — it never matches a raw key for behaviour (D11):
 // the root resolves a KeyMsg to an Action and hands the Action to Update; the one
 // exception is UpdateQuery, which receives the raw text content, exactly as the picker's
-// filter and the logs view's grep do. Unlike those two the query field is *always* open
-// while the view is up — the query is the view, not a mode within it. It emits its own
-// message types (SelectedMsg/ClosedMsg/QueryChangedMsg) so it never imports the root
-// package (D56) and holds no shared mutable state (principle 1).
+// filter and the logs view's grep do. It emits its own message types
+// (SelectedMsg/ClosedMsg/QueryChangedMsg) so it never imports the root package (D56) and
+// holds no shared mutable state (principle 1).
 package searchview
 
 import (
@@ -67,6 +73,32 @@ const (
 // two read as one scope, not two features; the app owns its constant and this package
 // owns this one, because a component never imports the root (D56).
 const allNamespacesLabel = "all namespaces"
+
+// Focus is which half of the view the reader is working in (SEARCH-05). It is the view's
+// only mode, and the whole reason it exists is that the query field cannot be open and
+// `j` cannot navigate at the same time: a rune is either text or a movement, never both.
+//
+//   - FocusQuery — the query field takes every rune. Navigation still works from here on
+//     the keys that carry no text (the arrows), because those never collided with typing
+//     and readers already use them.
+//   - FocusResults — the result list takes every mapped key, so `hjkl`, `g`/`G` and the
+//     page chords all move. Text that maps to nothing is dropped rather than typed: a
+//     surface where some letters move and the rest edit a field one line up is worse than
+//     one where letters only ever do one thing.
+type Focus int
+
+const (
+	FocusQuery Focus = iota
+	FocusResults
+)
+
+// String names the focus for test failures and debugging.
+func (f Focus) String() string {
+	if f == FocusResults {
+		return "results"
+	}
+	return "query"
+}
 
 // SelectedMsg is emitted when the user drills into the highlighted hit (nav.drillIn).
 // Hit carries the kind and object identity the wiring needs to switch the browse view
@@ -149,9 +181,15 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 // model; nothing here is shared across goroutines (principle 1).
 type Model struct {
 	styles styles.Styles
-	query  textinput.Model // always focused while the view is active
+	query  textinput.Model // focused while focus is FocusQuery
 	list   list.Model
 	scope  string // human label for what is being searched (e.g. a namespace), header only
+
+	// focus is which half owns the keyboard (SEARCH-05). Every open starts on the
+	// query — the view exists to be typed into — and it returns there whenever the
+	// results it was pointing at are dropped, because a cursor over an empty list is
+	// not a place a reader can be.
+	focus Focus
 
 	// allKinds is the kind-scope widen (SEARCH-04a): false searches the curated
 	// default set, true every discovered kind. The view only holds and announces the
@@ -254,6 +292,7 @@ func (m *Model) SetScope(s string) { m.scope = s }
 // caller decides whether reopening resumes or starts clean (Reset).
 func (m *Model) Show() tea.Cmd {
 	m.active = true
+	m.focus = FocusQuery
 	return m.query.Focus()
 }
 
@@ -280,7 +319,19 @@ func (m *Model) Reset() {
 	m.allKinds = false
 	m.allNamespaces = false
 	m.queryErr = ""
+	// The focus goes back to the query field like everything else here, field included:
+	// Reset has no command to return, and Show — its only caller's next line — re-issues
+	// the blink anyway, so the discarded cmd costs nothing and a Reset view is never left
+	// claiming a focus its input does not have.
+	_ = m.refocusQuery()
 }
+
+// Focus reports which half of the view owns the keyboard (SEARCH-05). The wiring reads it
+// to route a keypress: on the results a mapped key is an action even when it carries text
+// (`j` moves), on the query only a textless one is (`j` types). It is a query rather than
+// a pair of setters because the focus only ever moves through Update — there is no state
+// outside this package that may put the reader somewhere they did not go.
+func (m Model) Focus() Focus { return m.focus }
 
 // Query is the current query text.
 func (m Model) Query() string { return m.query.Value() }
@@ -389,13 +440,20 @@ func (m Model) Selected() (kube.SearchHit, bool) {
 }
 
 // Update handles a resolved keymap action while the view is active. Navigation moves
-// the result cursor (bubbles/list manages pagination); nav.drillIn emits SelectedMsg
-// for the highlighted hit; search.allKinds and search.allNamespaces flip their scope
-// widen and emit ScopeChangedMsg; nav.back clears a non-empty query first (dropping its
-// results and emitting QueryChangedMsg{""} so the wiring cancels the in-flight search)
-// and only closes the view (ClosedMsg) on a second press — one esc must never lose both
-// the query and the view. The view consumes actions, never raw keys (D11); an inactive
-// view ignores everything.
+// the result cursor (bubbles/list manages pagination); search.allKinds and
+// search.allNamespaces flip their scope widen and emit ScopeChangedMsg.
+//
+// nav.drillIn and nav.back are the two that read the focus, and together they are
+// SEARCH-05's seam (D235). **drillIn commits, then opens**: on the query field it hands
+// the keyboard to the result list (and does nothing at all with no results — there is
+// nowhere to go), and only from the list does it emit SelectedMsg for the highlighted
+// hit. **back unwinds one step at a time**, innermost first: results → query field,
+// non-empty query → cleared (dropping its results and emitting QueryChangedMsg{""} so
+// the wiring cancels the in-flight search), empty query → ClosedMsg. That is D233's rule
+// applied to this view — esc leaves the surface for the one the reader came from — and it
+// keeps the older guarantee that one esc never loses both the query and the view.
+//
+// The view consumes actions, never raw keys (D11); an inactive view ignores everything.
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	if !m.active {
 		return m, nil
@@ -414,6 +472,17 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	case keymap.ActionHalfPageUp, keymap.ActionPageUp:
 		m.list.PrevPage()
 	case keymap.ActionDrillIn:
+		if m.focus == FocusQuery {
+			// Nothing to hand the keyboard to: an empty list would trap the reader
+			// in a mode with no rows and no visible reason for their typing to have
+			// stopped working.
+			if len(m.hits) == 0 {
+				return m, nil
+			}
+			m.focus = FocusResults
+			m.query.Blur()
+			return m, nil
+		}
 		h, ok := m.Selected()
 		if !ok {
 			return m, nil
@@ -427,15 +496,18 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		// header says so immediately.
 		m.allKinds = !m.allKinds
 		m.clearHits()
-		return m, m.scopeChanged()
+		return m, tea.Batch(m.refocusQuery(), m.scopeChanged())
 	case keymap.ActionSearchAllNamespaces:
 		// Same contract as the kind widen above, on the other axis (SEARCH-04b): the
 		// results belonged to the narrower namespace scope, so they go with it, and
 		// the wiring re-runs the untouched query over the wider one.
 		m.allNamespaces = !m.allNamespaces
 		m.clearHits()
-		return m, m.scopeChanged()
+		return m, tea.Batch(m.refocusQuery(), m.scopeChanged())
 	case keymap.ActionBack:
+		if m.focus == FocusResults {
+			return m, m.refocusQuery()
+		}
 		if m.query.Value() != "" {
 			m.query.Reset()
 			m.clearHits()
@@ -480,6 +552,18 @@ func queryChanged(q string) tea.Cmd {
 func (m Model) scopeChanged() tea.Cmd {
 	msg := ScopeChangedMsg{Kind: kind, AllKinds: m.allKinds, AllNamespaces: m.allNamespaces}
 	return func() tea.Msg { return msg }
+}
+
+// refocusQuery hands the keyboard back to the query field and returns the field's own
+// focus command (the cursor blink). Every path that takes the reader off the result list
+// goes through here rather than assigning the flag, so the flag and the textinput can
+// never disagree: a blurred field that is nonetheless being typed into shows no cursor,
+// which reads as a hung view. It is deliberately unconditional — re-focusing an
+// already-focused field costs one redundant blink command and removes the case where a
+// caller has to know which state it is in.
+func (m *Model) refocusQuery() tea.Cmd {
+	m.focus = FocusQuery
+	return m.query.Focus()
 }
 
 // clearHits drops every result and rewinds the cursor. It also drops the progress
@@ -560,9 +644,17 @@ func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""
 	}
+	// The query line is muted while the results hold the keyboard (SEARCH-05). It is the
+	// only standing signal that typing has stopped going there — the textinput's cursor
+	// vanishes on blur, which is an absence, and an absence is not something a reader
+	// notices they are looking at.
+	queryStyle := m.styles.App
+	if m.focus == FocusResults {
+		queryStyle = m.styles.Subtle
+	}
 	parts := []string{
 		m.header(),
-		m.styles.App.Width(m.width).MaxWidth(m.width).Render(m.query.View()),
+		queryStyle.Width(m.width).MaxWidth(m.width).Render(m.query.View()),
 	}
 	if len(m.hits) == 0 {
 		// A hint is subtle; a query that cannot run is not — it is the one state

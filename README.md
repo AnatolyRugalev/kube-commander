@@ -275,14 +275,21 @@ where `p` and `0` are gestures of their own: it keeps the older behaviour of pre
 Press `Ctrl+s` (`search.cluster`, rebindable) to search the whole cluster instead of
 one table: type a query and matching objects stream in **across kinds** (Pods,
 Deployments, StatefulSets, DaemonSets, Services, ConfigMaps, Secrets, PVCs, Jobs,
-CronJobs, Ingresses) in the current namespace, shown as `Kind  namespace/name`. Press
-Enter on a hit to jump straight to it — the table switches to that kind with the object
-selected. Results are **ranked**, best match first — a query that matches the start of a
+CronJobs, Ingresses) in the current namespace, shown as `Kind  namespace/name`.
+
+**`Enter` is the seam between typing and moving.** While you are typing, every key goes
+to the query — so `j` types a `j`, and only the arrows move the cursor. Press `Enter` and
+the query line dims: the results now take `j`/`k`/`hjkl`, `g`/`G` and the page keys like
+any other list, and a second `Enter` jumps to the highlighted hit — the table switches to
+that kind with the object selected. `Esc` hands the keyboard back to the query with your
+text and results intact, so refining a search is `Esc`, type, `Enter` again. From the
+query line `Esc` clears it, and `Esc` on an empty query closes the search.
+
+Results are **ranked**, best match first — a query that matches the start of a
 name beats one that matches after a `-`, which beats one buried mid-word — and hits slot
 into place as they stream in, so the best answer rises to the top without waiting for the
 sweep to finish. The highlighted row is carried along, so a hit landing above your cursor
-never changes what `Enter` opens. `Esc` clears the query, and `Esc` again closes the
-search. The header tracks
+never changes what `Enter` opens. The header tracks
 the sweep (`searching 4/11 kinds…`) so a slow kind reads as progress rather than a hang,
 and says so explicitly when there were more matches than it shows (`first 200 matches —
 narrow the query`). This is a deliberate, one-shot query (it lists those kinds once per

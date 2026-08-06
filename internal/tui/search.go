@@ -126,18 +126,27 @@ func (m Model) searchResources() []kube.Resource {
 	return kube.CommonSearchResources(all)
 }
 
-// routeSearchKey resolves one keypress while the search view is up. The view's query
-// field is always open (D140 pt 1), so the split is by whether the key carries text:
-// a mapped key with no text (esc/enter/arrows/ctrl+…) is a control Action the view
-// consumes — navigation moves the result cursor, nav.drillIn opens the hit, nav.back
-// clears the query then closes — while anything text-producing or editing (a rune, or
-// an unmapped no-text key like backspace) is query input. So `q` types a `q` instead
-// of quitting, exactly as it does in the table filter; app.quit (ctrl+c) closes the
-// search view rather than the app, the way the help overlay and the viewer own quit
-// while they are open. No view matches a raw key for behaviour (D11).
+// routeSearchKey resolves one keypress while the search view is up. The split is the
+// view's focus (SEARCH-05/D235), because the same rune cannot be text and a movement at
+// once:
+//
+//   - On the **query field**, only a mapped key that carries no text (esc/enter/arrows/
+//     ctrl+…) is a control Action; everything text-producing or editing (a rune, or an
+//     unmapped no-text key like backspace) is query input. So `q` types a `q` instead of
+//     quitting, exactly as it does in the table filter.
+//   - On the **result list**, a mapped key is an Action whether or not it carries text,
+//     which is what makes `hjkl`, `g`/`G` and the page chords navigate. An unmapped key
+//     is dropped rather than typed: the reader committed the query with enter, and a
+//     stray letter silently editing the line one row up — re-running the search and
+//     throwing away the results they are standing on — is the worst outcome available.
+//
+// Either way app.quit (ctrl+c) closes the search view rather than the app, the way the
+// help overlay and the viewer own quit while they are open, and no view matches a raw key
+// for behaviour (D11).
 func (m Model) routeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.Key()
-	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+	onResults := m.searchView.Focus() == searchview.FocusResults
+	if action, mapped := m.keymap.Action(key); mapped && (key.Text == "" || onResults) {
 		if action == keymap.ActionQuit {
 			m.closeSearch()
 			return m, nil
@@ -145,6 +154,9 @@ func (m Model) routeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.searchView, cmd = m.searchView.Update(action)
 		return m, cmd
+	}
+	if onResults {
+		return m, nil
 	}
 	var cmd tea.Cmd
 	m.searchView, cmd = m.searchView.UpdateQuery(msg)

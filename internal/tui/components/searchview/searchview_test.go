@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
@@ -179,10 +180,24 @@ func TestAppendKeepsCursorOnRow(t *testing.T) {
 	}
 }
 
+// commit presses nav.drillIn on the query field, the keystroke that hands the keyboard to
+// the result list (SEARCH-05). Every test that wants to be *on* the results goes through
+// it rather than setting the field, so the seam is exercised by everything that depends
+// on it.
+func commit(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = m.Update(keymap.ActionDrillIn)
+	if m.Focus() != FocusResults {
+		t.Fatalf("nav.drillIn on the query field should focus the results; focus = %s", m.Focus())
+	}
+	return m
+}
+
 func TestDrillInEmitsSelectedHit(t *testing.T) {
 	m := newSearch()
 	m.AppendHit(hit("Pod", "default", "api-0"))
 	m.AppendHit(hit("Deployment", "default", "api"))
+	m = commit(t, m)
 	m, _ = m.Update(keymap.ActionDown)
 
 	_, cmd := m.Update(keymap.ActionDrillIn)
@@ -205,8 +220,153 @@ func TestDrillInEmitsSelectedHit(t *testing.T) {
 func TestDrillInWithNoResultsEmitsNothing(t *testing.T) {
 	m := newSearch()
 	m, _ = typeQuery(m, "nope")
-	if _, cmd := m.Update(keymap.ActionDrillIn); cmd != nil {
+	m, cmd := m.Update(keymap.ActionDrillIn)
+	if cmd != nil {
 		t.Error("nav.drillIn on an empty result list should emit nothing")
+	}
+	// And it must not move focus either: results focus over no rows is a mode with no
+	// cursor, no way to tell why typing stopped working, and nothing to press enter on.
+	if m.Focus() != FocusQuery {
+		t.Errorf("nav.drillIn with no results should leave focus on the query; got %s", m.Focus())
+	}
+	if m2, _ := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"})); m2.Query() != "nopex" {
+		t.Errorf("the query field should still take typing; Query() = %q", m2.Query())
+	}
+}
+
+// TestEnterIsTheSeamBetweenTypingAndNavigating is the feedback
+// (2026-08-06-cross-search-enter-navigate) as a test: before enter the query field owns
+// every rune, after it the result list does, and the *second* enter is the one that
+// opens a hit (D235).
+func TestEnterIsTheSeamBetweenTypingAndNavigating(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	m.AppendHit(hit("Pod", "default", "api-1"))
+
+	// Before: the query field has the keyboard, and it is the only thing that does.
+	if m.Focus() != FocusQuery {
+		t.Fatalf("a fresh search should start on the query field; got %s", m.Focus())
+	}
+	m = commit(t, m)
+
+	// After: the list moves and the query is untouched — the wiring stops sending it
+	// text (routeSearchKey), and the view never re-runs the search on a movement.
+	m, _ = m.Update(keymap.ActionDown)
+	if got, _ := m.Selected(); got.Ref.Name != "api-1" {
+		t.Errorf("nav.down after the commit should move the result cursor; selected %q", got.Ref.Name)
+	}
+	if m.Query() != "api" {
+		t.Errorf("committing must not disturb the query; got %q", m.Query())
+	}
+
+	// The second enter is the one that opens the highlighted hit.
+	_, cmd := m.Update(keymap.ActionDrillIn)
+	msgs := drain(cmd)
+	sel, ok := msgs[0].(SelectedMsg)
+	if len(msgs) != 1 || !ok {
+		t.Fatalf("nav.drillIn on the results emitted %v; want one SelectedMsg", msgs)
+	}
+	if sel.Hit.Ref.Name != "api-1" {
+		t.Errorf("nav.drillIn should open the highlighted hit; got %q", sel.Hit.Ref.Name)
+	}
+}
+
+// TestBackFromResultsReturnsToTheQuery proves esc unwinds one step at a time (D233's rule
+// in this view): off the results first, and only then into the older clear-then-close
+// ladder. Refining a query you have already committed must never cost you the query.
+func TestBackFromResultsReturnsToTheQuery(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	m = commit(t, m)
+
+	m, cmd := m.Update(keymap.ActionBack)
+	if m.Focus() != FocusQuery {
+		t.Fatalf("nav.back on the results should return to the query field; focus = %s", m.Focus())
+	}
+	if msgs := drain(cmd); len(queries(msgs)) != 0 {
+		t.Errorf("leaving the results must not restart the search; emitted %v", msgs)
+	}
+	if m.Query() != "api" || m.Len() != 1 {
+		t.Errorf("leaving the results must keep the query and its hits; got %q, %d hits", m.Query(), m.Len())
+	}
+	if m2, _ := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: '-', Text: "-"})); m2.Query() != "api-" {
+		t.Errorf("the query field should take typing again; Query() = %q", m2.Query())
+	}
+	// Only now does the older ladder resume: clear, then close.
+	m, _ = m.Update(keymap.ActionBack)
+	if m.Query() != "" || !m.Active() {
+		t.Fatalf("the next nav.back should clear the query and keep the view; %q, active=%v", m.Query(), m.Active())
+	}
+	_, cmd = m.Update(keymap.ActionBack)
+	if msgs := drain(cmd); len(msgs) != 1 {
+		t.Fatalf("the last nav.back should close the view; emitted %v", msgs)
+	}
+}
+
+// TestScopeWidenFromResultsReturnsToTheQuery: a widen drops every hit, so the cursor the
+// reader was on stops existing. Focus follows the rows rather than being left over an
+// empty list with no way back except a key nothing on screen mentions.
+func TestScopeWidenFromResultsReturnsToTheQuery(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		action keymap.Action
+	}{
+		{"all kinds", keymap.ActionSearchAllKinds},
+		{"all namespaces", keymap.ActionSearchAllNamespaces},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newSearch()
+			m, _ = typeQuery(m, "api")
+			m.AppendHit(hit("Pod", "default", "api-0"))
+			m = commit(t, m)
+
+			m, cmd := m.Update(tc.action)
+			if m.Focus() != FocusQuery {
+				t.Errorf("a widen that drops the hits should return focus to the query; got %s", m.Focus())
+			}
+			if len(scopeChanges(drain(cmd))) != 1 {
+				t.Error("the widen should still announce the new scope to the wiring")
+			}
+		})
+	}
+}
+
+// TestResetReturnsFocusToTheQuery: a reopen (openSearch → Reset → Show) always lands on
+// the query field, whatever the previous search left behind.
+func TestResetReturnsFocusToTheQuery(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	m = commit(t, m)
+	m.Reset()
+	if m.Focus() != FocusQuery {
+		t.Fatalf("Reset should return focus to the query field; got %s", m.Focus())
+	}
+	if m2, _ := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"})); m2.Query() != "x" {
+		t.Errorf("a reset view should take typing; Query() = %q", m2.Query())
+	}
+}
+
+// TestCommittedQueryLineIsMuted: the only standing signal that typing no longer reaches
+// the query is that its line stops being drawn in the body style. Asserted through the
+// rendered frame, since that is the whole claim.
+func TestCommittedQueryLineIsMuted(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	before := m.View()
+	m = commit(t, m)
+	after := m.View()
+	if before == after {
+		t.Error("committing into the results should change the frame — the query line is muted")
+	}
+	if lipgloss.Height(before) != lipgloss.Height(after) {
+		t.Errorf("muting the query line must not resize the view: %d lines → %d",
+			lipgloss.Height(before), lipgloss.Height(after))
+	}
+	if !strings.Contains(after, "api") {
+		t.Error("the committed query should still be legible on screen")
 	}
 }
 

@@ -6406,3 +6406,39 @@ produces no deltas, so its age is pinned to whenever it was last listed.
    costs nothing outside the model — unlike the metrics poll (D155 pt 3), whose every tick
    issues a request and therefore *needs* that machinery. Do not "optimise" this into a gated
    tick: the failure it buys is a clock that can be left off, which is the reported bug.
+
+## D235 — In cluster search, enter is the seam between typing and moving; focus is the view's only mode (2026-08-06, SEARCH-05)
+
+Feedback `2026-08-06-cross-search-enter-navigate`: after typing a query and pressing enter,
+typing should stop being captured by the query input and `hjkl` should move through the
+results. It could not, and the reason was structural: D140 pt 1 kept the query field open
+for the view's entire life, so every rune was text and only the keys that carry none (the
+arrows) ever reached the list. This **amends D140 pt 1** — the field is still open the whole
+time and still the view's centre, but it no longer holds the keyboard unconditionally.
+
+1. **`nav.drillIn` commits before it opens.** On the query field enter hands the keyboard to
+   the result list; on the list it emits `SelectedMsg` for the highlighted hit. Opening the
+   top hit therefore costs two enters, which is the price of the request and is paid only by
+   the reader who was already going to press enter once. With **no results, enter does
+   nothing at all** — a focus with no rows is a mode with no cursor and no visible reason for
+   typing to have stopped working.
+2. **`nav.back` unwinds one step at a time**, innermost first: results → query field,
+   non-empty query → cleared, empty query → closed. This is D233's rule (esc leaves the
+   surface for the one the reader came from) applied here; leaving the results must never
+   cost the query, because refining a committed search is the common next act.
+3. **Focus decides how a key is routed, and the two rules are asymmetric on purpose.** On the
+   query, only a mapped key carrying no text is an action (`q` types a `q`, as in the table
+   filter). On the results, a mapped key is an action **whether or not it carries text** —
+   that is what makes `hjkl`/`g`/`G` work — and an unmapped key is **dropped, not typed**. A
+   surface where some letters move and the rest silently edit a line one row up (re-running
+   the search and discarding the rows the reader is standing on) is worse than one where
+   letters only ever do one thing. Esc is the documented way back to editing.
+4. **Focus follows the rows.** Anything that drops the hits — either scope widen, a reset —
+   returns focus to the query field, and `refocusQuery` is the only way it moves back, so the
+   flag and the textinput's own focus can never disagree. A view claiming query focus with a
+   blurred field shows no cursor, which reads as a hang.
+5. **The committed query line is muted (`styles.Subtle`), and that is load-bearing, not
+   decoration.** It is the only standing signal that typing no longer reaches the field; the
+   textinput's cursor merely *vanishes* on blur, and an absence is not something a reader
+   notices they are looking at. A leg restyling this view keeps a visible difference between
+   the two focus states.

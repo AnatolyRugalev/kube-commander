@@ -3,19 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — AGE-01 done: the AGE column is re-derived on the client from each row's creation timestamp on a one-second tick, because a server-printed cell is a snapshot and an idle row never gets re-printed (D234); six feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — SEARCH-05 done: cluster search now has a focus, so enter commits the query into the result list and `hjkl` navigates there, which an always-open query field made impossible (D235); five feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **SEARCH-05** Enter is the seam in cluster search: query editing before it,
-      result navigation after it
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Feedback `2026-08-06-cross-search-enter-navigate`. The search view's query
-      field is open for the view's whole life (D140 pt 1), so every rune is text and
-      `hjkl` types instead of navigating — only the arrows move the result cursor.
-      Give the view two focus states, make `nav.drillIn` on the query field commit into
-      the result list (and only drill in from there), and route mapped keys as actions
-      once focus is on the results.
+_(none)_
 
 ## Blocked
 
@@ -95,7 +87,7 @@ on the maintainer's own cluster (HT-dogfood-0806). The standalone YAML viewer th
 M3's scope never shipped and never will: `e` opens the object's YAML in the user's real
 editor for reading and writing (D135/D178). Per-slice history: `vault/journal/`.)_
 
-### Cluster search (SEARCH — feedback-driven, D131) — closed
+### Cluster search (SEARCH — feedback-driven, D131) — closed, reclosed at SEARCH-05
 Feedback `2026-07-24-cluster-search-multi-resource`: `ctrl+s`, type a query, get matching
 objects **across kinds** (Kind · namespace · name), drill into a hit. **Closed** at
 SEARCH-04c-2b: one-shot, concurrent, curated-scope by default and never "watch everything"
@@ -112,6 +104,17 @@ selector the kind does not support fails its List, and a failed kind is silent b
 = limit/4` and the absent minimum needle length stay **open guesses**: the 2026-08-01 dogfood
 found no problem, which is narrower than verified, and D191 pt 2 forbids citing it as
 evidence for keeping them *or* for changing them.
+
+Reopened once on **input**, by feedback `2026-08-06-cross-search-enter-navigate`, and
+reclosed at **SEARCH-05**: the view now has a focus (**D235**). Enter commits the query into
+the result list — `hjkl`/`g`/`G`/page keys navigate there, esc hands the keyboard back with
+the query and hits intact — and only from the list does enter open a hit. This **amends
+D140 pt 1**: the query field is still open for the view's whole life, it just no longer
+holds the keyboard unconditionally, which is what made every rune text and `j` a `j`. Two
+constraints a later leg must not walk into: on the results an **unmapped key is dropped, not
+typed** (typing would cancel the fan-out and discard the rows the reader is standing on), and
+the **muted query line is the signal** that typing stopped reaching it — blur only removes a
+cursor, which is an absence nobody notices.
 
 ### Logs dedicated view (LOGS — feedback-driven, D134) — reopened on memory (LOGS-07)
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
@@ -458,6 +461,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **SEARCH-05** Enter commits the cluster-search query into the result list, so `hjkl` navigates there and a second enter opens the hit — feedback `2026-08-06-cross-search-enter-navigate` — done 2026-08-06 (D235)
 
 - [x] **AGE-01** AGE is re-derived from the object's own timestamp on a tick, instead of staying the string the server printed once — feedback `2026-08-06-age-column-stale` — done 2026-08-06 (D234)
 
