@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — THEME-01 done: the popular schemes' licences are surveyed and the three Catppuccin dark flavors ship, taking the registry from three palettes to six (D236); four feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — PAL-08 done: a palette row now names its command beside the description, in two columns, and the name is matched as well as shown (D237); three feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **PAL-08** The palette lists a command's **name** beside its description, in two
-      columns
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Feedback `2026-08-06-palette-two-columns` (see the PAL section below).
+_(none)_
 
 ## Blocked
 
@@ -245,6 +242,13 @@ key-opened stage closes, a typed one still rewinds, because that is where its re
 from), backspace still unwinds the *line* from anywhere, so D207 pt 1's "a key is sugar for
 a stage" is untouched. The one thing a later leg must not undo: a non-empty query still
 costs its own esc first, in this and every picker (D233 pt 3).
+
+**Reopened and reclosed again 2026-08-06** by feedback `2026-08-06-palette-two-columns`: the
+list showed each verb's description and never its name. PAL-08 gives `picker.Item` a `Name`
+column, seeded with the id the command already has elsewhere — `ns.switch`, `delete` —
+matched as well as shown (**D237**). Two standing constraints come with it: the Label is
+still the identity a pick resolves by, and a picker row is truncated, never wrapped, since
+the row that wraps costs the modal its last item.
 
 ### Credential-plugin auth (AUTH — feedback-driven, D195) — reopened on the layout (AUTH-07)
 Feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaced as a nameless auth
@@ -499,6 +503,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **PAL-08** Palette rows show the command's name beside its description, in two columns — feedback `2026-08-06-palette-two-columns` — done 2026-08-06 (D237)
 
 - [x] **THEME-01** Licence survey of the popular schemes + the Catppuccin dark flavors land, taking the registry to six — first slice of feedback `2026-08-06-more-themes` — done 2026-08-06 (D236)
 

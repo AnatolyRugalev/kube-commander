@@ -831,3 +831,66 @@ func TestActionStageEscClearsATypedQueryFirst(t *testing.T) {
 		t.Fatal("the second esc should close the action menu")
 	}
 }
+
+// --- PAL-08: the palette names its commands ----------------------------------
+
+// paletteRow returns the palette row holding want, through the real program's frame —
+// the feedback is about what is on screen, so the frame is what these tests read. The
+// modal is composited over the two-pane browse view (D95), so the row is the bordered
+// field the text lands in, not the whole screen line.
+func paletteRow(t *testing.T, m Model, want string) string {
+	t.Helper()
+	for _, l := range strings.Split(frame(m), "\n") {
+		for _, field := range strings.Split(l, "│") {
+			if strings.Contains(field, want) {
+				return field
+			}
+		}
+	}
+	t.Fatalf("no palette row holds %q; got:\n%s", want, frame(m))
+	return ""
+}
+
+// TestPaletteRowShowsTheCommandName is the feedback's own words — "I want to see the
+// command name too, not just its description" — asserted through the surface it was
+// written about: `:` and the row for a verb carries the action id the rest of kubecom
+// calls it by, ahead of the description it used to show alone (D237).
+func TestPaletteRowShowsTheCommandName(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, colon)
+	row := paletteRow(t, m, keymap.ActionNamespace.Describe())
+	if !strings.HasPrefix(strings.TrimSpace(row), string(keymap.ActionNamespace)) {
+		t.Fatalf("the namespace row should open with %q, got %q", keymap.ActionNamespace, row)
+	}
+	if i, j := strings.Index(row, string(keymap.ActionNamespace)), strings.Index(row, keymap.ActionNamespace.Describe()); i >= j {
+		t.Fatalf("name at %d, description at %d — the name column must come first: %q", i, j, row)
+	}
+}
+
+// TestPaletteRowNameIsTypeable is the half that makes the column worth more than
+// decoration: the id on screen is matched, so a reader can narrow by what a command is
+// called. `ns.sw` is not a subsequence of "Switch namespace" — before PAL-08 typing
+// the visible name found nothing.
+func TestPaletteRowNameIsTypeable(t *testing.T) {
+	m := sized(t)
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "ns.sw")
+	if got := m.cmdPicker.Len(); got != 1 {
+		t.Fatalf("typing the command name matched %d verbs, want 1", got)
+	}
+	if v, _ := m.cmdPicker.Selected(); v != keymap.ActionNamespace.Describe() {
+		t.Fatalf("selected %q, want %q", v, keymap.ActionNamespace.Describe())
+	}
+}
+
+// TestActionStageRowsShowTheRowActionName carries the same claim onto the one stage
+// whose entries are not registry actions: a row verb is named by its own id — the name
+// the `:action ` line already takes (D210) — so the stage `a` opens has a name column
+// too rather than reverting to bare titles.
+func TestActionStageRowsShowTheRowActionName(t *testing.T) {
+	m := openActionStage(t, openPodTable(t, "Pod"))
+	row := paletteRow(t, m, rowActionLabel(rowActionDescribe))
+	if !strings.HasPrefix(strings.TrimSpace(row), string(rowActionDescribe)) {
+		t.Fatalf("the describe row should open with %q, got %q", rowActionDescribe, row)
+	}
+}

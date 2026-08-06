@@ -211,6 +211,12 @@ highlighted one. Each verb does exactly what its key does, so the palette is a w
 rather than a second set of behaviour — and you never have to remember a key to reach
 any of them.
 
+Each row is two columns: the command's **name**, then what it does —
+`ns.switch  Switch namespace`. The name is the same id you rebind under `keys:` in
+`config.yaml` and read in [`docs/keybindings.md`](docs/keybindings.md), and typing it
+narrows the list exactly as typing the description does, so `ns.sw` finds the namespace
+switcher.
+
 Verbs that need a value complete it **in the same box**, so the whole thing is one line
 of typing: type enough of the verb, press **Space** (or Enter), and the list becomes
 that verb's values with the prompt reading `:resource `. So `:res` `␣` `pods` `Enter`

@@ -6482,3 +6482,40 @@ leg must not contradict:
    family select as one group in the theme picker's filter, and it keeps D169 pt 1
    affordable: a flavor added later is a new name, never a re-tuning of an
    existing one.
+
+## D237 — A palette row is the command's name *and* its description, in two columns (2026-08-06, PAL-08)
+
+Feedback `2026-08-06-palette-two-columns`: the palette showed only each verb's
+description, so the reader could not see what the command was actually called.
+Addressed by giving `picker.Item` an optional `Name` drawn in a column before the
+label. What a later leg must not silently contradict:
+
+1. **The name is display + match; the Label is still the identity.** A pick comes
+   back as the Label and the resolution maps stay keyed by it (D203 pt 3), so a
+   surface can name its rows without rekeying anything. A leg tempted to make the
+   name the value of a `SelectedMsg` is changing that key for every picker at once.
+
+2. **A command's name is the id it already has elsewhere** — the `keymap.Action`
+   for an app-global verb (`ns.switch`), the `rowAction` id for a row verb
+   (`delete`, the word the `:action ` line takes, D210). Not a new short word
+   invented for the column: the ids are unique by construction, they are what
+   `config.yaml`'s `keys:` map and `docs/keybindings.md` call the command, and a
+   second naming scheme would be a second thing to keep true. The palette's
+   argument *word* (`:namespace `) is the prompt, not the name.
+
+3. **A picker row is one line — it is truncated, never wrapped.** The delegate
+   declares `Height() == 1`; lipgloss's `Width()` wraps, so an over-long row
+   silently became two and pushed the last item off the bottom of the modal. Rows
+   are cut to the list width with an `…` before they are styled. A leg that widens
+   what a row carries owes the same cut, or the modal's geometry stops meaning
+   what it says (D220 pt 1's warning, one component further in).
+
+4. **The column is measured over the *visible* rows, not the whole item set**, so
+   a query that narrows to short names gives the width back to the descriptions.
+   That is also why the delegate is rebuilt in one place (`syncDelegate`): the
+   styles and the column width are two inputs to the same renderer and a leg that
+   sets one without the other loses the layout on a theme change.
+
+5. **Unnamed lists render exactly as before.** Every picker but the palette seeds
+   plain values, and none of them may grow an empty gutter — the two-column layout
+   exists only where something is named.

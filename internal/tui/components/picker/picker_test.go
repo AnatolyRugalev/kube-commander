@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
@@ -471,5 +472,116 @@ func TestSetItemsClearsAliases(t *testing.T) {
 	m = typeFilter(m, "externalsecrets")
 	if got := m.Len(); got != 0 {
 		t.Fatalf("a stale alias still matched after SetItems: Len() = %d, want 0", got)
+	}
+}
+
+// --- PAL-08: the name column -------------------------------------------------
+
+// newNamedModel builds the shape the command palette seeds since PAL-08: each value
+// carries the command's own name beside the description the reader picks by.
+func newNamedModel(items ...Item) Model {
+	m := New(styles.Default(), "command")
+	m.SetSize(80, 24)
+	m.SetItemsWithAliases(items)
+	m.Show()
+	return m
+}
+
+// rowLine returns the plain (un-styled, un-bordered) rendered line holding want, or
+// fails. It is how the column tests read geometry: the interesting claim is *where*
+// text lands on the row, which only the composed frame can answer.
+func rowLine(t *testing.T, m Model, want string) string {
+	t.Helper()
+	for _, l := range strings.Split(m.View(), "\n") {
+		plain := strings.Trim(ansi.Strip(l), "│")
+		if strings.Contains(plain, want) {
+			return plain
+		}
+	}
+	t.Fatalf("no rendered row holds %q; got:\n%s", want, ansi.Strip(m.View()))
+	return ""
+}
+
+// TestNamedItemsRenderInTwoColumns is PAL-08's headline and the feedback's own words:
+// the palette showed only the description, and the command's name has to be visible
+// beside it. The claim is alignment, not mere presence — two columns means every
+// label starts at the same cell, whatever the names above it are.
+func TestNamedItemsRenderInTwoColumns(t *testing.T) {
+	m := newNamedModel(
+		Item{Name: "resources.switch", Label: "Switch resource"},
+		Item{Name: "app.quit", Label: "Quit"},
+	)
+	long := rowLine(t, m, "Switch resource")
+	short := rowLine(t, m, "Quit")
+	if !strings.HasPrefix(long, "resources.switch") || !strings.HasPrefix(short, "app.quit") {
+		t.Fatalf("the name should open its row:\n%q\n%q", long, short)
+	}
+	if got, want := strings.Index(short, "Quit"), strings.Index(long, "Switch resource"); got != want {
+		t.Fatalf("labels start at %d and %d — the name column is not aligned:\n%q\n%q",
+			got, want, long, short)
+	}
+}
+
+// TestUnnamedItemsKeepTheirSingleColumn is the other half: every picker but the
+// palette seeds plain values, and none of them may grow a gutter for a column that
+// holds nothing. The row still opens with the value itself.
+func TestUnnamedItemsKeepTheirSingleColumn(t *testing.T) {
+	m := newTestModel("default", "kube-system")
+	m.Show()
+	if line := rowLine(t, m, "kube-system"); !strings.HasPrefix(line, "kube-system") {
+		t.Fatalf("an unnamed row should start with its value, got %q", line)
+	}
+}
+
+// TestNameColumnFollowsTheVisibleSet is why the width is measured over the rows on
+// screen rather than over the whole item set: a query that leaves only short-named
+// commands gives the width back to their descriptions instead of holding a gutter for
+// rows it is no longer showing.
+func TestNameColumnFollowsTheVisibleSet(t *testing.T) {
+	items := []Item{
+		{Name: "resources.switch", Label: "Switch resource"},
+		{Name: "app.quit", Label: "Quit"},
+	}
+	wide := strings.Index(rowLine(t, newNamedModel(items...), "Quit"), "Quit")
+	narrowed := typeFilter(newNamedModel(items...), "quit")
+	narrow := strings.Index(rowLine(t, narrowed, "Quit"), "Quit")
+	if narrow >= wide {
+		t.Fatalf("the name column stayed %d wide after narrowing to the short name (was %d)", narrow, wide)
+	}
+}
+
+// TestFilterMatchesTheName is the reason the name is matched as well as shown: a
+// reader who can see `ns.switch` will type it. "ns.sw" is not a subsequence of the
+// label ("Switch namespace" has no `.`), so before PAL-08 typing what is on screen
+// found nothing.
+func TestFilterMatchesTheName(t *testing.T) {
+	m := newNamedModel(
+		Item{Name: "ns.switch", Label: "Switch namespace"},
+		Item{Name: "app.quit", Label: "Quit"},
+	)
+	m = typeFilter(m, "ns.sw")
+	if got := m.Len(); got != 1 {
+		t.Fatalf("query %q matched %d rows, want 1", "ns.sw", got)
+	}
+	// The label is still the identity a pick resolves by (D203 pt 3) — matching the
+	// name must not make the name the value.
+	if v, ok := m.Selected(); !ok || v != "Switch namespace" {
+		t.Fatalf("Selected() = %q,%v; want the label, not the name", v, ok)
+	}
+}
+
+// TestNameSurvivesARestyle guards the one place the delegate is rebuilt from two
+// inputs: a theme change replaces the row renderer, and the column it was carrying
+// must come with it (a picker restyled while open otherwise loses its layout, which
+// is exactly what SetStyles exists to avoid).
+func TestNameSurvivesARestyle(t *testing.T) {
+	m := newNamedModel(
+		Item{Name: "resources.switch", Label: "Switch resource"},
+		Item{Name: "app.quit", Label: "Quit"},
+	)
+	before := strings.Index(rowLine(t, m, "Quit"), "Quit")
+	m.SetStyles(styles.Default())
+	if after := strings.Index(rowLine(t, m, "Quit"), "Quit"); after != before {
+		t.Fatalf("label starts at %d after a restyle, was %d — the column was dropped", after, before)
 	}
 }

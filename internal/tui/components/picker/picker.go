@@ -15,6 +15,11 @@
 // ordering the search view has (D194). A picker that must keep text-carrying
 // gestures of its own opts out with WithOptInFilter.
 //
+// Since PAL-08 a value may also carry a **Name** — its own short id — which is drawn
+// in a left-hand column before the label and matched alongside it (D237). Only the
+// command palette seeds names today; a list where nothing is named renders exactly as
+// it always has, one column of labels.
+//
 // It wraps bubbles/list for cursor and pagination management (and, later, its native
 // filter) but drives it entirely through keymap.Actions — it never matches a raw key
 // (D11): the root model resolves a KeyMsg to an Action and hands the Action to Update.
@@ -35,6 +40,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/AnatolyRugalev/kube-commander/internal/kube"
 	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
@@ -69,15 +75,20 @@ const (
 	filterHeight   = 1 // the filter input line (only while filtering)
 )
 
-// item is one selectable string. It satisfies list.Item; the whole string is the
-// substring-match target used by the picker's own incremental filter (M2-08b).
-type item string
+// item is one visible row: the label (the value, and the identity a pick resolves
+// by) plus the optional name rendered in the left-hand column before it (PAL-08).
+// It satisfies list.Item; the label is the substring-match target used by the
+// picker's own incremental filter (M2-08b).
+type item struct {
+	name  string
+	label string
+}
 
-func (i item) FilterValue() string { return string(i) }
+func (i item) FilterValue() string { return i.label }
 
 // Item is one pickable value: the Label the reader sees, picks and gets back in
-// SelectedMsg, plus Aliases — extra terms the filter matches against but never
-// shows (CRD-PIN-04).
+// SelectedMsg, an optional Name shown in a column *before* it, plus Aliases —
+// extra terms the filter matches against but never shows (CRD-PIN-04).
 //
 // The aliases exist because a label is a *name for a reader* while a query is
 // whatever the reader happens to know the thing as. The resource picker is the
@@ -90,8 +101,21 @@ func (i item) FilterValue() string { return string(i) }
 // would make every row of every picker carry text nobody reads, and the label is
 // also the identity a SelectedMsg is resolved by (resByLabel and its siblings), so
 // widening it would widen that key too.
+//
+// Name is the value's own short name where it has one — the command palette's
+// verbs are the case that forced it (PAL-08): their labels are the registry's
+// *descriptions* ("Switch namespace"), which left the reader unable to see what the
+// command is actually called. A named item renders as two columns, `name  label`,
+// with the column sized to the widest visible name; an unnamed one renders exactly
+// as it did before, so every other picker is untouched.
+//
+// Like an alias the Name is matched against, so typing a command's name finds it —
+// but unlike an alias it is *shown*, and unlike the Label it is not the identity a
+// SelectedMsg resolves by (D203 pt 3): the Label remains that, so a caller can add
+// names without rekeying the maps that resolve a pick.
 type Item struct {
 	Label   string
+	Name    string
 	Aliases []string
 }
 
@@ -107,28 +131,88 @@ func Labels(values []string) []Item {
 	return items
 }
 
+// nameGap separates the name column from the label column of a named item. Two
+// spaces rather than one because the columns are ragged text with no rule between
+// them, and a single space reads as a word break inside one sentence.
+const nameGap = "  "
+
 // itemDelegate renders each item on a single line, highlighting the cursor row with
 // the shared Selection style. It is a minimal list.ItemDelegate (no per-item state,
 // no key bindings) so the list contributes no hard-coded keys or help of its own.
+//
+// nameW is the width of the name column — the widest name among the *visible*
+// items, or 0 when nothing in the list is named. The picker recomputes it whenever
+// the item set changes (syncDelegate), so a narrowing query shrinks the column and
+// gives the width back to the labels rather than reserving room for names that are
+// no longer on screen.
 type itemDelegate struct {
 	styles styles.Styles
+	nameW  int
 }
 
 func (d itemDelegate) Height() int                         { return 1 }
 func (d itemDelegate) Spacing() int                        { return 0 }
 func (d itemDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 
+// rowEllipsis marks a row cut short by the modal's width. A picker row is one line
+// by contract (Height() == 1), so the alternative to cutting is not a wider row, it
+// is a *wrapped* one — which silently costs the list a row and pushes everything
+// below it down (D237 pt 3).
+const rowEllipsis = "…"
+
+// Render draws one row: the label alone in an unnamed list, or `name  label` with
+// the name padded to the column width. The cursor row is drawn in the Selection
+// style as one piece — its background is a full-width bar, and a second foreground
+// inside it would either fight the bar or break it (D170's "a component draws
+// through the Styles it was handed"); every other row dims the name to Subtle, since
+// the label is what a reader scans and the name is what they look for.
+//
+// The composed line is truncated to the list width *before* it is styled, because
+// lipgloss's Width() wraps rather than clips: a row longer than the modal would
+// otherwise become two rows, and the row after it would fall off the bottom.
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item) {
-	s, _ := it.(item)
+	row, _ := it.(item)
 	width := m.Width()
 	if width < 0 {
 		width = 0
 	}
-	style := d.styles.App
-	if index == m.Index() {
-		style = d.styles.Selection
+	selected := index == m.Index()
+	if d.nameW == 0 {
+		style := d.styles.App
+		if selected {
+			style = d.styles.Selection
+		}
+		_, _ = io.WriteString(w, style.Width(width).Render(fit(row.label, width)))
+		return
 	}
-	_, _ = io.WriteString(w, style.Width(width).MaxWidth(width).Render(string(s)))
+	name := padRight(row.name, d.nameW)
+	if selected {
+		line := fit(name+nameGap+row.label, width)
+		_, _ = io.WriteString(w, d.styles.Selection.Width(width).Render(line))
+		return
+	}
+	line := d.styles.Subtle.Render(name) + d.styles.App.Render(nameGap+row.label)
+	_, _ = io.WriteString(w, d.styles.App.Width(width).Render(fit(line, width)))
+}
+
+// fit truncates s to w cells, marking the cut, and is ANSI-aware so a styled segment
+// keeps its escape sequences intact when the text inside it is cut.
+func fit(s string, w int) string {
+	if w <= 0 || lipgloss.Width(s) <= w {
+		return s
+	}
+	return ansi.Truncate(s, w, rowEllipsis)
+}
+
+// padRight pads s with spaces to w cells (measured as the terminal sees them, so a
+// wide rune costs what it draws), and leaves an over-long name alone — the row is
+// clipped once, at the list width, exactly as an over-long label always has been.
+func padRight(s string, w int) string {
+	n := lipgloss.Width(s)
+	if n >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-n)
 }
 
 // Model is the modal picker. Every field is owned by the embedding root model;
@@ -150,6 +234,10 @@ type Model struct {
 	// opening it with the picker (PAL-01/D194 pt 3). Only a picker carrying
 	// text-producing gestures of its own wants this.
 	optInFilter bool
+
+	// nameW is the current name-column width (0 in a list where nothing is named).
+	// It is derived from the visible items by applyFilter and handed to the delegate.
+	nameW int
 
 	active bool // whether the picker is shown (captures input) — "" View when false
 	width  int  // full screen width  (the modal is centered within it)
@@ -213,7 +301,15 @@ func New(s styles.Styles, kind string, opts ...Option) Model {
 // an open picker can be restyled without losing the reader's place.
 func (m *Model) SetStyles(s styles.Styles) {
 	m.styles = s
-	m.list.SetDelegate(itemDelegate{styles: s})
+	m.syncDelegate()
+}
+
+// syncDelegate rebuilds the row renderer from the picker's current styles and name
+// column width. It is the one place the delegate is replaced, so the two inputs
+// cannot drift apart — a set of items seeded after a theme change is rendered
+// through the new palette, and a restyle keeps the column the items need.
+func (m *Model) syncDelegate() {
+	m.list.SetDelegate(itemDelegate{styles: m.styles, nameW: m.nameW})
 }
 
 // Kind returns the picker's kind id.
@@ -286,39 +382,66 @@ func (m *Model) applyFilter() {
 	items := make([]list.Item, 0, len(m.all))
 	if strings.TrimSpace(m.filter.Value()) == "" {
 		for _, v := range m.all {
-			items = append(items, item(v.Label))
+			items = append(items, item{name: v.Name, label: v.Label})
 		}
-		m.list.SetItems(items)
-		m.list.Select(0)
+		m.setVisible(items)
 		return
 	}
 	matcher := kube.NewNameMatcher(m.filter.Value())
 	type hit struct {
-		value string
+		row   item
 		score int
 	}
 	hits := make([]hit, 0, len(m.all))
 	for _, v := range m.all {
 		if score, ok := matchItem(matcher, v); ok {
-			hits = append(hits, hit{value: v.Label, score: score})
+			hits = append(hits, hit{row: item{name: v.Name, label: v.Label}, score: score})
 		}
 	}
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
 	for _, h := range hits {
-		items = append(items, item(h.value))
+		items = append(items, h.row)
+	}
+	m.setVisible(items)
+}
+
+// setVisible installs the visible rows, re-measures the name column against them
+// and resets the cursor to the top. Measuring here rather than over m.all is what
+// makes the column follow the query: a list narrowed to one short name gives the
+// width back to the labels instead of holding a gutter for rows it no longer shows.
+func (m *Model) setVisible(items []list.Item) {
+	nameW := 0
+	for _, it := range items {
+		row, ok := it.(item)
+		if !ok {
+			continue
+		}
+		if w := lipgloss.Width(row.name); w > nameW {
+			nameW = w
+		}
+	}
+	if nameW != m.nameW {
+		m.nameW = nameW
+		m.syncDelegate()
 	}
 	m.list.SetItems(items)
 	m.list.Select(0)
 }
 
-// matchItem scores one item against the query: the best score among its label and
-// its aliases, and whether anything matched at all. Taking the best rather than the
-// first means the order aliases are listed in carries no meaning — a caller adds the
-// names a value answers to, not a ranked list.
+// matchItem scores one item against the query: the best score among its label, its
+// name and its aliases, and whether anything matched at all. Taking the best rather
+// than the first means the order aliases are listed in carries no meaning — a caller
+// adds the names a value answers to, not a ranked list.
+//
+// The Name is matched for the same reason an alias is, and more strongly: it is on
+// screen, so a reader who can see `ns.switch` will type it (PAL-08).
 func matchItem(matcher kube.NameMatcher, it Item) (int, bool) {
 	best, _, ok := matcher.Match(it.Label)
-	for _, a := range it.Aliases {
-		score, _, hit := matcher.Match(a)
+	for _, alt := range append([]string{it.Name}, it.Aliases...) {
+		if alt == "" {
+			continue
+		}
+		score, _, hit := matcher.Match(alt)
 		if hit && (!ok || score > best) {
 			best, ok = score, true
 		}
@@ -377,7 +500,7 @@ func (m Model) Selected() (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return string(it), true
+	return it.label, true
 }
 
 // Update handles a resolved keymap action while the picker is active. Navigation

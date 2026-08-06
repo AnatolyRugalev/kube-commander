@@ -189,8 +189,15 @@ var paletteArgVerbs = map[keymap.Action]string{
 // Labels are the registry's own descriptions, so an entry cannot describe itself
 // differently from its key, and app.palette itself is skipped so the palette can never
 // list a way to reopen the surface you are already in.
-func paletteVerbItems() ([]string, map[string]keymap.Action) {
-	labels := make([]string, 0, len(paletteVerbs))
+//
+// Since PAL-08 each item also carries the action's **id** as its Name, drawn in a
+// column before the description (D237): "Switch namespace" alone never said what the
+// command was called, and the id is the name kubecom already uses for it everywhere
+// else — in `config.yaml`'s `keys:` map, in `docs/keybindings.md`, and in the `?`
+// overlay's own grouping. It is unique by construction, so it also gives the reader a
+// way to type at a verb precisely (`ns` finds ns.switch) that a description cannot.
+func paletteVerbItems() ([]picker.Item, map[string]keymap.Action) {
+	items := make([]picker.Item, 0, len(paletteVerbs))
 	byLabel := make(map[string]keymap.Action, len(paletteVerbs))
 	for _, a := range paletteVerbs {
 		label := a.Describe()
@@ -201,9 +208,9 @@ func paletteVerbItems() ([]string, map[string]keymap.Action) {
 			continue // a description collision would make the pick ambiguous — keep the first.
 		}
 		byLabel[label] = a
-		labels = append(labels, label)
+		items = append(items, picker.Item{Label: label, Name: string(a)})
 	}
-	return labels, byLabel
+	return items, byLabel
 }
 
 // paletteRowVerbs returns the row-scoped verbs the palette offers right now and the
@@ -230,7 +237,11 @@ func paletteVerbItems() ([]string, map[string]keymap.Action) {
 // `:action ` stage (PAL-05d) lists these titles alone, so it passes a nil `taken` and
 // keeps every applicable action — a collision with a verb the stage does not show would
 // hide an action from `a` for no reader-visible reason (D210 pt 2).
-func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[string]rowAction, string) {
+// Each item's Name is the row action's own id (PAL-08/D237) — `delete`, `scale`,
+// `rolloutRestart` — which is the name the `:action ` line already names them by
+// (D210) and, unlike the global verbs' keymap ids, the only name several of them have
+// (a menu-only action has no key to be called after).
+func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]picker.Item, map[string]rowAction, string) {
 	if !m.hasCurrent {
 		return nil, nil, ""
 	}
@@ -239,7 +250,7 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[st
 		return nil, nil, ""
 	}
 	titles, byTitle := rowActionTitles(m.current)
-	labels := make([]string, 0, len(titles))
+	items := make([]picker.Item, 0, len(titles))
 	byLabel := make(map[string]rowAction, len(titles))
 	for _, title := range titles {
 		// The listed label is the title plus the confirm marker where one applies
@@ -249,13 +260,13 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[st
 		if _, dup := taken[label]; dup {
 			continue
 		}
-		labels = append(labels, label)
+		items = append(items, picker.Item{Label: label, Name: string(byTitle[title])})
 		byLabel[label] = byTitle[title]
 	}
-	if len(labels) == 0 {
+	if len(items) == 0 {
 		return nil, nil, ""
 	}
-	return labels, byLabel, viewerTitle(m.current, row.Object)
+	return items, byLabel, viewerTitle(m.current, row.Object)
 }
 
 // showPaletteVerbs puts the palette into its verb stage: the curated verb list, the
@@ -269,21 +280,21 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]string, map[st
 // verb whether or not a row happens to be selected — the row verbs are additive, and
 // the matcher ranks them the moment anything is typed.
 func (m Model) showPaletteVerbs() Model {
-	labels, byLabel := paletteVerbItems()
+	items, byLabel := paletteVerbItems()
 	m.cmdByLabel = byLabel
 	m.palArg = ""
 	m.palDirect = false // the reader is on the verb list now, however they got here.
 	title := paletteTitle
-	rowLabels, rowByLabel, target := m.paletteRowVerbs(byLabel)
+	rowItems, rowByLabel, target := m.paletteRowVerbs(byLabel)
 	m.palRowByLabel = rowByLabel
 	if target != "" {
-		labels = append(labels, rowLabels...)
+		items = append(items, rowItems...)
 		title = paletteTitle + paletteTargetSep + target
 	}
 	m.cmdPicker.SetTitle(title)
 	m.cmdPicker.SetPrompt(palettePrompt)
 	m.cmdPicker.ClearQuery()
-	m.cmdPicker.SetItems(labels)
+	m.cmdPicker.SetItemsWithAliases(items)
 	return m
 }
 
@@ -411,15 +422,11 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		// so `:action ` and `:` can never offer different sets. Inertness is `a`'s own
 		// rule and is decided here, not in the key (D209 pt 2): no resource table, no
 		// row under the cursor, or no applicable action and the stage does not open.
-		var (
-			labels []string
-			target string
-		)
-		labels, m.palRowByLabel, target = m.paletteRowVerbs(nil)
-		if len(labels) == 0 {
+		var target string
+		items, m.palRowByLabel, target = m.paletteRowVerbs(nil)
+		if len(items) == 0 {
 			return m, nil, false
 		}
-		items = picker.Labels(labels)
 		title = paletteTitle + paletteTargetSep + target
 	default:
 		return m, nil, false
