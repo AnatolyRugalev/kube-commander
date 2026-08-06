@@ -7,7 +7,13 @@ _Last updated: 2026-08-06 — PAL-08 done: a palette row now names its command b
 
 ## In Progress
 
-_(none)_
+- [ ] **FILT-01** Backspace on an empty `/` query cancels the search instead of dead-ending
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Feedback `2026-08-06-search-backspace-cancel`. `/` opens a query field over the
+      resource table and over the logs view's live grep; with nothing left to erase, backspace
+      is currently fed to the field and does nothing, leaving an empty prompt open. Make it
+      resolve to the surface's own cancel (`nav.back`) so the line unwinds past its start —
+      the gesture the palette already has (D207 pt 2 / D233 pt 2).
 
 ## Blocked
 
