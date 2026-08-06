@@ -7,7 +7,12 @@ _Last updated: 2026-08-06 — BOARD-02b-3 done: the last four closed lines (LOGS
 
 ## In Progress
 
-_(none)_
+- [ ] **HT-dogfood-0806** Close the two human tasks the maintainer finished on 2026-08-06
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: `2026-07-24-edit-live-cluster-dogfood` ("editor is working") and
+      `2026-07-30-real-legacy-config-migration` ("I can't test, I don't have old config —
+      rely on tests") both came back `Status: done`. Fold each `## Result` into the exit
+      criteria and DoD boxes it gates, then delete both files (D79).
 
 ## Blocked
 
