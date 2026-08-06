@@ -87,6 +87,59 @@ func TestBoardDoneSectionHoldsNothingButEntries(t *testing.T) {
 	}
 }
 
+// TestBoardDoneIndexIsComplete guards what makes the Done list worth keeping at
+// all: it is the *canonical* record of every finished item, and the `- [x]` line
+// inside a Backlog line's own section is a working view of it.
+//
+// The distinction is not stylistic. When a line closes, its section collapses to
+// a sentence — `_(none — M2 is done)_` — and the per-slice entries in it go with
+// it; 207 of the 229 entries in the index today exist nowhere else on the board
+// for exactly that reason. So an entry that never reaches the index is not
+// duplicated-then-tidied, it is deleted the day its line is wrapped up, and the
+// deletion looks like housekeeping to the leg that does it.
+//
+// That is what had happened by 2026-08-06: the index had not been appended to
+// since 2026-08-02 and 26 finished items (AUTH-02…05b, PAL-01…05d, CRD-PIN-02…05,
+// HINT-02…05, BOX-01…03) were one section-collapse away from vanishing. This test
+// is the direction that matters — every finished entry above the heading has a
+// line below it. The reverse is deliberately not checked: the index outliving its
+// section is the whole point.
+func TestBoardDoneIndexIsComplete(t *testing.T) {
+	indexed := map[string]bool{}
+	for _, e := range doneEntries(t) {
+		if id := entryID(e.text); id != "" {
+			indexed[id] = true
+		}
+	}
+	for _, l := range workingArea(t) {
+		if !strings.HasPrefix(l.text, "- [x] ") {
+			continue
+		}
+		id := entryID(l.text)
+		if id == "" {
+			t.Errorf("board.md:%d is a finished entry with no **ID** to index it by\n  %s",
+				l.line, truncate(l.text, 120))
+			continue
+		}
+		if !indexed[id] {
+			t.Errorf("board.md:%d — %s is done but is not in the %q index, so it is lost the "+
+				"day its line closes and the section collapses (D225)\n"+
+				"  add the same line, unchanged, under %q", l.line, id, doneHeading, doneHeading)
+		}
+	}
+}
+
+// entryID is the `**ID**` a board entry opens with, or "" if it has none.
+func entryID(text string) string {
+	m := entryIDPattern.FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+var entryIDPattern = regexp.MustCompile(`^- \[[ x]\] \*\*([A-Za-z0-9._-]+)\*\*`)
+
 // boardLine is one line of the board with its 1-based number, so a failure names
 // a place the reader can open.
 type boardLine struct {
@@ -118,6 +171,26 @@ func doneSection(t *testing.T) []boardLine {
 		t.Fatalf("%s has no %q heading", boardPath, doneHeading)
 	}
 	return out
+}
+
+// workingArea is every line *above* the Done heading — In Progress, Blocked,
+// Backlog and the per-line planning prose. The shape guards deliberately stop at
+// the heading; only the index-completeness check reads this side.
+func workingArea(t *testing.T) []boardLine {
+	t.Helper()
+	data, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", boardPath, err)
+	}
+	var out []boardLine
+	for i, text := range strings.Split(string(data), "\n") {
+		if text == doneHeading {
+			return out
+		}
+		out = append(out, boardLine{line: i + 1, text: text})
+	}
+	t.Fatalf("%s has no %q heading", boardPath, doneHeading)
+	return nil
 }
 
 // doneEntries is the section's `- [x]` lines.

@@ -6123,3 +6123,33 @@ writes the paragraph pays nothing, every later Orient pays for it.
    tape (D181), and `internal/vault` is where the vault's own join it. Writing the rule into
    `CLAUDE.md` or a skill is necessary and has now twice been shown to be insufficient on its
    own.
+
+## D225 — The `## Done` index is the canonical record of a finished item; a section's `- [x]` is a working view (2026-08-06, BOARD-02a)
+
+BOARD-02's notes left the board in a half-and-half state: the `## Done` index had not been
+appended to since 2026-08-02, so 26 finished items existed only as the `- [x]` line inside
+their own Backlog line's section, while 207 older items existed only in the index. Both
+halves looked defensible, so this settles which one is the record.
+
+1. **The index is canonical.** When a line closes, its section collapses to a sentence —
+   `_(none — M2 is done)_`, `_(none — M1 is done …)_` — and every `- [x]` in it goes with the
+   section. That collapse is a normal, correct move for the leg that makes it, and it is
+   indistinguishable from housekeeping, so an entry that never reached the index is not
+   duplicated-then-tidied: it is **deleted**, silently, by a leg that is doing the right
+   thing. The per-line `- [x]` is therefore a working view of an item's state while its line
+   is open, and the index below `## Done` is what survives. This is why the completeness
+   check runs in one direction only — the index outliving its section is the point, not a
+   defect (`TestBoardDoneIndexIsComplete`, `internal/vault`).
+2. **The backfill is a copy, never a summary.** BOARD-01 declined to backfill on the grounds
+   that "summaries written by a leg that did not do the work" is how a wrong one gets in, and
+   that objection is right and stands. It stopped applying to *these* entries only because
+   BOARD-01's own collapse had already put every section entry into the D102 one-line shape:
+   25 of the 26 moved across unchanged, character for character. Where an entry does not fit
+   the shape (a parent rollup like `M2-07` or `PAL-03`), a leg may re-shape **its own words
+   and its own pointers** — the id, the date and every `(Dnn)` — and may not write a claim
+   the original entry did not make. A leg that cannot backfill an entry by copying it should
+   leave it and say so, not invent one.
+3. **A rollup entry carries the union of its slices' pointers, not a new claim.** `M2-07` and
+   `PAL-03` are parents whose work landed entirely in their slices, all of which are indexed.
+   Their index lines exist so the parent id resolves, and they say "via its four slices" /
+   "via its two slices" rather than restating what the slices did.
