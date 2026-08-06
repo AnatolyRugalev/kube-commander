@@ -6442,3 +6442,43 @@ time and still the view's centre, but it no longer holds the keyboard unconditio
    textinput's cursor merely *vanishes* on blur, and an absence is not something a reader
    notices they are looking at. A leg restyling this view keeps a visible difference between
    the two focus states.
+
+## D236 — A built-in theme is a palette, an attribution and a name that cannot move; light palettes wait on a background (2026-08-06, THEME-01)
+
+Feedback `2026-08-06-more-themes` asked for ~10 built-ins, Catppuccin among them,
+and for licences to be **checked per theme rather than assumed**. The survey and
+the per-scheme licence findings live in `vault/knowledge/themes.md`; what a future
+leg must not contradict:
+
+1. **A ported palette carries its attribution in the constructor's doc comment**
+   — project, licence, copyright line — and the values come from the upstream
+   *data* file, not a port or a screenshot. Nothing upstream is vendored (a theme
+   is thirteen hex values, D169 pt 3), so the comment is the notice, and it is the
+   only thing that stops kubecom shipping someone's scheme anonymously. A leg
+   adding a palette without one has not finished the port. Tokyo Night is
+   **Apache-2.0**, not MIT, and gruvbox upstream carries **no licence** (the
+   author's community fork does) — neither may be folded into an "all MIT" line.
+
+2. **`default` and `catppuccin-frappe` are one palette under two names, on
+   purpose.** kubecom's default has always been Catppuccin Frappé; D169 pt 1
+   makes the name `default` unrenameable, and dropping the flavor would leave the
+   family missing its middle member in a picker that filters on `catppuccin-`. So
+   the values live once (`catppuccinFrappeFlavor`) and both constructors return
+   them. This is the registry's **only** permitted duplicate: the distinctness
+   guarantee still holds for every other pair, and `TestDefaultThemeIsCatppuccinFrappe`
+   fails if the two ever drift apart.
+
+3. **No light theme until kubecom paints its own background.** `styles.New` sets
+   a background on three things only (selected row, status bar, search match);
+   everything else is foreground text over whatever the terminal already is. A
+   light palette's dark text on a dark terminal is unreadable, and it reads as a
+   kubecom rendering bug rather than a mismatch. Adding a `Background` role is
+   allowed — but by D169 pt 3 it must be filled in every built-in in the same leg
+   and the panes must actually paint it, so it is its own slice, never a rider on
+   a palette port. Until then, "is it dark?" is an admission criterion for the
+   registry.
+
+4. **A flavor family is named `<scheme>-<flavor>`.** The prefix is what makes the
+   family select as one group in the theme picker's filter, and it keeps D169 pt 1
+   affordable: a flavor added later is a new name, never a re-tuning of an
+   existing one.

@@ -440,13 +440,24 @@ keys:
 
 #### Theme
 
-`theme:` picks the palette kubecom renders with. Three are built in:
+`theme:` picks the palette kubecom renders with. Six are built in:
 
 | Name | |
 |------|--|
-| `default` | dark-friendly, blue accent (used when `theme:` is absent) |
+| `default` | dark-friendly, blue accent (used when `theme:` is absent) — this is Catppuccin Frappé |
+| `catppuccin-frappe` | Catppuccin's mid-dark flavor — the same palette as `default` |
+| `catppuccin-macchiato` | Catppuccin, darker and cooler than Frappé |
+| `catppuccin-mocha` | Catppuccin's darkest flavor |
 | `monokai` | the classic warm dark palette, cyan accent |
 | `solarized-dark` | Solarized's dark variant |
+
+All built-ins are **dark** palettes: kubecom draws text over your terminal's own
+background rather than painting one, so a light palette (Catppuccin Latte,
+Solarized Light) would be unreadable on a dark terminal. Light themes wait on
+kubecom painting its own background.
+
+Ported palettes keep their upstream names and attribution: Catppuccin
+(MIT, © 2021 Catppuccin), Monokai, Solarized (MIT, © 2011 Ethan Schoonover).
 
 The name is matched ignoring case and surrounding space, but it is never guessed
 at: an unknown name launches on the default theme and shows a brief startup notice

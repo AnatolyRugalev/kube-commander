@@ -51,26 +51,14 @@ type Theme struct {
 }
 
 // DefaultTheme is kubecom's built-in theme: a dark-friendly palette with a blue
-// accent (a nod to the original kube-commander). Truecolor hex values; terminals
-// without truecolor downsample at write time via the Bubble Tea renderer, so no
-// per-terminal branching is needed here.
+// accent. It has always been Catppuccin's Frappé flavor, and says so since
+// THEME-01 — the values live once, in themes.go, and CatppuccinFrappeTheme
+// returns the same palette under its own name (D236 pt 2; the name `default`
+// cannot move, D169 pt 1). Truecolor hex values; terminals without truecolor
+// downsample at write time via the Bubble Tea renderer, so no per-terminal
+// branching is needed here.
 func DefaultTheme() Theme {
-	return Theme{
-		Name:        "default",
-		Foreground:  lipgloss.Color("#c6d0f5"),
-		Subtle:      lipgloss.Color("#838ba7"),
-		Primary:     lipgloss.Color("#8caaee"),
-		Selection:   lipgloss.Color("#414559"),
-		SelectionFg: lipgloss.Color("#c6d0f5"),
-		Border:      lipgloss.Color("#51576d"),
-		BorderFocus: lipgloss.Color("#8caaee"),
-		Header:      lipgloss.Color("#f2d5cf"),
-		StatusBarFg: lipgloss.Color("#c6d0f5"),
-		StatusBarBg: lipgloss.Color("#292c3c"),
-		Error:       lipgloss.Color("#e78284"),
-		Warn:        lipgloss.Color("#e5c890"),
-		Success:     lipgloss.Color("#a6d189"),
-	}
+	return catppuccinTheme("default", catppuccinFrappeFlavor)
 }
 
 // Styles is the derived set of lipgloss.Style values components render through,

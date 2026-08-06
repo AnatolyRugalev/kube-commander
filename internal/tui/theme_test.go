@@ -50,12 +50,21 @@ func TestWithThemeReachesTheComponents(t *testing.T) {
 // TestEveryBuiltinThemeRendersTheShell walks the registry through the real
 // constructor, so a theme added to `builtins` is exercised end-to-end here rather
 // than only in the styles package's own unit tests.
+//
+// The one pair exempted from distinctness is `default`/`catppuccin-frappe`: they
+// are deliberately the same palette under two names, because kubecom's default
+// has always *been* Catppuccin Frappé and D169 pt 1 will not let the name move
+// (D236 pt 2). The styles package pins that they stay equal.
 func TestEveryBuiltinThemeRendersTheShell(t *testing.T) {
+	sameOnPurpose := func(a, b string) bool {
+		return (a == "default" && b == "catppuccin-frappe") ||
+			(a == "catppuccin-frappe" && b == "default")
+	}
 	seen := map[string]string{}
 	for _, th := range styles.Themes() {
 		out := sizedWith(t, WithTheme(th)).View().Content
 		for name, prev := range seen {
-			if prev == out {
+			if prev == out && !sameOnPurpose(name, th.Name) {
 				t.Errorf("themes %q and %q render the shell identically", name, th.Name)
 			}
 		}

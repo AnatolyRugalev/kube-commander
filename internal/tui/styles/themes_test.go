@@ -2,6 +2,7 @@ package styles
 
 import (
 	"image/color"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +124,15 @@ func TestThemesResultIsNotSharedState(t *testing.T) {
 	}
 }
 
+// aliasPair is the registry's one deliberate duplicate: kubecom's `default`
+// palette has always *been* Catppuccin Frappé, and D169 pt 1 forbids renaming a
+// shipped theme, so the palette carries both names instead (D236 pt 2). Every
+// other pair of built-ins must render differently.
+func aliasPair(a, b string) bool {
+	return (a == "default" && b == "catppuccin-frappe") ||
+		(a == "catppuccin-frappe" && b == "default")
+}
+
 func TestBuiltinThemesRenderDistinctly(t *testing.T) {
 	// Selecting a theme must actually change what is drawn — two themes whose
 	// styles render identically would make the picker a no-op.
@@ -130,10 +140,56 @@ func TestBuiltinThemesRenderDistinctly(t *testing.T) {
 	for _, th := range Themes() {
 		out := New(th).Selection.Render("row")
 		for name, prev := range seen {
-			if prev == out {
+			if prev == out && !aliasPair(name, th.Name) {
 				t.Errorf("themes %q and %q render identically", name, th.Name)
 			}
 		}
 		seen[th.Name] = out
+	}
+}
+
+func TestDefaultThemeIsCatppuccinFrappe(t *testing.T) {
+	// The alias is a claim about values, not a comment: if a later leg retunes
+	// `default`, it has either moved off Frappé (and the docs, the README table
+	// and D236 pt 2 are now wrong) or it retuned Catppuccin's published palette.
+	def, frappe := themeColors(DefaultTheme()), themeColors(CatppuccinFrappeTheme())
+	for role, c := range def {
+		if c != frappe[role] {
+			t.Errorf("default.%s = %v, catppuccin-frappe.%s = %v — the alias has drifted",
+				role, c, role, frappe[role])
+		}
+	}
+	if DefaultTheme().Name != "default" {
+		t.Errorf("DefaultTheme().Name = %q, want %q — the name is API (D169 pt 1)",
+			DefaultTheme().Name, "default")
+	}
+}
+
+func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
+	// The family ships its dark flavors only: kubecom paints no app background,
+	// so Latte's dark text would land on whatever the terminal already is
+	// (D236 pt 3). Each name is `catppuccin-<flavor>` so the family filters as
+	// one in the theme picker.
+	want := map[string]bool{
+		"catppuccin-frappe":    true,
+		"catppuccin-macchiato": true,
+		"catppuccin-mocha":     true,
+	}
+	got := map[string]bool{}
+	for _, th := range Themes() {
+		if strings.HasPrefix(th.Name, "catppuccin-") {
+			got[th.Name] = true
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("catppuccin themes = %v, want %v", got, want)
+	}
+	for name := range want {
+		if !got[name] {
+			t.Errorf("built-in %q is missing", name)
+		}
+	}
+	if _, ok := ByName("catppuccin-latte"); ok {
+		t.Error("catppuccin-latte is registered, but no built-in sets an app background yet (D236 pt 3)")
 	}
 }

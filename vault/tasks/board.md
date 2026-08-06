@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — SEARCH-05 done: cluster search now has a focus, so enter commits the query into the result list and `hjkl` navigates there, which an always-open query field made impossible (D235); five feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — THEME-01 done: the popular schemes' licences are surveyed and the three Catppuccin dark flavors ship, taking the registry from three palettes to six (D236); four feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **THEME-01** Survey the popular color schemes, check each one's licence, and land the
-      Catppuccin family
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: First slice of feedback `2026-08-06-more-themes` (see the THEME section below).
+_(none)_
 
 ## Blocked
 
@@ -299,6 +296,41 @@ never fetched, so wanting one live means re-listing or watching, not widening th
 **the tick stays ungated** — a generation tag would need restarting in five places, and the
 failure it buys is a clock left off, which is the bug that was reported.
 
+### Built-in themes (THEME — feedback-driven, D236)
+Feedback `2026-08-06-more-themes`: ship ~10 built-in palettes, Catppuccin among them, and
+**check each one's licence rather than assuming MIT**. THEME-01 did the survey — the
+candidates, their licence files and the two that are not plain MIT are in
+`vault/knowledge/themes.md` — and landed the Catppuccin dark flavors, taking the registry
+from 3 to 6.
+
+Two constraints the remaining slices inherit (**D236** pt 2/3): **`default` and
+`catppuccin-frappe` are one palette under two names** (kubecom's default has always been
+Frappé and D169 pt 1 will not let the name move) and it is the registry's only permitted
+duplicate; and **no light palette lands until kubecom paints an app background** — today it
+sets one on three things only, so Latte's dark text would render on whatever the terminal
+already is.
+
+- [ ] **THEME-02** Port the five remaining schemes: `dracula`, `gruvbox-dark`, `nord`,
+      `rose-pine`, `tokyo-night`
+      status: todo | owner: — | added: 2026-08-06
+      notes: Takes the registry to 11, which is the feedback's "~10". Licences already
+      verified (`knowledge/themes.md`) — attribute each in its constructor doc comment per
+      D236 pt 1, and note that **Tokyo Night is Apache-2.0** and **gruvbox upstream has no
+      licence file** (cite the author's community fork). Transcribe from each project's own
+      data file, not a port. Same thirteen roles, same shape as `catppuccinTheme`; map the
+      status bar onto the scheme's *second*-darkest background, not its base (a bar that
+      matches the terminal background is invisible). README's theme table is hand-written
+      and lists every name — update it in the same leg. Splittable if the diff runs long.
+- [ ] **THEME-03** Give `Theme` a `Background` role and have the panes paint it, so a light
+      palette is possible
+      status: todo | owner: — | added: 2026-08-06
+      notes: The precondition D236 pt 3 names, and the only thing blocking `catppuccin-latte`
+      / `solarized-light`. By D169 pt 3 the new role must be set in *every* built-in in the
+      same leg (`TestBuiltinThemesAreComplete` enforces it) and the panes must actually
+      render it — a role nothing paints is worse than no role. Check what a painted
+      background does to the overlay/help surfaces and to a terminal whose own background
+      already matches. Ship the light palettes as a follow-up slice, not as a rider.
+
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
 and back pays the full cost again (reconnect, rediscover, re-watch), and the submitter
@@ -464,6 +496,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-01** Licence survey of the popular schemes + the Catppuccin dark flavors land, taking the registry to six — first slice of feedback `2026-08-06-more-themes` — done 2026-08-06 (D236)
 
 - [x] **SEARCH-05** Enter commits the cluster-search query into the result list, so `hjkl` navigates there and a second enter opens the hit — feedback `2026-08-06-cross-search-enter-navigate` — done 2026-08-06 (D235)
 

@@ -7,6 +7,82 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// catppuccinFlavor is one Catppuccin flavor's raw palette, named with the
+// upstream role names (https://github.com/catppuccin/palette, MIT, © 2021
+// Catppuccin) so a value can be checked against the source without decoding
+// kubecom's semantic mapping first. Every flavor maps onto Theme identically
+// (catppuccinTheme), which is what makes them one family rather than four
+// separately-tuned palettes.
+type catppuccinFlavor struct {
+	text, overlay1, blue, surface0, surface1 string
+	rosewater, mantle, red, yellow, green    string
+}
+
+// The four flavors' values, transcribed from catppuccin/palette. Latte (the
+// light flavor) is deliberately absent — kubecom paints no app background, so a
+// light palette's dark text lands on whatever the terminal is (D236 pt 3).
+var (
+	catppuccinFrappeFlavor = catppuccinFlavor{
+		text: "#c6d0f5", overlay1: "#838ba7", blue: "#8caaee",
+		surface0: "#414559", surface1: "#51576d", rosewater: "#f2d5cf",
+		mantle: "#292c3c", red: "#e78284", yellow: "#e5c890", green: "#a6d189",
+	}
+	catppuccinMacchiatoFlavor = catppuccinFlavor{
+		text: "#cad3f5", overlay1: "#8087a2", blue: "#8aadf4",
+		surface0: "#363a4f", surface1: "#494d64", rosewater: "#f4dbd6",
+		mantle: "#1e2030", red: "#ed8796", yellow: "#eed49f", green: "#a6da95",
+	}
+	catppuccinMochaFlavor = catppuccinFlavor{
+		text: "#cdd6f4", overlay1: "#7f849c", blue: "#89b4fa",
+		surface0: "#313244", surface1: "#45475a", rosewater: "#f5e0dc",
+		mantle: "#181825", red: "#f38ba8", yellow: "#f9e2af", green: "#a6e3a1",
+	}
+)
+
+// catppuccinTheme maps a flavor onto kubecom's semantic roles under the given
+// name. The mapping is the family's, not the flavor's: text/overlay1 for the two
+// text weights, blue as the accent, surface0/surface1 for selection and chrome,
+// rosewater for headers, mantle behind the status bar, and the flavor's own
+// red/yellow/green for the semantic trio.
+func catppuccinTheme(name string, f catppuccinFlavor) Theme {
+	return Theme{
+		Name:        name,
+		Foreground:  lipgloss.Color(f.text),
+		Subtle:      lipgloss.Color(f.overlay1),
+		Primary:     lipgloss.Color(f.blue),
+		Selection:   lipgloss.Color(f.surface0),
+		SelectionFg: lipgloss.Color(f.text),
+		Border:      lipgloss.Color(f.surface1),
+		BorderFocus: lipgloss.Color(f.blue),
+		Header:      lipgloss.Color(f.rosewater),
+		StatusBarFg: lipgloss.Color(f.text),
+		StatusBarBg: lipgloss.Color(f.mantle),
+		Error:       lipgloss.Color(f.red),
+		Warn:        lipgloss.Color(f.yellow),
+		Success:     lipgloss.Color(f.green),
+	}
+}
+
+// CatppuccinFrappeTheme is Catppuccin's Frappé flavor — the mid-dark one. It is
+// the same palette DefaultTheme renders: kubecom's default has always been
+// Frappé, and D169 pt 1 forbids renaming a shipped theme, so the palette carries
+// both names rather than one of them moving (D236 pt 2).
+func CatppuccinFrappeTheme() Theme {
+	return catppuccinTheme("catppuccin-frappe", catppuccinFrappeFlavor)
+}
+
+// CatppuccinMacchiatoTheme is Catppuccin's Macchiato flavor: darker and cooler
+// than Frappé, lighter than Mocha.
+func CatppuccinMacchiatoTheme() Theme {
+	return catppuccinTheme("catppuccin-macchiato", catppuccinMacchiatoFlavor)
+}
+
+// CatppuccinMochaTheme is Catppuccin's Mocha flavor — the darkest, and the one
+// most ports use as their default.
+func CatppuccinMochaTheme() Theme {
+	return catppuccinTheme("catppuccin-mocha", catppuccinMochaFlavor)
+}
+
 // MonokaiTheme is a port of the classic Monokai palette (the original's abandoned
 // theme engine shipped one; D6 kept the idea, not the code): a warm dark
 // background with a cyan accent, pink for failures and lime for healthy states.
@@ -57,6 +133,9 @@ func SolarizedDarkTheme() Theme {
 // resolvable by ByName() with nothing else to wire.
 var builtins = []func() Theme{
 	DefaultTheme,
+	CatppuccinFrappeTheme,
+	CatppuccinMacchiatoTheme,
+	CatppuccinMochaTheme,
 	MonokaiTheme,
 	SolarizedDarkTheme,
 }
