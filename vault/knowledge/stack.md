@@ -122,6 +122,16 @@ nothing useful; attach is the way.)
   streams `WatchEvent{ADDED/MODIFIED/DELETED/RESET/ERROR}` on a bounded channel;
   it opens the same request with `watch=true` via `.Stream()` and decodes the
   `metav1.WatchEvent` stream with `decodeTableRV`.
+  **Gotcha (AGE-01/D234): a Table cell is a *snapshot*, not a binding.** The
+  server-side printers render every column at the instant they answer, `AGE`
+  included (`printers.translateTimestampSince` → `duration.HumanDuration`), so a
+  row whose object is never modified keeps the age it was listed with for as long
+  as the pane stays open — the watch is working, there is simply no delta to
+  re-print it. `AGE` is therefore re-derived client-side in
+  `internal/kube/age.go` from `Row.Created` (also carried out of the row's
+  `PartialObjectMetadata`) using the printers' own `HumanDuration`, driven by a
+  one-second tick in `internal/tui/age.go`. No other column can be fixed this way:
+  the metadata kubecom holds cannot re-answer questions it never asked.
 - **discovery** + **restmapper** — GVK↔GVR, namespaced?, verbs; async + cached.
   On-disk cache landed M1-04 (D32): `discovery/cached/disk`'s `CachedDiscoveryClient`
   (kubectl's own), base of the deferred RESTMapper. Cache dir

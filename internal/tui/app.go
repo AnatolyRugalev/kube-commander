@@ -1149,6 +1149,10 @@ func (m Model) Init() tea.Cmd {
 	if m.discoverer != nil {
 		cmds = append(cmds, func() tea.Msg { return startDiscoveryMsg{} })
 	}
+	// The age clock starts with the program and runs for its life (age.go): it is
+	// unconditional because it is free on the ticks that change nothing, and a
+	// gated one is a thing that can be left off.
+	cmds = append(cmds, scheduleAgeTick())
 	return tea.Batch(cmds...)
 }
 
@@ -1344,6 +1348,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case metricsTickMsg:
 		return m.handleMetricsTick(msg)
+
+	case ageTickMsg:
+		return m.handleAgeTick()
 
 	case authDiagMsg:
 		return m.handleAuthDiagMsg(msg)

@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — PAL-07 done: esc now closes a palette stage a shortcut key opened instead of rewinding to a verb list the reader never saw, while backspace keeps unwinding the line (D233); seven feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-06 — AGE-01 done: the AGE column is re-derived on the client from each row's creation timestamp on a one-second tick, because a server-printed cell is a snapshot and an idle row never gets re-printed (D234); six feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AGE-01** The AGE column is recomputed from the object's creation timestamp on a
-      clock tick, not frozen at the string the server printed
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
-      notes: Feedback `2026-08-06-age-column-stale`. Every cell in the browse table is a
-      string the API server's printer rendered once, so AGE is only as fresh as the last
-      watch delta for that row — an idle pane drifts stale indefinitely. Carry each row's
-      `creationTimestamp` out of the Table's embedded object metadata and re-derive the
-      age cell locally on a tick, with kubectl's own `duration.HumanDuration`.
+_(none)_
 
 ## Blocked
 
@@ -278,6 +271,20 @@ or D232 as evidence that an auth failure can no longer corrupt the layout** (D23
       lost by silencing the raw stream.
       → knowledge: knowledge/stack.md (TUI rendering) · D232 pt 3
 
+### Live table freshness (AGE — feedback-driven, D234) — closed at AGE-01
+Feedback `2026-08-06-age-column-stale`: an open pane's AGE column drifts stale. **Closed** at
+AGE-01: every cell of a server-printed Table is rendered once, when the server answers, so an
+object nothing modifies emits no delta and its age is pinned to when it was listed. AGE is now
+re-derived on the client from the row's own `creationTimestamp` with the printers' own
+`duration.HumanDuration`, on an unconditional one-second tick (`internal/kube/age.go`,
+`internal/tui/age.go`). Per-leg detail: `vault/journal/`.
+
+The two constraints a later leg must not walk into (**D234** pt 2/4): **AGE is the only cell
+kubecom recomputes** — every other column is the server's reading of an object body kubecom
+never fetched, so wanting one live means re-listing or watching, not widening this seam; and
+**the tick stays ungated** — a generation tag would need restarting in five places, and the
+failure it buys is a clock left off, which is the bug that was reported.
+
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
 and back pays the full cost again (reconnect, rediscover, re-watch), and the submitter
@@ -443,6 +450,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **AGE-01** AGE is re-derived from the object's own timestamp on a tick, instead of staying the string the server printed once — feedback `2026-08-06-age-column-stale` — done 2026-08-06 (D234)
 
 - [x] **PAL-07** Esc closes a key-opened palette stage; backspace keeps rewinding the line — feedback `2026-08-06-action-menu-esc-behavior` — done 2026-08-06 (D233)
 

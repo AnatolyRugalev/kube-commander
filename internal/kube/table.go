@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -49,9 +50,18 @@ type ObjectRef struct {
 // Row is one row of a server-printed table: Cells holds the printed values in
 // column order (strings, numbers, or null, matching the Column types); Object is
 // the identity of the underlying object.
+//
+// Created is the object's creation timestamp, carried out of the same embedded
+// metadata ObjectRef comes from. It is the only field here that is not a printed
+// value, and it exists because a printed value is printed *once*: the server
+// renders AGE at the moment it answers, so the cell is frozen until the next
+// watch delta for that row. Keeping the instant lets the display re-derive the
+// age locally on a clock tick (age.go, D234). Zero when the row carried no
+// parsable metadata — the degraded row of principle 3.
 type Row struct {
-	Cells  []any
-	Object ObjectRef
+	Cells   []any
+	Object  ObjectRef
+	Created time.Time
 }
 
 // Table is the TUI-facing view of a server-printed resource list: the column
@@ -106,6 +116,7 @@ func decodeTableRV(raw []byte) (*Table, string, error) {
 					Name:      pom.Name,
 					UID:       string(pom.UID),
 				}
+				row.Created = pom.CreationTimestamp.Time
 			}
 		}
 		t.Rows = append(t.Rows, row)

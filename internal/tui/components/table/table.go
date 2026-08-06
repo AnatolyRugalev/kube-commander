@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -380,6 +381,30 @@ func (m *Model) ApplyEvent(ev kube.WatchEvent) {
 	m.restoreSelection(selUID)
 	m.clampOffset()
 	m.clampHOffset()
+}
+
+// RefreshAges re-derives the AGE column from each row's creation timestamp
+// against now, reporting whether anything changed (AGE-01/D234). The embedder
+// calls it on a clock tick: every cell here is a string the server printed once,
+// so an untouched row's age is frozen at the moment of its last watch delta, and
+// a pane left open drifts stale for as long as it is left open.
+//
+// It re-derives the whole view rather than only rewriting cells, because a wider
+// age ("9h" → "10h", "59m" → "1h2m") has to widen the column — otherwise padRight
+// pads past the measured width and shifts every column to its right on that one
+// row. The re-derivation is skipped entirely when no cell moved, which is the
+// common tick; the selection, scroll and filter survive it exactly as they do a
+// watch delta.
+func (m *Model) RefreshAges(now time.Time) bool {
+	if !m.full.RefreshAge(now) {
+		return false
+	}
+	selUID := m.selectedUID()
+	m.applyFilter()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+	m.clampHOffset()
+	return true
 }
 
 // selectedUID is the object UID of the highlighted row, or "" when the table is

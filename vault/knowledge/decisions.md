@@ -6372,3 +6372,37 @@ this decision splits them. It supersedes D207 pt 2 for esc only.
    than an accident, and it is: the query is text the reader typed and can see, esc is what
    discards an input field's contents everywhere, and unwinding the visible thing first is
    the same ordering as pt 1. No leg may make esc skip a non-empty query to close faster.
+
+## D234 — A printed cell that is really a clock is re-derived locally; nothing else in the table is (2026-08-06, AGE-01)
+
+Feedback `2026-08-06-age-column-stale`: leave a resource pane open and the AGE column stops
+telling the truth. It is not a watch failure — the cell is exactly what the API server's
+printer rendered, and the printer runs once per response. `kubectl get` prints and exits, so
+the value is never wrong for it; kubecom keeps the pane up, and a row nothing modifies
+produces no deltas, so its age is pinned to whenever it was last listed.
+
+1. **AGE is re-derived on the client, from the object's own `creationTimestamp`, with the
+   server's formatter.** `kube.Row` carries `Created` out of the Table's embedded object
+   metadata (the same metadata `ObjectRef` comes from) and `kube.HumanAge` formats it with
+   `k8s.io/apimachinery/pkg/util/duration.HumanDuration` — the function the server-side
+   printers call. Using a hand-rolled formatter here would make a re-derived cell disagree
+   with a freshly printed one on the compound forms (`5d3h`, `2m30s`), so a leg may not
+   substitute one.
+2. **AGE is the only cell kubecom recomputes.** Every other value in a server-printed table
+   is the server's answer to a question kubecom did not ask and cannot re-answer from the
+   metadata it holds; server-side printing exists precisely so kubecom shows kubectl's
+   columns without knowing what they mean (`tableAcceptHeader`). A future leg that wants
+   another column live must fix it by re-listing or by watching, not by growing this seam.
+   The age column is identified by header name, narrowed to string/date cells, so a CRD's
+   numeric field named "Age" is never overwritten.
+3. **A row kubecom cannot date keeps the server's string.** `Created` is zero for a row whose
+   object metadata was absent or unparsable (principle 3's degraded row). Computing from the
+   zero time would print `55y` — confidently wrong, in a column with no way to signal doubt —
+   so a stale value is preferred to a fabricated one.
+4. **The clock that drives it is unconditional and self-perpetuating.** `Init` arms a
+   one-second tick and the handler re-arms it, with no generation tag, no gating on a table
+   or a cluster, and no restart on a kind change / re-scope / drill-down / reconnect / context
+   switch. It is affordable because the refresh returns early when no age string moved and
+   costs nothing outside the model — unlike the metrics poll (D155 pt 3), whose every tick
+   issues a request and therefore *needs* that machinery. Do not "optimise" this into a gated
+   tick: the failure it buys is a clock that can be left off, which is the reported bug.

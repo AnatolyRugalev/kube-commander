@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -714,8 +715,8 @@ func TestInitStartsDiscovery(t *testing.T) {
 	if initCmd == nil {
 		t.Fatal("Init should kick off discovery when a discoverer is wired")
 	}
-	if _, ok := initCmd().(startDiscoveryMsg); !ok {
-		t.Fatalf("Init should emit startDiscoveryMsg, got %T", initCmd())
+	if _, ok := findMsg[startDiscoveryMsg](initMsgs(t, initCmd)); !ok {
+		t.Fatal("Init should emit startDiscoveryMsg")
 	}
 
 	next, cmd := m.Update(startDiscoveryMsg{})
@@ -732,15 +733,55 @@ func TestInitStartsDiscovery(t *testing.T) {
 }
 
 // TestInitInertWithoutDiscoverer proves a model with no discoverer never starts
-// discovery: Init has no command and the spinner stays off.
+// discovery: nothing on Init asks for it and the spinner stays off. Init is not
+// empty — the age clock starts with the program either way (AGE-01) — so what is
+// asserted is the absence of the discovery hop, not the absence of commands.
 func TestInitInertWithoutDiscoverer(t *testing.T) {
 	m := sized(t) // no WithDiscoverer
-	if cmd := m.Init(); cmd != nil {
-		t.Fatalf("Init should be a no-op without a discoverer, got a command yielding %T", cmd())
+	if _, ok := findMsg[startDiscoveryMsg](initMsgs(t, m.Init())); ok {
+		t.Fatal("Init should not start discovery without a discoverer")
 	}
 	if m.status.Discovering() {
 		t.Fatal("no discoverer means the spinner never starts")
 	}
+}
+
+// initMsgs runs an Init command and flattens the batch it returns, so a test can
+// assert on one startup message without depending on how many others there are.
+// Init batches a seeded startup toast, the discovery hop and the age clock, and
+// the branches are run concurrently because one of them is a timer.
+func initMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	out := make([]tea.Msg, len(batch))
+	var wg sync.WaitGroup
+	for i, c := range batch {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out[i] = c()
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
+// findMsg returns the first message of type T among msgs.
+func findMsg[T tea.Msg](msgs []tea.Msg) (T, bool) {
+	for _, msg := range msgs {
+		if got, ok := msg.(T); ok {
+			return got, true
+		}
+	}
+	var zero T
+	return zero, false
 }
 
 // TestMenuExtrasFoldedIn proves WithMenuExtras merges a per-context menu entry
@@ -784,10 +825,9 @@ func TestStartupErrorSurfacesToast(t *testing.T) {
 	if initCmd == nil {
 		t.Fatal("Init should emit the seeded startup error")
 	}
-	msg := initCmd()
-	errMsg, ok := msg.(ErrorMsg)
+	errMsg, ok := findMsg[ErrorMsg](initMsgs(t, initCmd))
 	if !ok {
-		t.Fatalf("Init should yield the ErrorMsg toast, got %T", msg)
+		t.Fatal("Init should yield the ErrorMsg toast")
 	}
 	next, clearCmd := m.Update(errMsg)
 	m = next.(Model)
