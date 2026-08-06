@@ -7,7 +7,10 @@ _Last updated: 2026-08-06 — THEME-01 done: the popular schemes' licences are s
 
 ## In Progress
 
-_(none)_
+- [ ] **PAL-08** The palette lists a command's **name** beside its description, in two
+      columns
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06
+      notes: Feedback `2026-08-06-palette-two-columns` (see the PAL section below).
 
 ## Blocked
 
