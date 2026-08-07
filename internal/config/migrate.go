@@ -125,7 +125,7 @@ func legacyMenuNote(lc *legacyConfig) string {
 	return fmt.Sprintf(
 		"%d legacy menu %s (%s) %s not migrated automatically: the old config "+
 			"stored no API version/resource, which the per-context menu now requires. "+
-			"Re-add them in a per-context menu file (see README: Per-context menu).",
+			"Re-add them in a per-context menu file (see docs/configuration.md: Per-context menu).",
 		n, plural(n, "resource", "resources"), strings.Join(names, ", "),
 		plural(n, "was", "were"))
 }

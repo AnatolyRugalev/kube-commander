@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — CTX-MEM-01 done: the pane-memory feedback is split from CTX-WARM into its own line (D240), where a remembered pane is an address on the per-context state file rather than anything live, so it is not gated on the dogfood; one feedback item remains (the README rewrite) and it preempts the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — DOC-01 done: the README is organised around the capability surface with install and configuration reference moved out to `docs/` (D241), and with the inbox now empty the board is next — CTX-MEM-02 is the top unblocked item. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **DOC-01** Restructure the README around what kubecom can do; reference out to `docs/`
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
-      notes: The outline half of feedback `2026-08-07-readme-structural-rewrite` — see the
-      **DOC** section below for the split and what each half owns.
+_(none)_
 
 ## Blocked
 
@@ -473,6 +470,7 @@ after the payoff, push reference to `docs/`, and end up shorter. The feedback it
 for the split — outline first, prose after — because a 587-line rewrite in one commit is
 not reviewable.
 
+- [x] **DOC-01** README restructured around the capability surface; install/config out to `docs/` — done 2026-08-07 (D241)
 - [ ] **DOC-02** Prose pass over the restructured README
       status: todo | owner: — | added: 2026-08-07 | blocked-on: DOC-01
       notes: DOC-01 moves paragraphs under headings largely as they were, so the prose is
@@ -612,6 +610,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **DOC-01** README restructured around the capability surface (587 → 438 lines); install and configuration reference moved to `docs/install.md` + `docs/configuration.md`; the three install guards now scan the doc set — outline half of feedback `2026-08-07-readme-structural-rewrite` — done 2026-08-07 (D241)
 
 - [x] **CTX-MEM-01** Triaged the pane-memory feedback into the CTX-MEM line, split from CTX-WARM — feedback `2026-08-06-context-switch-pane-memory` — done 2026-08-07 (D240)
 

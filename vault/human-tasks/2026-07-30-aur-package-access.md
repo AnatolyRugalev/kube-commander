@@ -101,8 +101,10 @@ kubecom version           # must report the tag, a real commit and a build date,
 kubecom                   # must actually launch
 ```
 
-Then replace the "Arch Linux users, note the rename" paragraph under
-[Install](../../README.md#install) with the real path:
+Then replace the "Arch Linux" bullet under "Package managers" in
+[`docs/install.md`](../../docs/install.md) — since DOC-01 that is where the install
+paths live, and the README carries only the short block that links to it — with the
+real path:
 
 ```markdown
 ### Arch Linux (AUR)

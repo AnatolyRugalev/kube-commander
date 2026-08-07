@@ -75,9 +75,11 @@ criterion.
 
 Set `Status: done`, add a `## Result`, and the next leg will:
 
-- drop the README's "why not `@v1`" explainer and restore
-  `go install …/cmd/kubecom@latest` as the primary install line (FB-go-install);
-- retire the "no version has been tagged yet" status note;
+- drop the "why not `@v1`" explainer and restore `go install …/cmd/kubecom@latest`
+  as the primary install line (FB-go-install) — since DOC-01 that explainer lives in
+  [`docs/install.md`](../../docs/install.md), and the README's short install block
+  and its `v1`-checkout line change with it;
+- retire the "no version has been tagged yet" status note in the README;
 - tick the M5 exit criteria the tag closes, plus the DoD's "Linux + macOS release
   artifacts via goreleaser + GitHub Actions" box;
 - close the resolved GitHub issues (#8, #28, #68, #76, #80, #83, #84, #85, #86, #87,

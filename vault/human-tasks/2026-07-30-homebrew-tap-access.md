@@ -82,8 +82,9 @@ kubecom version          # must report the tag, a real commit and a build date, 
 kubecom                  # must actually launch — see the Gatekeeper note below
 ```
 
-Then add the install path to `README.md`, replacing the "planned" paragraph under
-[Install](../../README.md#install):
+Then add the install path to [`docs/install.md`](../../docs/install.md), replacing
+the "Homebrew" bullet under "Package managers" — since DOC-01 that is where the
+install paths live, and the README carries only the short block that links to it:
 
 ```markdown
 ### Homebrew (macOS)

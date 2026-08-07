@@ -99,7 +99,9 @@ raise come back done, not when the config that would produce them compiles.
       the browse UI was yet to land (stale since M2-RUN, 2026-07-20), rewrote it, and added
       the release-archive install path the three package paths had left implicit. The
       remaining README edits are the ones only a tag can make true (drop the `@v1` explainer,
-      restore `go install …@latest`), listed as step 3 of the tag human task. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
+      restore `go install …@latest`), listed as step 3 of the tag human task — and since
+      **DOC-01 ✅ 2026-08-07** (D241) those live in `docs/install.md`, the README keeping only
+      a short install block that links to it. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
       landed the tape, the `make` target and the guards (D181), and the README stays
       deliberately image-free — and is test-forced to — until human task
       `2026-07-30-record-screencast` brings back a real recording.)

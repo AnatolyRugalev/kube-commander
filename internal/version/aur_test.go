@@ -173,25 +173,20 @@ func TestAURPackageHonorsItsConstraints(t *testing.T) {
 	}
 }
 
-// aurPackageRef matches an AUR package name mentioned in the README as code.
+// aurPackageRef matches an AUR package name mentioned in the install docs as code.
 var aurPackageRef = regexp.MustCompile("`(kubecom-bin|kube-commander-bin|kubecom-git)`")
 
-// TestReadmeAURPackageMatchesTheConfig keeps the README's Arch instructions
+// TestReadmeAURPackageMatchesTheConfig keeps the documented Arch instructions
 // pinned to the name that is actually published.
 //
-// The README currently names `kubecom-bin` only to warn a returning 2020 user
+// The docs currently name `kubecom-bin` only to warn a returning 2020 user
 // that it is a different package from `kube-commander` and not an upgrade of it,
 // so the guard is live from this leg — and it becomes load-bearing when human
 // task `2026-07-30-aur-package-access` turns that warning into an install line.
 func TestReadmeAURPackageMatchesTheConfig(t *testing.T) {
 	cfg := readAURs(t)
 
-	data, err := os.ReadFile(readmePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", readmePath, err)
-	}
-
-	refs := aurPackageRef.FindAllStringSubmatch(string(data), -1)
+	refs := aurPackageRef.FindAllStringSubmatch(installDocText(t), -1)
 	if len(refs) == 0 {
 		return // dormant: no AUR package documented yet
 	}
@@ -203,7 +198,7 @@ func TestReadmeAURPackageMatchesTheConfig(t *testing.T) {
 
 	for _, ref := range refs {
 		if !slices.Contains(want, ref[1]) {
-			t.Errorf("README names the AUR package %q, but %s publishes %v",
+			t.Errorf("the install docs name the AUR package %q, but %s publishes %v",
 				ref[1], goreleaserPath, want)
 		}
 	}

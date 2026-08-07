@@ -317,20 +317,15 @@ func TestReleaseWorkflowCanPublishTheDockerImage(t *testing.T) {
 	}
 }
 
-// dockerImageRef matches a ghcr.io image reference written as code in the README.
+// dockerImageRef matches a ghcr.io image reference written as code in the docs.
 var dockerImageRef = regexp.MustCompile(`ghcr\.io/[a-z0-9._/-]+`)
 
-// TestReadmeDockerImageMatchesTheConfig keeps the README's `docker run` line
+// TestReadmeDockerImageMatchesTheConfig keeps the documented `docker run` line
 // pinned to the image the release actually publishes. A stale registry path in
 // an install instruction is worse than none: it fails with "not found", which
 // reads as "this project is broken" rather than "this doc is old".
 func TestReadmeDockerImageMatchesTheConfig(t *testing.T) {
 	cfg := readDockers(t)
-
-	data, err := os.ReadFile(readmePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", readmePath, err)
-	}
 
 	published := map[string]bool{}
 	for _, d := range cfg.DockersV2 {
@@ -339,17 +334,17 @@ func TestReadmeDockerImageMatchesTheConfig(t *testing.T) {
 		}
 	}
 
-	refs := dockerImageRef.FindAllString(string(data), -1)
+	refs := dockerImageRef.FindAllString(installDocText(t), -1)
 	if len(refs) == 0 {
 		return // dormant: no Docker install path documented yet
 	}
 	for _, ref := range refs {
-		// The README writes tags; the config declares them separately.
+		// The docs write tags; the config declares them separately.
 		if image, _, ok := strings.Cut(ref, ":"); ok {
 			ref = image
 		}
 		if !published[ref] {
-			t.Errorf("README names the image %q, which %s does not publish (it publishes %v)",
+			t.Errorf("the install docs name the image %q, which %s does not publish (it publishes %v)",
 				ref, goreleaserPath, keysOf(published))
 		}
 	}

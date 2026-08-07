@@ -10,7 +10,36 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-var readmePath = filepath.Join("..", "..", "README.md")
+// installDocs are the user-facing documents that carry install instructions: the
+// README's short install section and the `docs/install.md` it links to, which is
+// where the per-path detail (archives, container, Homebrew, AUR) moved when the
+// README was restructured around the capability surface (DOC-01/D241).
+//
+// The three README guards below read this *set* rather than the README alone. A
+// guard that keys on one file silently goes dormant the day a section is
+// relocated — each of them returns early on "no install path documented yet" —
+// so relocating the text would have retired three live checks and nothing would
+// have failed.
+var installDocs = []string{
+	filepath.Join("..", "..", "README.md"),
+	filepath.Join("..", "..", "docs", "install.md"),
+}
+
+// installDocText returns the concatenated contents of installDocs. Concatenated
+// because every guard over it is a scan for references, not a per-file claim.
+func installDocText(t *testing.T) string {
+	t.Helper()
+	var b strings.Builder
+	for _, p := range installDocs {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read %s: %v", p, err)
+		}
+		b.Write(data)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
 
 // caskConfig is the sliver of .goreleaser.yml these guards read.
 type caskConfig struct {
@@ -130,10 +159,10 @@ func assertReleaseStepPassesSecret(t *testing.T, secret string) {
 	}
 }
 
-// brewTap matches a `brew tap <owner>/<name>` line in the README.
+// brewTap matches a `brew tap <owner>/<name>` line in the install docs.
 var brewTap = regexp.MustCompile(`brew\s+tap\s+([\w.-]+)/([\w.-]+)`)
 
-// TestReadmeBrewTapMatchesTheCask keeps the README's Homebrew instructions and
+// TestReadmeBrewTapMatchesTheCask keeps the documented Homebrew instructions and
 // the tap goreleaser publishes to from drifting apart.
 //
 // Homebrew's shorthand drops the `homebrew-` prefix — the repository
@@ -142,7 +171,7 @@ var brewTap = regexp.MustCompile(`brew\s+tap\s+([\w.-]+)/([\w.-]+)`)
 // A wrong tap is a silent failure of the worst kind: the command works, it just
 // taps a repository that does not exist or is not ours.
 //
-// The README names the tap today only to tell a returning 2020 user that its
+// The docs name the tap today only to tell a returning 2020 user that its
 // address survives and that what it currently serves is the old formula, so the
 // guard is live from this leg. It stays live — and becomes load-bearing rather
 // than merely correct — when human task `2026-07-30-homebrew-tap-access` turns
@@ -150,12 +179,7 @@ var brewTap = regexp.MustCompile(`brew\s+tap\s+([\w.-]+)/([\w.-]+)`)
 func TestReadmeBrewTapMatchesTheCask(t *testing.T) {
 	cfg := readCasks(t)
 
-	data, err := os.ReadFile(readmePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", readmePath, err)
-	}
-
-	taps := brewTap.FindAllStringSubmatch(string(data), -1)
+	taps := brewTap.FindAllStringSubmatch(installDocText(t), -1)
 	if len(taps) == 0 {
 		return // dormant: no Homebrew install path documented yet
 	}
@@ -169,7 +193,7 @@ func TestReadmeBrewTapMatchesTheCask(t *testing.T) {
 		// `brew tap owner/x` resolves to the repository `owner/homebrew-x`.
 		repo := tap[1] + "/homebrew-" + tap[2]
 		if !want[repo] {
-			t.Errorf("README says `brew tap %s/%s`, i.e. the repository %s, which no cask in %s publishes to",
+			t.Errorf("the install docs say `brew tap %s/%s`, i.e. the repository %s, which no cask in %s publishes to",
 				tap[1], tap[2], repo, goreleaserPath)
 		}
 	}

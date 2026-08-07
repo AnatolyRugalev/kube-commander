@@ -6638,3 +6638,34 @@ rather than quietly made. It is recorded here, before any code remembers anythin
    time away; restoring it is an object re-resolve that can fail, and silently landing in
    a *different* scope is worse than landing on the plain list. Only a leg that can make
    that failure legible on screen should take it.
+
+## D241 — The README is the narrative and `docs/` is the reference; a doc guard scans the doc set, not one file (2026-08-07, DOC-01)
+
+From feedback `2026-08-07-readme-structural-rewrite`: the README had grown to 587 lines by
+accretion — every leg that added a capability appended a paragraph under one flat `## Usage`
+heading, install sat ahead of a single concrete thing kubecom does, and config/theme/menu
+reference was interleaved with the walkthrough. D68 ("a leg that changes install/launch/
+config/usage updates the README in the same leg") is what produced that, and it stands —
+this decision says *where* in the doc set that update goes.
+
+1. **The README answers "is this for me", organised by capability.** What kubecom is, why,
+   then what it can do under headings a reader can skim — browse/navigate, find, inspect,
+   act, make it yours, when something doesn't work — then a short install block, then
+   pointers. A new capability goes **under the heading it belongs to**, not appended at the
+   end; a leg that cannot find a heading for what it added has found a missing heading, not
+   a reason to append.
+
+2. **Reference material lives in `docs/`.** Install paths and their caveats in
+   `docs/install.md`, the config file / themes / per-context menus / pins / remembered
+   namespace / 2020 migration in `docs/configuration.md`, keys in the generated
+   `docs/keybindings.md`. The README may restate a reference fact only in the compressed
+   form a reader needs to decide something, and links to the page that owns it. The test of
+   whether a paragraph belongs in the README is whether it reads as *interruption* front to
+   back — if it is looked up rather than read, it is reference.
+
+3. **A guard over user-facing docs reads the doc set, not `README.md`.** The three install
+   guards in `internal/version` (Homebrew tap, AUR package name, ghcr.io image) each return
+   early when the doc names no install path — so keying them on one file means relocating a
+   section silently retires the guard, and nothing fails. They now scan `installDocs`
+   (README + `docs/install.md`). Any future guard over prose does the same: name the set the
+   claim can legitimately live in, never the file it happens to live in today.
