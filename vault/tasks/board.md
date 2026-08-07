@@ -7,7 +7,9 @@ _Last updated: 2026-08-07 — DOC-01 done: the README is organised around the ca
 
 ## In Progress
 
-_(none)_
+- [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
+      notes: See the CTX-MEM section below for the full brief (D240).
 
 ## Blocked
 
