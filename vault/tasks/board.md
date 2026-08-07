@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — FILT-02 done: the `/` filter now highlights what it matched, on the cursor row too (D239), leaving SEARCH-06 as the cluster-search half; two feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — CTX-MEM-01 done: the pane-memory feedback is split from CTX-WARM into its own line (D240), where a remembered pane is an address on the per-context state file rather than anything live, so it is not gated on the dogfood; one feedback item remains (the README rewrite) and it preempts the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CTX-MEM-01** Triage feedback `2026-08-06-context-switch-pane-memory` into a CTX-MEM line
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
+_(none)_
 
 ## Blocked
 
@@ -389,6 +388,10 @@ measurement** rather than on the assumption that reconnecting is slow.
 CTX-WARM-02/03 additionally wait on `2026-07-29-context-switch-live-dogfood` pts 3-6 — the
 leak checks — so the teardown baseline is known-good before it is optimised (D196 pt 5).
 
+This line is the **speed** half of "switching should feel like tabs". The other half — the
+pane you were on coming back with you — is **CTX-MEM** below, and D240 pt 1 keeps the two
+apart: only this one retains anything live, so only this one is gated.
+
 - [x] **CTX-WARM-01** Triage the warmth feedback; time the switch into the diagnostic log
       — done 2026-08-02 (D196)
 - [ ] **CTX-WARM-02** Retain the previous context's client in the connector
@@ -414,6 +417,48 @@ leak checks — so the teardown baseline is known-good before it is optimised (D
       exceeds one entry however many contexts are visited, and that a forced refresh
       invalidates rather than trusts it (D196 pt 4). Then a line on the dogfood task asking
       for the switch-back timing again, to confirm the win is real on a real cluster.
+
+### Context pane memory (CTX-MEM — feedback-driven, D240)
+Raised by feedback `2026-08-06-context-switch-pane-memory`: every switch resets the pane,
+so flipping to another context and back starts over instead of returning you to the
+resource you had open. D240 splits it from CTX-WARM before any code remembers anything:
+that line is *speed* (live retention, gated), this one is *place*. What comes back with
+you is an **address written to the context's own state file** — the same `ContextState`
+seam the namespace, menu extras and pins already ride (M4-05/D163) — so the shell still
+holds nothing from a context it is not on and `resetCluster` stays unconditional (D196
+pt 1). Nothing here is gated on the dogfood: no client, no watch and no row survives a
+switch, only a GVR.
+
+- [x] **CTX-MEM-01** Triage the pane-memory feedback into this line — done 2026-08-07 (D240)
+- [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
+      status: todo | owner: — | added: 2026-08-07
+      notes: `config.State` grows a `lastResource` (a `MenuResource`-shaped GVR beside
+      `lastNamespace`); `tui.ContextState` grows the field and a writer seam alongside
+      `NamespacePersister`/`PinPersister`, written when a drill-in changes `m.current`;
+      `handleClusterConnected` replays it after `resetCluster`, as the switch already
+      replays `msg.state.Namespace`. Restore at launch too (D240 pt 4) — `run.go` already
+      reads the same file for the namespace. **The degrade is part of this slice, not a
+      follow-up**: a remembered GVR the new cluster does not serve (a CRD that is not
+      installed, an RBAC denial) leaves the seed menu and the welcome pane, silently
+      (D240 pt 3) — restore is a convenience and must never be the reason a switch shows
+      an error.
+- [ ] **CTX-MEM-03** Bring the table's own view state back with the pane
+      status: todo | owner: — | added: 2026-08-07 | blocked-on: CTX-MEM-02
+      notes: The feedback names "where I'd drilled in, scroll position". Sort column +
+      direction (M2-13a) is plainly durable and is a column name, so it stores like the
+      GVR. The cursor is the open question and this slice's real work: a row identity is
+      a UID (D98), which is meaningless on another cluster and stale on this one after
+      time away — so decide, and record, whether the cursor is remembered by UID with a
+      miss falling back to the top row, or whether it is deliberately session-only. A
+      filter is a transient question and the default answer is no; argue it if you
+      disagree. Whatever lands must keep D240 pt 3: a miss is silent, never an error.
+- [ ] **CTX-MEM-04** The drill-in scope — deferred, with the reason
+      status: todo | owner: — | added: 2026-08-07 | blocked-on: CTX-MEM-02
+      notes: Deferred by D240 pt 6, kept on the board so the deferral is visible rather
+      than lost. A children scope names an owner object (D165), so restoring it is an
+      object re-resolve that can fail — and landing in a *different* scope silently is
+      worse than landing on the plain list. Take this only with a way to say on screen
+      that the owner is gone; until then CTX-MEM-02's restore stops at the plain table.
 
 ### Board hygiene (BOARD — agent-found)
 The board is read on every Orient, so its size is a cost every leg pays and no leg sees.
@@ -542,6 +587,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CTX-MEM-01** Triaged the pane-memory feedback into the CTX-MEM line, split from CTX-WARM — feedback `2026-08-06-context-switch-pane-memory` — done 2026-08-07 (D240)
 
 - [x] **FILT-02** The `/` filter's matched text is highlighted in the rows it kept, cursor row included — first half of feedback `2026-08-06-search-highlight-matches` — done 2026-08-07 (D239)
 

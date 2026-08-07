@@ -6588,3 +6588,53 @@ and will need its own, because a fuzzy hit's matched runes are not a substring.
    horizontal scroll offset is still applied once, at paint time. A future span kind (a diff
    marker, a stale-row wash) adds a flag to `roleSpan` and a case to `spanStyle`; it must not
    extend `cellRole`, whose constants are ordered by severity and merged with `>`.
+
+## D240 — Landing where you left off is per-context *state*, not a warm cluster: pane memory is an inert bookmark on the ContextState seam (2026-08-07, CTX-MEM-01)
+
+From feedback `2026-08-06-context-switch-pane-memory`: "flip to context B, look at its
+`pods` pane, flip back to context A, and be looking at what I was looking at before". The
+submitter flagged that this pushes on D196 and asked for the resolution to be recorded
+rather than quietly made. It is recorded here, before any code remembers anything.
+
+1. **The feedback is two asks and they belong on two lines.** "Like flipping a tab" is
+   *fast* (CTX-WARM, D196 — retain the connector's client/discovery, gated on measurement
+   and on the leak checks in `2026-07-29-context-switch-live-dogfood`) **and** *where I
+   left off* (CTX-MEM, this line). Only the first needs anything live to survive a switch,
+   so only the first is gated by D196 pt 5. Splitting them is what lets the half the
+   submitter actually described — the pane, not the millisecond — proceed now.
+
+2. **Pane memory rides the existing `ContextState` seam (M4-05/D163), never a shell-side
+   map of departed contexts.** It is written to the context's own state file when it
+   changes and read back by `LoadContextState` on the way in, exactly as the namespace,
+   the menu extras and the pins already are. So **D196 pt 1 stays literally true**: the
+   shell holds nothing belonging to a context it is not on, and the teardown stays
+   unconditional. A leg that instead keeps a `map[context]paneState` on the `Model` is
+   contradicting this decision, not implementing it.
+
+3. **What is remembered is an address, not data.** A GVR (plus the namespace D163 already
+   carries) — never rows, never an object's contents, never a client. It is re-resolved
+   against the new connection like any other drill-in, and it is **never trusted**: a
+   remembered kind the cluster does not serve degrades to the seed menu and the welcome
+   pane with no error (principle 3). D196 pt 4's rule holds for this line too — nothing
+   user-visible may *depend* on a context having been visited before; the second visit may
+   only start closer to where you were.
+
+4. **It restores at launch as well as at a switch.** The state file is not session-scoped
+   and `LastNamespace` already behaves this way, so remembering the pane between switches
+   but forgetting it between runs would be a second lifetime nobody asked for. An explicit
+   flag, if one ever names a resource, wins for that run — the precedent `-n` set
+   (M2-11b-2).
+
+5. **The bound the feedback offered does not apply to this half, and D196 pt 4's one-entry
+   cap is unchanged for the other.** "Evict after idle, or once more than N contexts are
+   held" is a memory question, and a bookmark holds no memory: it is a few dozen bytes in
+   a per-context file that already exists. There is nothing to evict. Bounding stays a
+   CTX-WARM question about live clients and discovery results, still capped at the
+   previous context only.
+
+6. **The drill-in scope is deferred, not forgotten (CTX-MEM-04).** A children scope names
+   an owner *object* (D165's `ChildScope`, cleared by `clearChildScope`), whose selector
+   may not survive the
+   time away; restoring it is an object re-resolve that can fail, and silently landing in
+   a *different* scope is worse than landing on the plain list. Only a leg that can make
+   that failure legible on screen should take it.
