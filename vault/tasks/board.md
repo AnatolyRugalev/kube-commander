@@ -7,7 +7,14 @@ _Last updated: 2026-08-06 — FILT-01 done: a backspace with nothing left to era
 
 ## In Progress
 
-_(none)_
+- [ ] **FILT-02** Highlight the `/` filter's matched text in the resource table
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
+      notes: First slice of feedback `2026-08-06-search-highlight-matches` (which asked for
+      **both** `/` search and cluster search, after checking what already highlights). Survey:
+      the logs grep already highlights (D145), the table filter does not, and cluster search
+      does not — so the feedback splits into FILT-02 (here) and SEARCH-06. This slice paints
+      the matched spans of each filtered row with `styles.Match`, reusing the M4-06 span
+      substrate in `internal/tui/components/table/color.go`.
 
 ## Blocked
 
