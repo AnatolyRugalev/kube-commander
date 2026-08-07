@@ -7,7 +7,9 @@ _Last updated: 2026-08-07 — CTX-MEM-02 done: kubecom reopens the kind you left
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
+      notes: See the LOGS-SEL section below for the full brief (D242).
 
 ## Blocked
 
@@ -207,7 +209,7 @@ back to raw text, Selection and Match share the cursor's line, the bar is derive
 to the viewport rather than cached into `shownLines`, and following owns the cursor.
 
 - [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
-      status: todo | owner: — | added: 2026-08-07
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
       notes: On top of LOGS-SEL-01's cursor. `v` (`logs.select`) anchors a selection at the
       cursor, `j`/`k` extend it, `Esc` cancels; `y` (`logs.yank`) copies the selection — or
       the cursor's line with no selection — to the clipboard through `internal/clipboard`
