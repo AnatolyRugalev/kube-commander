@@ -276,3 +276,189 @@ func TestShortRowColoringSafe(t *testing.T) {
 		t.Fatalf("short row lost its present cell: %q", got)
 	}
 }
+
+// TestFilterMatchIsHighlighted proves the `/` filter's matched text is painted
+// with the Match style on a plain row — the headline claim of FILT-02. `pod-`
+// keeps all three rows, so this reads a row the cursor is not on.
+func TestFilterMatchIsHighlighted(t *testing.T) {
+	s := styles.Default()
+	m := New(s)
+	m.SetTable(sampleTable())
+	m.SetSize(60, 8)
+	m.SetFilter("pod-")
+
+	line := dataLine(m.View(), 1)
+	if want := s.Match.Render("pod-"); !strings.Contains(line, want) {
+		t.Fatalf("the matched text should be highlighted:\ngot  %q\nwant substring %q", line, want)
+	}
+	// The rest of the name is not part of the match and must stay body text.
+	if strings.Contains(line, s.Match.Render("pod-b")) {
+		t.Fatalf("the highlight must span the query, not the cell:\n%q", line)
+	}
+}
+
+// TestFilterMatchIsCaseInsensitiveAndRepeats proves the highlight follows the
+// filter's own matching rule (case-insensitive substring, every occurrence) rather
+// than a second, stricter one — a row kept by the filter but shown unmarked would
+// read as a bug in the filter.
+func TestFilterMatchIsCaseInsensitiveAndRepeats(t *testing.T) {
+	s := styles.Default()
+	m := New(s)
+	m.SetTable(kube.Table{
+		Columns: []kube.Column{{Name: "NAME"}, {Name: "NOTE"}},
+		Rows: []kube.Row{
+			{Cells: []any{"keep-me", "x"}, Object: kube.ObjectRef{Name: "keep-me", UID: "k"}},
+			{Cells: []any{"ab-AB-ab", "y"}, Object: kube.ObjectRef{Name: "ab-AB-ab", UID: "a"}},
+		},
+	})
+	m.SetSize(60, 8)
+	m.SetFilter("AB")
+
+	// Only the second row matches, so it is row 0 — and the cursor row keeps its
+	// marks (see TestFilterMatchSurvivesSelection).
+	line := dataLine(m.View(), 0)
+	if got := strings.Count(line, s.Match.Render("ab")) + strings.Count(line, s.Match.Render("AB")); got != 3 {
+		t.Fatalf("want all 3 occurrences highlighted, got %d:\n%q", got, line)
+	}
+}
+
+// TestFilterMatchSurvivesSelection proves the one thing the selection bar does not
+// win over: the cursor row still shows what matched, while everything else on it
+// is the Selection style.
+func TestFilterMatchSurvivesSelection(t *testing.T) {
+	s := styles.Default()
+	m := New(s)
+	m.SetTable(sampleTable())
+	m.SetSize(60, 8)
+	m.SetFilter("pod-")
+
+	sel := dataLine(m.View(), 0) // the cursor row
+	if want := s.Match.Render("pod-"); !strings.Contains(sel, want) {
+		t.Fatalf("the cursor row must keep its match highlight:\ngot  %q\nwant substring %q", sel, want)
+	}
+	// The unmatched remainder is rendered through Selection, in runs whose exact
+	// boundaries are a column-width detail — so this asserts the style is there,
+	// and that a plain row does not have it.
+	selPrefix := strings.SplitN(s.Selection.Render("x"), "x", 2)[0]
+	if !strings.Contains(sel, selPrefix) {
+		t.Fatalf("the rest of the cursor row must stay the selection bar:\n%q", sel)
+	}
+	if plain := dataLine(m.View(), 1); strings.Contains(plain, selPrefix) {
+		t.Fatalf("a non-cursor row must not carry the selection bar:\n%q", plain)
+	}
+}
+
+// TestFilterMatchWinsOverCellColorAndCutsIt proves the merge: a match landing
+// inside a status-colored cell is painted whole, and the uncovered part of that
+// cell keeps its role color rather than being dropped or repainted.
+//
+// `1` matches every row (each READY cell has one), so row 1 is a plain row whose
+// READY "0/1" classifies to Warn and whose last rune is the match.
+func TestFilterMatchWinsOverCellColorAndCutsIt(t *testing.T) {
+	s := styles.Default()
+	m := New(s)
+	m.SetTable(statusTable())
+	m.SetSize(60, 8)
+	m.SetFilter("1")
+
+	line := dataLine(m.View(), 1) // pod-warn
+	if want := s.Warn.Render("0/") + s.Match.Render("1"); !strings.Contains(line, want) {
+		t.Fatalf("a match inside a colored cell should cut it, not replace it:\ngot  %q\nwant substring %q", line, want)
+	}
+	if strings.Contains(line, s.Warn.Render("0/1")) {
+		t.Fatalf("the matched rune must not stay in the role color:\n%q", line)
+	}
+	// A colored cell with no match in it is untouched.
+	if want := s.Warn.Render("Pending"); !strings.Contains(line, want) {
+		t.Fatalf("an unmatched colored cell should keep its role style:\ngot  %q\nwant substring %q", line, want)
+	}
+}
+
+// TestFilterHighlightKeepsWidthAndText is TestColoredRowKeepsWidthAndText with a
+// filter on: painting must stay invisible to layout at every pane width and at a
+// nonzero horizontal scroll, since the match spans are in unclipped coordinates
+// and are shifted at paint time.
+func TestFilterHighlightKeepsWidthAndText(t *testing.T) {
+	for _, w := range []int{60, 24, 12} {
+		for _, hoff := range []int{0, 3, 9} {
+			m := New(styles.Default())
+			m.SetTable(statusTable())
+			m.SetSize(w, 8)
+			m.SetFilter("1")
+			m.hoffset = hoff
+
+			view := m.View()
+			if got := lipgloss.Width(view); got != w {
+				t.Fatalf("width %d hoffset %d: View width = %d\n%s", w, hoff, got, view)
+			}
+			// The same model with no filter and the same rows on screen renders the
+			// same text; only the styling may differ.
+			plain := New(styles.Default())
+			plain.SetTable(kube.Table{Columns: statusTable().Columns, Rows: statusTable().Rows})
+			plain.SetSize(w, 8)
+			plain.hoffset = hoff
+			if got, want := ansi.Strip(view), ansi.Strip(plain.View()); got != want {
+				t.Fatalf("width %d hoffset %d: highlighting changed the text\ngot  %q\nwant %q", w, hoff, got, want)
+			}
+		}
+	}
+}
+
+// TestMatchOffsets pins the offset finder directly: it is what places every
+// highlight, it works in runes (the span coordinate space), and it declines the
+// one case it cannot place honestly.
+func TestMatchOffsets(t *testing.T) {
+	cases := []struct {
+		text, needle string
+		want         []int
+	}{
+		{"pod-a", "pod", []int{0}},
+		{"POD-A", "pod", []int{0}},  // the query is matched case-insensitively
+		{"aaaa", "aa", []int{0, 2}}, // occurrences never overlap
+		{"abcabc", "abc", []int{0, 3}},
+		{"pod-a", "zz", nil},
+		{"ab", "abc", nil},             // needle longer than the cell
+		{"héllo wörld", "ö", []int{7}}, // offsets are runes, not bytes
+		{"İstanbul", "i", []int{0}},    // a fold that changes byte width, never rune count
+	}
+	for _, c := range cases {
+		got := matchOffsets(c.text, []rune(c.needle))
+		if len(got) != len(c.want) {
+			t.Fatalf("matchOffsets(%q, %q) = %v, want %v", c.text, c.needle, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Fatalf("matchOffsets(%q, %q) = %v, want %v", c.text, c.needle, got, c.want)
+			}
+		}
+	}
+}
+
+// TestMergeSpansCutsAndOrders pins the merge in isolation: the result is sorted,
+// disjoint, and every match survives whole — the three properties paintRow relies
+// on and that a rendered frame can only show indirectly.
+func TestMergeSpansCutsAndOrders(t *testing.T) {
+	role := []roleSpan{{start: 0, end: 10, role: roleWarn}, {start: 20, end: 24, role: roleError}}
+	match := []roleSpan{{start: 3, end: 5, match: true}, {start: 8, end: 12, match: true}, {start: 20, end: 24, match: true}}
+
+	got := mergeSpans(role, match)
+	want := []roleSpan{
+		{start: 0, end: 3, role: roleWarn},
+		{start: 3, end: 5, match: true},
+		{start: 5, end: 8, role: roleWarn},
+		{start: 8, end: 12, match: true},
+		{start: 20, end: 24, match: true}, // the role span is wholly covered and vanishes
+	}
+	if len(got) != len(want) {
+		t.Fatalf("mergeSpans = %+v, want %+v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("mergeSpans[%d] = %+v, want %+v\nfull: %+v", i, got[i], want[i], got)
+		}
+	}
+	// With nothing to overlay the role spans come back untouched.
+	if got := mergeSpans(role, nil); len(got) != 2 || got[0] != role[0] || got[1] != role[1] {
+		t.Fatalf("mergeSpans with no matches should be a no-op, got %+v", got)
+	}
+}

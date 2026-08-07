@@ -987,20 +987,31 @@ func (m Model) sortMark() string {
 // "you are here", and a row whose STATUS is repainted mid-bar reads as a broken
 // highlight rather than as information. The color is still one keystroke away —
 // move off the row and it is there.
+//
+// A `/` filter match is the one thing selection does *not* win over (FILT-02).
+// Status color is information about the row, which the reader can go and get; a
+// match is the reason the row is on screen, and hiding it under the cursor would
+// blank the answer on exactly the row being read — the same line the reader
+// navigates the matches with. styles.Match is deliberately not the Selection hue
+// for this case, so the two on one line stay tellable apart.
 func (m Model) renderRow(r kube.Row, selected bool, innerW int, starts []int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
 		cells[i] = padRight(formatCell(cellAt(r.Cells, ci)), m.colWidths[i])
 	}
 	line := m.hclip(strings.Join(cells, colGap), innerW)
+	matches := m.matchSpans(r, starts)
 	if selected {
-		return m.styles.Selection.Width(innerW).Render(line)
+		if len(matches) == 0 {
+			return m.styles.Selection.Width(innerW).Render(line)
+		}
+		return m.paintRow(line, matches, innerW, m.styles.Selection)
 	}
-	spans := m.roleSpans(r, starts)
+	spans := mergeSpans(m.roleSpans(r, starts), matches)
 	if len(spans) == 0 {
 		return m.styles.App.Width(innerW).Render(line)
 	}
-	return m.paintRow(line, spans, innerW)
+	return m.paintRow(line, spans, innerW, m.styles.App)
 }
 
 // cellAt returns the cell at index i, or nil when the row has fewer cells than

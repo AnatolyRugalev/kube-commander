@@ -6555,3 +6555,36 @@ erase.
    view is excluded for the opposite reason: its query is not a mode over content but the
    view itself (D140 pt 1), so "cancel" there means dismissing a whole mini-app, which stays
    on esc alone (D235 pt 2) until someone asks for otherwise.
+
+## D239 — A `/` match is painted over the row's own colors, and the cursor bar does not hide it (2026-08-07, FILT-02)
+
+Feedback `2026-08-06-search-highlight-matches` asked for matched text to be highlighted in
+both `/` search and cluster search. The logs grep already did (D145); the resource table and
+cluster search did not. This decision covers the table (FILT-02); cluster search is SEARCH-06
+and will need its own, because a fuzzy hit's matched runes are not a substring.
+
+1. **The highlight's scope is the filter's scope, exactly.** Match spans are computed over
+   `m.visible` — the same columns `rowMatches` narrows on — with the same case-insensitive
+   substring rule, so every occurrence the filter counted as a reason to keep a row is
+   marked, and a hit in a hidden column is never claimed. A later leg that changes what the
+   filter matches on (a fuzzy mode, a column scope) changes both or the row acquires marks
+   that do not explain why it is there.
+
+2. **A match wins over a cell's status color, and the role span is cut around it rather than
+   replaced.** The colored part of the cell that did not match keeps its color. Status color
+   is information about the row that the reader can go and get by moving off it; a match is
+   the reason the row is on screen at all.
+
+3. **The selection bar does not win over a match** — the one exception to "selection wins
+   outright over cell coloring" (M4-06). Hiding the marks under the cursor would blank the
+   answer on exactly the row being read, which is the row `n`/`N` puts there. `styles.Match`
+   already existed with this in mind ("the Warn hue rather than Selection so a highlight is
+   never confused with the cursor — the two can appear on the same line"), so no new role was
+   needed. `paintRow` takes the base style for this: Selection for the cursor row, body text
+   otherwise.
+
+4. **Span coordinates stay in runes and unclipped columns.** Match spans join the M4-06 role
+   spans in the one coordinate space `columnStarts` and `padRight` already measure in, so the
+   horizontal scroll offset is still applied once, at paint time. A future span kind (a diff
+   marker, a stale-row wash) adds a flag to `roleSpan` and a case to `spanStyle`; it must not
+   extend `cellRole`, whose constants are ordered by severity and merged with `>`.

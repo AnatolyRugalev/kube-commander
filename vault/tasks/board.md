@@ -3,18 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-06 — FILT-01 done: a backspace with nothing left to erase now cancels a `/` search on the table and in the logs grep instead of dead-ending on an empty prompt (D238); two feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — FILT-02 done: the `/` filter now highlights what it matched, on the cursor row too (D239), leaving SEARCH-06 as the cluster-search half; two feedback items remain and they still preempt the board (D69). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **FILT-02** Highlight the `/` filter's matched text in the resource table
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
-      notes: First slice of feedback `2026-08-06-search-highlight-matches` (which asked for
-      **both** `/` search and cluster search, after checking what already highlights). Survey:
-      the logs grep already highlights (D145), the table filter does not, and cluster search
-      does not — so the feedback splits into FILT-02 (here) and SEARCH-06. This slice paints
-      the matched spans of each filtered row with `styles.Match`, reusing the M4-06 span
-      substrate in `internal/tui/components/table/color.go`.
+_(none)_
 
 ## Blocked
 
@@ -123,7 +116,26 @@ typed** (typing would cancel the fan-out and discard the rows the reader is stan
 the **muted query line is the signal** that typing stopped reaching it — blur only removes a
 cursor, which is an absence nobody notices.
 
-### In-panel `/` search (FILT — feedback-driven) — closed at FILT-01
+Reopened again on **legibility**, by feedback `2026-08-06-search-highlight-matches`, whose
+table half landed as FILT-02 (D239):
+
+- [ ] **SEARCH-06** Highlight the matched text in cluster-search results
+      status: todo | owner: — | added: 2026-08-07
+      notes: The second half of `2026-08-06-search-highlight-matches`; FILT-02 did the first
+      and D239 is the table's answer, but **it does not transfer**. A table match is a
+      substring, so the spans can be re-derived at paint time from the query alone; a cluster
+      hit can be *fuzzy* (D153, a subsequence — `wbp` matching `web-pod`) or a **label
+      selector** (D151, which matches nothing the label text shows), so the runes to mark are
+      known only to the matcher that scored the hit. Decide there: either `kube.SearchHit`
+      carries its matched rune offsets (the scorer already walks them, and it is the only
+      place that knows a selector hit has none to show) or the view re-runs the subsequence
+      walk over `item.label` and accepts that it and the scorer can disagree. Prefer the
+      former, and record which. `searchview`'s `itemDelegate` renders one pre-built label per
+      row, so the paint side is small once the offsets exist; the label is built with the kind
+      column padded, so offsets must be in the *label's* coordinate space or be shifted into
+      it. `styles.Match` is the style, and per D239 pt 3 the cursor row keeps its marks.
+
+### In-panel `/` search (FILT — feedback-driven) — closed, reclosed at FILT-02
 Feedback `2026-08-06-search-backspace-cancel`: `/` then backspace with nothing typed left an
 empty prompt open. **Closed** at FILT-01 (**D238**): a backspace that finds the line already
 empty resolves to `nav.back` and takes the surface's own unwind step — `clearFilter` on the
@@ -132,6 +144,15 @@ different things. Two constraints a later leg must not walk into: the check runs
 the keymap (a config that binds backspace still wins), and it belongs to a `/` opened **over
 content**, not to a picker's incidental filter or to the cluster-search view whose query *is*
 the view (D140 pt 1/D235 pt 2). Per-leg history: `vault/journal/`.
+
+Reopened once on **legibility**, by feedback `2026-08-06-search-highlight-matches` ("both
+regular (in-panel `/`) search and cross-resource search should visually highlight the matched
+text … check current behavior for both before doing the work"). The survey found the logs
+grep already highlighting (D145) and the other two not, so the item split: **FILT-02**
+(reclosing this line) paints the table's matches, and **SEARCH-06** below is the cluster-search
+half. Constraints a later leg must not walk into (**D239**): the highlight's scope is the
+filter's scope exactly, a match cuts a status-colored cell rather than replacing it, and the
+**cursor row keeps its marks** — the one exception to M4-06's "selection wins outright".
 
 ### Logs dedicated view (LOGS — feedback-driven, D134) — reopened on memory (LOGS-07)
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
@@ -520,6 +541,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **FILT-02** The `/` filter's matched text is highlighted in the rows it kept, cursor row included — first half of feedback `2026-08-06-search-highlight-matches` — done 2026-08-07 (D239)
 
 - [x] **FILT-01** Backspace past the start of an empty `/` query cancels the search — feedback `2026-08-06-search-backspace-cancel` — done 2026-08-06 (D238)
 

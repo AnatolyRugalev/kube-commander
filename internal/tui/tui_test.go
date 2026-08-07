@@ -1629,6 +1629,32 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 	}
 }
 
+// TestFilterMatchesAreHighlightedInTheFrame proves FILT-02 end to end: the reader
+// who presses `/` and types sees the matched text marked in the rows that stayed.
+// The component tests own where the marks land; this one owns the wiring — that a
+// query typed at the shell reaches the renderer that paints them.
+func TestFilterMatchesAreHighlightedInTheFrame(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	before := m.View().Content
+	if strings.Contains(before, m.styles.Match.Render("web")) {
+		t.Fatal("precondition: nothing should be highlighted before a query is typed")
+	}
+
+	m, _ = press(t, m, slash)
+	m = typeStr(t, m, "web")
+
+	got := m.View().Content
+	if want := m.styles.Match.Render("web"); !strings.Contains(got, want) {
+		t.Fatalf("the `/` query should be highlighted in the surviving rows:\ngot  %q\nwant substring %q", got, want)
+	}
+	// Clearing the query takes the marks away again — the highlight follows the
+	// filter rather than sticking to whatever was matched once.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if got := m.View().Content; strings.Contains(got, m.styles.Match.Render("web")) {
+		t.Fatalf("clearing the filter should clear the highlight:\n%q", got)
+	}
+}
+
 // TestFilterInertWithoutTable proves `/` does nothing before a resource is drilled
 // into (the welcome page is showing, so there is nothing to narrow).
 func TestFilterInertWithoutTable(t *testing.T) {

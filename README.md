@@ -280,10 +280,13 @@ where `p` and `0` are gestures of their own: it keeps the older behaviour of pre
 
 Press `/` (`app.filter`, rebindable) to **search the open table**: typing narrows the
 rows live, `Enter` commits the narrowed view so `n`/`N` step through the matches, and
-`Esc` clears the filter and brings every row back. **Backspace past the start of the
-query cancels the search** — one backspace on an empty line closes the field and
-returns you to the normal view, so `/` pressed by mistake costs one keystroke. The same
-gesture works in the logs view's live grep.
+`Esc` clears the filter and brings every row back. **Matched text is highlighted in the
+rows that survive**, in every column the filter looks at, so a row that is on screen for
+a reason you cannot see is never left unexplained — the marks stay visible on the row
+under the cursor too. **Backspace past the start of the query cancels the search** — one
+backspace on an empty line closes the field and returns you to the normal view, so `/`
+pressed by mistake costs one keystroke. The same gesture works in the logs view's live
+grep.
 
 Press `Ctrl+s` (`search.cluster`, rebindable) to search the whole cluster instead of
 one table: type a query and matching objects stream in **across kinds** (Pods,

@@ -1,6 +1,7 @@
 package table
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -251,12 +252,29 @@ func (m Model) roleStyle(r cellRole) lipgloss.Style {
 	}
 }
 
-// roleSpan is one colored run of a rendered row, in display columns of the
+// roleSpan is one styled run of a rendered row, in display columns of the
 // *unclipped* line (the same coordinate space as columnStarts), so the horizontal
 // scroll offset is applied once, at paint time.
+//
+// match marks a run produced by the active `/` filter rather than by the cell
+// classifier (FILT-02). It is a flag rather than another cellRole because the
+// cellRole constants are ordered by severity and merged with `>` — a match is not
+// a severity and must not enter that comparison.
 type roleSpan struct {
 	start, end int
 	role       cellRole
+	match      bool
+}
+
+// spanStyle is the style one span paints with. A match wins over the cell's
+// status role: the filter is why the row is on screen at all, so the reader must
+// be able to see what matched even in a cell that also carries a color. Match
+// paints a background of its own (styles.Match), so the two are never ambiguous.
+func (m Model) spanStyle(sp roleSpan) lipgloss.Style {
+	if sp.match {
+		return m.styles.Match
+	}
+	return m.roleStyle(sp.role)
 }
 
 // roleSpans is the set of colored runs for one row: each visible cell whose value
@@ -286,6 +304,115 @@ func (m Model) roleSpans(r kube.Row, starts []int) []roleSpan {
 	return spans
 }
 
+// matchSpans is the set of runs one row's cells matched the active `/` filter on,
+// in the same unclipped coordinate space as roleSpans. Empty with no filter set,
+// which is why an unfiltered table renders through exactly the path it always did.
+//
+// The scope is m.visible — the same columns rowMatches narrows on — so every
+// occurrence the filter counted as a reason to keep the row is highlighted, and a
+// hit in a column the reader cannot see is never claimed. Spans come out sorted
+// and disjoint: the columns are walked in display order and each cell's own
+// occurrences are non-overlapping.
+func (m Model) matchSpans(r kube.Row, starts []int) []roleSpan {
+	if m.filter == "" {
+		return nil
+	}
+	needle := []rune(strings.ToLower(m.filter))
+	if len(needle) == 0 {
+		return nil
+	}
+	var spans []roleSpan
+	for i, ci := range m.visible {
+		if i >= len(starts) {
+			break
+		}
+		text := formatCell(cellAt(r.Cells, ci))
+		for _, off := range matchOffsets(text, needle) {
+			spans = append(spans, roleSpan{
+				start: starts[i] + off,
+				end:   starts[i] + off + len(needle),
+				match: true,
+			})
+		}
+	}
+	return spans
+}
+
+// matchOffsets returns the rune offset of every case-insensitive occurrence of the
+// (already lowercased) needle in text. Offsets are in runes because the whole span
+// coordinate space is display columns, which is what columnStarts and padRight
+// measure in.
+//
+// Searching the lowercased copy and indexing the original needs the two to stay in
+// step, and in **runes** they always do: strings.ToLower maps rune to rune
+// (unicode.ToLower), so the fold can change a rune's width in bytes (İ → i) but
+// never the count. That is why there is no length guard here and why logsview's
+// spanSubstring — which works in byte offsets, where the fold does change the
+// length — needs one.
+func matchOffsets(text string, needle []rune) []int {
+	lower := []rune(strings.ToLower(text))
+	if len(needle) > len(lower) {
+		return nil
+	}
+	var out []int
+	for i := 0; i+len(needle) <= len(lower); {
+		if string(lower[i:i+len(needle)]) == string(needle) {
+			out = append(out, i)
+			i += len(needle)
+			continue
+		}
+		i++
+	}
+	return out
+}
+
+// mergeSpans overlays the match runs on the role runs, returning one sorted,
+// disjoint span list for paintRow. Where a match lands inside a colored cell the
+// role run is cut around it, so the match is painted whole and the rest of the
+// cell keeps its color — rather than the two fighting over the same columns and
+// whichever paintRow reached first winning by accident.
+//
+// Both inputs are sorted and internally disjoint (roleSpans and matchSpans walk
+// m.visible in order), which is what makes the cut a single pass.
+func mergeSpans(role, match []roleSpan) []roleSpan {
+	if len(match) == 0 {
+		return role
+	}
+	out := make([]roleSpan, 0, len(role)+len(match))
+	for _, rs := range role {
+		out = append(out, cutSpan(rs, match)...)
+	}
+	out = append(out, match...)
+	sort.Slice(out, func(i, j int) bool { return out[i].start < out[j].start })
+	return out
+}
+
+// cutSpan returns the parts of rs left uncovered by cuts (sorted, disjoint),
+// preserving rs's role. A span wholly covered yields nothing.
+func cutSpan(rs roleSpan, cuts []roleSpan) []roleSpan {
+	var out []roleSpan
+	at := rs.start
+	for _, c := range cuts {
+		if c.end <= at {
+			continue
+		}
+		if c.start >= rs.end {
+			break
+		}
+		if c.start > at {
+			out = append(out, roleSpan{start: at, end: c.start, role: rs.role})
+		}
+		at = c.end
+		if at >= rs.end {
+			return out
+		}
+	}
+	if at < rs.end {
+		out = append(out, roleSpan{start: at, end: rs.end, role: rs.role})
+	}
+	return out
+}
+
 // paintRow renders an already-clipped row line with its colored spans, padded out
 // to innerW. line is the horizontal window starting at m.hoffset, so the spans —
 // which are in unclipped coordinates — are shifted by it and clamped to the
@@ -296,7 +423,12 @@ func (m Model) roleSpans(r kube.Row, starts []int) []roleSpan {
 // span-containing line inside an outer style would leave the text after the first
 // span's reset unstyled, which is the whole reason this does the padding itself
 // instead of leaning on lipgloss's Width.
-func (m Model) paintRow(line string, spans []roleSpan, innerW int) string {
+//
+// base is the style every unspanned segment — and the trailing pad — is rendered
+// through. It is the body style for a normal row and the Selection style for the
+// cursor row, which is what lets a match stay visible on the row the reader is
+// standing on without the selection bar being broken up by anything else.
+func (m Model) paintRow(line string, spans []roleSpan, innerW int, base lipgloss.Style) string {
 	runes := []rune(line)
 	var b strings.Builder
 	last := 0
@@ -312,16 +444,16 @@ func (m Model) paintRow(line string, spans []roleSpan, innerW int) string {
 			continue
 		}
 		if s > last {
-			b.WriteString(m.styles.App.Render(string(runes[last:s])))
+			b.WriteString(base.Render(string(runes[last:s])))
 		}
-		b.WriteString(m.roleStyle(sp.role).Render(string(runes[s:e])))
+		b.WriteString(m.spanStyle(sp).Render(string(runes[s:e])))
 		last = e
 	}
 	if last < len(runes) {
-		b.WriteString(m.styles.App.Render(string(runes[last:])))
+		b.WriteString(base.Render(string(runes[last:])))
 	}
 	if pad := innerW - len(runes); pad > 0 {
-		b.WriteString(m.styles.App.Render(strings.Repeat(" ", pad)))
+		b.WriteString(base.Render(strings.Repeat(" ", pad)))
 	}
 	return b.String()
 }
