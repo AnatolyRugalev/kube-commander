@@ -7,7 +7,10 @@ _Last updated: 2026-08-07 — SEARCH-06 done: a cluster-search hit carries the r
 
 ## In Progress
 
-_(none)_
+- [ ] **AUTH-07** Nothing may write to the terminal the TUI is holding — the plugin's stderr
+      least of all
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
+      notes: See the AUTH section below for the full brief.
 
 ## Blocked
 
@@ -328,7 +331,7 @@ or D232 as evidence that an auth failure can no longer corrupt the layout** (D23
 
 - [ ] **AUTH-07** Nothing may write to the terminal the TUI is holding — the plugin's stderr
       least of all
-      status: todo | owner: — | added: 2026-08-06
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
       notes: `plugin/pkg/client/auth/exec/exec.go` sets `stderr: os.Stderr` and
       `cmd.Stderr = a.stderr`, so **every** credential refresh — not only a failing one —
       streams the plugin's output onto the alt screen, over the panes, where it survives
