@@ -176,7 +176,7 @@ does not retire it**; what that closure licenses, and the buffer depth it never 
 D191 pt 3, and neither D160 nor D162 is evidence that the depth is bounded (D230).
 
 - [ ] **LOGS-07** Bound the logs buffer — nothing does
-      status: todo | owner: — | added: 2026-08-06
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
       notes: Found by BOARD-02b-3's sweep, checking this line's prose against the code.
       `logsview.appendLine` appends to `lines`, `stamps` and (on a match) `shownLines` and
       drops nothing ever: a followed stream grows all three for as long as the view is open,
