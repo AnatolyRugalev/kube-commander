@@ -702,6 +702,13 @@ type Model struct {
 	// suspending, so an unresolved editor can never blank the terminal.
 	editorArgv []string
 
+	// termStderr is the fd-2 guard the launcher installed (WithTerminalStderr,
+	// AUTH-07). It is per-process like editorArgv above — a context switch changes
+	// nothing about which descriptor the terminal is on — and is read only by
+	// Model.suspend, which every tea.Exec in this package goes through. Nil is
+	// handover-inert, which is every hermetic test.
+	termStderr TerminalStderr
+
 	// Cluster holds every seam bound to the cluster kubecom is currently on — the
 	// watch/discovery clients, the viewer sources, the mutating action set (M4-02).
 	// It is embedded, so the shell reads them unqualified (m.watcher, m.deleter, …)

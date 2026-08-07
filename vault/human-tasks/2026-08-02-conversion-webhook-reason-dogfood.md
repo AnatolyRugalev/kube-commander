@@ -8,6 +8,9 @@
 - Amended: 2026-08-05 by AUTH-05b — item 7 added: the same expired session now also opens a
   prompt offering to run the login, and accepting it suspends kubecom into `aws sso login`.
   It shares item 6's setup, so do the two in one sitting.
+- Amended: 2026-08-07 by AUTH-07 — item 8 added (nothing paints over the panes any more).
+  Same expired session as items 6 and 7 and no extra setup, but it is about what the screen
+  does *before* the pane speaks, so read it first if you can.
 - Priority: normal
 - Blocks: none (advisory — every claim in CRD-01 is covered by hermetic tests, including
   the wording, the wrap and the clear-on-recovery. The single thing a sandbox cannot supply
@@ -109,6 +112,26 @@ should start failing; that is the state kubecom needs to be opened in.
    - **If the offer never appears** but item 6's diagnosis did: note what was on screen at
      the time. An offer is deliberately suppressed while any picker, viewer, modal, the logs
      view or the filter field is open, and it does not queue for later.
+
+8. **Does the plugin still paint over the panes (AUTH-07, 2026-08-07)?** Items 6 and 7 are
+   about what the empty pane *says*; this one is about the frame around it. Until this leg,
+   client-go ran the credential plugin with its stderr on kubecom's own terminal, so on every
+   refresh — including the successful ones — whatever `aws` printed landed on top of the
+   browse view and stayed there until bubbletea happened to repaint those exact lines. fd 2
+   now points at `~/.cache/kubecom/kubecom.log` for as long as the UI is up (D247).
+   - **On the expired session of item 6**, watch the screen in the seconds before the pane
+     changes: no `aws` text, no partial lines through the table's borders, no stray blank
+     rows. If something does appear, say roughly *where* it landed and what it said — and
+     check whether the same text is also in the log, since "in both places" and "only on
+     screen" are different bugs.
+   - **On a healthy context that still uses a plugin** (an EKS cluster with a valid session),
+     just leave kubecom open past a token refresh — an hour, typically. Nothing should ever
+     flicker. This is the case that used to be invisible precisely because it worked.
+   - **Then the suspends, which must still show you everything**: `e` into the editor on a
+     bad buffer (the editor's own error), an exec shell into a pod whose container is gone,
+     and item 7's accepted `aws sso login`. Each of those *should* print to your terminal
+     normally. If any of the three has gone silent where it used to speak, that is this leg's
+     regression and worth reporting above everything else here.
 
 ## Result
 

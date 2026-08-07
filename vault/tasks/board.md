@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — SEARCH-06 done: a cluster-search hit carries the runes it matched, so the view marks them without guessing (D246). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — AUTH-07 done: fd 2 points at the log for the life of the TUI, so nothing but kubecom paints on the terminal (D247). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **AUTH-07** Nothing may write to the terminal the TUI is holding — the plugin's stderr
-      least of all
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
-      notes: See the AUTH section below for the full brief.
+_(none)_
 
 ## Blocked
 
@@ -306,7 +303,7 @@ matched as well as shown (**D237**). Two standing constraints come with it: the 
 still the identity a pick resolves by, and a picker row is truncated, never wrapped, since
 the row that wraps costs the modal its last item.
 
-### Credential-plugin auth (AUTH — feedback-driven, D195) — reopened on the layout (AUTH-07)
+### Credential-plugin auth (AUTH — feedback-driven, D195) — closed at AUTH-07
 Feedback `2026-08-01-eks-sso-reauth`: an expired AWS SSO session surfaced as a nameless auth
 failure, leaving the user to work out that the fix was `aws sso login --profile x` in another
 terminal. Provider-specific auth is not a non-goal, but the shape was fixed up front — detect
@@ -322,28 +319,16 @@ The live claim — the suspend into a real `aws sso login`, and the retry after 
 on `vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks
 nothing).
 
-**Reopened 2026-08-06** by feedback `2026-08-06-auth-error-breaks-layout`: an auth failure
-*distorts the UI* rather than rendering in it. Two mechanisms do that and AUTH-06 fixed the
-smaller one (D232) — what kubecom renders is now sanitized at the seam. The one the reader
-actually sees is AUTH-07 below: client-go runs the exec plugin with `cmd.Stderr = os.Stderr`,
-so the plugin paints straight onto the terminal the TUI is holding. **No leg may cite AUTH-06
-or D232 as evidence that an auth failure can no longer corrupt the layout** (D232 pt 3).
+**Reopened 2026-08-06** by feedback `2026-08-06-auth-error-breaks-layout` (an auth failure
+*distorts* the UI rather than rendering in it) and **closed again 2026-08-07**: AUTH-06
+sanitized what kubecom renders (D232), AUTH-07 took fd 2 away from everything else —
+`internal/stderrfd` dup2s it onto the log for the life of the TUI and `Model.suspend` lends
+it back for exactly the length of a handover (D247). The standing constraints are D247's
+five points; the one worth repeating here is that reassigning the `os.Stderr` *variable* is
+never the fix, since client-go captures it when the authenticator is built and a child
+inherits the descriptor.
 
-- [ ] **AUTH-07** Nothing may write to the terminal the TUI is holding — the plugin's stderr
-      least of all
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
-      notes: `plugin/pkg/client/auth/exec/exec.go` sets `stderr: os.Stderr` and
-      `cmd.Stderr = a.stderr`, so **every** credential refresh — not only a failing one —
-      streams the plugin's output onto the alt screen, over the panes, where it survives
-      until bubbletea repaints those lines. The same hole passes a panic trace, a cgo
-      library's chatter and anything else that reaches fd 2. Point fd 2 at the log file for
-      the life of the TUI (redirecting the `os.Stderr` *variable* is not enough — client-go
-      captures it when the authenticator is built) and put it back around the suspends that
-      hand the terminal over on purpose (`$EDITOR`, `aws sso login`, exec), which are the
-      one case where the reader must see a subprocess's stderr. What the plugin said is
-      already recovered for display by `kube.Diagnose`'s own capture (D211), so nothing is
-      lost by silencing the raw stream.
-      → knowledge: knowledge/stack.md (TUI rendering) · D232 pt 3
+- [x] **AUTH-07** fd 2 points at the log for the life of the TUI, and at the terminal only inside a suspend — done 2026-08-07 (D247)
 
 ### Live table freshness (AGE — feedback-driven, D234) — closed at AGE-01
 Feedback `2026-08-06-age-column-stale`: an open pane's AGE column drifts stale. **Closed** at
@@ -625,6 +610,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **AUTH-07** fd 2 points at the log file for the life of the TUI, and back at the terminal only inside a suspend, so a credential plugin's stderr can no longer paint over the panes — done 2026-08-07 (D247)
 
 - [x] **SEARCH-06** A cluster-search hit carries the runes it matched, so a fuzzy or label-selector result says why it is there — second half of feedback `2026-08-06-search-highlight-matches` — done 2026-08-07 (D246)
 

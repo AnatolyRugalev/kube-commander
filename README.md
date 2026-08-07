@@ -427,7 +427,13 @@ Flags: `--kubeconfig` (path; default `$KUBECONFIG`, else `~/.kube/config`),
 namespaces), `--config` (kubecom config file). A missing or invalid
 kubeconfig/context fails with a clear message instead of launching. While the UI runs
 it owns the terminal, so all logs (including client-go warnings) go to a file under
-your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen.
+your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen. That holds
+for standard error as a whole, not just kubecom's own logging: for the life of the UI
+the process's stderr *descriptor* points at that log, so anything a library prints —
+an auth plugin refreshing your credentials, for instance — ends up in the file instead
+of painted over the panes. The exception is the moments kubecom hands you the terminal
+on purpose — the YAML editor on `e`, an exec shell, an accepted re-login — where
+stderr is yours again for as long as that program runs, so it can talk to you normally.
 
 ## Install
 

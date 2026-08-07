@@ -6852,3 +6852,48 @@ What a later leg must not silently contradict:
    it arrives, and a rule letting the bar swallow the marks would hide them on exactly the
    row the reader is looking at. `styles.Match` carries its own background, so the two
    never become ambiguous where they meet.
+
+## D247 — fd 2 belongs to the log for the life of the TUI, and to the terminal only inside a suspend (2026-08-07, AUTH-07)
+
+The alt screen is not a second terminal. Anything written to file descriptor 2 while
+kubecom is up paints over the panes and survives until bubbletea happens to repaint
+those exact lines — client-go's exec credential plugin (`cmd.Stderr = a.stderr`, on
+*every* refresh, not only a failing one), a panic trace, a cgo library's chatter. The
+launcher therefore points fd 2 at `~/.cache/kubecom/kubecom.log` (`internal/stderrfd`,
+dup2) before the shell is built, and hands it back only inside a suspend.
+
+What a later leg must not silently contradict:
+
+1. **The descriptor, not the variable.** Reassigning `os.Stderr` fixes nothing that
+   matters: client-go captured the old value when the authenticator was built, a
+   subprocess inherits the descriptor, and the runtime writes a panic to fd 2 directly.
+   Any future "route X's output to the log" is a dup2 or it is a hole. Two corollaries:
+   the guard keeps a close-on-exec duplicate of the original fd 2 as its only route back,
+   and fd 2 itself stays inheritable — a child wired to `os.Stderr` must land wherever
+   fd 2 currently points, which is the whole mechanism.
+
+2. **The redirect covers the TUI's life, not the process's.** It is installed after
+   every fallible startup step and closed before `runTUI` returns, so a bad
+   kubeconfig, an unresolvable config and cobra's own error still reach the user's
+   terminal. A leg that moves it up beside `setupLogging` silently swallows the launch
+   errors — those are the diagnostics of a kubecom that never drew a frame.
+
+3. **Every `tea.Exec` in `internal/tui` goes through `Model.suspend`.** Three flows hand
+   the terminal over on purpose — `$EDITOR` (D125), exec (D124/D128), an approved
+   remediation (D215) — and there the reader must see the subprocess's stderr, so the
+   wrapper releases fd 2 for exactly the length of `Run` and reclaims it in a defer.
+   A fourth suspend that calls `tea.Exec` directly is not a compile error, so
+   `TestEverySuspendGoesThroughTheHandover` asserts the wrapper type at each call site;
+   the kubectl parity path needs `Model.suspendProcess` because bubbletea's `*exec.Cmd`
+   adapter is unexported and `tea.ExecProcess` cannot be composed with a wrapper.
+
+4. **A failed handover never fails the action.** A dup2 that will not move degrades to
+   the subprocess's stderr landing in the log — where it was going a moment earlier —
+   rather than aborting an approved `aws sso login` or an edit (principle 3). Likewise a
+   redirect that cannot be installed at launch leaves the seam nil and the shell behaves
+   exactly as it did before this decision.
+
+5. **This does not license printing to fd 2.** The rule in `stack.md` stands: no code in
+   `internal/` writes to stdout/stderr, and the log is reached through the injected
+   `slog.Logger` (D159). The redirect is a backstop for the libraries kubecom does not
+   control, not a channel kubecom may start using.

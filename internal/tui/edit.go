@@ -188,7 +188,7 @@ func (m Model) handleEditFetched(msg editFetchedMsg) (tea.Model, tea.Cmd) {
 	callback := func(err error) tea.Msg {
 		return editDoneMsg{label: label, changed: cmd.changed, err: err}
 	}
-	return m, tea.Exec(cmd, callback)
+	return m, m.suspend(cmd, callback)
 }
 
 // handleEditDone reports a finished edit: an editor/apply failure degrades to a transient

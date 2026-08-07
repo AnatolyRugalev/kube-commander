@@ -597,4 +597,10 @@ nothing useful; attach is the way.)
   screen is the same terminal, so the plugin's text paints over the panes and
   survives until bubbletea repaints the lines it landed on. Anything that writes
   to fd 2 while the TUI is up (a panic, a cgo library, client-go) corrupts the
-  layout the same way. See D232 pt 3 and **AUTH-07**.
+  layout the same way. **Closed at AUTH-07/D247**: `internal/stderrfd` dup2s fd 2
+  onto the log file for the life of the TUI, and `Model.suspend` gives it back to
+  the terminal for exactly the length of a `tea.Exec`. Two things that follow —
+  reassigning the `os.Stderr` *variable* is never the fix (the descriptor is what a
+  captured writer and a forked child both hold), and `syscall.Dup2` does not exist
+  on every GOARCH: linux/arm64 has only `dup3` (`dup3(old,new,0)` ≡ `dup2`), darwin
+  only `dup2`, so the shim is build-tagged per GOOS.

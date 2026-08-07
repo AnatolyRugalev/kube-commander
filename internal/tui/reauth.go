@@ -228,7 +228,7 @@ func (m Model) runReauth() (tea.Model, tea.Cmd) {
 	callback := func(err error) tea.Msg {
 		return reauthDoneMsg{line: rc.Line, res: res, stderr: cmd.capturedStderr(), err: err}
 	}
-	return m, tea.Exec(cmd, callback)
+	return m, m.suspend(cmd, callback)
 }
 
 // handleReauthDone reports a finished remediation and, on success, retries the

@@ -112,10 +112,10 @@ func (m Model) execInto(res kube.Resource, ref kube.ObjectRef, container string)
 	// covers every server-side edge case. tea.ExecProcess wraps the *exec.Cmd,
 	// releasing/re-capturing the terminal around it exactly as the in-process wire does.
 	if proc, ok := m.kubectlExecProc(ref, container); ok {
-		return m, tea.ExecProcess(proc, callback)
+		return m, m.suspendProcess(proc, callback)
 	}
 	cmd := newExecCommand(m.execer, ref, container)
-	return m, tea.Exec(cmd, callback)
+	return m, m.suspend(cmd, callback)
 }
 
 // lookupKubectl resolves the kubectl binary on PATH for the exec parity fallback

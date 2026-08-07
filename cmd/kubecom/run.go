@@ -12,6 +12,7 @@ import (
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/stderrfd"
 	"github.com/neuroplastio/kubecom/internal/tui"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 	"github.com/neuroplastio/kubecom/internal/version"
@@ -157,6 +158,26 @@ func runTUI(opts runOptions) error {
 		p := &statePersister{path: statePath, state: state}
 		persister, pinner, resourcer = p, p, p
 	}
+	// Everything that can fail the launch has now run, so from here to the end of the
+	// program nothing is meant to reach the terminal except the TUI itself: point the
+	// stderr *file descriptor* at the log file (AUTH-07). Reassigning the os.Stderr
+	// variable would not do — client-go captured it when the exec authenticator was
+	// built, a subprocess inherits the descriptor rather than the variable, and the
+	// runtime writes a panic straight to fd 2. Installed here rather than beside
+	// setupLogging so a bad kubeconfig, config or context above still reports itself on
+	// the terminal; Close puts fd 2 back before runTUI returns, so cobra's error and
+	// anything printed on the way out reach the user.
+	//
+	// A failed redirect degrades to the previous behaviour and never blocks the launch
+	// (principle 3): the seam stays nil and the shell suspends exactly as before.
+	var stderrSeam tui.TerminalStderr
+	if guard, err := stderrfd.Redirect(logFile); err != nil {
+		slog.Warn("stderr redirect", "error", err)
+	} else {
+		stderrSeam = guard
+		defer func() { _ = guard.Close() }()
+	}
+
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
 	// the alternate screen itself (via View.AltScreen — D70), so no program option
@@ -205,6 +226,11 @@ func runTUI(opts runOptions) error {
 		// still diagnosable afterwards (D159). Wired here rather than read as a global
 		// inside the shell so a test can point it at a buffer.
 		tui.WithLogger(slog.Default()),
+		// The fd-2 guard installed just above (AUTH-07): the shell hands the descriptor
+		// back to the terminal for the length of the three suspends that hand the
+		// terminal over on purpose — $EDITOR, exec, an approved re-login — where the
+		// reader must see what the subprocess says on stderr.
+		tui.WithTerminalStderr(stderrSeam),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("kubecom exited with error: %w", err)
