@@ -324,6 +324,14 @@ func TestLogsTailIsBoundedButScrollable(t *testing.T) {
 	if defaultLogTail > 100000 {
 		t.Errorf("defaultLogTail = %d — large enough to be the unbounded replay it replaced", defaultLogTail)
 	}
+	// The two bounds are on opposite sides of the same buffer and only one of them is
+	// visible from here: the replay is what the view opens holding, the cap is what it
+	// keeps. A cap at or under the replay would have the first live line start discarding
+	// history the reader just asked the apiserver for (D245).
+	if logsview.MaxLines <= int(defaultLogTail) {
+		t.Errorf("logsview.MaxLines = %d must exceed defaultLogTail = %d, or the opening replay is trimmed on arrival",
+			logsview.MaxLines, defaultLogTail)
+	}
 }
 
 // tsKey is the default logs.timestamps key (`t`) — the LOGS-04b display toggle. Like

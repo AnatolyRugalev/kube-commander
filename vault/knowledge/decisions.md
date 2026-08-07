@@ -6780,3 +6780,37 @@ selection and the copy on top of it. What a later leg must not silently contradi
    there is nothing for the mode toggle to re-interpret. It is still hinted with the grep
    *open*, still fires in both states, and `?` and `docs/keybindings.md` still carry it —
    this is a hint budget, not a claim about what acts.
+
+## D245 — The logs buffer is bounded, drops from the top, and says so once it has (2026-08-07, LOGS-07)
+
+Nothing bounded it before: `TailLines` bounds the **replay** that precedes the tail, and
+LOGS-05b bounds what a line **costs**, not how many are held (D230). At the ~1,900 lines/sec
+that D162's dogfood measured, a view left following grew `lines`, `stamps` and `shownLines`
+for as long as it was open. What a later leg must not silently contradict:
+
+1. **The cap must exceed the opening replay.** `logsview.MaxLines` (10 000) is deliberately
+   an order above `defaultLogTail` (1 000): a cap at or under the replay would have the
+   *first live line* start discarding history the reader just asked the apiserver for and
+   has not scrolled to yet. The two live in different packages, so the relationship is held
+   by a test in `internal/tui` rather than by the constants' proximity. Tune either freely;
+   keep the inequality.
+
+2. **The trim drops from the top, in chunks, and is O(1) per line amortized.** Dropping a
+   prefix costs O(held), so trimming on every line past the cap would make a fast stream
+   quadratic — the buffer runs `trimChunk` past `MaxLines` and is then taken back to it.
+   "Bounded" therefore means `MaxLines+trimChunk`, not `MaxLines`. The prefix is *deleted*
+   (`slices.Delete`), never resliced away: a reslice keeps the dropped strings reachable
+   through the backing array, which is the growth this exists to stop.
+
+3. **Everything that addresses a line by index moves with the trim.** `shownIdx` holds
+   buffer indices, so a trim renumbers all of them and evicts the entries pointing into the
+   dropped prefix; the cursor and the selection anchor count *shown* lines and shift by that
+   eviction; the viewport's y-offset counts *rows* and comes down by the rows that left, so
+   the stream cannot scroll a paused reader. A trim is the one event that moves all four at
+   once — a future field derived from a line index has to join them.
+
+4. **A trimmed buffer says so, once, in a word.** The top of the body is no longer the top
+   of the stream, so `gg` lands mid-log in something that otherwise looks like its start —
+   state with no other evidence on screen, which is D146's test for a marker. `[trimmed]` is
+   a fixed word, not a count of what was dropped: the count would change on every trim and
+   the reader can act on none of it. It clears only with the buffer (`Restream`).

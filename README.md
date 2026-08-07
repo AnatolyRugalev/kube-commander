@@ -242,6 +242,10 @@ first — **init** and ephemeral containers are offered too, marked as such, sin
 init container's logs are the only thing to read when a pod is stuck in `Init:`. The
 header shows the object, the container, and `[following]`/`[paused]`.
 
+The view holds the **most recent 10 000 lines**: a stream left following all afternoon
+drops its oldest lines rather than growing without end. Once it has dropped anything the
+header says `[trimmed]`, so a `gg` that lands mid-log does not look like the start of one.
+
 In that view, `/` opens a **live grep**: typing narrows the streamed lines *while the
 log keeps following*, with a `matched/total` count, and nothing is re-fetched —
 `Esc`, or a backspace past the start of the query, clears the filter and the full

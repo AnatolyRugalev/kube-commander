@@ -1698,3 +1698,148 @@ func TestSelectionIsNotBakedIntoTheAppendCache(t *testing.T) {
 		t.Errorf("the bar should still reach the frame; got:\n%q", v)
 	}
 }
+
+// streamLines batches "line-<from>".."line-<to>" into m the way the log pump does, in
+// runs of 500 — one syncContent per run rather than per line, which is what makes a
+// volume test cheap enough to be a unit test.
+func streamLines(m *Model, from, to int) {
+	const batch = 500
+	for i := from; i <= to; i += batch {
+		var b []Line
+		for j := i; j < i+batch && j <= to; j++ {
+			b = append(b, Line{Message: "line-" + itoa(j)})
+		}
+		m.AppendBatch(b)
+	}
+}
+
+// TestBufferIsBounded is LOGS-07's whole point: a followed stream must not grow for as
+// long as the view is open. Nothing else bounded it — TailLines bounds the replay before
+// the tail, not the tail (D230) — so at ~1,900 lines/sec an afternoon's follow was an
+// afternoon's worth of RAM.
+func TestBufferIsBounded(t *testing.T) {
+	m := newLogs()
+	streamLines(&m, 1, MaxLines+3*trimChunk)
+	if got := len(m.lines); got > MaxLines+trimChunk {
+		t.Errorf("held %d lines; want at most %d (MaxLines+trimChunk)", got, MaxLines+trimChunk)
+	}
+	if got := len(m.stamps); got != len(m.lines) {
+		t.Errorf("stamps (%d) must stay parallel to lines (%d)", got, len(m.lines))
+	}
+	if got := len(m.shownLines); got != len(m.lines) {
+		t.Errorf("with no grep every held line is shown: shown %d, held %d", got, len(m.lines))
+	}
+	// It is the *oldest* that go: the newest line is the one a follower is reading.
+	if m.lines[0] == "line-1" {
+		t.Error("the buffer dropped nothing — the trim never ran")
+	}
+	if last := m.lines[len(m.lines)-1]; last != "line-"+itoa(MaxLines+3*trimChunk) {
+		t.Errorf("newest held line = %q; the trim must drop from the top", last)
+	}
+	if !m.trimmed {
+		t.Error("a trimmed buffer must know it was trimmed")
+	}
+}
+
+// TestTrimKeepsShownIdxAddressingTheRightText: shownIdx is the only sanctioned route from
+// a cursor to raw text (D242 pt 2), and a trim renumbers every buffer index under it. Off
+// by the dropped count, a yank would copy some other line — silently, since both are log
+// lines.
+func TestTrimKeepsShownIdxAddressingTheRightText(t *testing.T) {
+	m := newLogs()
+	m = typeFilter(m, "7")
+	streamLines(&m, 1, MaxLines+2*trimChunk)
+	if len(m.shownIdx) != len(m.shownLines) {
+		t.Fatalf("shownIdx (%d) and shownLines (%d) must stay parallel", len(m.shownIdx), len(m.shownLines))
+	}
+	if len(m.shownIdx) == 0 {
+		t.Fatal("the grep should keep something")
+	}
+	for n, i := range m.shownIdx {
+		if i < 0 || i >= len(m.lines) {
+			t.Fatalf("shownIdx[%d] = %d, out of a buffer of %d", n, i, len(m.lines))
+		}
+		if !strings.Contains(m.lines[i], "7") {
+			t.Fatalf("shownIdx[%d] points at %q, which the grep does not keep", n, m.lines[i])
+		}
+	}
+	// The yank reads through the same map, so it is the end-to-end check of it.
+	text, _, ok := m.Yank()
+	if !ok || !strings.Contains(text, "7") {
+		t.Errorf("yank after a trim = %q (ok=%v); want the cursor's matched line", text, ok)
+	}
+}
+
+// TestTrimHoldsThePausedReaderStill: while paused, the reader is standing on lines that a
+// trim slides out from under them — the body loses rows off its top, so the same viewport
+// offset points somewhere else. The offset has to come down with it or a paused reader is
+// scrolled by the stream, which is exactly what pausing is for.
+func TestTrimHoldsThePausedReaderStill(t *testing.T) {
+	m := newLogs()
+	streamLines(&m, 1, MaxLines)
+	m, _ = m.Update(keymap.ActionUp) // pause, cursor off the tail
+	for range 200 {
+		m, _ = m.Update(keymap.ActionUp)
+	}
+	if m.Following() {
+		t.Fatal("nav.up must pause following")
+	}
+	// The body only: the header is *expected* to change, since it grows the [trimmed]
+	// marker this leg added.
+	body := func(m Model) string { _, rest, _ := strings.Cut(plain(m.View()), "\n"); return rest }
+	before := body(m)
+	streamLines(&m, MaxLines+1, MaxLines+2*trimChunk)
+	if !m.trimmed {
+		t.Fatal("this test needs the trim to have run")
+	}
+	if after := body(m); after != before {
+		t.Errorf("a trim moved a paused reader's frame:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// TestTrimmedIsNamedInTheHeader: past a trim the top of the body is no longer the top of
+// the stream, so `gg` lands mid-log in something that looks like its start. That is state
+// with no other evidence on screen (D146). A re-stream starts a new log, so it clears.
+func TestTrimmedIsNamedInTheHeader(t *testing.T) {
+	m := newLogs()
+	streamLines(&m, 1, 10)
+	if h := plain(m.View()); strings.Contains(h, "[trimmed]") {
+		t.Errorf("an untrimmed buffer must not claim otherwise; got:\n%s", h)
+	}
+	streamLines(&m, 11, MaxLines+2*trimChunk)
+	if h := plain(m.View()); !strings.Contains(h, "[trimmed]") {
+		t.Errorf("header should say the oldest lines are gone; got:\n%s", h)
+	}
+	m.Restream()
+	if h := plain(m.View()); strings.Contains(h, "[trimmed]") {
+		t.Errorf("a re-streamed buffer has dropped nothing; got:\n%s", h)
+	}
+}
+
+// TestTrimNarrowsASelectionInsteadOfSlidingIt: a selection counts shown lines, so a trim
+// renumbers both its ends. Sliding them by the wrong amount would silently re-aim a range
+// the reader is about to copy; a far end that streamed off the top narrows to the oldest
+// line left, the same answer a grep that hides it gives (rebuildShown).
+func TestTrimNarrowsASelectionInsteadOfSlidingIt(t *testing.T) {
+	m := newLogs()
+	streamLines(&m, 1, MaxLines)
+	m = selectUp(m, 3) // four lines, ending at the newest
+	lo, hi, ok := m.Selection()
+	if !ok || hi-lo+1 != 4 {
+		t.Fatalf("selection = (%d,%d,%v); want four lines", lo, hi, ok)
+	}
+	want, _, _ := m.Yank()
+	m = selectUp(m, 3) // re-arm the same range: Yank left visual mode
+
+	streamLines(&m, MaxLines+1, MaxLines+2*trimChunk)
+	if !m.trimmed {
+		t.Fatal("this test needs the trim to have run")
+	}
+	got, n, ok := m.Yank()
+	if !ok {
+		t.Fatal("the selection should survive a trim of lines it does not cover")
+	}
+	if got != want || n != 4 {
+		t.Errorf("yank after a trim = %q (%d lines); want the same four lines %q", got, n, want)
+	}
+}

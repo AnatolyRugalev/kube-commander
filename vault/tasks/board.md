@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — LOGS-SEL-02 done: `v` selects log lines in the logs view and `y` copies them to the clipboard, unpainted and unwrapped (D244). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — LOGS-07 done: the logs buffer is bounded at 10 000 lines and drops from the top, saying `[trimmed]` once it has (D245). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -154,7 +154,7 @@ half. Constraints a later leg must not walk into (**D239**): the highlight's sco
 filter's scope exactly, a match cuts a status-colored cell rather than replacing it, and the
 **cursor row keeps its marks** — the one exception to M4-06's "selection wins outright".
 
-### Logs dedicated view (LOGS — feedback-driven, D134) — reopened on memory (LOGS-07)
+### Logs dedicated view (LOGS — feedback-driven, D134) — closed again at LOGS-07
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
 and `2026-07-29-logs-init-containers`: a **dedicated full-screen logs mini-app** with a
 `/`-filter that narrows the stream live while following. **Closed twice.** On *features* at
@@ -168,26 +168,16 @@ the pump feeds in batches — ~131 ms → ~2 ms for a 1000-line open (D162,
 marked `name (init)`, since an init container's logs are the only diagnosis a pod stuck in
 `Init:` has (D161). Per-slice history: `vault/journal/`.
 
-Both closures are on **latency**, and BOARD-02b-3's sweep of the paragraphs above reopened the
-line a third time on **memory**: nothing bounds the buffer at all, which is **LOGS-07** below —
-the one open item here, so everything above it is the collapsed history of closed work (D229
-pt 1). The 2026-08-01 throughput dogfood (~1,900 lines/sec, no degradation) **confirms D162 and
-does not retire it**; what that closure licenses, and the buffer depth it never measured, is
-D191 pt 3, and neither D160 nor D162 is evidence that the depth is bounded (D230).
+The first two closures were on **latency**, and BOARD-02b-3's sweep of the paragraphs above
+reopened the line a third time on **memory**: nothing bounded the buffer at all. That was
+LOGS-07, and it is now closed — the buffer holds the newest 10 000 lines and drops from the
+top (**D245**), so this line has no open item and everything here is the collapsed history of
+closed work (D229 pt 1). The 2026-08-01 throughput dogfood (~1,900 lines/sec, no degradation)
+**confirms D162 and does not retire it**; what that closure licenses, and the buffer depth it
+never measured, is D191 pt 3, and neither D160 nor D162 was ever evidence that the depth was
+bounded (D230) — D245 pt 1 is, and it is the constraint the two constants now live under.
 
-- [ ] **LOGS-07** Bound the logs buffer — nothing does
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-07
-      notes: Found by BOARD-02b-3's sweep, checking this line's prose against the code.
-      `logsview.appendLine` appends to `lines`, `stamps` and (on a match) `shownLines` and
-      drops nothing ever: a followed stream grows all three for as long as the view is open,
-      at a rate measured at ~1,900 lines/sec, and `Reset` only clears them at the *next*
-      open. LOGS-05a's `TailLines` bounds the initial replay, not the tail; LOGS-05b bounds
-      what a line costs, not how many are held (D230). Wants a cap — `defaultLogTail` (1000)
-      is the obvious default and matches what `-f` readers expect — plus a test that a long
-      stream holds a bounded count. The care is in the trim: `shownLines` holds only the
-      lines the query keeps and `renderLine` indexes `lines`/`stamps`, so dropping a prefix
-      has to drop the matching prefix of the cache (or rebuild it) and keep the scroll
-      position meaning what it did.
+- [x] **LOGS-07** Logs buffer bounded at 10 000 lines, trimmed from the top — done 2026-08-07 (D245)
 
 ### Logs selection and yank (LOGS-SEL — feedback-driven)
 Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
@@ -642,6 +632,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-07** Logs buffer bounded at 10 000 lines, trimmed from the top — done 2026-08-07 (D245)
 
 - [x] **LOGS-SEL-02** Visual mode and yank in the logs view — `v` selects log lines, `y` copies them unpainted and unwrapped via OSC-52, and a selection suspends the tail — done 2026-08-07 (D244)
 

@@ -66,6 +66,28 @@ const (
 // usual pager compromise and lands on tab stops.
 const hStep = 8
 
+// MaxLines bounds the log buffer: a followed stream drops its oldest lines rather
+// than growing for as long as the view is open (LOGS-07). Nothing else bounds it —
+// the wiring's TailLines bounds the *replay* that precedes the tail, and LOGS-05b
+// bounds what a line costs, not how many are held — so a chatty container measured at
+// ~1,900 lines/sec would otherwise grow `lines`, `stamps` and `shownLines` without
+// end (D230).
+//
+// Ten thousand, not the thousand-line replay: the cap must exceed that replay or the
+// first live line would start discarding history the reader just asked for and
+// scrolled into (D245). Ten thousand lines of typical output is a few MB held twice
+// over (the raw buffer and its painted cache) and still a full pager's worth of
+// scroll-back.
+//
+// trimChunk is the slack the buffer runs past the cap before a trim, which is what
+// makes the trim amortized: dropping a prefix is O(held), so trimming on every line
+// past the cap would make a fast stream quadratic. One trim per trimChunk lines makes
+// it O(1) per line, at the cost of holding at most MaxLines+trimChunk.
+const (
+	MaxLines  = 10000
+	trimChunk = 1000
+)
+
 // ClosedMsg is emitted when the user dismisses the logs view (nav.back with the filter
 // already closed). Owned by this package — the emitter — so the root model handles the
 // concrete type without this package importing it (D56). Kind mirrors the shared
@@ -94,8 +116,15 @@ type Model struct {
 	// joins exactly the bytes it joined before this existed, so the high-throughput
 	// default costs nothing; and the grep matches the message in either state, so a
 	// query can never be satisfied by the clock.
-	lines  []string
-	stamps []string
+	//
+	// Both are bounded at MaxLines: past it the oldest lines are dropped (trim), so a
+	// stream that never ends does not grow forever. trimmed records that this has
+	// happened at least once — the top of the buffer is then no longer the top of the
+	// stream, which is a thing the reader standing on it must be told (the header says
+	// so), and it is never unset short of a Reset.
+	lines   []string
+	stamps  []string
+	trimmed bool
 
 	following bool // auto-scroll to the newest line as it streams (toggled by logs.follow)
 	filtering bool // whether the filter field is open and capturing text
@@ -276,6 +305,7 @@ func (m *Model) Restream() {
 	m.shownIdx = m.shownIdx[:0]
 	m.cursor = -1
 	m.anchor = -1
+	m.trimmed = false
 	m.resumeFollow = false
 	m.following = true
 	m.render()
@@ -296,6 +326,7 @@ type Line struct {
 func (m *Model) Append(stamp, line string) {
 	match, filtered := m.shownFilter()
 	m.appendLine(match, filtered, stamp, line)
+	m.trim()
 	m.syncContent()
 }
 
@@ -315,6 +346,7 @@ func (m *Model) AppendBatch(batch []Line) {
 	for _, l := range batch {
 		m.appendLine(match, filtered, l.Stamp, l.Message)
 	}
+	m.trim()
 	m.syncContent()
 }
 
@@ -327,6 +359,61 @@ func (m *Model) appendLine(match matcher, filtered bool, stamp, line string) {
 	if s, ok := m.renderLine(len(m.lines)-1, match, filtered); ok {
 		m.shownLines = append(m.shownLines, s)
 		m.shownIdx = append(m.shownIdx, len(m.lines)-1)
+	}
+}
+
+// trim drops the oldest lines once the buffer has run trimChunk past MaxLines, taking
+// the buffer back to exactly MaxLines. It is called after an append and before the
+// content is handed to the viewport, so nothing ever sees a half-trimmed model.
+//
+// The care is all in what addresses a line by index. `shownIdx` holds buffer indices,
+// so every survivor shifts down by the number dropped and the entries that pointed
+// *into* the dropped prefix leave with it — which in turn moves the cursor and the
+// selection anchor, both of which count shown lines. And the viewport's own offset is
+// rows from the top of the body: dropping rows off that top would slide the body up
+// under a paused reader, so the offset is pulled down by exactly the rows that left
+// and the reader keeps looking at the lines they were looking at. (A following reader
+// is pinned to the newest line by syncContent, so none of the scroll arithmetic
+// applies — but the index arithmetic still does.)
+//
+// slices.Delete, not a reslice: a reslice would keep the dropped strings alive through
+// the backing array until it next grew, which is exactly the unbounded growth this
+// exists to stop.
+func (m *Model) trim() {
+	if len(m.lines) < MaxLines+trimChunk {
+		return
+	}
+	drop := len(m.lines) - MaxLines
+	m.lines = slices.Delete(m.lines, 0, drop)
+	m.stamps = slices.Delete(m.stamps, 0, drop)
+	m.trimmed = true
+
+	// shownIdx is ascending, so the first survivor is the insertion point of drop.
+	cut, _ := slices.BinarySearch(m.shownIdx, drop)
+	if cut > 0 {
+		if !m.following {
+			rows := cut
+			if m.wrap {
+				rows = 0
+				w := m.viewport.Width()
+				for i := range cut {
+					rows += lineRows(m.shownLines[i], w)
+				}
+			}
+			m.viewport.SetYOffset(max(0, m.viewport.YOffset()-rows))
+		}
+		m.shownLines = slices.Delete(m.shownLines, 0, cut)
+		m.shownIdx = slices.Delete(m.shownIdx, 0, cut)
+		// Both ends of the reader's range are clamped, not dropped: a selection whose
+		// far end has streamed off the top narrows to what survives, the same answer
+		// rebuildShown gives when a grep hides one of its lines.
+		m.cursor = max(m.cursor-cut, 0)
+		if m.anchor >= 0 {
+			m.anchor = max(m.anchor-cut, 0)
+		}
+	}
+	for i := range m.shownIdx {
+		m.shownIdx[i] -= drop
 	}
 }
 
@@ -1088,6 +1175,15 @@ func (m Model) header() string {
 		seg += "  [previous]"
 	}
 	seg += "  " + state
+	// Once the buffer has dropped its oldest lines (LOGS-07) the top of the body is no
+	// longer the start of the stream, so `gg` lands in the middle of a log that looks
+	// like it starts there. That is state the reader cannot see and would misread, which
+	// is D146's test for a marker. It is a fixed word rather than a count of what was
+	// dropped: the count would change on every trim and the reader can do nothing with
+	// it, while "there was more above this" is the whole of what they need to know.
+	if m.trimmed {
+		seg += "  [trimmed]"
+	}
 	// Visual mode, with the size of the selection (LOGS-SEL-02). It earns a marker on
 	// D146's own test — state the reader can lose sight of — twice over. A fresh `v`
 	// selects exactly the line the cursor was already on, so the screen is unchanged
