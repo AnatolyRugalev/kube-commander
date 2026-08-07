@@ -152,9 +152,10 @@ func runTUI(opts runOptions) error {
 	// leaves true nils rather than typed-nil pointers that would read as "wired".
 	var persister tui.NamespacePersister
 	var pinner tui.PinPersister
+	var resourcer tui.ResourcePersister
 	if statePath != "" {
 		p := &statePersister{path: statePath, state: state}
-		persister, pinner = p, p
+		persister, pinner, resourcer = p, p, p
 	}
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
@@ -175,6 +176,12 @@ func runTUI(opts runOptions) error {
 		tui.WithNamespace(namespace),
 		tui.WithNamespacePersister(persister),
 		tui.WithPinPersister(pinner),
+		// The kind this context was last browsing, restored once the launch discovery
+		// pass reconciles (CTX-MEM-02/D240) — the same file, the same seam shape and the
+		// same silent degrade as the namespace above. Unlike the namespace there is no
+		// flag to override it: -n names a scope for the run, and nothing names a kind.
+		tui.WithLastResource(state.LastResource),
+		tui.WithResourcePersister(resourcer),
 		tui.WithContext(ctxName),
 		tui.WithKubeconfig(opts.kubeconfig),
 		tui.WithVersion(version.Version),
@@ -314,14 +321,19 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 		MenuExtras: extras,
 		Pinned:     state.PinnedResources,
 		Namespace:  state.LastNamespace,
+		// The third thing this file remembers per context (CTX-MEM-02/D240): the kind
+		// the reader left open. It rides the same message as the namespace because it
+		// is the same disk read keyed by the same name, and because a switch must land
+		// on the *new* context's memory or none at all.
+		LastResource: state.LastResource,
 	}
 	if statePath != "" {
 		// Guarded so the interface fields stay true nils when the state path is
 		// unresolvable — a typed nil pointer in one would read as "persistence wired"
-		// and panic on the first write. Both writers into this context's state file
-		// are the same object, as at launch.
+		// and panic on the first write. All three writers into this context's state
+		// file are the same object, as at launch.
 		p := &statePersister{path: statePath, state: state}
-		st.Persister, st.Pinner = p, p
+		st.Persister, st.Pinner, st.Resourcer = p, p, p
 	}
 	return st
 }
@@ -495,6 +507,23 @@ func (p *statePersister) PersistPin(r config.MenuResource) error {
 	if !p.state.Pin(r) {
 		return nil
 	}
+	return p.state.SaveFile(p.path)
+}
+
+// PersistResource records the kind the UI last opened a table for (tui.ResourcePersister,
+// CTX-MEM-02) in the same context's state file, so the next launch and every switch back
+// reopen on it. It stores an address only — the GVR plus its display hints, exactly the
+// shape a pin stores — and never rows, which is what lets the restore be a fresh watch
+// rather than a replay of data from a cluster kubecom has left (D240 pt 2).
+//
+// It mutates the retained *config.State in place like the two writers above, so a
+// namespace change, a pin and a drill-in each carry the others rather than reverting
+// them. Unlike PersistPin it does not dedupe: the shell already declines to call it when
+// the recorded GVR is unchanged (recordResource), so reaching here means the file is
+// genuinely out of date.
+func (p *statePersister) PersistResource(r config.MenuResource) error {
+	entry := r
+	p.state.LastResource = &entry
 	return p.state.SaveFile(p.path)
 }
 

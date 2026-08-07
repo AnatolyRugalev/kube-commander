@@ -65,7 +65,7 @@ on the table.
 
 Press `Ctrl+n` (`ns.switch`) to change namespace — the same palette line, on
 `:namespace `. kubecom reopens on the namespace you last used in that context
-([configuration](docs/configuration.md#remembered-namespace)).
+([configuration](docs/configuration.md#what-kubecom-remembers)).
 
 `--context` only picks the context to *start* on: press `C` (`ctx.switch`) to
 switch to any other context in the kubeconfig without restarting. The list marks
@@ -351,8 +351,12 @@ stops them all, and quitting kubecom stops them all too.
   kind in this context's menu whether or not discovery lists it. `*` is a toggle, and
   `:pin ` does the same thing by name — a kind you have never seen in the menu is
   exactly the one you want to pin. See [pinned kinds](docs/configuration.md#pinned-kinds).
-- **The namespace you left off in.** kubecom reopens on the last namespace you used,
-  per context. See [remembered namespace](docs/configuration.md#remembered-namespace).
+- **Where you left off.** kubecom reopens on the last namespace you used *and* the
+  last resource kind you had open, per context — including across a context switch,
+  so flipping to another cluster and back returns you to what you were reading. The
+  kind comes back as a fresh watch, and a kind the cluster doesn't serve is skipped
+  silently rather than surfaced as an error. See
+  [what kubecom remembers](docs/configuration.md#what-kubecom-remembers).
 
 ### When something doesn't work
 
@@ -428,8 +432,8 @@ keys:
 ```
 
 [`docs/configuration.md`](docs/configuration.md) covers the config file, the
-built-in themes, per-context resource menus, pinned kinds, the remembered
-namespace, and migrating a config from the 2020 kube-commander.
+built-in themes, per-context resource menus, pinned kinds, what kubecom remembers
+per context, and migrating a config from the 2020 kube-commander.
 [`docs/keybindings.md`](docs/keybindings.md) is the generated key reference.
 
 ## Contributing

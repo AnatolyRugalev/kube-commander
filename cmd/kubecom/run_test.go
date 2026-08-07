@@ -459,6 +459,76 @@ func TestPersistPinRoundTripsAndKeepsTheNamespace(t *testing.T) {
 	}
 }
 
+// TestPersistResourceRoundTripsAndKeepsTheRestOfTheState covers the third write into
+// the same file (CTX-MEM-02/D240): the kind the reader last browsed, restored on the
+// next launch and on every switch back. Like the pin it is written through the one
+// retained State, so a drill-in must not drop the namespace or the pins the same
+// session recorded — SaveFile marshals the whole struct, and this is the file's third
+// chance to lose the other two fields.
+func TestPersistResourceRoundTripsAndKeepsTheRestOfTheState(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	state, path := loadState("prod")
+	p := &statePersister{path: path, state: state}
+	if err := p.PersistNamespace("monitoring"); err != nil {
+		t.Fatalf("PersistNamespace: %v", err)
+	}
+	pin := config.MenuResource{Group: "g", Version: "v1", Resource: "widgets", Kind: "Widget"}
+	if err := p.PersistPin(pin); err != nil {
+		t.Fatalf("PersistPin: %v", err)
+	}
+	last := config.MenuResource{
+		Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets",
+		Kind: "ExternalSecret", Namespaced: true,
+	}
+	if err := p.PersistResource(last); err != nil {
+		t.Fatalf("PersistResource: %v", err)
+	}
+
+	reloaded, _ := loadState("prod")
+	if reloaded.LastResource == nil || *reloaded.LastResource != last {
+		t.Fatalf("reloaded LastResource = %+v, want %+v", reloaded.LastResource, last)
+	}
+	if reloaded.LastNamespace != "monitoring" {
+		t.Errorf("reloaded LastNamespace = %q — a drill-in must not drop the namespace", reloaded.LastNamespace)
+	}
+	if len(reloaded.PinnedResources) != 1 || reloaded.PinnedResources[0] != pin {
+		t.Errorf("reloaded PinnedResources = %+v — a drill-in must not drop the pins", reloaded.PinnedResources)
+	}
+
+	// Moving on overwrites rather than accumulates: the file remembers one place.
+	next := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true}
+	if err := p.PersistResource(next); err != nil {
+		t.Fatalf("PersistResource (second): %v", err)
+	}
+	reloaded, _ = loadState("prod")
+	if reloaded.LastResource == nil || *reloaded.LastResource != next {
+		t.Fatalf("reloaded LastResource = %+v, want %+v", reloaded.LastResource, next)
+	}
+}
+
+// TestLoadContextStateCarriesTheRememberedKind proves the switch path resolves the
+// third per-context field too (CTX-MEM-02): without it a switch would rebind the menu
+// and the namespace but leave the departed context's remembered kind armed, and the
+// restore would fire against the wrong cluster.
+func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeStateFile(t, "prod", "lastNamespace: apps\nlastResource:\n  group: example.com\n  version: v1\n  resource: widgets\n  kind: Widget\n")
+
+	st := contextStateLoader{}.LoadContextState("prod")
+	if st.LastResource == nil || st.LastResource.Resource != "widgets" {
+		t.Fatalf("LastResource = %+v, want the widgets entry", st.LastResource)
+	}
+	if st.Resourcer == nil {
+		t.Error("a resolved state path should wire the resource writer, as it wires the other two")
+	}
+
+	// A context with no state file arms nothing and still leaves the writer usable.
+	st = contextStateLoader{}.LoadContextState("staging")
+	if st.LastResource != nil {
+		t.Errorf("LastResource for an unrecorded context = %+v, want nil", st.LastResource)
+	}
+}
+
 // TestPersistThemeKeepsTheRestOfTheConfig is the leg's real risk (M4-12b-2): SaveFile
 // marshals the whole struct, so a write-back that does not load the file first deletes
 // everything else in it — a user's entire `keys:` section for the sake of one theme

@@ -75,6 +75,20 @@ type ContextState struct {
 	// — the bug D163 exists to prevent. Nil disables pinning for the switched-in
 	// context, exactly as a nil WithPinPersister does at launch.
 	Pinner PinPersister
+	// LastResource is the kind this context was last left browsing (State.LastResource,
+	// D240), or nil when it has never been recorded. The switch arms one restore
+	// attempt with it, taken when the new cluster's discovery pass reconciles — so a
+	// switch back lands on the table you left rather than on the welcome pane. It is an
+	// address and nothing more: no row and no client survives a switch (D196 pt 1 is
+	// untouched), and a kind the new cluster does not serve restores nothing, silently
+	// (D240 pt 3).
+	LastResource *config.MenuResource
+	// Resourcer writes a kind opened on the new context back to *its* state file. It
+	// rides here for the reason Persister and Pinner do: bound to one context's state
+	// path, so a switch that carried the launch context's writer over would record the
+	// new context's browsing in the departed context's file. Nil disables the memory
+	// for the switched-in context, exactly as a nil WithResourcePersister does.
+	Resourcer ResourcePersister
 }
 
 // ContextStateLoader resolves ContextState for a kubeconfig context (M4-05). It is
@@ -228,6 +242,14 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		m.nsPersister = msg.state.Persister
 		m.pinner = msg.state.Pinner // pins recorded next belong to the new context's file
 		m.setNamespace(msg.state.Namespace)
+		// The remembered kind is armed, not applied: the seed menu the reset just
+		// rebuilt cannot resolve a CRD, so the restore waits for the discovery pass
+		// started below (CTX-MEM-02/D240 pt 4). Arming it here — after resetCluster
+		// cleared hasCurrent — is what makes a switch-back reopen the table, and
+		// rebinding the writer alongside keeps the two halves naming one context.
+		m.resPersister = msg.state.Resourcer
+		m.lastResource = msg.state.LastResource
+		m.restorePending = msg.state.LastResource != nil
 	}
 
 	// Start the stopwatch's second half now the swap has landed; the discovery pass

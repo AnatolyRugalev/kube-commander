@@ -3,14 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — LOGS-SEL-01 done: the logs view has a line cursor over log lines (D242), which is what LOGS-SEL-02's visual mode and yank build on. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — CTX-MEM-02 done: kubecom reopens the kind you left open, per context, at launch and across a switch (D243). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: See the CTX-MEM section below for the full brief (D240). Re-taken 2026-08-07
-      after the first claim landed nothing (commit 3f812a9 was the claim itself).
+_(none)_
 
 ## Blocked
 
@@ -472,22 +469,19 @@ holds nothing from a context it is not on and `resetCluster` stays unconditional
 pt 1). Nothing here is gated on the dogfood: no client, no watch and no row survives a
 switch, only a GVR.
 
+CTX-MEM-02 landed the address itself and the two ends it attaches to (**D243**): the
+write is in `watchResource` once the watch is live, so every browse surface records
+through one point and a refused LIST records nothing; the replay is in `handleDiscovery`
+after `Reconcile`, so a remembered CRD resolves; and the attempt is single and loses every
+tie — to a reader who drilled in first, and to a second pass on the same cluster.
+
 - [x] **CTX-MEM-01** Triage the pane-memory feedback into this line — done 2026-08-07 (D240)
-- [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
-      status: todo | owner: — | added: 2026-08-07
-      notes: `config.State` grows a `lastResource` (a `MenuResource`-shaped GVR beside
-      `lastNamespace`); `tui.ContextState` grows the field and a writer seam alongside
-      `NamespacePersister`/`PinPersister`, written when a drill-in changes `m.current`;
-      `handleClusterConnected` replays it after `resetCluster`, as the switch already
-      replays `msg.state.Namespace`. Restore at launch too (D240 pt 4) — `run.go` already
-      reads the same file for the namespace. **The degrade is part of this slice, not a
-      follow-up**: a remembered GVR the new cluster does not serve (a CRD that is not
-      installed, an RBAC denial) leaves the seed menu and the welcome pane, silently
-      (D240 pt 3) — restore is a convenience and must never be the reason a switch shows
-      an error.
+- [x] **CTX-MEM-02** Last-browsed kind remembered per context and restored — done 2026-08-07 (D243)
 - [ ] **CTX-MEM-03** Bring the table's own view state back with the pane
-      status: todo | owner: — | added: 2026-08-07 | blocked-on: CTX-MEM-02
-      notes: The feedback names "where I'd drilled in, scroll position". Sort column +
+      status: todo | owner: — | added: 2026-08-07
+      notes: Unblocked — CTX-MEM-02 landed the seam and the two attachment points D243
+      names, so this slice adds fields to `config.State.LastResource`'s neighbourhood and
+      replays them in `restoreLastResource`, not a new mechanism. The feedback names "where I'd drilled in, scroll position". Sort column +
       direction (M2-13a) is plainly durable and is a column name, so it stores like the
       GVR. The cursor is the open question and this slice's real work: a row identity is
       a UID (D98), which is meaningless on another cluster and stale on this one after
@@ -496,7 +490,7 @@ switch, only a GVR.
       filter is a transient question and the default answer is no; argue it if you
       disagree. Whatever lands must keep D240 pt 3: a miss is silent, never an error.
 - [ ] **CTX-MEM-04** The drill-in scope — deferred, with the reason
-      status: todo | owner: — | added: 2026-08-07 | blocked-on: CTX-MEM-02
+      status: todo | owner: — | added: 2026-08-07
       notes: Deferred by D240 pt 6, kept on the board so the deferral is visible rather
       than lost. A children scope names an owner object (D165), so restoring it is an
       object re-resolve that can fail — and landing in a *different* scope silently is
@@ -653,6 +647,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CTX-MEM-02** kubecom reopens the kind you left open, per context — recorded once the watch is live, replayed after discovery reconciles, silent when the cluster does not serve it — done 2026-08-07 (D243)
 
 - [x] **LOGS-SEL-01** A line cursor in the logs view — j/k move a highlighted log line (not a screen row), Selection and Match share it, and `shownIdx` is the map a yank reads — done 2026-08-07 (D242)
 

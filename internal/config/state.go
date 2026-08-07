@@ -32,6 +32,17 @@ type State struct {
 	// rather than in that file because kubecom writes them *for* you as you work, and
 	// this is the file kubecom may rewrite freely (D90).
 	PinnedResources []MenuResource `json:"pinnedResources,omitempty"`
+
+	// LastResource is the resource kind the user last browsed on this context, restored
+	// as the opened table on the next launch and on every switch back (CTX-MEM-02/D240).
+	// It is an *address* — a GVR and the display hints that go with it — never rows: rows
+	// from a cluster kubecom is not connected to are stale the moment they are stored, so
+	// the restore re-watches through the ordinary drill-in path instead (D240 pt 2).
+	//
+	// A pointer rather than a value because "never recorded" and "recorded" must be
+	// distinguishable and `omitempty` does not omit a zero struct. Nil is the state of a
+	// context that has only ever been browsed at the menu, and it restores nothing.
+	LastResource *MenuResource `json:"lastResource,omitempty"`
 }
 
 // Pin adds r to the context's pinned kinds, returning false when the GVR is already
@@ -135,6 +146,16 @@ func parseState(data []byte) (*State, error) {
 	// the launch.
 	if err := validateMenuResources("state pinnedResources", s.PinnedResources); err != nil {
 		return nil, err
+	}
+	// The remembered kind is validated the same way and for the same reason: it is
+	// addressed by the kube layer exactly as a pin is, so a version- or resource-less
+	// entry is a broken address whichever field it came from. It degrades no worse
+	// either — the launcher turns a state-file error into the zero state and a log
+	// line, which costs the restore and the namespace but never the launch.
+	if s.LastResource != nil {
+		if err := validateMenuResources("state lastResource", []MenuResource{*s.LastResource}); err != nil {
+			return nil, err
+		}
 	}
 	return &s, nil
 }

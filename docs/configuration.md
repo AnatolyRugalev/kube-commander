@@ -8,7 +8,7 @@ in a file you hand-edit.
 - [Themes](#themes) — the built-in palettes
 - [Per-context menu](#per-context-menu) — adding CRDs to the resource menu
 - [Pinned kinds](#pinned-kinds) — what `*` writes, and where
-- [Remembered namespace](#remembered-namespace)
+- [What kubecom remembers](#what-kubecom-remembers) — the namespace and the kind you left open
 - [Migrating from the 2020 kube-commander](#migrating-from-the-2020-kube-commander)
 
 ## The config file
@@ -97,10 +97,11 @@ and discovered rows are not removable this way. A pinned kind is otherwise an
 ordinary menu row, listed under **Custom Resources** unless the menu already places
 it elsewhere.
 
-## Remembered namespace
+## What kubecom remembers
 
-kubecom remembers the last namespace you selected, per kubeconfig context, and
-reopens on it next time. The choice is stored in
+kubecom remembers where you were, per kubeconfig context, and reopens there next
+time: the **namespace** you last selected and the **resource kind** you last had
+open. Both are stored in
 `os.UserConfigDir()/kubecom/state/<context>.yaml` (`~/.config/kubecom/state/` on
 Linux) — a kubecom-managed file, separate from your config and menu files, so
 kubecom rewrites it freely without touching anything you hand-edit (it also holds
@@ -110,6 +111,18 @@ the UI updates what's remembered. Switching context (`C`) lands you in *that*
 context's remembered namespace, and what you pick afterwards is remembered against
 it — `-n` names the scope for the context you launched on, not for every context
 you visit.
+
+The remembered kind is restored a moment after launch — once discovery has listed
+the cluster's API surface, so a CRD comes back as readily as `pods` does. It is an
+address, not a snapshot: kubecom starts a fresh watch on it, so what you see is the
+cluster as it is now, never rows left over from last time. Switching context (`C`)
+restores that context's kind the same way.
+
+If the kind isn't there — you pinned a CRD on the cluster that runs the operator and
+opened one that doesn't, or the API group it lives in is unavailable — nothing is
+said and nothing fails: you land on the resource menu and the welcome pane, exactly
+as you would have before. And if you drill into something yourself before the restore
+gets there, you keep what you chose.
 
 ## Migrating from the 2020 kube-commander
 

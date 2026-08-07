@@ -2,6 +2,9 @@
 
 - Created: 2026-07-29
 - By: M4-04b
+- Amended: 2026-08-07 by CTX-MEM-02 — item 8 added (the pane comes back now). Same two-cluster
+  setup as everything above, so do it in the same sitting; it is the first item here that is
+  about how the switch *looks* rather than what it tears down.
 - Priority: normal
 - Blocks: none (advisory — gates only the M4 "switch context without restarting; watches
   and menu rebind" exit criterion, which stays unticked until this is done; M4-05 and every
@@ -56,6 +59,32 @@ other context:
    retaining a departed cluster is worth its risk, and if so which half is worth retaining
    (D196 pt 3). A first switch to a cluster and a switch *back* to one seen already are
    different measurements: please include both, the second is the one the feedback is about.
+
+8. **Does the pane coming back feel like arriving, or like a jump?** _(added 2026-08-07 by
+   CTX-MEM-02, from feedback `2026-08-06-context-switch-pane-memory` — "my pane gets reset",
+   pt 3 of the 2026-08-06 update above.)_ kubecom now remembers the **kind you had open**,
+   per context, and reopens it — at launch as well as across a switch. The mechanism is
+   hermetically covered (`internal/tui/panememory_test.go`); what is not is the *timing*, and
+   it is the one thing that could make this worse rather than better:
+
+   The restore fires when the new cluster's discovery pass completes, not when the switch
+   lands, because a CRD is not resolvable before then. So for however long discovery takes
+   you see the seed menu and the welcome pane, and *then* the table appears under you.
+   Please say which of these it is:
+
+   - it reads as the switch finishing (good — this is what the design assumes), or
+   - it reads as a flash of the wrong screen followed by a jump (bad — then the fix is to
+     hold the welcome pane's transition, or to restore a *seed* kind immediately and upgrade
+     to a discovered one when the pass lands; either is a small follow-up, but only one of
+     them is worth writing).
+
+   Two more things only a real cluster shows: (a) scope one context to a CRD its cluster
+   serves and the other to `pods`, then switch back and forth — each should reopen its own
+   kind, and neither should reopen the other's; (b) point kubecom at a cluster **without**
+   that CRD's operator. The remembered kind is deliberately skipped in silence there — you
+   should land on the menu and welcome pane with **no toast and no error in the table**. If
+   anything at all is said on screen about the kind that could not be restored, that is a
+   bug against D240 pt 3 and belongs in `../feedback/`.
 
 ## Why the agent can't do it
 

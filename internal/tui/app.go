@@ -763,6 +763,22 @@ type Model struct {
 	// (the palette's `:namespace ` stage) is seeded by the bundle's nsLister.
 	nsPersister NamespacePersister
 
+	// lastResource is the kind this context was last browsing (nil → none recorded), and
+	// restorePending arms the single restore attempt handleDiscovery takes for it
+	// (CTX-MEM-02/D240). It is an address, never rows: the restore re-watches through
+	// selectResource, so what is remembered survives being wrong about the cluster.
+	// The field doubles as the dedupe recordResource writes against, so a namespace
+	// re-scope of the same kind rewrites nothing. Like nsPersister and pinner it is
+	// per-context rather than per-cluster, so the switch rebinds it (D163) and
+	// resetCluster leaves it alone.
+	lastResource   *config.MenuResource
+	restorePending bool
+	// resPersister writes lastResource back to the per-context state file (nil →
+	// memory-inert). Bound to one context's state path, so the switch rebinds it for
+	// the same reason it rebinds the other two: a kind opened on the new context must
+	// not be recorded in the departed context's file.
+	resPersister ResourcePersister
+
 	// pinner records a kind pinned with menu.pin to the per-context state file so
 	// it stays in this context's menu (nil → pin-inert, CRD-PIN-02). Like nsPersister
 	// it is bound to one context's state path rather than to the cluster client, so
@@ -1553,6 +1569,11 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	m.watchCh = ch
 	m.current = r
 	m.hasCurrent = true
+	// Record the kind for this context now the watch is actually live (CTX-MEM-02): a
+	// Watch that failed above returned before here, so the state file never remembers a
+	// kind that could not be opened. A children drill-down records the child kind, which
+	// is what CTX-MEM-04 defers — the restore lands on the plain table, not in the scope.
+	persist := m.recordResource(pinEntry(r))
 
 	m.status.SetResourceType(r.GVK.Kind) // name the browsed kind on the top status bar
 	m.menu.SetActive(r)                  // mark the opened resource distinctly from the nav cursor
@@ -1564,7 +1585,7 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	// on every restart (M4-10). Off — and silent — for a kind this cluster does not
 	// measure.
 	metrics := m.startMetrics(r, ns)
-	return m, tea.Batch(m.pumpWatch(), metrics)
+	return m, tea.Batch(m.pumpWatch(), metrics, persist)
 }
 
 // surfaceError shows a classified error as a transient message in the status bar
@@ -1697,7 +1718,11 @@ func (m Model) handleDiscovery(msg DiscoveryReadyMsg) (tea.Model, tea.Cmd) {
 	// usable — so this is where a context switch's stopwatch stops (CTX-WARM-01).
 	// A launch-time pass has none pending and this is a no-op.
 	m = m.logSwitchComplete()
-	return m, nil
+	// …and the moment the remembered kind becomes resolvable, so this is where the
+	// pane comes back (CTX-MEM-02/D240 pt 4). One attempt per cluster, silent when the
+	// kind is not served here, and it yields to a reader who already drilled in.
+	m, restore := m.restoreLastResource()
+	return m, restore
 }
 
 // logDiscovery records what a discovery pass could not load. These are the shell's

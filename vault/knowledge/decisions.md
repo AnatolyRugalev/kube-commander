@@ -6709,3 +6709,31 @@ not walk into:
    offset counts display rows, so keeping the cursor visible means summing the heights above
    it. That walk is O(shown lines) and is paid on a reader gesture only — the same order
    `rebuildShown` already pays per keystroke in the grep — and never on an append.
+
+## D243 — Pane memory is written where the watch goes live and replayed where discovery lands; the attempt is single and always loses (2026-08-07, CTX-MEM-02)
+
+D240 said *what* is remembered (an address on the `ContextState` seam) and *that* a miss
+must be silent. This is where the two ends attach, and CTX-MEM-03/04 extend these points
+rather than re-choosing them.
+
+1. **One write point: `watchResource`, after `Watch` returned.** Every way of opening a
+   browse table — the menu, the `:resource ` stage, a search hit, a namespace re-scope, a
+   children drill-down — passes through it, so a later leg adding a sixth surface records
+   for free and cannot forget to. Recording *after* the watch is live is the load-bearing
+   half: a kind whose LIST the server refuses is not a kind the reader was browsing, and
+   remembering it would reopen the same failure on every launch. The dedupe against what is
+   already recorded is not an optimisation — without it a namespace re-scope, which
+   re-selects the same kind, rewrites the state file on every change.
+
+2. **One replay point: `handleDiscovery`, after `Reconcile`.** Not the connect, not
+   `Init` — before the pass the menu is the seed, so a remembered CRD would read as "not
+   served here" on every cluster that serves it. This is the same moment CTX-WARM-01's
+   stopwatch stops, and it is where anything else per-context and menu-resolved (a sort
+   column, CTX-MEM-03) belongs too.
+
+3. **The restore is attempted once per cluster and loses every tie.** It is armed by a
+   launch or a switch, consumed whatever the outcome, and skipped outright if the reader
+   already drilled in while the pass was running. A second pass on the same cluster — a
+   reconnect, or any later leg that refreshes the API surface — must not drag a reader who
+   is sitting on the menu into a table. A restore may only ever be the *first* thing that
+   happens on a cluster, never an interruption of something later.

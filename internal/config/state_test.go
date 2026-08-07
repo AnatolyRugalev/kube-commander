@@ -271,3 +271,60 @@ func TestStateUnpin(t *testing.T) {
 		t.Error("the core group ('') must be unpinnable, not treated as a wildcard")
 	}
 }
+
+// TestStateLastResourceRoundTrips proves the remembered kind survives Save → Load with
+// every field intact (CTX-MEM-02/D240). Namespaced matters for the same reason it does
+// on a pin: a restore that lost it would list a namespaced CRD cluster-wide.
+func TestStateLastResourceRoundTrips(t *testing.T) {
+	in := &State{
+		LastNamespace: "kube-system",
+		LastResource: &MenuResource{
+			Group: "external-secrets.io", Version: "v1beta1", Resource: "externalsecrets",
+			Kind: "ExternalSecret", Namespaced: true,
+		},
+	}
+	var buf bytes.Buffer
+	if err := in.Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out, err := LoadState(&buf)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if out.LastResource == nil || *out.LastResource != *in.LastResource {
+		t.Fatalf("LastResource = %+v, want %+v", out.LastResource, in.LastResource)
+	}
+	if out.LastNamespace != "kube-system" {
+		t.Errorf("LastNamespace = %q, want kube-system", out.LastNamespace)
+	}
+}
+
+// TestStateNoLastResourceStaysEmpty is why the field is a pointer: a zero struct is not
+// omitted by omitempty, so a value type would add a `lastResource: {version: ""}` stanza
+// to every existing state file and then fail its own validation on the next read.
+func TestStateNoLastResourceStaysEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (&State{}).Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if strings.Contains(buf.String(), "lastResource") {
+		t.Errorf("empty state emitted %q, want no lastResource key", buf.String())
+	}
+	got, err := LoadState(&buf)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if got.LastResource != nil {
+		t.Errorf("LastResource = %+v, want nil", got.LastResource)
+	}
+}
+
+// TestStateLastResourceIsValidated: the remembered kind is addressed by the kube layer
+// exactly as a pin is, so an entry the layer could not address is rejected at the same
+// gate rather than reaching a watch. The launcher degrades the whole file to the zero
+// state, which costs the restore and never the launch.
+func TestStateLastResourceIsValidated(t *testing.T) {
+	if _, err := LoadState(strings.NewReader("lastResource:\n  kind: Widget\n")); err == nil {
+		t.Fatal("a lastResource with no version/resource should be rejected")
+	}
+}
