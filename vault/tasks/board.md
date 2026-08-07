@@ -7,9 +7,15 @@ _Last updated: 2026-08-07 — DOC-01 done: the README is organised around the ca
 
 ## In Progress
 
+- [ ] **LOGS-SEL-01** A line cursor in the logs view
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
+      notes: See the LOGS-SEL section below for the full brief (feedback
+      `2026-08-07-logs-selection-and-yank`).
+
 - [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
       status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: See the CTX-MEM section below for the full brief (D240).
+      notes: See the CTX-MEM section below for the full brief (D240). Claimed 2026-08-07 by a
+      leg that landed nothing — if it is still unstarted at the next pick, re-take it.
 
 ## Blocked
 
@@ -190,6 +196,41 @@ D191 pt 3, and neither D160 nor D162 is evidence that the depth is bounded (D230
       lines the query keeps and `renderLine` indexes `lines`/`stamps`, so dropping a prefix
       has to drop the matching prefix of the cache (or rebuild it) and keep the scroll
       position meaning what it did.
+
+### Logs selection and yank (LOGS-SEL — feedback-driven)
+Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
+there is no way to say "this line" and therefore no way to copy one. The only route today is
+`M` (drop mouse capture) and the terminal's own select-to-copy, which costs the mouse, cannot
+reach past the screen, and on a wrapped line copies the *visual rows* — a long entry comes
+back with breaks that were never in the log. The ask is a line cursor, a vim visual mode on
+top of it, and `y` through the clipboard path `secret.copy` already built (M3-08b, OSC-52
+included). The submitter asked for the split below and named the cases that decide whether it
+feels right: follow must pause while selecting, the cursor and the selection are over **log
+lines** not screen rows, selection covers what a `/` query *displays*, a yank matches the
+timestamps toggle's current state, and **no styling may reach the clipboard**.
+
+- [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
+      status: todo | owner: — | added: 2026-08-07
+      notes: On top of LOGS-SEL-01's cursor. `v` (`logs.select`) anchors a selection at the
+      cursor, `j`/`k` extend it, `Esc` cancels; `y` (`logs.yank`) copies the selection — or
+      the cursor's line with no selection — to the clipboard through `internal/clipboard`
+      (the `secret.copy` path), with the status-bar confirmation that copy gives. Entering
+      visual mode **pauses following** and leaving it resumes it if the reader never turned
+      it off themselves. The clipboard gets `lines[i]` joined by `\n` — never `shownLines`,
+      which is painted — with the stamp prefixed exactly when `logs.timestamps` is on
+      (D242 pt 4). `y` is currently `confirm.accept`; the two are modal and cannot be live
+      together, but bind deliberately rather than discovering the overlap later. Wants a test
+      that the yanked text carries no escape sequence and that a wrapped line yanks whole.
+
+- [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
+      status: todo | owner: — | added: 2026-08-07
+      notes: Cheap follow-ups, worth doing only once LOGS-SEL-02 is dogfooded, because both
+      are legibility judgements a test cannot make. (1) Whether the selection bar and the `/`
+      match highlight stay legible together on one line or one must yield while visual mode
+      is active — D242 pt 3 says they coexist, on the same argument D239 made for the table,
+      and this is the check of it. (2) Whether a "yank everything visible" shortcut earns a
+      binding or `gg v G y` is enough. The third open question — what happens at the top of
+      the buffer while lines stream in above — is answered by LOGS-07's cap, not here.
 
 ### Diagnostics (DIAG — feedback-driven) — closed
 Feedback `2026-07-29-external-secrets-crd-error` ("need to find the actual error"): opening
