@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 func newBar() Model { return New(styles.Default()) }

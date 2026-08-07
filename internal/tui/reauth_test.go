@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 )
 
 // recordedRun is what the suspended remediation was asked to run, captured instead of

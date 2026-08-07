@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
 )
 
 // fakeMetricsLister is a hermetic MetricsLister: it hands back a preset sample set

@@ -9,10 +9,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/config"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 // fakeConnector is a hermetic ClusterConnector: it records the context names it was

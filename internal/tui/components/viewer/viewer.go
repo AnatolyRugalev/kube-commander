@@ -27,8 +27,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // ClosedMsg is emitted when the user dismisses the viewer (nav.back). Kind

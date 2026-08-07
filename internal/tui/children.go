@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // This file is the M4-08 owner → children drill-down: the gesture that turns a

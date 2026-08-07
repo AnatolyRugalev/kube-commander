@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // logSink builds a model whose diagnostic logger writes into a buffer, so a test can

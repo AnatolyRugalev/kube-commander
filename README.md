@@ -9,7 +9,7 @@ in-cluster deployment and **no `kubectl` binary required**.
 > This branch (`v1`) rebuilds the 2020 codebase from scratch on a modern Go stack
 > (**Bubble Tea + client-go**), fixing the old data-race/focus/redraw bug class by
 > construction and dropping the hard `kubectl` dependency. The original 2020 code
-> lives on [`master`](https://github.com/AnatolyRugalev/kube-commander/tree/master).
+> lives on [`master`](https://github.com/neuroplastio/kubecom/tree/master).
 >
 > **Current status:** feature-complete and dogfooded against real clusters —
 > everything documented below is in the binary, not planned. What is left is the
@@ -398,7 +398,7 @@ Until the first release is tagged, build from a `v1` checkout — this needs
 **Go 1.24+**, and works on Linux and macOS (Windows via WSL2):
 
 ```bash
-git clone -b v1 https://github.com/AnatolyRugalev/kube-commander
+git clone -b v1 https://github.com/neuroplastio/kubecom
 cd kube-commander
 go install ./cmd/kubecom      # installs kubecom to $(go env GOPATH)/bin
 ```

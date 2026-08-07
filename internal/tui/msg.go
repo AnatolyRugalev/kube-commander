@@ -3,7 +3,7 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // This file is the boundary between the concurrent `kube` layer and the

@@ -9,7 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // This file is AUTH-05a: what happens once the reader has approved the remediation

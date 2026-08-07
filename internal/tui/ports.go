@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 // This file is the FB-pf-port-picker-b wire: the TUI surface that turns the

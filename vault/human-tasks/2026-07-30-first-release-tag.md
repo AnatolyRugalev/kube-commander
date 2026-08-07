@@ -45,7 +45,7 @@ Then watch `.github/workflows/release.yml` (it runs `make check` first, then
    `GITHUB_TOKEN` may not create a *new* package under a user account in some org/user
    settings — fix it at Settings → Packages, or fall back to naming the package after
    the repository (`ghcr.io/anatolyrugalev/kube-commander`) in `.goreleaser.yml`.
-5. **`go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@v1.0.0-rc.1`**
+5. **`go install github.com/neuroplastio/kubecom/cmd/kubecom@v1.0.0-rc.1`**
    works from a clean `GOPATH` — this is what finally proves the module path is
    installable remotely (FB-go-install).
 

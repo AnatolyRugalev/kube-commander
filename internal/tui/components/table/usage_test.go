@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // usageSamples is a sample set covering the pods of sampleTable — deliberately not

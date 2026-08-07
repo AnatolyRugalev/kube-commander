@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"sigs.k8s.io/yaml"
 )
 

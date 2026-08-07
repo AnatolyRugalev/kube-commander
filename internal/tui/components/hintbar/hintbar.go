@@ -15,7 +15,7 @@
 package hintbar
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // Model is the hint line. The root model owns one, refreshes its hint whenever

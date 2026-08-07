@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 // TestPaletteOpensOnColon proves `:` opens the command palette (PAL-02) — not the

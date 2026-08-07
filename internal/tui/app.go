@@ -15,21 +15,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/config"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/hintbar"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/logsview"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/modal"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/searchview"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/statusbar"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/table"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/viewer"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/welcome"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/help"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/hintbar"
+	"github.com/neuroplastio/kubecom/internal/tui/components/logsview"
+	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
+	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
+	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/components/searchview"
+	"github.com/neuroplastio/kubecom/internal/tui/components/statusbar"
+	"github.com/neuroplastio/kubecom/internal/tui/components/table"
+	"github.com/neuroplastio/kubecom/internal/tui/components/viewer"
+	"github.com/neuroplastio/kubecom/internal/tui/components/welcome"
+	"github.com/neuroplastio/kubecom/internal/tui/help"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // ResourceWatcher is the narrow slice of the kube layer the shell needs to start
@@ -1086,8 +1086,8 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
-	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
-	m.menu.AddPinned(m.menuPinned) // then this context's pins, behind them (D193 pt 3 / D202)
+	m.menu.AddExtras(m.menuExtras)             // fold in the per-context menu customizations (D83); no-op when none
+	m.menu.AddPinned(m.menuPinned)             // then this context's pins, behind them (D193 pt 3 / D202)
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
 	m.syncHints()                      // menu starts focused → menu-context hints

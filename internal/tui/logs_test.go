@@ -9,10 +9,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/logsview"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/menu"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/logsview"
+	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 // These cover what LOGS-02 adds on top of the M3-05/06/07 logs behaviour already

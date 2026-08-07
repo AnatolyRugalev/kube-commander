@@ -10,11 +10,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/config"
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
-	"github.com/AnatolyRugalev/kube-commander/internal/version"
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/version"
 )
 
 // runOptions carries the resolved root-command flags into runTUI, so the launch

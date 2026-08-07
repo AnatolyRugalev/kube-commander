@@ -3,7 +3,7 @@ package menu
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // seedItems is the static default menu: the common core resource kinds a user
@@ -59,8 +59,8 @@ func seedItems() []Item {
 	for _, s := range specs {
 		items = append(items, Item{
 			Resource: kube.Resource{
-				GVK: schema.GroupVersionKind{Group: s.group, Version: s.version, Kind: s.kind},
-				GVR: schema.GroupVersionResource{Group: s.group, Version: s.version, Resource: s.resource},
+				GVK:        schema.GroupVersionKind{Group: s.group, Version: s.version, Kind: s.kind},
+				GVR:        schema.GroupVersionResource{Group: s.group, Version: s.version, Resource: s.resource},
 				Namespaced: s.namespaced,
 			},
 			Title:     s.kind,

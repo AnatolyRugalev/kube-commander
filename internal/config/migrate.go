@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 	"sigs.k8s.io/yaml"
 )
 

@@ -36,10 +36,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/safetext"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // colGap is the spacing between rendered columns, matching `kubectl get`'s

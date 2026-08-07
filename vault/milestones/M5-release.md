@@ -77,7 +77,7 @@ from the old kube-commander.
   then its own slice because each needs a human-owned external resource (a tap repo, an AUR
   key), except Docker, which authenticates to `ghcr.io` with the workflow's own token.
 - **Restore remote `go install`**: tag a real `v1.x.x` release so
-  `go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@latest` works
+  `go install github.com/neuroplastio/kubecom/cmd/kubecom@latest` works
   again (today `@v1` is semver-parsed as a version query, not the branch — see
   FB-go-install / journal 2026-07-20). Renaming `v1`→`main` also dissolves the
   branch-vs-semver collision. Update the README install section back to the remote

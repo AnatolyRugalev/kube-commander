@@ -3,7 +3,7 @@ package table
 import (
 	"strconv"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/kube"
 )
 
 // This file is the M4-10 metrics overlay: the CPU/MEMORY columns the table shows

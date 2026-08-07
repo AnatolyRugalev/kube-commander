@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/AnatolyRugalev/kube-commander/internal/kube"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 // This file is the M3 row-action surface (M3-02): the curated set of operations

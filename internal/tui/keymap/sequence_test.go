@@ -9,12 +9,12 @@ func TestParseSequence(t *testing.T) {
 	}{
 		{"j", []chord{"j"}},
 		{"G", []chord{"G"}},
-		{"up", []chord{"up"}},       // special name stays one chord, not u+p
+		{"up", []chord{"up"}}, // special name stays one chord, not u+p
 		{"ctrl+d", []chord{"ctrl+d"}},
 		{"f3", []chord{"f3"}},
-		{"gg", []chord{"g", "g"}},   // vim concatenated form
+		{"gg", []chord{"g", "g"}}, // vim concatenated form
 		{"dd", []chord{"d", "d"}},
-		{"g g", []chord{"g", "g"}},  // space-separated form
+		{"g g", []chord{"g", "g"}}, // space-separated form
 		{"ctrl+w k", []chord{"ctrl+w", "k"}},
 		{" gg ", []chord{"g", "g"}}, // surrounding space tolerated
 	}

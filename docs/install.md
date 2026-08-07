@@ -19,7 +19,7 @@ Until a tagged release lands (M5), build from a `v1` checkout — this needs no
 version tag and respects the branch:
 
 ```bash
-git clone -b v1 https://github.com/AnatolyRugalev/kube-commander
+git clone -b v1 https://github.com/neuroplastio/kubecom
 cd kube-commander
 go install ./cmd/kubecom      # installs kubecom to $(go env GOPATH)/bin
 ```
@@ -34,7 +34,7 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 > semver-parsed, so a pinned remote install does work if you want one:
 >
 > ```bash
-> go install github.com/AnatolyRugalev/kube-commander/cmd/kubecom@<commit-sha>
+> go install github.com/neuroplastio/kubecom/cmd/kubecom@<commit-sha>
 > ```
 >
 > A clean `go install …@latest` returns with the first tagged release.
@@ -43,7 +43,7 @@ current directory? Use `go build -o kubecom ./cmd/kubecom` instead.
 
 From the first tagged release onward, every release carries `.tar.gz` archives for
 `linux`/`darwin` × `amd64`/`arm64` plus a `checksums.txt`. Download the one for your
-platform from the [Releases page](https://github.com/AnatolyRugalev/kube-commander/releases),
+platform from the [Releases page](https://github.com/neuroplastio/kubecom/releases),
 verify it, and put the binary on your `PATH`:
 
 ```bash

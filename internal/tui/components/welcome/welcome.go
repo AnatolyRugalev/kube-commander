@@ -19,7 +19,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // namespaceAll is the label shown when no namespace is scoped ("" = every

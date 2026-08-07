@@ -3,9 +3,9 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/components/picker"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // The command palette (PAL-02, the second slice of the PAL line): `:` opens one
@@ -566,6 +566,7 @@ func (m Model) handleCommandSelected(msg picker.SelectedMsg) (tea.Model, tea.Cmd
 //   - **backspace at the start of the argument leaves it.** With the argument query
 //     empty, backspace erases the committed verb itself and returns to the verb list —
 //     the line unwinds the way it was typed instead of dead-ending.
+//
 // The returned cmd is the value load of a verb whose list is fetched (PAL-03b); it is
 // nil for every other outcome.
 func (m Model) handlePaletteFilterKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {

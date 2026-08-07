@@ -83,7 +83,7 @@ named `kubecom` and there is no kubectl-plugin story in v1. If you actually use
 
 - Upload `~/.ssh/kubecom_aur.pub` to your AUR account's SSH keys.
 - Add the **private** key (`~/.ssh/kubecom_aur`, whole file including the BEGIN/END lines) to
-  `AnatolyRugalev/kube-commander` → Settings → Secrets and variables → Actions, named exactly
+  `neuroplastio/kubecom` → Settings → Secrets and variables → Actions, named exactly
   **`AUR_SSH_PRIVATE_KEY`**. The name is asserted by `TestAURIsInertWithoutItsKey`, so a typo
   fails `make check` rather than releasing quietly.
 

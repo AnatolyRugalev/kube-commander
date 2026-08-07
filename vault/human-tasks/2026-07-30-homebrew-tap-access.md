@@ -60,7 +60,7 @@ tap repo.
 
 - Mint a fine-grained PAT scoped to **`AnatolyRugalev/homebrew-kubecom`** with
   **Contents: read and write** (that is the whole scope goreleaser needs).
-- Add it to `AnatolyRugalev/kube-commander` → Settings → Secrets and variables → Actions,
+- Add it to `neuroplastio/kubecom` → Settings → Secrets and variables → Actions,
   named exactly **`HOMEBREW_TAP_TOKEN`**. The name is asserted by
   `TestHomebrewCaskIsInertWithoutItsToken`, so a typo fails `make check` rather than
   releasing quietly.

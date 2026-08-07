@@ -1,4 +1,4 @@
-module github.com/AnatolyRugalev/kube-commander
+module github.com/neuroplastio/kubecom
 
 go 1.24.2
 

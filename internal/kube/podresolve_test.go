@@ -78,7 +78,7 @@ func TestPodForOwnerNewestReadyPod(t *testing.T) {
 		Clientset: k8sfake.NewSimpleClientset(
 			labeledPod("web", "api-old", sel, true, epoch),
 			labeledPod("web", "api-new", sel, true, epoch.Add(2*time.Hour)),
-			labeledPod("web", "api-newest", sel, false, epoch.Add(3*time.Hour)),        // newest but not ready
+			labeledPod("web", "api-newest", sel, false, epoch.Add(3*time.Hour)),                      // newest but not ready
 			labeledPod("web", "other", map[string]string{"app": "db"}, true, epoch.Add(9*time.Hour)), // excluded by selector
 		),
 	}
@@ -209,7 +209,7 @@ func TestPodForServiceNewestReadyPod(t *testing.T) {
 			serviceWithSelector("web", "api", sel),
 			labeledPod("web", "api-old", sel, true, epoch),
 			labeledPod("web", "api-new", sel, true, epoch.Add(2*time.Hour)),
-			labeledPod("web", "api-newest", sel, false, epoch.Add(3*time.Hour)),          // newest but not ready
+			labeledPod("web", "api-newest", sel, false, epoch.Add(3*time.Hour)),                      // newest but not ready
 			labeledPod("web", "other", map[string]string{"app": "db"}, true, epoch.Add(9*time.Hour)), // excluded by selector
 		),
 	}

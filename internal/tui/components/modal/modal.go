@@ -28,10 +28,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/elide"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/elide"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/safetext"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // ConfirmedMsg is emitted when the user accepts the modal (nav.drillIn). Kind

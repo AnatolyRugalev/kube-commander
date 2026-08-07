@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 func newPage() Model { return New(styles.Default()) }

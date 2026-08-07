@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // These measure what it costs to stream n lines into the view — the cost the throughput

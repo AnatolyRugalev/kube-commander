@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
 func TestLoadEmptyIsZeroConfig(t *testing.T) {

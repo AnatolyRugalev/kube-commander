@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/config"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/keymap"
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/spf13/cobra"
 )
 

@@ -258,9 +258,9 @@ func TestPodLogOptionsZeroValue(t *testing.T) {
 // line unchanged.
 func TestSplitLogTimestamp(t *testing.T) {
 	tests := []struct {
-		name       string
-		line       string
-		wantStamp  string
+		name        string
+		line        string
+		wantStamp   string
 		wantContent string
 	}{
 		{"nano", "2026-07-28T16:32:01.123456789Z hello world", "2026-07-28T16:32:01.123456789Z", "hello world"},

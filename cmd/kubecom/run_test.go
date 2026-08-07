@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/config"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // writeMenuFile points the user config dir at a temp dir and writes body to the

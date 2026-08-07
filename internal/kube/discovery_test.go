@@ -78,8 +78,8 @@ func coreList() *metav1.APIResourceList {
 		GroupVersion: "v1",
 		APIResources: []metav1.APIResource{
 			{Name: "pods", SingularName: "pod", Namespaced: true, Kind: "Pod", Verbs: metav1.Verbs{"get", "list", "watch"}, ShortNames: []string{"po"}, Categories: []string{"all"}},
-			{Name: "pods/log", Namespaced: true, Kind: "Pod", Verbs: metav1.Verbs{"get"}},                         // subresource → dropped
-			{Name: "bindings", Namespaced: true, Kind: "Binding", Verbs: metav1.Verbs{"create"}},                  // not listable → dropped
+			{Name: "pods/log", Namespaced: true, Kind: "Pod", Verbs: metav1.Verbs{"get"}},        // subresource → dropped
+			{Name: "bindings", Namespaced: true, Kind: "Binding", Verbs: metav1.Verbs{"create"}}, // not listable → dropped
 			{Name: "namespaces", SingularName: "namespace", Namespaced: false, Kind: "Namespace", Verbs: metav1.Verbs{"get", "list", "watch"}},
 		},
 	}

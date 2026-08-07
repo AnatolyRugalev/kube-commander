@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/version"
+	"github.com/neuroplastio/kubecom/internal/version"
 	"github.com/spf13/cobra"
 )
 

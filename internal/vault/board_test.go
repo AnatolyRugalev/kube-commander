@@ -31,7 +31,7 @@ const (
 
 // doneEntry is the shape D102 fixes for a completed item:
 //
-//	- [x] **ID** <short title> — done YYYY-MM-DD (Dnn, …)
+//   - [x] **ID** <short title> — done YYYY-MM-DD (Dnn, …)
 //
 // The trailing parenthetical is optional (a few legs are their own reference),
 // and it must not itself contain parentheses, so a wrapped-up sentence cannot

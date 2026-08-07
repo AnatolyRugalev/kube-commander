@@ -20,8 +20,8 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/safetext"
-	"github.com/AnatolyRugalev/kube-commander/internal/tui/styles"
+	"github.com/neuroplastio/kubecom/internal/tui/safetext"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // separator joins the left-hand segments (context, namespace, discovery hint).

@@ -19,9 +19,9 @@ builds:
     # TestGoreleaserSetsAllVersionVars is the drift guard.
     ldflags:
       - -s -w
-      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Version={{ .Version }}
-      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Commit={{ .FullCommit }}
-      - -X github.com/AnatolyRugalev/kube-commander/internal/version.Date={{ .Date }}
+      - -X github.com/neuroplastio/kubecom/internal/version.Version={{ .Version }}
+      - -X github.com/neuroplastio/kubecom/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/neuroplastio/kubecom/internal/version.Date={{ .Date }}
     goos:
       - linux
       - darwin
@@ -123,7 +123,7 @@ homebrew_casks:
     # stanza. `goreleaser check` in CI is what keeps both honest.
     binaries:
       - kubecom
-    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+    homepage: "https://github.com/neuroplastio/kubecom"
     description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
 
     # Inert without its secret (D173 pt 2, D182 pt 3). goreleaser evaluates
@@ -182,7 +182,7 @@ aurs:
     # overwriting the first.
     ids:
       - release
-    homepage: "https://github.com/AnatolyRugalev/kube-commander"
+    homepage: "https://github.com/neuroplastio/kubecom"
     description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
     # Apache-2.0, per this repo's LICENSE. The 2020 PKGBUILD said MIT; the
     # repository has carried the Apache license since before that package was
@@ -290,8 +290,8 @@ dockers_v2:
     labels:
       org.opencontainers.image.title: kubecom
       org.opencontainers.image.description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
-      org.opencontainers.image.url: "https://github.com/AnatolyRugalev/kube-commander"
-      org.opencontainers.image.source: "https://github.com/AnatolyRugalev/kube-commander"
+      org.opencontainers.image.url: "https://github.com/neuroplastio/kubecom"
+      org.opencontainers.image.source: "https://github.com/neuroplastio/kubecom"
       org.opencontainers.image.licenses: "Apache-2.0"
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
