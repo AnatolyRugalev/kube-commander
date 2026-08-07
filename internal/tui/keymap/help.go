@@ -282,10 +282,14 @@ func HelpContexts() []HelpContext {
 // "stop" one line up, and the same trade is already made by the prompt modal, where
 // enter submits. The hint's promise is which keys act, not a gloss of each verb.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:         {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable:        {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
-	HelpSearch:       {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
-	HelpLogs:         {ActionDown, ActionUp, ActionFilter, ActionLogsRegex, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
+	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
+	// logs.regex is offered by HelpLogsFilter rather than here, which is where it acts
+	// on something: with the grep closed there is no query for it to re-interpret, and
+	// the hint is a line, not a list — LOGS-SEL-02's `v`/`y` are the two gestures a
+	// reader cannot guess, and one of them has to make room for them.
+	HelpLogs:         {ActionDown, ActionUp, ActionFilter, ActionLogsSelect, ActionLogsYank, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit},
 	HelpLogsFilter:   {ActionDown, ActionUp, ActionLogsRegex, ActionBack},
 	HelpPickerFilter: {ActionDown, ActionUp, ActionDrillIn, ActionBack},
 	HelpPicker:       {ActionDown, ActionUp, ActionFilter, ActionDrillIn, ActionBack},

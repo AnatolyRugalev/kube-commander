@@ -62,7 +62,7 @@ func TestDefaultResolution(t *testing.T) {
 func TestMergeOverride(t *testing.T) {
 	km := DefaultKeymap()
 	merged, warns, err := km.Merge(map[Action][]string{
-		ActionFilter: {"v"}, // replace "/" with "v" (a free, non-nav key)
+		ActionFilter: {"x"}, // replace "/" with "x" (a free, non-nav key)
 	})
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -71,8 +71,8 @@ func TestMergeOverride(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", warns)
 	}
 	// New binding wins.
-	if a, ok := merged.Action(tea.Key{Code: 'v', Text: "v"}); !ok || a != ActionFilter {
-		t.Errorf("v resolved to %q,%v; want app.filter", a, ok)
+	if a, ok := merged.Action(tea.Key{Code: 'x', Text: "x"}); !ok || a != ActionFilter {
+		t.Errorf("x resolved to %q,%v; want app.filter", a, ok)
 	}
 	// Old default no longer resolves.
 	if a, ok := merged.Action(tea.Key{Code: '/', Text: "/"}); ok {
@@ -132,8 +132,11 @@ func TestConfirmContextResolution(t *testing.T) {
 	}
 
 	// The confirm chords `n`/`enter`/`esc` keep their browse meaning in the default
-	// context. `y` is unbound in the browse context since res.yaml was retired into
-	// the edit action (D135/M3-15c) — its confirm-context meaning stands alone.
+	// context, and so does `y`: left free when res.yaml was retired (D135/M3-15c), it
+	// is logs.yank since LOGS-SEL-02. That is the sharpest case the split has — one
+	// key, two live actions, told apart by nothing but the context — and it is safe
+	// because the two surfaces are modal: the confirm modal captures every key while
+	// it is up, so the logs view cannot be reading `y` at the same moment.
 	browse := []struct {
 		key  tea.Key
 		want Action
@@ -147,8 +150,8 @@ func TestConfirmContextResolution(t *testing.T) {
 			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
 		}
 	}
-	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); ok {
-		t.Errorf("Action(y) = %q,true; want unbound in browse after res.yaml retired (D135/M3-15c)", a)
+	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); !ok || a != ActionLogsYank {
+		t.Errorf("Action(y) = %q,%v; want logs.yank in the browse context (LOGS-SEL-02)", a, ok)
 	}
 
 	// Browse resolution never yields a confirm action, and vice versa.

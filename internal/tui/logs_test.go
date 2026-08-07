@@ -694,3 +694,71 @@ func TestLogsPreviousIsInertWithoutAStream(t *testing.T) {
 		t.Fatal("logs.previous must not open the logs view")
 	}
 }
+
+// selectKey / yankKey are the default logs.select (`v`) and logs.yank (`y`) keys. Both
+// are ordinary letters, so an open grep types them like any other.
+var (
+	selectKey = tea.Key{Code: 'v', Text: "v"}
+	yankKey   = tea.Key{Code: 'y', Text: "y"}
+)
+
+// TestLogsYankReachesTheClipboard is the wiring half of LOGS-SEL-02: `v` and `y` reach
+// the logs view as actions, the selected lines land on the system clipboard through the
+// same OSC-52 path secret.copy uses (M3-08b), and the status bar says how much was copied
+// without quoting a log line. The component owns which lines and what their raw text is;
+// this is about the keys getting there and the copy leaving.
+func TestLogsYankReachesTheClipboard(t *testing.T) {
+	m := openLogsWithLines(t, "boot ok", "err disk", "err net")
+	m, _ = press(t, m, tea.Key{Code: 'f', Text: "f"}) // pause with the cursor on the newest line
+	m, _ = press(t, m, selectKey)
+	if !m.logsView.Selecting() {
+		t.Fatal("`v` should start a selection in the logs view")
+	}
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"}) // extend over "err disk"
+
+	m, cmd := press(t, m, yankKey)
+	if got, want := copiedClipboard(t, cmd), "err disk\nerr net"; got != want {
+		t.Errorf("`y` should put the selected lines on the clipboard; got %q, want %q", got, want)
+	}
+	if m.logsView.Selecting() {
+		t.Error("a yank ends visual mode")
+	}
+	if !m.logsView.Active() {
+		t.Fatal("a yank must not close the view")
+	}
+	if v := frame(m); !strings.Contains(v, "copied 2 lines") {
+		t.Errorf("the status bar should confirm the copy: %q", v)
+	}
+}
+
+// TestLogsYankTypesIntoAnOpenGrep: `v` and `y` are plain letters, so the moment the grep
+// field is open they are text, exactly as `w` and `t` are (D140 pt 1). Neither is a
+// gesture anyone reaches for mid-query, which is why they were allowed to be letters.
+func TestLogsYankTypesIntoAnOpenGrep(t *testing.T) {
+	m := openLogsWithLines(t, "very quiet")
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "vy")
+	if q := m.logsView.Query(); q != "vy" {
+		t.Errorf("`v`/`y` should type into the open grep; query = %q", q)
+	}
+	if m.logsView.Selecting() {
+		t.Error("typing `v` into the grep must not start a selection")
+	}
+}
+
+// TestLogsYankOnAnEmptyViewSaysNothing: there is no line to copy, so the gesture is inert
+// — no clipboard write and no notice, the same degrade secret.copy makes on a Secret with
+// no data. An error the reader never asked for is the failure mode worth guarding here.
+func TestLogsYankOnAnEmptyViewSaysNothing(t *testing.T) {
+	m := openLogsWithLines(t)
+	if !m.logsView.Empty() {
+		t.Fatal("precondition: the view should hold no lines")
+	}
+	m, cmd := press(t, m, yankKey)
+	if cmd != nil {
+		t.Errorf("an empty view should yank nothing; got a command producing %T", cmd())
+	}
+	if v := frame(m); strings.Contains(v, "copied") {
+		t.Errorf("nothing was copied, so nothing should be claimed: %q", v)
+	}
+}

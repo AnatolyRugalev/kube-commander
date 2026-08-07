@@ -259,6 +259,24 @@ one keystroke away, not three — and the page only scrolls once the cursor woul
 leave it. While the view is following, the cursor rides the newest line; moving it up
 pauses following, and a `/` query narrows what it walks to the lines that matched.
 
+On that cursor, `v` (`logs.select`) starts a **visual selection** — vim's key, and vim's
+behaviour: `j`/`k` (and `gg`/`G`/the page keys) extend it, `v` again or `Esc` abandons
+it, and the header shows `[visual 3]` so you can see how much is held even when the
+selection is taller than the screen. `y` (`logs.yank`) **copies** it to your system
+clipboard, through the same path `secret.copy` uses, so it works over SSH and inside tmux
+(OSC-52); the status bar says how many lines went. With no selection, `y` copies the
+cursor's line — and `gg v G y` copies the whole buffer.
+
+What lands on the clipboard is the log, not the screen: no colors, no highlight from your
+grep, and a line that `w` folded onto three rows comes back as **one line**, exactly as it
+arrived. That is the reason this exists rather than "just select it with the mouse" —
+`M` (`mouse.toggle`) plus the terminal's own select-to-copy still works, but it cannot
+reach past the visible screen and it copies wrapped rows with the breaks in them. Each
+line carries its timestamp exactly when `t` is showing it, so the copy matches what you
+were looking at. Selecting pauses tailing for as long as the selection stands — the
+stream would otherwise drag one end of it — and the yank hands the stream back if that is
+where you were.
+
 Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward gesture
 pauses it so the next line does not yank you back); `f` again resumes and jumps to
 the newest line, and so does `G` (`nav.bottom`) — in a live stream "go to the end"
@@ -283,8 +301,8 @@ a toggle: the header shows `[previous]` while you are on it. Because the two
 instances are two different logs, the lines are replaced — but your grep, wrapping
 and timestamps are not, so you can ask the same question of both, and the chord works
 with the grep field open. A container that has never terminated has no previous log,
-and the cluster says so in the status bar. `Esc` with no filter open, or `q`, closes
-the view.
+and the cluster says so in the status bar. `Esc` clears the grep, then the selection,
+then — with neither open — closes the view, as does `q`.
 
 A **Secret**'s contents open through the actions menu (`Reveal secret`), decoded but
 **masked**: every value starts hidden, and `r` (`secret.reveal`) is the deliberate

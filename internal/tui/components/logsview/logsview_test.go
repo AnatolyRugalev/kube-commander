@@ -1270,3 +1270,431 @@ func TestPreviousMarkerNamesTheInstance(t *testing.T) {
 		t.Errorf("the instance marker should precede the follow state; got:\n%s", v)
 	}
 }
+
+// --- LOGS-SEL-02: visual mode and yank (feedback 2026-08-07-logs-selection-and-yank) ---
+
+// selectUp anchors a selection at the cursor and extends it n lines upward, which is the
+// natural direction in a log: the interesting lines are the ones just before the one you
+// stopped on.
+func selectUp(m Model, n int) Model {
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	for range n {
+		m, _ = m.Update(keymap.ActionUp)
+	}
+	return m
+}
+
+// TestSelectionExtendsWithTheCursor is the shape of visual mode: `v` fixes one end, the
+// nav keys move the other, and the range between them is what a yank takes. A selection
+// of one line — what `v` alone makes — is the state the yank falls back to anyway, so the
+// assertion that matters is that the *second* key extends rather than moves.
+func TestSelectionExtendsWithTheCursor(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionUp) // pause, cursor on line-4 (index 3)
+
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	if !m.Selecting() {
+		t.Fatal("logs.select should start a selection")
+	}
+	lo, hi, ok := m.Selection()
+	if !ok || lo != 3 || hi != 3 {
+		t.Fatalf("a fresh selection is the cursor's own line; got %d..%d (ok=%v)", lo, hi, ok)
+	}
+	m, _ = m.Update(keymap.ActionUp)
+	m, _ = m.Update(keymap.ActionUp)
+	if lo, hi, _ = m.Selection(); lo != 1 || hi != 3 {
+		t.Fatalf("nav.up should extend the selection upward; got %d..%d, want 1..3", lo, hi)
+	}
+	// Moving back down shrinks it — the anchor is fixed, the cursor is not.
+	m, _ = m.Update(keymap.ActionDown)
+	if lo, hi, _ = m.Selection(); lo != 2 || hi != 3 {
+		t.Fatalf("nav.down should shrink it back; got %d..%d, want 2..3", lo, hi)
+	}
+	// Every line of the range wears the bar, not just the cursor's.
+	v := m.View()
+	for _, want := range []string{"line-3", "line-4"} {
+		if !strings.Contains(v, cursorBar(want)) {
+			t.Errorf("%s should be inside the selection bar; got:\n%q", want, v)
+		}
+	}
+	if strings.Contains(v, cursorBar("line-2")) {
+		t.Errorf("line-2 is outside the selection and must not wear the bar; got:\n%q", v)
+	}
+}
+
+// TestYankCopiesTheSelectionUnpainted is the requirement the feedback called out as the
+// one that "looks right on screen and only shows up once the text is pasted somewhere":
+// the clipboard gets the raw buffered lines, with no escape sequence in them, even though
+// every one of those lines is on screen inside a Selection bar and carrying Match marks.
+func TestYankCopiesTheSelectionUnpainted(t *testing.T) {
+	m := newLogs()
+	for _, l := range []string{"boot ok", "err disk", "err net", "done"} {
+		m.Append("", l)
+	}
+	m = typeFilter(m, "err")           // shown: [err disk, err net], cursor on err net
+	m, _ = m.Update(keymap.ActionBack) // close the field; the query is cleared with it
+	m, _ = m.Update(keymap.ActionUp)   // pause on "err net" (index 2 of the full set)
+	m = selectUp(m, 1)                 // select "err disk".."err net"
+
+	text, n, ok := m.Yank()
+	if !ok || n != 2 {
+		t.Fatalf("Yank() = %q, %d, %v; want two lines", text, n, ok)
+	}
+	if want := "err disk\nerr net"; text != want {
+		t.Errorf("yanked %q; want %q", text, want)
+	}
+	if strings.Contains(text, "\x1b") {
+		t.Errorf("the clipboard must carry no styling; got %q", text)
+	}
+}
+
+// TestYankUnderAGrepTakesTheMatchedLinesOnly: the selection is over what the query
+// *displays* (the feedback's wording), so a range spanning a hidden line does not smuggle
+// it into the clipboard — and the copied text still carries no highlight, though every
+// line in it is painted with one on screen.
+func TestYankUnderAGrepTakesTheMatchedLinesOnly(t *testing.T) {
+	m := newLogs()
+	for _, l := range []string{"err disk", "steady", "err net"} {
+		m.Append("", l)
+	}
+	m = typeFilter(m, "err") // shown: [err disk, err net]; "steady" is between them
+	if len(m.shownLines) != 2 {
+		t.Fatalf("precondition: shown = %d lines, want 2", len(m.shownLines))
+	}
+	// logs.follow pauses without moving, so the cursor stays on the newest shown line.
+	m, _ = m.Update(keymap.ActionLogsFollow)
+	m = selectUp(m, 1) // the whole shown set
+
+	if v := m.View(); !strings.Contains(v, matchSpan("err")) {
+		t.Fatalf("precondition: the selected lines should still show their matches; got:\n%q", v)
+	}
+	text, n, ok := m.Yank()
+	if !ok || n != 2 {
+		t.Fatalf("Yank() = %q, %d, %v; want two lines", text, n, ok)
+	}
+	if want := "err disk\nerr net"; text != want {
+		t.Errorf("a selection spanning a filtered-out line must not copy it; got %q, want %q", text, want)
+	}
+}
+
+// TestYankWithNoSelectionTakesTheCursorLine: `y` is useful without `v`, which is the
+// common case — you scrolled to the line you want and want that one line.
+func TestYankWithNoSelectionTakesTheCursorLine(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 4)
+	m, _ = m.Update(keymap.ActionUp) // pause on line-3
+	if m.Selecting() {
+		t.Fatal("precondition: no selection")
+	}
+	text, n, ok := m.Yank()
+	if !ok || n != 1 || text != "line-3" {
+		t.Errorf("Yank() = %q, %d, %v; want \"line-3\", 1, true", text, n, ok)
+	}
+}
+
+// TestYankOfAWrappedLineIsWhole is why the cursor counts log lines rather than screen
+// rows (D242 pt 1): the wrapped line occupies three rows and comes back as one, with no
+// break the log did not have. It is the defect the feedback filed against the terminal's
+// own select-to-copy.
+func TestYankOfAWrappedLineIsWhole(t *testing.T) {
+	long := "HEAD" + strings.Repeat("-", 90) + "TAIL"
+	m := newLogs() // 40 columns wide
+	m.Append("", "short one")
+	m.Append("", long)
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	if got := lineRows(m.shownLines[1], m.viewport.Width()); got < 3 {
+		t.Fatalf("precondition: the long line should wrap onto several rows; got %d", got)
+	}
+	m, _ = m.Update(keymap.ActionLogsFollow) // pause with the cursor on the long line
+	text, n, ok := m.Yank()
+	if !ok || n != 1 {
+		t.Fatalf("Yank() = %q, %d, %v; want one line", text, n, ok)
+	}
+	if text != long {
+		t.Errorf("a wrapped line must yank whole and unbroken; got %q", text)
+	}
+	if strings.Contains(text, "\n") {
+		t.Error("the yank inserted a break the log never had")
+	}
+}
+
+// TestYankMatchesTheTimestampsToggle: the copy is what is on screen, so the stamp comes
+// with it exactly when logs.timestamps is showing it — and never otherwise, since the
+// buffer holds it either way.
+func TestYankMatchesTheTimestampsToggle(t *testing.T) {
+	m := newStampedLogs()
+	appendStamped(&m)
+	m, _ = m.Update(keymap.ActionUp) // pause on the newest line
+
+	text, _, ok := m.Yank()
+	if !ok {
+		t.Fatal("Yank() should copy the cursor's line")
+	}
+	if strings.Contains(text, "T12:00:0") {
+		t.Errorf("timestamps are off; the copy must not carry one: %q", text)
+	}
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	stamped, _, _ := m.Yank()
+	if !strings.HasPrefix(stamped, m.stamps[m.shownIdx[m.Cursor()]]+" ") {
+		t.Errorf("with timestamps on the copy should be stamped as the screen is: %q", stamped)
+	}
+	if !strings.HasSuffix(stamped, text) {
+		t.Errorf("the stamp is a prefix, not a replacement: %q vs %q", stamped, text)
+	}
+}
+
+// TestVisualModePausesFollowAndGivesItBack is the rule LOGS-SEL-02 rests on (D242 pt 5):
+// a selection cannot be held while following, because following owns the cursor — so `v`
+// suspends it, and finishing puts it back, because a reader who was tailing when they
+// copied a line meant to go on tailing.
+func TestVisualModePausesFollowAndGivesItBack(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 3)
+	if !m.Following() {
+		t.Fatal("precondition: a fresh view tails")
+	}
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	if m.Following() {
+		t.Fatal("entering visual mode must pause following")
+	}
+	// The stream keeps arriving while the selection stands, and must not drag it.
+	m.Append("", "line-4")
+	if lo, hi, _ := m.Selection(); lo != 2 || hi != 2 {
+		t.Errorf("an arriving line must not move the selection; got %d..%d, want 2..2", lo, hi)
+	}
+	if _, _, ok := m.Yank(); !ok {
+		t.Fatal("Yank() should copy")
+	}
+	if !m.Following() {
+		t.Error("a yank should hand the stream back to the reader who was tailing")
+	}
+	if m.Selecting() {
+		t.Error("a yank ends visual mode")
+	}
+}
+
+// TestVisualModeDoesNotResumeAFollowTheReaderPaused: the resume is the undo of the pause
+// visual mode itself did, never a decision about a view the reader had already parked.
+func TestVisualModeDoesNotResumeAFollowTheReaderPaused(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionTop) // the reader's own pause
+	if m.Following() {
+		t.Fatal("precondition: paused")
+	}
+	m = selectUp(m, 0)
+	m, _ = m.Update(keymap.ActionBack) // abandon the selection
+	if m.Selecting() {
+		t.Fatal("nav.back should abandon the selection")
+	}
+	if m.Following() {
+		t.Error("leaving visual mode must not resume a follow the reader turned off")
+	}
+}
+
+// TestBackLaddersThroughTheSelection: esc undoes the innermost thing the reader turned
+// on — the grep, then the selection, then the view itself — so no rung ever costs them
+// the one below it.
+func TestBackLaddersThroughTheSelection(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 4)
+	m, _ = m.Update(keymap.ActionUp)
+	m = selectUp(m, 1)
+	m = typeFilter(m, "line") // a grep opened over a live selection
+
+	m, cmd := m.Update(keymap.ActionBack)
+	if m.Filtering() || cmd != nil {
+		t.Fatalf("the first esc clears the grep; filtering=%v cmd=%v", m.Filtering(), cmd != nil)
+	}
+	if !m.Selecting() {
+		t.Fatal("clearing the grep must not take the selection with it")
+	}
+	m, cmd = m.Update(keymap.ActionBack)
+	if m.Selecting() || cmd != nil {
+		t.Fatalf("the second esc abandons the selection; selecting=%v cmd=%v", m.Selecting(), cmd != nil)
+	}
+	m, cmd = m.Update(keymap.ActionBack)
+	if cmd == nil {
+		t.Fatal("the third esc closes the view")
+	}
+	if _, ok := cmd().(ClosedMsg); !ok {
+		t.Errorf("expected ClosedMsg; got %T", cmd())
+	}
+}
+
+// TestSecondSelectCancels: `v` is a toggle, as it is in vim — the way out a reader finds
+// by pressing the key they pressed to get in.
+func TestSecondSelectCancels(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 4)
+	m, _ = m.Update(keymap.ActionUp)
+	m = selectUp(m, 2)
+	if lo, hi, _ := m.Selection(); lo == hi {
+		t.Fatalf("precondition: a multi-line selection; got %d..%d", lo, hi)
+	}
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	if m.Selecting() {
+		t.Fatal("a second logs.select should cancel the selection")
+	}
+	if lo, hi, _ := m.Selection(); lo != hi || lo != m.Cursor() {
+		t.Errorf("with no selection the range is the cursor's line; got %d..%d, cursor %d", lo, hi, m.Cursor())
+	}
+}
+
+// TestBottomExtendsTheSelectionInsteadOfResumingFollow: `G` is the one nav key whose
+// meaning changes inside visual mode. Outside it, it re-arms following (LOGS-04c); inside
+// it, re-arming would hand the cursor to the stream and the selection with it — so it
+// extends to the last line instead, which is what makes `gg v G y` copy the buffer.
+func TestBottomExtendsTheSelectionInsteadOfResumingFollow(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 6)
+	m, _ = m.Update(keymap.ActionTop) // pause on line-1
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	m, _ = m.Update(keymap.ActionBottom)
+
+	if m.Following() {
+		t.Error("nav.bottom inside a selection must not re-arm following")
+	}
+	if !m.Selecting() {
+		t.Fatal("nav.bottom must not end the selection")
+	}
+	if lo, hi, _ := m.Selection(); lo != 0 || hi != 5 {
+		t.Fatalf("nav.bottom should extend to the last line; got %d..%d, want 0..5", lo, hi)
+	}
+	text, n, _ := m.Yank()
+	if n != 6 || !strings.HasPrefix(text, "line-1\n") || !strings.HasSuffix(text, "\nline-6") {
+		t.Errorf("`gg v G y` should copy the whole buffer; got %d lines: %q", n, text)
+	}
+}
+
+// TestFollowEndsTheSelection: `f` is "back to the stream", and following owns the cursor,
+// so the selection cannot survive it. It resumes rather than toggling into a second
+// pause — from visual mode the view is always paused, so the toggle has only one honest
+// reading.
+func TestFollowEndsTheSelection(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionUp)
+	m = selectUp(m, 2)
+	m, _ = m.Update(keymap.ActionLogsFollow)
+	if m.Selecting() {
+		t.Error("logs.follow should end the selection")
+	}
+	if !m.Following() {
+		t.Error("logs.follow out of visual mode should resume the stream")
+	}
+	if m.Cursor() != len(m.shownLines)-1 {
+		t.Errorf("resuming pins the cursor to the newest line; got %d", m.Cursor())
+	}
+}
+
+// TestSelectionKeepsItsLogLinesAcrossAFilterChange: both ends of the range are log lines,
+// so a keystroke in the grep narrows the selection to the ones that survive rather than
+// leaving either end pointing at whatever the new query put at that index.
+// It is deliberately set up so that clamping the anchor into the new body would give a
+// *different* answer than re-finding it: the anchor sits in the middle of the buffer with
+// a still-shown line after it, so an unclamped stale index stays in range and silently
+// swallows a line the reader never selected.
+func TestSelectionKeepsItsLogLinesAcrossAFilterChange(t *testing.T) {
+	m := newLogs()
+	for _, l := range []string{"err a", "x1", "err b", "x2", "x3", "x4", "err c"} {
+		m.Append("", l)
+	}
+	m, _ = m.Update(keymap.ActionLogsFollow) // pause on "err c" (6) without moving
+	for range 4 {
+		m, _ = m.Update(keymap.ActionUp) // up to "err b" (2)
+	}
+	m = selectUp(m, 2) // anchor "err b" (2), cursor up to "err a" (0)
+	if lo, hi, _ := m.Selection(); lo != 0 || hi != 2 {
+		t.Fatalf("precondition: selection %d..%d, want 0..2", lo, hi)
+	}
+
+	m = typeFilter(m, "err") // shown becomes [err a, err b, err c]
+	if lo, hi, _ := m.Selection(); lo != 0 || hi != 1 {
+		t.Fatalf("the selection should still end on `err b`; got %d..%d, want 0..1", lo, hi)
+	}
+	text, n, _ := m.Yank()
+	if n != 2 || text != "err a\nerr b" {
+		t.Errorf("yanked %d lines %q; want the two the reader had selected", n, text)
+	}
+}
+
+// TestVisualModeIsNamedInTheHeader: a fresh `v` selects the line the cursor was already
+// on, so nothing on screen changes — the header is the only evidence that the next `j`
+// will extend rather than move, and the count is the only way to size a selection taller
+// than the pane.
+func TestVisualModeIsNamedInTheHeader(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionUp)
+	if v := plain(m.View()); strings.Contains(v, "[visual") {
+		t.Errorf("no selection, no marker; got:\n%s", v)
+	}
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	if v := plain(m.View()); !strings.Contains(v, "[visual 1]") {
+		t.Errorf("a fresh selection should be named and sized; got:\n%s", v)
+	}
+	m, _ = m.Update(keymap.ActionUp)
+	m, _ = m.Update(keymap.ActionUp)
+	if v := plain(m.View()); !strings.Contains(v, "[visual 3]") {
+		t.Errorf("the marker should size the selection; got:\n%s", v)
+	}
+	m, _ = m.Update(keymap.ActionBack)
+	if v := plain(m.View()); strings.Contains(v, "[visual") {
+		t.Errorf("abandoning the selection should clear the marker; got:\n%s", v)
+	}
+}
+
+// TestSelectionCannotOutliveItsLines: Reset and Restream empty the buffer, and a range
+// over lines that no longer exist is the one way this could copy the wrong log.
+func TestSelectionCannotOutliveItsLines(t *testing.T) {
+	for name, clear := range map[string]func(*Model){
+		"Reset":    (*Model).Reset,
+		"Restream": (*Model).Restream,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := newLogs()
+			appendLines(&m, 5)
+			m, _ = m.Update(keymap.ActionUp)
+			m = selectUp(m, 2)
+			clear(&m)
+			if m.Selecting() {
+				t.Error("emptying the buffer must end visual mode")
+			}
+			if _, _, ok := m.Yank(); ok {
+				t.Error("there is nothing to yank from an empty view")
+			}
+		})
+	}
+	// A grep that keeps nothing is the same state reached without emptying the buffer.
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionUp)
+	m = selectUp(m, 2)
+	m = typeFilter(m, "zzz")
+	if m.Selecting() {
+		t.Error("a grep that keeps no line leaves no selection")
+	}
+	if _, _, ok := m.Yank(); ok {
+		t.Error("an empty body yanks nothing")
+	}
+}
+
+// TestSelectionIsNotBakedIntoTheAppendCache extends LOGS-05b's invariant over the whole
+// range rather than the one cursor line: shownLines stays what a rebuild would produce,
+// so a selection is not an invalidation of it — and the raw text a yank reads stays raw.
+func TestSelectionIsNotBakedIntoTheAppendCache(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 5)
+	m, _ = m.Update(keymap.ActionUp)
+	m = selectUp(m, 3)
+	for i, s := range m.shownLines {
+		if strings.Contains(s, "\x1b") {
+			t.Errorf("cached line %d carries styling: %q", i, s)
+		}
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar("line-2")) {
+		t.Errorf("the bar should still reach the frame; got:\n%q", v)
+	}
+}

@@ -187,9 +187,28 @@ func TestShortHelpContext(t *testing.T) {
 		t.Error("logs.timestamps self-announces and must not spend a hint slot")
 	}
 	// The regex toggle carries no text, so unlike follow/quit it survives the open grep
-	// and belongs in *both* logs contexts (LOGS-03).
-	if !logsFilter[ActionLogsRegex.Describe()] || !descs(hm.ShortHelpContext(HelpLogs))[ActionLogsRegex.Describe()] {
-		t.Error("logs.regex acts in both logs states and should be hinted in both")
+	// — and the open grep is now the only logs context that hints it (LOGS-SEL-02).
+	// That is the scarcity above being spent, not a claim that ctrl+r stopped working
+	// with the grep closed: it still fires, `?` and the doc still carry it, and the
+	// header still marks `[re]`. But with no query typed there is nothing for the mode
+	// to re-interpret — the action's own doc says the mode matters least before typing
+	// — while `v` and `y` are gestures a reader cannot discover by looking at the
+	// screen, and the line has room for one of the three.
+	if !logsFilter[ActionLogsRegex.Describe()] {
+		t.Error("logs.regex survives the open grep and must be hinted there")
+	}
+	if logs[ActionLogsRegex.Describe()] {
+		t.Error("with no query typed, logs.regex must not hold a slot the selection keys need")
+	}
+	// Visual mode and the yank (LOGS-SEL-02) are hinted with the grep closed and not
+	// with it open: both are plain letters, so an open field types them.
+	for _, a := range []Action{ActionLogsSelect, ActionLogsYank} {
+		if !logs[a.Describe()] {
+			t.Errorf("logs context should offer %q — a copy gesture nothing on screen announces", a)
+		}
+		if logsFilter[a.Describe()] {
+			t.Errorf("%q types into the open logs grep, not honoured — it must not be hinted", a)
+		}
 	}
 
 	// The picker contexts (HINT-01) apply the same rule to an overlay. Every picker

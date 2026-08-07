@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — CTX-MEM-02 done: kubecom reopens the kind you left open, per context, at launch and across a switch (D243). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — LOGS-SEL-02 done: `v` selects log lines in the logs view and `y` copies them to the clipboard, unpainted and unwrapped (D244). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: See the LOGS-SEL section below for the full brief (D242).
+_(none)_
 
 ## Blocked
 
@@ -203,27 +201,22 @@ feels right: follow must pause while selecting, the cursor and the selection are
 lines** not screen rows, selection covers what a `/` query *displays*, a yank matches the
 timestamps toggle's current state, and **no styling may reach the clipboard**.
 
+LOGS-SEL-02 landed visual mode and the yank on top of it (**D244**): a selection and a
+running stream are mutually exclusive, `G` extends rather than re-arming the tail (so
+`gg v G y` copies the buffer), both ends of the range survive a grep change as *log lines*,
+and the clipboard gets the buffer — no styling, no wrap breaks, the stamp iff
+`logs.timestamps`. `y` is now live in two key contexts (`logs.yank` in browse,
+`confirm.accept` in confirm), which is legal because the surfaces are modal.
+
 LOGS-SEL-01 landed the cursor half and wrote the constraints the rest inherits (**D242**):
 the cursor counts log lines, it addresses the *shown* set with `shownIdx` as the only route
 back to raw text, Selection and Match share the cursor's line, the bar is derived on the way
 to the viewport rather than cached into `shownLines`, and following owns the cursor.
 
-- [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: On top of LOGS-SEL-01's cursor. `v` (`logs.select`) anchors a selection at the
-      cursor, `j`/`k` extend it, `Esc` cancels; `y` (`logs.yank`) copies the selection — or
-      the cursor's line with no selection — to the clipboard through `internal/clipboard`
-      (the `secret.copy` path), with the status-bar confirmation that copy gives. Entering
-      visual mode **pauses following** and leaving it resumes it if the reader never turned
-      it off themselves. The clipboard gets `lines[i]` joined by `\n` — never `shownLines`,
-      which is painted — with the stamp prefixed exactly when `logs.timestamps` is on
-      (D242 pt 4). `y` is currently `confirm.accept`; the two are modal and cannot be live
-      together, but bind deliberately rather than discovering the overlap later. Wants a test
-      that the yanked text carries no escape sequence and that a wrapped line yanks whole.
-
 - [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
       status: todo | owner: — | added: 2026-08-07
-      notes: Cheap follow-ups, worth doing only once LOGS-SEL-02 is dogfooded, because both
+      notes: Cheap follow-ups, unblocked by LOGS-SEL-02 but worth doing only once it has
+      been used against a real cluster, because both
       are legibility judgements a test cannot make. (1) Whether the selection bar and the `/`
       match highlight stay legible together on one line or one must yield while visual mode
       is active — D242 pt 3 says they coexist, on the same argument D239 made for the table,
@@ -649,6 +642,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-SEL-02** Visual mode and yank in the logs view — `v` selects log lines, `y` copies them unpainted and unwrapped via OSC-52, and a selection suspends the tail — done 2026-08-07 (D244)
 
 - [x] **CTX-MEM-02** kubecom reopens the kind you left open, per context — recorded once the watch is live, replayed after discovery reconciles, silent when the cluster does not serve it — done 2026-08-07 (D243)
 

@@ -6737,3 +6737,46 @@ rather than re-choosing them.
    reconnect, or any later leg that refreshes the API surface — must not drag a reader who
    is sitting on the menu into a table. A restore may only ever be the *first* thing that
    happens on a cluster, never an interruption of something later.
+
+## D244 — Visual mode owns follow; the yank copies the buffer, and `y` is a second confirm-context twin (2026-08-07, LOGS-SEL-02)
+
+D242 built the cursor and named the constraints a selection would inherit. This is the
+selection and the copy on top of it. What a later leg must not silently contradict:
+
+1. **A selection and a running stream are mutually exclusive.** Following pins the cursor
+   to the newest line (D242 pt 5), so `logs.select` suspends following for the selection's
+   whole life and remembers whether it was *it* that did so — leaving visual mode restores
+   only the pause visual mode caused, never one the reader made themselves. `logs.follow`
+   is the one gesture that ends a selection outright: it means "back to the stream", and
+   the two cannot both be true.
+
+2. **`nav.bottom` changes meaning inside visual mode.** Outside it, `G` re-arms following
+   (D147/LOGS-04c). Inside it, that would hand the moving end of the selection to the
+   stream, so it extends to the last shown line instead and follow stays off. This is what
+   makes `gg v G y` — copy the whole buffer — the gesture it looks like, and it is the
+   only nav key whose meaning is mode-dependent here.
+
+3. **Both ends of the selection are log lines, carried across a rebuild by buffer index.**
+   The anchor is re-found exactly as the cursor is (D242 pt 2), *not* clamped into the new
+   body: clamping happens to agree whenever the anchor is the last shown line, so a test
+   that only exercises that case proves nothing — the mutation is masked. A grep change
+   narrows a selection to the lines that survive it and never widens it.
+
+4. **The copy is the buffer, not the screen.** `Yank` builds from `lines[i]` with the
+   stamp prefixed exactly when `logs.timestamps` is on, so the clipboard carries no escape
+   sequence and a soft-wrapped line comes back whole. This is D242 pt 4 discharged, and it
+   is the whole reason the feature exists rather than "use the terminal's select-to-copy".
+   The clipboard write and its status-bar confirmation stay in the shell (as `secret.copy`
+   does, M3-08b); the component owns only which lines and what their raw text is.
+
+5. **`y` is browse-context `logs.yank` and confirm-context `confirm.accept` at once.** The
+   second key to be bound in both contexts, and the first that is a live action in both. It
+   is safe because the surfaces are modal — the confirm modal captures every key while it
+   is up — not because one of them is dormant. A later leg giving `y` a third meaning in
+   the browse context is a collision, and Merge will say so.
+
+6. **The closed-grep logs hint no longer offers `logs.regex`.** The line is the scarcest in
+   the app and `v`/`y` are gestures nothing on screen announces, while with no query typed
+   there is nothing for the mode toggle to re-interpret. It is still hinted with the grep
+   *open*, still fires in both states, and `?` and `docs/keybindings.md` still carry it —
+   this is a hint budget, not a claim about what acts.

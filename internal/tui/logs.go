@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -247,7 +248,8 @@ func (m Model) routeLogsFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleLogsAction routes a resolved action to the open logs view. app.quit closes the
 // view rather than exiting kubecom — a full-screen pager owns the quit key while it is
-// up, exactly as the help modal, the shared viewer and the search view do. Everything
+// up, exactly as the help modal, the shared viewer and the search view do. logs.previous
+// and logs.yank are handled here rather than by the component (see below). Everything
 // else is handed to the component, which scrolls, opens/narrows the live grep, toggles
 // follow (pausing it on any upward scroll), and closes itself on nav.back via its own
 // ClosedMsg. Actions the view does not honour are swallowed, so nothing underneath moves
@@ -262,6 +264,27 @@ func (m Model) handleLogsAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// only the shell can do (M5-01a).
 	if a == keymap.ActionLogsPrevious {
 		return m.toggleLogsPrevious()
+	}
+	// logs.yank is handled here for the same reason secret.copy is handled in
+	// handleViewerAction: putting text on the clipboard and echoing what happened are
+	// the shell's two jobs (M3-08b), and a component that did either would have to know
+	// about tea.SetClipboard and the status bar. The view owns the only hard part —
+	// which lines, and what their raw text is (D242 pt 4) — and hands it over.
+	//
+	// The notice counts lines and never quotes one: a log line can be a kilobyte of
+	// JSON, and the reader can already see what they selected. An empty view yanks
+	// nothing and says nothing, exactly as a copy on a Secret with no data does.
+	if a == keymap.ActionLogsYank {
+		text, n, ok := m.logsView.Yank()
+		if !ok {
+			return m, nil
+		}
+		unit := " lines"
+		if n == 1 {
+			unit = " line"
+		}
+		notice := m.surfaceNotice("copied " + strconv.Itoa(n) + unit)
+		return m, tea.Batch(tea.SetClipboard(text), notice)
 	}
 	var cmd tea.Cmd
 	m.logsView, cmd = m.logsView.Update(a)

@@ -171,6 +171,23 @@ type Model struct {
 	// (2026-08-07-logs-selection-and-yank, D242 pt 1).
 	cursor int
 
+	// anchor is the fixed end of a visual-mode selection — the shown line logs.select
+	// was pressed on — and -1 exactly when there is no selection (LOGS-SEL-02). The
+	// moving end is the cursor, so the selected range is the closed interval between
+	// them and every nav key extends it for free. Like the cursor it counts log lines
+	// (D242 pt 1) and addresses the *shown* set, so it is carried across a query change
+	// the same way: rebuildShown remembers which buffer line it was and re-finds it.
+	anchor int
+
+	// resumeFollow records that entering visual mode is what paused following, so
+	// leaving it can put the stream back the way the reader had it. Following owns the
+	// cursor (D242 pt 5) — it pins it to the newest line — so a selection cannot be
+	// held while the stream is running; but a reader who was tailing, selected three
+	// lines and yanked them meant to go on tailing, and having to press `f` afterwards
+	// would make the copy cost them their place. False when the view was already paused
+	// before `v`: that pause is the reader's, and visual mode does not get to undo it.
+	resumeFollow bool
+
 	active bool // whether the view is shown (captures input) — "" View when false
 	width  int  // full screen width
 	height int  // full screen height
@@ -194,6 +211,7 @@ func New(s styles.Styles) Model {
 		title:     kind,
 		following: true,
 		cursor:    -1,
+		anchor:    -1,
 	}
 }
 
@@ -257,6 +275,8 @@ func (m *Model) Restream() {
 	m.shownLines = m.shownLines[:0]
 	m.shownIdx = m.shownIdx[:0]
 	m.cursor = -1
+	m.anchor = -1
+	m.resumeFollow = false
 	m.following = true
 	m.render()
 }
@@ -323,6 +343,82 @@ func (m Model) Following() bool { return m.following }
 // lines the query keeps, so what it addresses is always what is on screen.
 func (m Model) Cursor() int { return m.cursor }
 
+// Selecting reports whether visual mode is on (logs.select, LOGS-SEL-02).
+func (m Model) Selecting() bool { return m.anchor >= 0 }
+
+// Selection is the inclusive range of *shown* lines a yank would copy: the visual-mode
+// range while one is being made, and the cursor's own line otherwise — which is what
+// makes `y` useful without `v` first. ok is false only when there is nothing to copy
+// (an empty body).
+func (m Model) Selection() (lo, hi int, ok bool) {
+	if m.cursor < 0 || m.cursor >= len(m.shownLines) {
+		return 0, 0, false
+	}
+	if !m.Selecting() || m.anchor >= len(m.shownLines) {
+		return m.cursor, m.cursor, true
+	}
+	return min(m.anchor, m.cursor), max(m.anchor, m.cursor), true
+}
+
+// startSelect anchors a selection at the cursor and suspends following for its
+// duration. The suspend is not a courtesy: while following, placeCursor pins the cursor
+// to the newest line (D242 pt 5), so a selection made under a live stream would have one
+// end dragged along by every arriving line and the reader would be selecting the tail
+// rather than what they are looking at. A view with nothing in it has nothing to anchor.
+func (m *Model) startSelect() {
+	if len(m.shownLines) == 0 {
+		return
+	}
+	m.anchor = max(m.cursor, 0)
+	m.resumeFollow = m.following
+	m.following = false
+}
+
+// endSelect leaves visual mode. resume asks for the follow state visual mode suspended
+// to be restored — true for the ways of *finishing* (esc, a second `v`, a yank), false
+// for logs.follow, which is about to state the reader's own intent and must not be
+// pre-empted by ours.
+func (m *Model) endSelect(resume bool) {
+	if !m.Selecting() {
+		return
+	}
+	m.anchor = -1
+	if resume && m.resumeFollow {
+		m.following = true
+	}
+	m.resumeFollow = false
+}
+
+// Yank returns the text the reader asked for — the selected lines, or the cursor's line
+// with no selection — and leaves visual mode. What it returns is built from `lines`, the
+// raw buffer, never from the painted `shownLines` cache: the clipboard must carry no
+// escape sequence, and a soft-wrapped line must come back whole rather than broken at
+// the column the screen happened to fold it (D242 pt 1/pt 4 — the two defects that made
+// the terminal's own select-to-copy insufficient in the first place). The timestamp is
+// prefixed exactly when logs.timestamps is showing it, so the copy matches the screen.
+// ok is false when there is nothing to copy.
+func (m *Model) Yank() (text string, lines int, ok bool) {
+	lo, hi, ok := m.Selection()
+	if !ok {
+		return "", 0, false
+	}
+	var b strings.Builder
+	for n := lo; n <= hi; n++ {
+		if n > lo {
+			b.WriteByte('\n')
+		}
+		i := m.shownIdx[n]
+		if m.timestamps && i < len(m.stamps) && m.stamps[i] != "" {
+			b.WriteString(m.stamps[i])
+			b.WriteByte(' ')
+		}
+		b.WriteString(m.lines[i])
+	}
+	m.endSelect(true)
+	m.syncContent()
+	return b.String(), hi - lo + 1, true
+}
+
 // Filtering reports whether the filter field is open and capturing text. The root
 // model uses it to route raw text keys to UpdateFilter while it is true (D11).
 func (m Model) Filtering() bool { return m.filtering }
@@ -380,7 +476,12 @@ func (m *Model) SetSize(w, h int) {
 // clipped, and while clipped nav.left/nav.right scroll horizontally to the tail of a
 // long line (LOGS-04a); logs.timestamps shows or hides each line's server timestamp
 // without touching the stream (LOGS-04b); logs.follow toggles follow (re-enabling jumps to the newest
-// line); nav.back closes the filter if open, else closes the view (ClosedMsg).
+// line); logs.select starts or abandons a visual selection the nav keys then extend, and
+// suspends following while it stands (LOGS-SEL-02); nav.back clears the filter if open,
+// else abandons a selection, else closes the view (ClosedMsg).
+//
+// logs.yank is deliberately not an action this Update handles: the clipboard write and the
+// status-bar confirmation belong to the shell (M3-08b), which calls Yank for the text.
 // The view consumes actions, never raw keys (D11); an inactive view ignores everything.
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	if !m.active {
@@ -406,6 +507,15 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	case keymap.ActionPageDown:
 		m.moveCursor(m.page(1))
 	case keymap.ActionBottom:
+		if m.Selecting() {
+			// vim's visual-mode `G`: extend the selection to the last line. It must not
+			// re-arm following the way the same key does outside visual mode — that
+			// would hand the cursor to the stream (D242 pt 5) and with it the moving end
+			// of the selection. This is also what makes `gg v G y` — copy the whole
+			// buffer — the gesture it looks like.
+			m.moveCursor(len(m.shownLines))
+			return m, nil
+		}
 		// The one "catch up and keep tailing" gesture (LOGS-04c, D147). In a streaming
 		// pager the bottom is not a position: the newest line keeps moving, so a jump to
 		// the end that did not rejoin the stream would be true for exactly one frame and
@@ -436,7 +546,23 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.resizeViewport()
 		m.render()
 		return m, cmd
+	case keymap.ActionLogsSelect:
+		// A toggle, like vim's own `v`: pressed inside a selection it abandons it,
+		// which is the second way out beside esc and the one a reader finds by
+		// pressing the key again.
+		if m.Selecting() {
+			m.endSelect(true)
+		} else {
+			m.startSelect()
+		}
+		m.syncContent()
 	case keymap.ActionLogsFollow:
+		// Rejoining the stream ends any selection: following pins the cursor to the
+		// newest line, so the two cannot both be true. The end does not restore the
+		// suspended follow state — this key is about to set it explicitly, and from
+		// visual mode it is always paused, so the toggle reads "resume", which is what
+		// a reader pressing `f` out of a selection means.
+		m.endSelect(false)
 		// Resuming pins the cursor to the newest line and jumps there; pausing leaves
 		// the cursor exactly where it is, so `f` twice is a no-op rather than a way to
 		// lose your place. syncContent is both, because the pin is a property of
@@ -463,11 +589,17 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.timestamps = !m.timestamps
 		m.render()
 	case keymap.ActionBack:
-		// One esc clears an open filter (restoring the full stream); a second closes
-		// the view — the filter must never be lost by the same key that dismisses.
+		// One esc clears an open filter (restoring the full stream); the next abandons a
+		// selection; the last closes the view. Each rung undoes the innermost thing the
+		// reader turned on, so nothing they built is ever lost to the key that dismisses.
 		if m.filtering {
 			m.closeFilter()
 			m.render()
+			return m, nil
+		}
+		if m.Selecting() {
+			m.endSelect(true)
+			m.syncContent()
 			return m, nil
 		}
 		return m, func() tea.Msg { return ClosedMsg{Kind: kind} }
@@ -718,6 +850,14 @@ func (m *Model) rebuildShown() {
 	if m.cursor >= 0 && m.cursor < len(m.shownIdx) {
 		anchor = m.shownIdx[m.cursor]
 	}
+	// The visual-mode anchor is carried the same way and for the same reason: it is the
+	// other end of a range the reader chose over *log lines*, so a query that hides some
+	// of them must narrow the selection to what survives, not slide its end onto whatever
+	// the new query put at that index.
+	selAnchor := -1
+	if m.anchor >= 0 && m.anchor < len(m.shownIdx) {
+		selAnchor = m.shownIdx[m.anchor]
+	}
 	match, filtered := m.shownFilter()
 	kept, idx := m.shownLines[:0], m.shownIdx[:0]
 	for i := range m.lines {
@@ -732,6 +872,9 @@ func (m *Model) rebuildShown() {
 		// kept line at or after the anchor (and len(shownIdx) when it was the last —
 		// placeCursor clamps that back onto the body).
 		m.cursor, _ = slices.BinarySearch(m.shownIdx, anchor)
+	}
+	if selAnchor >= 0 {
+		m.anchor, _ = slices.BinarySearch(m.shownIdx, selAnchor)
 	}
 }
 
@@ -750,6 +893,12 @@ func (m *Model) placeCursor() {
 		m.cursor = 0
 	case m.cursor >= len(m.shownLines):
 		m.cursor = len(m.shownLines) - 1
+	}
+	// The selection's fixed end is only ever clamped — a rebuild has already re-found it
+	// by log line. Past the end of an emptied body it lands on -1, which *is* "no
+	// selection": there is nothing left to have selected, so visual mode ends with it.
+	if m.anchor >= len(m.shownLines) {
+		m.anchor = len(m.shownLines) - 1
 	}
 }
 
@@ -771,8 +920,9 @@ func (m *Model) moveCursor(d int) {
 // Never zero — an unsized view must still move by one.
 func (m Model) page(div int) int { return max(1, m.viewport.Height()/div) }
 
-// cursorLine is shown line n repainted as the cursor: a Selection bar across the whole
-// pane, with the matched spans still marked on top of it and the timestamp inside the bar
+// cursorLine is shown line n repainted as the cursor — or, in visual mode, as one line
+// of the selection, which is the same bar: a Selection background across the whole pane,
+// with the matched spans still marked on top of it and the timestamp inside the bar
 // rather than beside it. It is derived here, not cached in shownLines, so that moving the
 // cursor never invalidates the append cache LOGS-05b built (and a repaint costs one line,
 // not the buffer).
@@ -847,8 +997,10 @@ func (m *Model) showCursor() {
 func (m *Model) syncContent() {
 	m.placeCursor()
 	body := slices.Clone(m.shownLines)
-	if m.cursor >= 0 && m.cursor < len(body) {
-		body[m.cursor] = m.cursorLine(m.cursor)
+	if lo, hi, ok := m.Selection(); ok {
+		for n := lo; n <= hi && n < len(body); n++ {
+			body[n] = m.cursorLine(n)
+		}
 	}
 	m.viewport.SetContentLines(body)
 	m.clampHOffset()
@@ -936,6 +1088,15 @@ func (m Model) header() string {
 		seg += "  [previous]"
 	}
 	seg += "  " + state
+	// Visual mode, with the size of the selection (LOGS-SEL-02). It earns a marker on
+	// D146's own test — state the reader can lose sight of — twice over. A fresh `v`
+	// selects exactly the line the cursor was already on, so the screen is unchanged
+	// and the only evidence that the next `j` will extend rather than move is this;
+	// and a selection can be taller than the pane (`gg v G`), where the count is the
+	// only way to know what a `y` is about to copy.
+	if lo, hi, ok := m.Selection(); ok && m.Selecting() {
+		seg += "  [visual " + itoa(hi-lo+1) + "]"
+	}
 	// Long-line state (LOGS-04a): wrapping is a mode the reader turned on, so it is
 	// always named; clipping is the default and only worth a marker once it is actually
 	// hiding something to the left — the column offset doubles as "you are scrolled".

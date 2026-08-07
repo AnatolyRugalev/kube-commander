@@ -134,6 +134,21 @@ const (
 	// the view starts over on the other instance's output. It is meaningful only
 	// while the logs view is up; elsewhere it is inert.
 	ActionLogsPrevious Action = "logs.previous"
+	// ActionLogsSelect starts a **visual selection** in the logs view at the line
+	// cursor and, pressed again, cancels it (LOGS-SEL-02): vim's `v`, over log lines
+	// rather than screen rows (D242 pt 1). While it is on, the nav keys extend the
+	// selection instead of merely moving, and following is suspended for its duration
+	// — a selection anchored in a stream running at ~1,900 lines/sec is not a
+	// selection. It is meaningful only while the logs view is up; elsewhere it is
+	// inert.
+	ActionLogsSelect Action = "logs.select"
+	// ActionLogsYank copies the selected log lines — or, with no selection, the
+	// cursor's line — to the system clipboard (LOGS-SEL-02), through the same OSC-52
+	// path secret.copy uses (M3-08b). What lands there is the raw buffered text, never
+	// what is on screen: no styling, no inserted wrap breaks, and the timestamp
+	// prefixed exactly when logs.timestamps is showing it (D242 pt 4). It is
+	// meaningful only while the logs view is up; elsewhere it is inert.
+	ActionLogsYank Action = "logs.yank"
 	// ActionRevealSecret toggles reveal (unmask/decode) of the values inside the
 	// open secret viewer (M3-08a). Values start masked; this is the deliberate
 	// reveal gesture. It is meaningful only while the secret viewer is up; elsewhere
@@ -283,6 +298,8 @@ var actionMeta = []struct {
 	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
 	{ActionLogsTimestamps, "Toggle timestamps in the logs viewer"},
 	{ActionLogsPrevious, "Toggle logs of the previous (crashed) container instance"},
+	{ActionLogsSelect, "Select log lines (visual mode)"},
+	{ActionLogsYank, "Copy the selected log lines"},
 	{ActionRevealSecret, "Reveal / hide secret values in the secret viewer"},
 	{ActionCopySecret, "Copy the selected secret value to the clipboard"},
 	{ActionForwards, "Toggle the port-forward panel"},
@@ -419,6 +436,18 @@ var defaultBindings = map[Action][]string{
 	// takes ctrl+r. ctrl+p is free in the browse context and is not a reserved nav
 	// chord (D10).
 	ActionLogsPrevious: {"ctrl+p"},
+	// Visual mode and yank take vim's own keys, and both are plain letters for the
+	// reason the wrap and timestamps toggles are: neither is a gesture anyone reaches
+	// for mid-query — you select lines you can already see — so being swallowed by an
+	// open grep field (D140 pt 1) costs them nothing. `v` is free in the browse
+	// context and is not a reserved nav chord (D10).
+	ActionLogsSelect: {"v"},
+	// `y` is the one binding here with a twin: it is also confirm.accept. That is
+	// legal rather than lucky — the two resolve in different key contexts (contextOf),
+	// and they are modal besides: the confirm modal captures every key while it is up,
+	// so the logs view cannot be reading `y` at the same moment the modal is. It was
+	// left browse-free when res.yaml retired (D135/M3-15c) and this is what claims it.
+	ActionLogsYank:     {"y"},
 	ActionRevealSecret: {"r"},
 	ActionCopySecret:   {"c"},
 	ActionForwards:     {"F"},
