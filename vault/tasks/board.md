@@ -7,7 +7,8 @@ _Last updated: 2026-08-07 — FILT-02 done: the `/` filter now highlights what i
 
 ## In Progress
 
-_(none)_
+- [ ] **CTX-MEM-01** Triage feedback `2026-08-06-context-switch-pane-memory` into a CTX-MEM line
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
 
 ## Blocked
 
