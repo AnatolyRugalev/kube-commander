@@ -9,8 +9,8 @@ _Last updated: 2026-08-07 — LOGS-SEL-01 done: the logs view has a line cursor 
 
 - [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
       status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: See the CTX-MEM section below for the full brief (D240). Claimed 2026-08-07 by a
-      leg that landed nothing — if it is still unstarted at the next pick, re-take it.
+      notes: See the CTX-MEM section below for the full brief (D240). Re-taken 2026-08-07
+      after the first claim landed nothing (commit 3f812a9 was the claim itself).
 
 ## Blocked
 
