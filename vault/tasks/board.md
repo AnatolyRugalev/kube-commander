@@ -7,7 +7,10 @@ _Last updated: 2026-08-07 — CTX-MEM-01 done: the pane-memory feedback is split
 
 ## In Progress
 
-_(none)_
+- [ ] **DOC-01** Restructure the README around what kubecom can do; reference out to `docs/`
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07
+      notes: The outline half of feedback `2026-08-07-readme-structural-rewrite` — see the
+      **DOC** section below for the split and what each half owns.
 
 ## Blocked
 
@@ -459,6 +462,28 @@ switch, only a GVR.
       object re-resolve that can fail — and landing in a *different* scope silently is
       worse than landing on the plain list. Take this only with a way to say on screen
       that the owner is gone; until then CTX-MEM-02's restore stops at the plain table.
+
+### User-facing docs (DOC — feedback-driven)
+Raised by feedback `2026-08-07-readme-structural-rewrite`: the README grew by accretion —
+587 lines, `## Usage` alone spanning ~290 of them under one flat heading, install ahead of
+a single concrete thing kubecom does, and reference material (config, theme, menu file,
+migration) interleaved with the walkthrough. The ask is structural: organise around the
+**capability surface**, make every capability findable by skimming headings, put install
+after the payoff, push reference to `docs/`, and end up shorter. The feedback itself asks
+for the split — outline first, prose after — because a 587-line rewrite in one commit is
+not reviewable.
+
+- [ ] **DOC-02** Prose pass over the restructured README
+      status: todo | owner: — | added: 2026-08-07 | blocked-on: DOC-01
+      notes: DOC-01 moves paragraphs under headings largely as they were, so the prose is
+      still written in the order things were built: capabilities announced with "Press `X`
+      (`action.id`, rebindable) to …" over and over, several paragraphs arguing a design
+      decision the reader did not ask about, and the status callout listing what works as
+      if the reader knew what did not. Condense — the headings now carry the structure, so
+      each paragraph only has to say what the thing does and when you want it. The
+      failure-mode paragraphs ("A resource that won't list", "An expired credential
+      plugin") are the ones the feedback asked to keep; they earn their length. Target the
+      capability sections; do not re-litigate the outline.
 
 ### Board hygiene (BOARD — agent-found)
 The board is read on every Orient, so its size is a cost every leg pays and no leg sees.
