@@ -3,14 +3,9 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — DOC-01 done: the README is organised around the capability surface with install and configuration reference moved out to `docs/` (D241), and with the inbox now empty the board is next — CTX-MEM-02 is the top unblocked item. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — LOGS-SEL-01 done: the logs view has a line cursor over log lines (D242), which is what LOGS-SEL-02's visual mode and yank build on. Per-leg history: `vault/journal/`._
 
 ## In Progress
-
-- [ ] **LOGS-SEL-01** A line cursor in the logs view
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: See the LOGS-SEL section below for the full brief (feedback
-      `2026-08-07-logs-selection-and-yank`).
 
 - [ ] **CTX-MEM-02** Remember the last-browsed resource per context, and restore it
       status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
@@ -208,6 +203,11 @@ included). The submitter asked for the split below and named the cases that deci
 feels right: follow must pause while selecting, the cursor and the selection are over **log
 lines** not screen rows, selection covers what a `/` query *displays*, a yank matches the
 timestamps toggle's current state, and **no styling may reach the clipboard**.
+
+LOGS-SEL-01 landed the cursor half and wrote the constraints the rest inherits (**D242**):
+the cursor counts log lines, it addresses the *shown* set with `shownIdx` as the only route
+back to raw text, Selection and Match share the cursor's line, the bar is derived on the way
+to the viewport rather than cached into `shownLines`, and following owns the cursor.
 
 - [ ] **LOGS-SEL-02** Visual mode and yank in the logs view
       status: todo | owner: — | added: 2026-08-07
@@ -653,6 +653,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-SEL-01** A line cursor in the logs view — j/k move a highlighted log line (not a screen row), Selection and Match share it, and `shownIdx` is the map a yank reads — done 2026-08-07 (D242)
 
 - [x] **DOC-01** README restructured around the capability surface (587 → 438 lines); install and configuration reference moved to `docs/install.md` + `docs/configuration.md`; the three install guards now scan the doc set — outline half of feedback `2026-08-07-readme-structural-rewrite` — done 2026-08-07 (D241)
 

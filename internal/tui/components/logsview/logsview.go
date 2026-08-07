@@ -146,7 +146,30 @@ type Model struct {
 	// timestamps toggle changes what a line looks like, and appendLine only ever
 	// extends it, through the same renderLine both use. Its length is the match
 	// count the header reports, so View still never re-runs the match to label it.
+	//
+	// It is deliberately **not** where the cursor is painted: the selection bar is
+	// applied to a copy on its way to the viewport (syncContent), so the cache stays
+	// the thing a rebuild would produce and moving the cursor never invalidates it.
 	shownLines []string
+
+	// shownIdx maps each shown line back to its index in lines/stamps, parallel to
+	// shownLines and ascending. The cursor addresses *shown* lines — that is what
+	// j/k step through — but everything a reader does with the line it lands on needs
+	// the raw text: the cursor's own repaint re-runs the matcher against lines[i], and
+	// the yank LOGS-SEL-02 adds must reach lines[i] rather than the painted cache, or
+	// the clipboard gets escape sequences (D242 pt 4). It is also what lets the cursor
+	// survive a query change: rebuildShown remembers which *log line* it was on and
+	// re-finds it, instead of leaving an index pointing at whatever the new query put
+	// in that slot.
+	shownIdx []int
+
+	// cursor is the index into shownLines of the highlighted line — the reader's
+	// "this line", and the anchor a later visual mode extends from. -1 exactly when
+	// the body is empty. It counts **log lines, not screen rows**: a soft-wrapped line
+	// is one cursor step however many rows it occupies, which is the property the
+	// feedback singled out as the reason terminal select-to-copy is not good enough
+	// (2026-08-07-logs-selection-and-yank, D242 pt 1).
+	cursor int
 
 	active bool // whether the view is shown (captures input) — "" View when false
 	width  int  // full screen width
@@ -170,6 +193,7 @@ func New(s styles.Styles) Model {
 		filter:    fi,
 		title:     kind,
 		following: true,
+		cursor:    -1,
 	}
 }
 
@@ -231,6 +255,8 @@ func (m *Model) Restream() {
 	m.lines = m.lines[:0]
 	m.stamps = m.stamps[:0]
 	m.shownLines = m.shownLines[:0]
+	m.shownIdx = m.shownIdx[:0]
+	m.cursor = -1
 	m.following = true
 	m.render()
 }
@@ -280,6 +306,7 @@ func (m *Model) appendLine(match matcher, filtered bool, stamp, line string) {
 	m.stamps = append(m.stamps, stamp)
 	if s, ok := m.renderLine(len(m.lines)-1, match, filtered); ok {
 		m.shownLines = append(m.shownLines, s)
+		m.shownIdx = append(m.shownIdx, len(m.lines)-1)
 	}
 }
 
@@ -290,6 +317,11 @@ func (m Model) Empty() bool { return len(m.lines) == 0 }
 
 // Following reports whether the view is auto-scrolling with the stream.
 func (m Model) Following() bool { return m.following }
+
+// Cursor is the index into the *shown* lines of the highlighted line, or -1 when the
+// body is empty. Shown, not buffered: with a `/` query active the cursor walks the
+// lines the query keeps, so what it addresses is always what is on screen.
+func (m Model) Cursor() int { return m.cursor }
 
 // Filtering reports whether the filter field is open and capturing text. The root
 // model uses it to route raw text keys to UpdateFilter while it is true (D11).
@@ -357,22 +389,22 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionUp:
 		m.following = false
-		m.viewport.ScrollUp(1)
+		m.moveCursor(-1)
 	case keymap.ActionHalfPageUp:
 		m.following = false
-		m.viewport.HalfPageUp()
+		m.moveCursor(-m.page(2))
 	case keymap.ActionPageUp:
 		m.following = false
-		m.viewport.PageUp()
+		m.moveCursor(-m.page(1))
 	case keymap.ActionTop:
 		m.following = false
-		m.viewport.GotoTop()
+		m.moveCursor(-len(m.shownLines))
 	case keymap.ActionDown:
-		m.viewport.ScrollDown(1)
+		m.moveCursor(1)
 	case keymap.ActionHalfPageDown:
-		m.viewport.HalfPageDown()
+		m.moveCursor(m.page(2))
 	case keymap.ActionPageDown:
-		m.viewport.PageDown()
+		m.moveCursor(m.page(1))
 	case keymap.ActionBottom:
 		// The one "catch up and keep tailing" gesture (LOGS-04c, D147). In a streaming
 		// pager the bottom is not a position: the newest line keeps moving, so a jump to
@@ -382,8 +414,11 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		// it. Incremental downward movement (nav.down, page down) deliberately does not:
 		// stepping onto the last line is browsing, not a statement about the tail, and a
 		// reader parked at the end of a paused view must be able to stay there.
+		// It moves the cursor too: re-arming follow pins the cursor to the newest line
+		// (syncContent does it), so `G` lands the reader and their cursor in the same
+		// place, which is where the next line will arrive.
 		m.following = true
-		m.viewport.GotoBottom()
+		m.syncContent()
 	case keymap.ActionLeft:
 		// Horizontal movement says nothing about whether the reader still wants the
 		// tail, so unlike an upward scroll it leaves following alone. Inert while
@@ -402,10 +437,12 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.render()
 		return m, cmd
 	case keymap.ActionLogsFollow:
+		// Resuming pins the cursor to the newest line and jumps there; pausing leaves
+		// the cursor exactly where it is, so `f` twice is a no-op rather than a way to
+		// lose your place. syncContent is both, because the pin is a property of
+		// following rather than of this key.
 		m.following = !m.following
-		if m.following {
-			m.viewport.GotoBottom()
-		}
+		m.syncContent()
 	case keymap.ActionLogsRegex:
 		// Toggling re-interprets the query already typed, so the shown set changes
 		// under the reader's cursor — deliberately: it is how you promote a substring
@@ -570,38 +607,64 @@ func spanSubstring(line, lowerQuery string) ([][]int, bool) {
 	return spans, len(spans) > 0
 }
 
-// highlight paints the matched spans of line with the Match style, leaving the rest as
-// it streamed. Spans arrive in order and non-overlapping (both FindAllStringIndex and
-// spanSubstring guarantee it); anything out of range or zero-width is skipped so a
-// pathological pattern (`x*`) can only fail to highlight, never corrupt the line.
-func (m Model) highlight(line string, spans [][]int) string {
-	if len(spans) == 0 {
-		return line
+// highlight paints the matched spans of line with the Match style. Spans arrive in
+// order and non-overlapping (both FindAllStringIndex and spanSubstring guarantee it);
+// anything out of range or zero-width is skipped so a pathological pattern (`x*`) can
+// only fail to highlight, never corrupt the line.
+//
+// base is what the *unmatched* text is painted with, and nil means "leave it exactly
+// as it streamed". The nil case is not an optimisation detail, it is the streaming
+// path: every buffered line goes through it, so emitting a style there would put two
+// escape sequences on every log line the view holds. Only the cursor's line has a base
+// (Selection), and it is re-derived on its way to the viewport rather than cached.
+//
+// Match keeps its own background even under Selection, which is the point: the two are
+// designed to share a line (styles.Match uses the Warn hue precisely so a highlight is
+// never mistaken for the cursor), and blanking the marks on the cursor's line would
+// blank the answer on exactly the line the reader is reading — the argument D239 made
+// for the table's cursor row, which applies here with more force because in a grep the
+// match *is* why the line is on screen.
+func (m Model) highlight(line string, spans [][]int, base *lipgloss.Style) string {
+	paint := func(b *strings.Builder, s string) {
+		if s == "" {
+			return
+		}
+		if base == nil {
+			b.WriteString(s)
+			return
+		}
+		b.WriteString(base.Render(s))
 	}
 	var b strings.Builder
+	if len(spans) == 0 {
+		paint(&b, line)
+		return b.String()
+	}
 	last := 0
 	for _, s := range spans {
 		if s[0] < last || s[1] > len(line) || s[0] >= s[1] {
 			continue
 		}
-		b.WriteString(line[last:s[0]])
+		paint(&b, line[last:s[0]])
 		b.WriteString(m.styles.Match.Render(line[s[0]:s[1]]))
 		last = s[1]
 	}
-	b.WriteString(line[last:])
+	paint(&b, line[last:])
 	return b.String()
 }
 
 // stamp is line i's rendered timestamp prefix, or "" when timestamps are off or the
-// server sent none for that line. Muted, because the timestamp is context for the
-// message and should not compete with it for the eye. An unstamped line is simply not
-// padded: aligning it under its neighbours would mean inventing a timestamp it does not
-// have, and in practice a stream is either wholly stamped or wholly not.
-func (m Model) stamp(i int) string {
+// server sent none for that line. st is the style to draw it in — Subtle for an ordinary
+// line, because the timestamp is context for the message and should not compete with it
+// for the eye, and Selection under the cursor so the bar is not broken by a gap where the
+// clock is. An unstamped line is simply not padded: aligning it under its neighbours would
+// mean inventing a timestamp it does not have, and in practice a stream is either wholly
+// stamped or wholly not.
+func (m Model) stamp(i int, st lipgloss.Style) string {
 	if !m.timestamps || i >= len(m.stamps) || m.stamps[i] == "" {
 		return ""
 	}
-	return m.styles.Subtle.Render(m.stamps[i]) + " "
+	return st.Render(m.stamps[i] + " ")
 }
 
 // shownFilter returns the matcher for the current query and whether a query is narrowing
@@ -629,7 +692,7 @@ func (m Model) shownFilter() (matcher, bool) {
 func (m Model) renderLine(i int, match matcher, filtered bool) (string, bool) {
 	line := m.lines[i]
 	if !filtered {
-		return m.stamp(i) + line, true
+		return m.stamp(i, m.styles.Subtle) + line, true
 	}
 	if match == nil {
 		return "", false
@@ -638,22 +701,142 @@ func (m Model) renderLine(i int, match matcher, filtered bool) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return m.stamp(i) + m.highlight(line, spans), true
+	return m.stamp(i, m.styles.Subtle) + m.highlight(line, spans, nil), true
 }
 
 // rebuildShown recomputes the whole rendered body from the buffer. It is the O(n) path,
 // and the only one: it runs when the query, the grep mode or the timestamps toggle
 // changes what every line looks like — reader gestures, not stream events — never on
 // append.
+// It also re-finds the cursor. The cursor is an index into the *shown* set, and a
+// rebuild is exactly the event that changes what lives at that index — so it is carried
+// across as the buffer line it was on and re-looked-up afterwards, landing on the nearest
+// still-shown line at or after it. Without that, narrowing a grep by one keystroke would
+// throw the reader's cursor onto an unrelated line every time.
 func (m *Model) rebuildShown() {
+	anchor := -1
+	if m.cursor >= 0 && m.cursor < len(m.shownIdx) {
+		anchor = m.shownIdx[m.cursor]
+	}
 	match, filtered := m.shownFilter()
-	kept := m.shownLines[:0]
+	kept, idx := m.shownLines[:0], m.shownIdx[:0]
 	for i := range m.lines {
 		if s, ok := m.renderLine(i, match, filtered); ok {
 			kept = append(kept, s)
+			idx = append(idx, i)
 		}
 	}
-	m.shownLines = kept
+	m.shownLines, m.shownIdx = kept, idx
+	if anchor >= 0 {
+		// shownIdx is ascending by construction, so the insertion point is the first
+		// kept line at or after the anchor (and len(shownIdx) when it was the last —
+		// placeCursor clamps that back onto the body).
+		m.cursor, _ = slices.BinarySearch(m.shownIdx, anchor)
+	}
+}
+
+// placeCursor puts the cursor somewhere real for the body as it now stands. Following
+// owns it outright — a followed view's cursor is the newest line, which is where the
+// next line will arrive and where `v` would start a selection — and otherwise it is only
+// clamped, so a reader's position survives everything but the line it was on leaving the
+// shown set.
+func (m *Model) placeCursor() {
+	switch {
+	case len(m.shownLines) == 0:
+		m.cursor = -1
+	case m.following:
+		m.cursor = len(m.shownLines) - 1
+	case m.cursor < 0:
+		m.cursor = 0
+	case m.cursor >= len(m.shownLines):
+		m.cursor = len(m.shownLines) - 1
+	}
+}
+
+// moveCursor steps the cursor d shown lines (negative is up), clamping at both ends, and
+// redraws. Callers that mean "and stop tailing" clear following first: the cursor is
+// pinned while following, so a move that did not would be undone by placeCursor.
+func (m *Model) moveCursor(d int) {
+	if len(m.shownLines) == 0 {
+		return
+	}
+	c := max(m.cursor, 0) + d
+	m.cursor = min(max(c, 0), len(m.shownLines)-1)
+	m.syncContent()
+}
+
+// page is the cursor distance one page (div 1) or half page (div 2) moves: screen rows,
+// which equal shown lines while clipping and over-estimate nothing while wrapping (a
+// wrapped page covers fewer log lines than rows, so paging moves at most a screenful).
+// Never zero — an unsized view must still move by one.
+func (m Model) page(div int) int { return max(1, m.viewport.Height()/div) }
+
+// cursorLine is shown line n repainted as the cursor: a Selection bar across the whole
+// pane, with the matched spans still marked on top of it and the timestamp inside the bar
+// rather than beside it. It is derived here, not cached in shownLines, so that moving the
+// cursor never invalidates the append cache LOGS-05b built (and a repaint costs one line,
+// not the buffer).
+func (m Model) cursorLine(n int) string {
+	i := m.shownIdx[n]
+	base := m.styles.Selection
+	var spans [][]int
+	if match, filtered := m.shownFilter(); filtered && match != nil {
+		spans, _ = match(m.lines[i])
+	}
+	s := m.stamp(i, base) + m.highlight(m.lines[i], spans, &base)
+	// Pad to the pane so the bar is a bar. A line already wider than the pane needs
+	// none, which is also what keeps this from changing any line's wrapped height.
+	if pad := m.viewport.Width() - lipgloss.Width(s); pad > 0 {
+		s += base.Render(strings.Repeat(" ", pad))
+	}
+	return s
+}
+
+// lineRows is how many display rows a body line occupies at width w — one while
+// clipping, ceil(width/w) while wrapping. Width is measured ANSI-aware, since a shown
+// line may already carry Match escapes.
+func lineRows(s string, w int) int {
+	if w <= 0 {
+		return 1
+	}
+	return max(1, (lipgloss.Width(s)+w-1)/w)
+}
+
+// cursorRow reports the viewport y-offset of shown line n and how many rows it occupies.
+//
+// The two coordinate spaces only agree while clipping: with SoftWrap on, the viewport's
+// offset counts *display rows*, so the row of a shown line is the summed height of
+// everything above it. That is also why viewport.EnsureVisible is not used here — it
+// compares a content-line index against a row offset, which is only correct unwrapped.
+// The walk is O(shown lines) and paid solely in wrap mode, on a reader gesture; the same
+// order rebuildShown already pays on every keystroke typed into the grep.
+func (m Model) cursorRow(n int) (row, height int) {
+	if !m.wrap {
+		return n, 1
+	}
+	w := m.viewport.Width()
+	for i := range n {
+		row += lineRows(m.shownLines[i], w)
+	}
+	return row, lineRows(m.shownLines[n], w)
+}
+
+// showCursor scrolls the viewport the least it can to bring the cursor's line into view,
+// so h/j/k/l move a cursor through a still page rather than dragging the page around. A
+// line taller than the pane (wrapped) is shown from its top: its first row is the one the
+// reader is looking for.
+func (m *Model) showCursor() {
+	if m.cursor < 0 || m.cursor >= len(m.shownLines) {
+		return
+	}
+	row, h := m.cursorRow(m.cursor)
+	top, height := m.viewport.YOffset(), m.viewport.Height()
+	switch {
+	case row < top || h >= height:
+		m.viewport.SetYOffset(row)
+	case row+h > top+height:
+		m.viewport.SetYOffset(row + h - height)
+	}
 }
 
 // syncContent hands the rendered body to the viewport and keeps the newest line pinned
@@ -662,11 +845,18 @@ func (m *Model) rebuildShown() {
 // this one is the cache every later append extends. Cloning copies string headers, not
 // the log text — far cheaper than the join-and-re-split SetContent would do.
 func (m *Model) syncContent() {
-	m.viewport.SetContentLines(slices.Clone(m.shownLines))
+	m.placeCursor()
+	body := slices.Clone(m.shownLines)
+	if m.cursor >= 0 && m.cursor < len(body) {
+		body[m.cursor] = m.cursorLine(m.cursor)
+	}
+	m.viewport.SetContentLines(body)
 	m.clampHOffset()
 	if m.following {
 		m.viewport.GotoBottom()
+		return
 	}
+	m.showCursor()
 }
 
 // render rebuilds the body from the buffer and shows it. Called whenever something other

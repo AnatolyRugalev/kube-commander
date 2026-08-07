@@ -258,6 +258,35 @@ func TestLogsJumpToLatestFromTheShell(t *testing.T) {
 	}
 }
 
+// TestLogsCursorMovesFromTheShell is the wiring half of LOGS-SEL-01: `j`/`k` reach the
+// logs view as nav actions and move its line cursor, and — like every other letter — they
+// stop being navigation the moment the grep is open and become the text they type. The
+// component owns what the cursor then does; this is only about the keys getting there.
+func TestLogsCursorMovesFromTheShell(t *testing.T) {
+	m := openLogsWithLines(t, "one", "two", "three")
+	if got := m.logsView.Cursor(); got != 2 {
+		t.Fatalf("precondition: a followed view holds the cursor on the newest line; got %d", got)
+	}
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
+	if got := m.logsView.Cursor(); got != 1 {
+		t.Errorf("`k` should step the cursor up one line; got %d", got)
+	}
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if got := m.logsView.Cursor(); got != 2 {
+		t.Errorf("`j` should step it back down; got %d", got)
+	}
+	if !m.logsView.Active() {
+		t.Fatal("moving the cursor must not close the view")
+	}
+
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"}) // pause, cursor on line 1
+	m, _ = press(t, m, filterKey)
+	m = typeInto(t, m, "j")
+	if q := m.logsView.Query(); q != "j" {
+		t.Errorf("`j` typed into the open grep should be text; query = %q", q)
+	}
+}
+
 // TestLogsStreamTailsRecentHistory is LOGS-05a: opening a log asks the server for the
 // last defaultLogTail lines rather than the container's whole history. Without it a pod
 // that has been up for a week replays a week before the view reaches "now" — the wait

@@ -252,6 +252,13 @@ works while you are typing, so a substring you started can become a pattern with
 retyping it — a pattern that does not compile yet keeps the last working one and the
 header says `invalid regex`.
 
+The view has a **line cursor**, like a table row: `j`/`k` (or the arrow keys) move a
+highlighted line, `gg`/`G` jump to the first and last, and the page keys move it by a
+screenful. It steps whole **log lines** — a line folded onto several rows by `w` is
+one keystroke away, not three — and the page only scrolls once the cursor would
+leave it. While the view is following, the cursor rides the newest line; moving it up
+pauses following, and a `/` query narrows what it walks to the lines that matched.
+
 Press `f` (`logs.follow`) to pause tailing, or just scroll up (any upward gesture
 pauses it so the next line does not yank you back); `f` again resumes and jumps to
 the newest line, and so does `G` (`nav.bottom`) — in a live stream "go to the end"

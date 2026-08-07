@@ -6669,3 +6669,43 @@ this decision says *where* in the doc set that update goes.
    section silently retires the guard, and nothing fails. They now scan `installDocs`
    (README + `docs/install.md`). Any future guard over prose does the same: name the set the
    claim can legitimately live in, never the file it happens to live in today.
+
+## D242 — The logs view's cursor addresses log lines; the selection bar is derived, never cached (2026-08-07, LOGS-SEL-01)
+
+From feedback `2026-08-07-logs-selection-and-yank`. The logs view had scrolling and no
+cursor, so nothing could say "this line" and nothing could copy one. This is the cursor;
+LOGS-SEL-02 is the visual mode and the yank on top of it. The constraints a later leg must
+not walk into:
+
+1. **The cursor counts log lines, not screen rows.** One `j` crosses a whole soft-wrapped
+   line however many rows it occupies. This is the property that makes the feature worth
+   having at all — the terminal's own select-to-copy is rejected in the feedback precisely
+   because it operates on visual rows — so a selection, and the yank that reads it, are
+   ranges of *lines* and a yanked line comes back as it arrived, unwrapped.
+
+2. **The cursor addresses the shown set, and `shownIdx` is how it reaches the buffer.**
+   With a `/` query active the cursor walks the lines the query kept, so what it points at
+   is always what is on screen. `shownIdx` maps each shown line back to `lines`/`stamps`
+   and is the *only* sanctioned route from a cursor position to raw text.
+
+3. **Selection and Match share the cursor's line.** Neither yields. This is D239's rule for
+   the table, and it binds harder here: in a grep the match is why the line is on screen, so
+   blanking the marks under the cursor blanks the answer on the one line being read.
+   `styles.Match` was given the Warn hue rather than Selection for exactly this coexistence.
+
+4. **The bar is painted on the way to the viewport, never into `shownLines`.** That cache is
+   defined as what a full rebuild would produce (LOGS-05b), so baking the cursor into it
+   would make every cursor move an invalidation — and would put escape sequences in front of
+   the text a yank must copy. The clipboard gets `lines[i]`, joined with `\n`, with the stamp
+   prefixed exactly when `logs.timestamps` is on so the copy matches the screen.
+
+5. **Following owns the cursor.** A followed view's cursor is the newest line; any upward
+   move pauses following first (the pre-existing rule), and downward movement still does not
+   resume it (D147). A cursor left behind while a stream runs at ~1,900 lines/sec is not a
+   position, and this is what LOGS-SEL-02's "entering visual mode pauses follow" rests on.
+
+6. **Row arithmetic is done here, in wrap mode only.** `viewport.EnsureVisible` compares a
+   content-line index against a row offset, which only agree while clipping; wrapped, the
+   offset counts display rows, so keeping the cursor visible means summing the heights above
+   it. That walk is O(shown lines) and is paid on a reader gesture only — the same order
+   `rebuildShown` already pays per keystroke in the grep — and never on an append.

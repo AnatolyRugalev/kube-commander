@@ -168,6 +168,317 @@ func TestDownwardScrollDoesNotResumeFollowing(t *testing.T) {
 	}
 }
 
+// --- LOGS-SEL-01: the line cursor (feedback 2026-08-07-logs-selection-and-yank) ---
+
+// cursorBar is how the cursor's line looks in the view: the text rendered through the
+// shared Selection style. The bar is padded to the pane, so the assertion is that the
+// line's own text is inside it — not that the whole row is one Render call.
+func cursorBar(s string) string { return styles.Default().Selection.Render(s) }
+
+// TestCursorFollowsTheNewestLine: a followed view's cursor is the line the next one will
+// arrive after, so the reader never has to chase it to start a selection. It is also the
+// only sane answer while tailing — a cursor left behind on line 3 of a stream at 1,900
+// lines/sec is not a position, it is a scroll the reader did not ask for.
+func TestCursorFollowsTheNewestLine(t *testing.T) {
+	m := newLogs()
+	if m.Cursor() != -1 {
+		t.Fatalf("an empty view has no cursor; got %d", m.Cursor())
+	}
+	appendLines(&m, 50)
+	if m.Cursor() != 49 {
+		t.Fatalf("a followed view should hold the cursor on the newest line; got %d", m.Cursor())
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar("line-50")) {
+		t.Errorf("the newest line should carry the cursor bar; got:\n%q", v)
+	}
+	m.Append("", "line-51")
+	if m.Cursor() != 50 {
+		t.Errorf("the cursor should ride the stream; got %d", m.Cursor())
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar("line-51")) {
+		t.Errorf("the cursor should have moved onto the newly streamed line; got:\n%q", v)
+	}
+}
+
+// TestCursorMovesByLineAndPausesOnTheWayUp is the gesture the feedback asked for: j/k
+// move a highlighted line the way they move a table row. Up pauses following (the
+// pre-existing rule — a reader looking back must not be yanked forward), down does not
+// resume it (LOGS-04c's other half, unchanged).
+func TestCursorMovesByLineAndPausesOnTheWayUp(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+
+	m, _ = m.Update(keymap.ActionUp)
+	if m.Following() {
+		t.Fatal("moving the cursor up should pause following")
+	}
+	if m.Cursor() != 48 {
+		t.Fatalf("one nav.up = one line; cursor = %d, want 48", m.Cursor())
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar("line-49")) {
+		t.Errorf("the bar should have moved to line-49; got:\n%q", v)
+	}
+	m, _ = m.Update(keymap.ActionDown)
+	if m.Cursor() != 49 {
+		t.Fatalf("one nav.down = one line back; cursor = %d, want 49", m.Cursor())
+	}
+	if m.Following() {
+		t.Error("stepping back onto the last line is browsing, not a statement about the tail")
+	}
+}
+
+// TestCursorClampsAtBothEnds: gg/G and a wall of j/k land on the first and last line and
+// stay there, rather than running the index off either end of the body.
+func TestCursorClampsAtBothEnds(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+
+	m, _ = m.Update(keymap.ActionTop)
+	if m.Cursor() != 0 {
+		t.Fatalf("nav.top should put the cursor on the first line; got %d", m.Cursor())
+	}
+	for range 5 {
+		m, _ = m.Update(keymap.ActionUp)
+	}
+	if m.Cursor() != 0 {
+		t.Errorf("the cursor should clamp at the first line; got %d", m.Cursor())
+	}
+	if v := plain(m.View()); !strings.Contains(v, "line-1") {
+		t.Errorf("the first line should be on screen; got:\n%s", v)
+	}
+	for range 100 {
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	if m.Cursor() != 49 {
+		t.Errorf("the cursor should clamp at the last line; got %d", m.Cursor())
+	}
+	// Reached by stepping, so still paused — and G is what re-arms it, cursor included.
+	m, _ = m.Update(keymap.ActionBottom)
+	if !m.Following() || m.Cursor() != 49 {
+		t.Errorf("nav.bottom should follow with the cursor on the newest line; following=%v cursor=%d",
+			m.Following(), m.Cursor())
+	}
+}
+
+// TestCursorDragsTheViewportOnlyWhenItHasTo is why this is a cursor and not a scroll: the
+// page stays still while the cursor crosses it, and moves by the least it can once the
+// cursor would leave it.
+func TestCursorDragsTheViewportOnlyWhenItHasTo(t *testing.T) {
+	m := newLogs() // 40x12 → 11 body rows
+	appendLines(&m, 50)
+	m, _ = m.Update(keymap.ActionTop)
+	if off := m.viewport.YOffset(); off != 0 {
+		t.Fatalf("precondition: nav.top should be unscrolled; offset %d", off)
+	}
+	h := m.viewport.Height()
+	for range h - 1 { // walk to the last visible row
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	if off := m.viewport.YOffset(); off != 0 {
+		t.Errorf("the page should not move while the cursor crosses it; offset %d", off)
+	}
+	m, _ = m.Update(keymap.ActionDown) // one past it
+	if off := m.viewport.YOffset(); off != 1 {
+		t.Errorf("stepping off the bottom should scroll by exactly one row; offset %d", off)
+	}
+	if v := plain(m.View()); !strings.Contains(v, "line-"+itoa(h+1)) {
+		t.Errorf("the cursor's line should be on screen; got:\n%s", v)
+	}
+}
+
+// TestCursorStepsAWrappedLineAsOneLine is the property the feedback singled out: the
+// cursor is over log lines, not screen rows. With wrapping on, a line that occupies
+// several rows is still one k away — which is exactly what terminal select-to-copy gets
+// wrong, and the reason this is not a viewport scroll wearing a highlight.
+func TestCursorStepsAWrappedLineAsOneLine(t *testing.T) {
+	m := newLogs()
+	m.Append("", "short one")
+	m.Append("", longLine()) // several rows wide at 40 columns
+	m.Append("", "short two")
+	m, _ = m.Update(keymap.ActionLogsWrap)
+
+	if m.Cursor() != 2 {
+		t.Fatalf("precondition: the cursor should be on the newest line; got %d", m.Cursor())
+	}
+	m, _ = m.Update(keymap.ActionUp)
+	if m.Cursor() != 1 {
+		t.Fatalf("one nav.up should cross the whole wrapped line; cursor = %d, want 1", m.Cursor())
+	}
+	m, _ = m.Update(keymap.ActionUp)
+	if m.Cursor() != 0 {
+		t.Fatalf("the second nav.up should reach the first line; cursor = %d", m.Cursor())
+	}
+	if v := plain(m.View()); !strings.Contains(v, "short one") {
+		t.Errorf("scrolling back over a wrapped line should show the line above it; got:\n%s", v)
+	}
+}
+
+// TestCursorScrollsInRowsWhileWrapping is the arithmetic that has to be done by hand.
+// Once SoftWrap is on the viewport's offset counts *display rows* while the cursor counts
+// log lines, so keeping the cursor on screen means summing the heights above it — which is
+// also why viewport.EnsureVisible cannot be used (it compares a line index to a row
+// offset). Treating the two as the same number scrolls too little and leaves the tail of
+// the cursor's own line below the fold, which is what this reads.
+func TestCursorScrollsInRowsWhileWrapping(t *testing.T) {
+	m := newLogs() // 40x12 → 11 body rows
+	for i := range 6 {
+		m.Append("", "HEAD"+itoa(i)+strings.Repeat("-", 90)+"TAIL"+itoa(i)) // 3 rows each
+	}
+	m, _ = m.Update(keymap.ActionLogsWrap)
+	m, _ = m.Update(keymap.ActionTop)
+	if off := m.viewport.YOffset(); off != 0 {
+		t.Fatalf("precondition: nav.top should be unscrolled; offset %d", off)
+	}
+	for range 3 { // down to line 3, whose rows are 9..11 — one past the bottom
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	if m.Cursor() != 3 {
+		t.Fatalf("cursor = %d, want 3", m.Cursor())
+	}
+	v := plain(m.View())
+	if !strings.Contains(v, "HEAD3") || !strings.Contains(v, "TAIL3") {
+		t.Errorf("the cursor's wrapped line should be on screen whole; got:\n%s", v)
+	}
+	if off := m.viewport.YOffset(); off != 1 {
+		t.Errorf("the view should have scrolled by the one row it owed; offset %d, want 1", off)
+	}
+}
+
+// TestCursorKeepsItsLogLineAcrossAFilterChange: the cursor indexes the shown set, and a
+// keystroke in the grep rewrites that set — so it is carried across as the *log line* it
+// was on. Without this every character typed would fling the cursor onto an unrelated
+// line.
+func TestCursorKeepsItsLogLineAcrossAFilterChange(t *testing.T) {
+	m := newLogs()
+	for _, l := range []string{"boot ok", "err disk", "steady", "err net", "done"} {
+		m.Append("", l)
+	}
+	m, _ = m.Update(keymap.ActionUp) // pause, cursor on "err net" (index 3)
+	if m.Cursor() != 3 {
+		t.Fatalf("precondition: cursor = %d, want 3", m.Cursor())
+	}
+	m = typeFilter(m, "err") // shown becomes [err disk, err net]
+	if m.Cursor() != 1 {
+		t.Fatalf("the cursor should still be on `err net`, now shown line 1; got %d", m.Cursor())
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar(" net")) {
+		t.Errorf("the bar should be on `err net`; got:\n%q", v)
+	}
+	// Clearing the grep restores the full set, and the cursor with it.
+	m, _ = m.Update(keymap.ActionBack)
+	if m.Cursor() != 3 {
+		t.Errorf("clearing the grep should put the cursor back on the same log line; got %d", m.Cursor())
+	}
+}
+
+// TestCursorLineKeepsItsMatchHighlight: Selection and Match share the cursor's line
+// rather than one blanking the other (D239's rule for the table, and the reason
+// styles.Match uses the Warn hue). In a grep the match is *why* the line is on screen, so
+// hiding it under the cursor would hide the answer on the one line being read.
+func TestCursorLineKeepsItsMatchHighlight(t *testing.T) {
+	m := newLogs()
+	m.Append("", "err and err again")
+	m = typeFilter(m, "err")
+	if m.Cursor() != 0 {
+		t.Fatalf("precondition: the only shown line should hold the cursor; got %d", m.Cursor())
+	}
+	v := m.View()
+	if n := strings.Count(v, matchSpan("err")); n != 2 {
+		t.Errorf("both matches should survive on the cursor's line; got %d in:\n%q", n, v)
+	}
+	if !strings.Contains(v, cursorBar(" and ")) {
+		t.Errorf("the unmatched run should carry the selection bar; got:\n%q", v)
+	}
+	if p := plain(v); !strings.Contains(p, "err and err again") {
+		t.Errorf("the cursor must not alter the line's text; got:\n%s", p)
+	}
+}
+
+// TestCursorIsNotBakedIntoTheAppendCache guards the seam LOGS-05b built: shownLines is
+// the cache a rebuild must reproduce, so the bar is applied to a copy on its way to the
+// viewport. Painting it into the cache would mean every cursor move invalidated it — and
+// would put escape sequences in front of the raw text LOGS-SEL-02's yank needs.
+func TestCursorIsNotBakedIntoTheAppendCache(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 3)
+	for i, s := range m.shownLines {
+		if strings.Contains(s, "\x1b") {
+			t.Errorf("cached line %d carries styling: %q", i, s)
+		}
+	}
+	if got, want := m.shownLines[m.Cursor()], "line-3"; got != want {
+		t.Errorf("the cursor's cached line = %q; want the raw %q", got, want)
+	}
+	if v := m.View(); !strings.Contains(v, cursorBar("line-3")) {
+		t.Errorf("the bar should still reach the frame; got:\n%q", v)
+	}
+}
+
+// TestCursorMapsBackToTheBufferLine is the map LOGS-SEL-02 yanks through: with a grep on,
+// shown line n is buffer line shownIdx[n], and lines[] holds the text as it streamed —
+// unpainted, unstamped, unwrapped.
+func TestCursorMapsBackToTheBufferLine(t *testing.T) {
+	m := newLogs()
+	for _, l := range []string{"boot ok", "err disk", "steady", "err net"} {
+		m.Append("", l)
+	}
+	m = typeFilter(m, "err")
+	if len(m.shownIdx) != 2 || m.shownIdx[0] != 1 || m.shownIdx[1] != 3 {
+		t.Fatalf("shownIdx = %v; want [1 3]", m.shownIdx)
+	}
+	if got := m.lines[m.shownIdx[m.Cursor()]]; got != "err net" {
+		t.Errorf("the cursor's buffer line = %q; want %q", got, "err net")
+	}
+}
+
+// TestEmptyBodyHasNoCursor: a grep that matches nothing leaves nothing to point at, and
+// the cursor says so rather than pointing at line 0 of an empty body.
+func TestEmptyBodyHasNoCursor(t *testing.T) {
+	m := newLogs() // nothing streamed yet
+	for _, a := range []keymap.Action{keymap.ActionUp, keymap.ActionDown, keymap.ActionTop, keymap.ActionPageDown} {
+		m, _ = m.Update(a) // must not panic or invent a position
+		if m.Cursor() != -1 {
+			t.Fatalf("%v gave an empty view a cursor: %d", a, m.Cursor())
+		}
+	}
+	// A grep that matches nothing is the same state reached the other way.
+	m = newLogs()
+	appendLines(&m, 3)
+	m = typeFilter(m, "zzz")
+	if m.Cursor() != -1 || len(m.shownIdx) != 0 {
+		t.Errorf("a grep that keeps no line leaves no cursor; cursor=%d shownIdx=%v", m.Cursor(), m.shownIdx)
+	}
+	// Backing the grep out restores the body and the cursor with it.
+	m, _ = m.Update(keymap.ActionBack)
+	if m.Cursor() != 2 {
+		t.Errorf("clearing the grep should re-seat the cursor on the newest line; got %d", m.Cursor())
+	}
+}
+
+// TestResetAndRestreamDropTheCursor: both empty the buffer, so the cursor cannot survive
+// them — an index into a body that no longer exists is the one way this could point at
+// the wrong log.
+func TestResetAndRestreamDropTheCursor(t *testing.T) {
+	for name, clear := range map[string]func(*Model){
+		"Reset":    (*Model).Reset,
+		"Restream": (*Model).Restream,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := newLogs()
+			appendLines(&m, 5)
+			m, _ = m.Update(keymap.ActionUp) // pause somewhere in the middle
+			clear(&m)
+			if m.Cursor() != -1 || len(m.shownIdx) != 0 {
+				t.Errorf("cursor = %d, shownIdx = %v; want -1 and empty", m.Cursor(), m.shownIdx)
+			}
+			m.Append("", "fresh")
+			if m.Cursor() != 0 {
+				t.Errorf("the first line of the new stream should take the cursor; got %d", m.Cursor())
+			}
+		})
+	}
+}
+
 func TestLiveFilterNarrowsShownLines(t *testing.T) {
 	m := newLogs()
 	m.Append("", "alpha error one")
