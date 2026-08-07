@@ -120,7 +120,7 @@ Reopened again on **legibility**, by feedback `2026-08-06-search-highlight-match
 table half landed as FILT-02 (D239):
 
 - [ ] **SEARCH-06** Highlight the matched text in cluster-search results
-      status: todo | owner: — | added: 2026-08-07
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
       notes: The second half of `2026-08-06-search-highlight-matches`; FILT-02 did the first
       and D239 is the table's answer, but **it does not transfer**. A table match is a
       substring, so the spans can be re-derived at paint time from the query alone; a cluster
