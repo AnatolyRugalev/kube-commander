@@ -47,6 +47,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
@@ -146,16 +147,25 @@ type QueryChangedMsg struct {
 // item is one result row: the hit plus its pre-rendered, column-aligned label. The
 // label is built once per rebuild (kind column padded to the widest kind currently
 // shown) so the delegate stays a pure renderer and tests can assert exact text.
+//
+// spans are the label's matched runs (SEARCH-06), already shifted out of the
+// name's coordinate space — which is the one kube.SearchHit.Match speaks — and
+// into the label's, because that shift depends on the kind-column padding the
+// label was built with and therefore changes under the row whenever a wider kind
+// streams in. Resolving it here keeps the delegate a pure renderer, and keeps the
+// one place that knows the label's layout the same place that measures into it.
 type item struct {
 	hit   kube.SearchHit
 	label string
+	spans []kube.MatchSpan
 }
 
 func (i item) FilterValue() string { return i.label }
 
 // itemDelegate renders each result on a single line, highlighting the cursor row with
-// the shared Selection style. Minimal (no per-item state, no key bindings) so the list
-// contributes no hard-coded keys or help of its own.
+// the shared Selection style and the matched runes with the shared Match style.
+// Minimal (no per-item state, no key bindings) so the list contributes no hard-coded
+// keys or help of its own.
 type itemDelegate struct {
 	styles styles.Styles
 }
@@ -170,11 +180,63 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 	if width < 0 {
 		width = 0
 	}
-	style := d.styles.App
+	base := d.styles.App
 	if index == m.Index() {
-		style = d.styles.Selection
+		base = d.styles.Selection
 	}
-	_, _ = io.WriteString(w, style.Width(width).MaxWidth(width).Render(row.label))
+	_, _ = io.WriteString(w, paintLabel(row.label, row.spans, width, base, d.styles.Match))
+}
+
+// paintLabel renders one result row: base everywhere, styles.Match over the runs the
+// query matched, padded (or clipped) to width.
+//
+// The cursor row keeps its marks — the one exception M4-06's "selection wins outright"
+// has, and the same call D239 made for the table: on a ranked list the top row is under
+// the cursor from the moment it arrives, so a rule that let the bar swallow the marks
+// would hide them on exactly the hit the reader is looking at. styles.Match paints its
+// own background (the Warn hue, chosen so a highlight is never read as a cursor), so the
+// two never become ambiguous where they meet.
+//
+// Each segment is rendered through a complete style and concatenated, rather than a
+// span-carrying string being rendered inside an outer one — an enclosing style's color
+// ends at the first span's reset, leaving the rest of the line unstyled, which is why the
+// padding is done here instead of by lipgloss's Width (the same reason the table's
+// paintRow does it). With no spans nothing has changed: that is the path every row took
+// before this existed, and every row of a label-selector search still takes.
+func paintLabel(label string, spans []kube.MatchSpan, width int, base, match lipgloss.Style) string {
+	if len(spans) == 0 {
+		return base.Width(width).MaxWidth(width).Render(label)
+	}
+	runes := []rune(label)
+	if len(runes) > width {
+		runes = runes[:width]
+	}
+	var b strings.Builder
+	last := 0
+	for _, sp := range spans {
+		s, e := sp.Start, sp.End
+		if s < last {
+			s = last
+		}
+		if e > len(runes) {
+			e = len(runes)
+		}
+		if s >= e {
+			continue
+		}
+		if s > last {
+			b.WriteString(base.Render(string(runes[last:s])))
+		}
+		b.WriteString(match.Render(string(runes[s:e])))
+		last = e
+	}
+	if last < len(runes) {
+		b.WriteString(base.Render(string(runes[last:])))
+	}
+	if pad := width - len(runes); pad > 0 {
+		b.WriteString(base.Render(strings.Repeat(" ", pad)))
+	}
+	return b.String()
 }
 
 // Model is the full-screen search view. Every field is owned by the embedding root
@@ -608,7 +670,41 @@ func hitItems(hits []kube.SearchHit) []item {
 		if h.Ref.Namespace != "" {
 			path = h.Ref.Namespace + "/" + h.Ref.Name
 		}
-		out = append(out, item{hit: h, label: k + strings.Repeat(" ", width-len(k)) + "  " + path})
+		label := k + strings.Repeat(" ", width-len(k)) + "  " + path
+		out = append(out, item{hit: h, label: label, spans: labelSpans(label, h)})
+	}
+	return out
+}
+
+// labelSpans shifts a hit's matched runes (which kube reports against the object
+// **name**) into the coordinate space of the row label built above.
+//
+// The shift is derived as "the label's length minus the name's" rather than by
+// re-adding up the kind column, its padding, the separator and the namespace: the
+// label ends with the name by construction, so the difference *is* where the name
+// starts, and it stays right if the label's prefix ever gains a column. A span that
+// would fall outside the label is dropped rather than clamped — a mark in the wrong
+// place is a worse answer than no mark, and this can only happen if the two sides
+// disagree about what the name is.
+func labelSpans(label string, h kube.SearchHit) []kube.MatchSpan {
+	if len(h.Match) == 0 {
+		return nil
+	}
+	offset := utf8.RuneCountInString(label) - utf8.RuneCountInString(h.Ref.Name)
+	if offset < 0 {
+		return nil
+	}
+	total := utf8.RuneCountInString(label)
+	out := make([]kube.MatchSpan, 0, len(h.Match))
+	for _, sp := range h.Match {
+		s, e := sp.Start+offset, sp.End+offset
+		if s < offset || e > total || s >= e {
+			continue
+		}
+		out = append(out, kube.MatchSpan{Start: s, End: e})
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

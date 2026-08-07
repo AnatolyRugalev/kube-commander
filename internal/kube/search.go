@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,6 +39,33 @@ type SearchHit struct {
 	// kinds return (see Search) and ranking is the consumer's job, deliberately
 	// (D152).
 	Score int
+
+	// Match is which runes of Ref.Name the query matched, so a consumer can mark
+	// them (SEARCH-06). The spans are in **Ref.Name's own** rune coordinate space
+	// — offset 0 is the first rune of the name, not of whatever row the consumer
+	// builds around it — sorted, disjoint and non-empty, half-open [Start, End).
+	//
+	// It is carried on the hit rather than re-derived at paint time because only
+	// the matcher that scored the hit knows what to mark: a match may be a
+	// *subsequence* (D153 — `wbp` matching `web-pod` marks three separate runes),
+	// and a hit found by the label-selector half of the query matches nothing the
+	// name shows at all. A consumer re-running a substring search over the query
+	// would silently mark nothing in the first case and the wrong thing in the
+	// second.
+	//
+	// Nil is normal and means "nothing to mark": a pure label-selector query, an
+	// empty name half, or any hit the score already reports as unranked (Score 0
+	// with no Name term). A consumer must render such a hit plainly rather than
+	// treating nil as an error.
+	Match []MatchSpan
+}
+
+// MatchSpan is one run of matched runes inside a name, half-open: [Start, End).
+// Rune offsets rather than byte offsets because every consumer of one is painting
+// display columns, where runes are the unit (kubecom's own convention — see the
+// table's roleSpan and the logs view's grep spans).
+type MatchSpan struct {
+	Start, End int
 }
 
 // SearchQuery is what one cluster search matches on. The two terms are ANDed and
@@ -231,7 +259,7 @@ func (m NameMatcher) Match(name string) (score int, scattered, ok bool) {
 		return 0, false, true
 	}
 	hay := strings.ToLower(name)
-	if s, found := m.substringScore(hay); found {
+	if s, _, found := m.substringScore(hay); found {
 		return s, false, true
 	}
 	if s, found := m.scatteredScore(hay); found {
@@ -240,10 +268,76 @@ func (m NameMatcher) Match(name string) (score int, scattered, ok bool) {
 	return 0, false, false
 }
 
+// MatchSpans returns the runes of name that produced the score Match reports, as
+// sorted, disjoint spans in name's own rune coordinate space (SEARCH-06). It is a
+// second pass rather than an extra return value from Match so the hot path — every
+// row of every kind in a cluster-wide sweep — keeps allocating nothing; only the
+// hits actually emitted (at most the search's cap) pay for their spans.
+//
+// It marks the *same* occurrence the score was read from, which is what makes the
+// marks an explanation of the ranking rather than a second opinion about it: the
+// best-scoring contiguous occurrence, or — when there is none — the tightened
+// subsequence window scatteredScore charges for its gaps. A needle that occurs
+// several times therefore marks one occurrence, unlike the table's `/` filter
+// (D239), which marks them all: there the query is a substring by construction and
+// every occurrence is equally the reason the row was kept, while here the score
+// names one reading of the name and the marks say which.
+//
+// Nil means there is nothing to mark: no match, an empty name, or an empty needle
+// (a pure label-selector query matches names it never looked at).
+func (m NameMatcher) MatchSpans(name string) []MatchSpan {
+	if name == "" || m.needle == "" {
+		return nil
+	}
+	hay := strings.ToLower(name)
+	if _, at, found := m.substringScore(hay); found {
+		start := runeOffset(hay, at)
+		return []MatchSpan{{Start: start, End: start + utf8.RuneCountInString(m.needle)}}
+	}
+	offsets := m.scatteredOffsets(hay)
+	if offsets == nil {
+		return nil
+	}
+	total := utf8.RuneCountInString(hay)
+	spans := make([]MatchSpan, 0, len(offsets))
+	for _, off := range offsets {
+		at := runeOffset(hay, off)
+		if at >= total {
+			continue
+		}
+		// Adjacent matched runes coalesce, so `apiserver` matching `api-server`
+		// marks two runs rather than nine one-rune ones — fewer style switches on
+		// the wire and, more to the point, a mark a reader reads as a word.
+		if n := len(spans); n > 0 && spans[n-1].End == at {
+			spans[n-1].End = at + 1
+			continue
+		}
+		spans = append(spans, MatchSpan{Start: at, End: at + 1})
+	}
+	if len(spans) == 0 {
+		return nil
+	}
+	return spans
+}
+
+// runeOffset converts a byte offset in s to a rune offset. A byte offset landing
+// mid-rune (possible only for the multi-byte needle Match's doc comment calls a
+// junk hit) counts the partial rune rather than panicking — a junk match may mark
+// the wrong rune, but it may not crash the view drawing it.
+func runeOffset(s string, byteOff int) int {
+	if byteOff > len(s) {
+		byteOff = len(s)
+	}
+	if byteOff < 0 {
+		byteOff = 0
+	}
+	return utf8.RuneCountInString(s[:byteOff])
+}
+
 // substringScore scores the best contiguous occurrence of the needle in hay
-// (already lower-cased), or reports that there is none.
-func (m NameMatcher) substringScore(hay string) (int, bool) {
-	best, found := 0, false
+// (already lower-cased) and reports its byte offset, or that there is none.
+func (m NameMatcher) substringScore(hay string) (score, at int, found bool) {
+	best, bestAt := 0, 0
 	for off := 0; off <= len(hay)-len(m.needle); {
 		i := strings.Index(hay[off:], m.needle)
 		if i < 0 {
@@ -262,11 +356,11 @@ func (m NameMatcher) substringScore(hay string) (int, bool) {
 		s -= clamp(at, maxStartPenalty)
 		s -= clamp(len(hay)-len(m.needle), maxLenPenalty)
 		if !found || s > best {
-			best, found = s, true
+			best, bestAt, found = s, at, true
 		}
 		off = at + 1
 	}
-	return best, found
+	return best, bestAt, found
 }
 
 // scatteredScore matches the needle against hay (already lower-cased) as a
@@ -313,6 +407,38 @@ func (m NameMatcher) scatteredScore(hay string) (int, bool) {
 	s -= gapPenaltyWeight * clamp(end-start+1-len(m.needle), maxGapPenalty)
 	s -= clamp(len(hay)-len(m.needle), maxLenPenalty)
 	return s, true
+}
+
+// scatteredOffsets returns the byte offset in hay of every needle character the
+// scattered window matched, ascending. It walks the *same* two passes
+// scatteredScore does — forward to find where the window must end, then backward
+// from there to pull it as tight as it will go — so the characters it reports are
+// the ones the score was computed over. nil when the needle is not a subsequence
+// of hay at all.
+//
+// Only the backward pass's positions are kept: the forward pass exists solely to
+// find `end`, and its own choices are the needlessly-wide window the backward pass
+// is there to correct (see scatteredScore).
+func (m NameMatcher) scatteredOffsets(hay string) []int {
+	end, n := -1, 0
+	for i := 0; i < len(hay) && n < len(m.needle); i++ {
+		if hay[i] == m.needle[n] {
+			n++
+			end = i
+		}
+	}
+	if n < len(m.needle) {
+		return nil
+	}
+	out := make([]int, len(m.needle))
+	n = len(m.needle) - 1
+	for i := end; i >= 0 && n >= 0; i-- {
+		if hay[i] == m.needle[n] {
+			out[n] = i
+			n--
+		}
+	}
+	return out
 }
 
 // isNameSeparator reports the characters that start a new word inside a
@@ -596,7 +722,15 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					}
 					mu.Unlock()
 
-					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{Resource: r, Ref: row.Object, Score: score}}
+					// Spans are resolved here, off the lock and only for a hit that
+					// survived both the cap and the scattered budget: a dropped hit
+					// is never painted, so it never needs to know what it matched.
+					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{
+						Resource: r,
+						Ref:      row.Object,
+						Score:    score,
+						Match:    matcher.MatchSpans(row.Object.Name),
+					}}
 					if !sendEvent(outer, out, hit) {
 						return
 					}

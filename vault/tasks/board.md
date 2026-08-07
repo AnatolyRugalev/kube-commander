@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — LOGS-07 done: the logs buffer is bounded at 10 000 lines and drops from the top, saying `[trimmed]` once it has (D245). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-07 — SEARCH-06 done: a cluster-search hit carries the runes it matched, so the view marks them without guessing (D246). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
@@ -87,7 +87,7 @@ on the maintainer's own cluster (HT-dogfood-0806). The standalone YAML viewer th
 M3's scope never shipped and never will: `e` opens the object's YAML in the user's real
 editor for reading and writing (D135/D178). Per-slice history: `vault/journal/`.)_
 
-### Cluster search (SEARCH — feedback-driven, D131) — closed, reclosed at SEARCH-05
+### Cluster search (SEARCH — feedback-driven, D131) — closed, reclosed at SEARCH-06
 Feedback `2026-07-24-cluster-search-multi-resource`: `ctrl+s`, type a query, get matching
 objects **across kinds** (Kind · namespace · name), drill into a hit. **Closed** at
 SEARCH-04c-2b: one-shot, concurrent, curated-scope by default and never "watch everything"
@@ -117,23 +117,13 @@ the **muted query line is the signal** that typing stopped reaching it — blur 
 cursor, which is an absence nobody notices.
 
 Reopened again on **legibility**, by feedback `2026-08-06-search-highlight-matches`, whose
-table half landed as FILT-02 (D239):
-
-- [ ] **SEARCH-06** Highlight the matched text in cluster-search results
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-07
-      notes: The second half of `2026-08-06-search-highlight-matches`; FILT-02 did the first
-      and D239 is the table's answer, but **it does not transfer**. A table match is a
-      substring, so the spans can be re-derived at paint time from the query alone; a cluster
-      hit can be *fuzzy* (D153, a subsequence — `wbp` matching `web-pod`) or a **label
-      selector** (D151, which matches nothing the label text shows), so the runes to mark are
-      known only to the matcher that scored the hit. Decide there: either `kube.SearchHit`
-      carries its matched rune offsets (the scorer already walks them, and it is the only
-      place that knows a selector hit has none to show) or the view re-runs the subsequence
-      walk over `item.label` and accepts that it and the scorer can disagree. Prefer the
-      former, and record which. `searchview`'s `itemDelegate` renders one pre-built label per
-      row, so the paint side is small once the offsets exist; the label is built with the kind
-      column padded, so offsets must be in the *label's* coordinate space or be shifted into
-      it. `styles.Match` is the style, and per D239 pt 3 the cursor row keeps its marks.
+table half landed as FILT-02 (D239) — and **reclosed at SEARCH-06**, which took the cluster
+half the way D239 could not: `kube.SearchHit` now carries the runes it matched, because a
+fuzzy or label-selector hit is not a substring a view can re-derive (**D246**). Three
+standing constraints come with it: the spans are in the **name's** coordinate space and the
+consumer that laid out the row does the shift; they mark the occurrence the *score* was read
+from, which is where this deliberately differs from the table's mark-them-all (D239); and
+they are a second pass over the emitted hits only, never a cost the cluster-wide scan pays.
 
 ### In-panel `/` search (FILT — feedback-driven) — closed, reclosed at FILT-02
 Feedback `2026-08-06-search-backspace-cancel`: `/` then backspace with nothing typed left an
@@ -149,8 +139,8 @@ Reopened once on **legibility**, by feedback `2026-08-06-search-highlight-matche
 regular (in-panel `/`) search and cross-resource search should visually highlight the matched
 text … check current behavior for both before doing the work"). The survey found the logs
 grep already highlighting (D145) and the other two not, so the item split: **FILT-02**
-(reclosing this line) paints the table's matches, and **SEARCH-06** below is the cluster-search
-half. Constraints a later leg must not walk into (**D239**): the highlight's scope is the
+(reclosing this line) paints the table's matches, and **SEARCH-06** (done, D246) was the
+cluster-search half. Constraints a later leg must not walk into (**D239**): the highlight's scope is the
 filter's scope exactly, a match cuts a status-colored cell rather than replacing it, and the
 **cursor row keeps its marks** — the one exception to M4-06's "selection wins outright".
 
@@ -632,6 +622,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **SEARCH-06** A cluster-search hit carries the runes it matched, so a fuzzy or label-selector result says why it is there — second half of feedback `2026-08-06-search-highlight-matches` — done 2026-08-07 (D246)
 
 - [x] **LOGS-07** Logs buffer bounded at 10 000 lines, trimmed from the top — done 2026-08-07 (D245)
 

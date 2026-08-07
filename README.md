@@ -142,7 +142,11 @@ into place as they stream in, so the best answer rises to the top without waitin
 for the sweep to finish. The highlighted row is carried along, so a hit landing
 above your cursor never changes what `Enter` opens. Matching is also **fuzzy**,
 with nothing to turn on: a query whose letters appear in order but not together
-still matches, so `apisrv` finds `api-server` and `kdns` finds `kube-dns`. Fuzzy
+still matches, so `apisrv` finds `api-server` and `kdns` finds `kube-dns`. **The
+letters that matched are marked in every result**, cursor row included — for a fuzzy
+hit that is the only thing that says why the row is there, since what you typed does
+not appear in the name as you typed it. A hit found by a label selector alone marks
+nothing, because the selector matched something the name never showed. Fuzzy
 matches always rank *below* every name that contains what you typed outright, and
 are capped to a small share of the results, so widening the net can only add
 results at the bottom — it never pushes an exact match down. The header tracks the

@@ -986,3 +986,144 @@ func TestFirstHitIsSelected(t *testing.T) {
 		t.Errorf("Selected() = %+v (ok=%v); want the single hit selected", sel, ok)
 	}
 }
+
+// --- matched-run highlighting (SEARCH-06) ---
+
+// matched builds a hit whose name matched needle, using the real matcher — so
+// these tests break if kube ever changes what it marks, rather than agreeing with
+// a hand-written span that has quietly stopped describing anything.
+func matched(kind, ns, name, needle string) kube.SearchHit {
+	h := hit(kind, ns, name)
+	h.Match = kube.NewNameMatcher(needle).MatchSpans(name)
+	return h
+}
+
+// The shift is the view's whole share of this feature: kube marks runes of the
+// *name*, the row is a padded kind column plus a namespace plus the name, and a
+// span painted in the wrong space lands on the namespace or on the padding.
+func TestMatchedRunesAreShiftedIntoTheLabelSpace(t *testing.T) {
+	rows := hitItems([]kube.SearchHit{
+		matched("Pod", "default", "api-0", "api"),
+		matched("Deployment", "kube-system", "coredns", "dns"),
+	})
+	for i, tc := range []struct{ label, want string }{
+		{label: "Pod         default/api-0", want: "api"},
+		{label: "Deployment  kube-system/coredns", want: "dns"},
+	} {
+		if rows[i].label != tc.label {
+			t.Fatalf("row %d label = %q; want %q", i, rows[i].label, tc.label)
+		}
+		if len(rows[i].spans) != 1 {
+			t.Fatalf("row %d spans = %v; want exactly one run", i, rows[i].spans)
+		}
+		sp := rows[i].spans[0]
+		if got := string([]rune(tc.label)[sp.Start:sp.End]); got != tc.want {
+			t.Errorf("row %d span %v covers %q; want %q", i, sp, got, tc.want)
+		}
+	}
+}
+
+// The padding is what makes the shift a moving target: a wider kind streaming in
+// re-pads every row, so a span resolved once at arrival would drift off its
+// letters. hitItems runs on every rebuild, which is why it is the place that does
+// this.
+func TestMatchedRunesFollowTheKindColumnWidening(t *testing.T) {
+	narrow := hitItems([]kube.SearchHit{matched("Pod", "default", "api-0", "api")})
+	wide := hitItems([]kube.SearchHit{
+		matched("Pod", "default", "api-0", "api"),
+		matched("PersistentVolumeClaim", "default", "api-data", "api"),
+	})
+	if narrow[0].spans[0].Start == wide[0].spans[0].Start {
+		t.Fatalf("the span should move with the kind column: %v in both layouts", narrow[0].spans[0])
+	}
+	sp := wide[0].spans[0]
+	if got := string([]rune(wide[0].label)[sp.Start:sp.End]); got != "api" {
+		t.Errorf("after re-padding, span %v covers %q; want %q", sp, got, "api")
+	}
+}
+
+// A scattered hit is the case a consumer could not have painted by re-searching
+// the query: `wbp` is nowhere in `web-pod` as a substring, and the three runes it
+// did match are three separate runs.
+func TestScatteredMatchPaintsItsSeparateRuns(t *testing.T) {
+	rows := hitItems([]kube.SearchHit{matched("Pod", "default", "web-pod", "wbp")})
+	if len(rows[0].spans) != 3 {
+		t.Fatalf("spans = %v; want three separate runs", rows[0].spans)
+	}
+	label := []rune(rows[0].label)
+	var got string
+	for _, sp := range rows[0].spans {
+		got += string(label[sp.Start:sp.End])
+	}
+	if got != "wbp" {
+		t.Errorf("the marked runes spell %q; want %q", got, "wbp")
+	}
+}
+
+// A hit that matched nothing in its name — the label-selector half of a query
+// (D151) — renders exactly as it did before this existed.
+func TestUnmatchedHitRendersUnmarked(t *testing.T) {
+	m := newSearch()
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	if v := m.View(); strings.Contains(v, m.styles.Match.Render("api")) {
+		t.Errorf("a hit carrying no spans should be painted plainly; got:\n%q", v)
+	}
+}
+
+// The end of the chain: the marked runes reach the screen through the Match style.
+func TestMatchedRunesAreHighlightedInTheView(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(matched("Pod", "default", "api-0", "api"))
+
+	if want := m.styles.Match.Render("api"); !strings.Contains(m.View(), want) {
+		t.Errorf("the matched runes should be painted with styles.Match; got:\n%q", m.View())
+	}
+	// The rest of the row is still there — painting spans must not eat the text
+	// around them.
+	if !strings.Contains(stripANSI(m.View()), "Pod  default/api-0") {
+		t.Errorf("the row text should survive being painted in segments; got:\n%q", stripANSI(m.View()))
+	}
+}
+
+// The cursor row keeps its marks — the one exception to "selection wins outright",
+// and the case that matters most: on a ranked list the best hit is under the
+// cursor from the moment it arrives (D239 pt 3).
+func TestCursorRowKeepsItsMarks(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(matched("Pod", "default", "api-0", "api"))
+	m.AppendHit(matched("Pod", "default", "api-1", "api"))
+
+	if sel, ok := m.Selected(); !ok || sel.Ref.Name != "api-0" {
+		t.Fatalf("expected the first row selected; got %+v (ok=%v)", sel, ok)
+	}
+	v := m.View()
+	if want := m.styles.Match.Render("api"); strings.Count(v, want) != 2 {
+		t.Errorf("both rows — the cursor row included — should carry marks; got:\n%q", v)
+	}
+	// …and the bar is still a bar: everything on the cursor row that is not a mark
+	// is painted with Selection, so the two styles share the line rather than one
+	// having replaced the other.
+	if want := m.styles.Selection.Render("Pod  default/"); !strings.Contains(v, want) {
+		t.Errorf("the cursor row's unmarked text should keep the Selection style; got:\n%q", v)
+	}
+}
+
+// stripANSI removes SGR escape sequences so a test can assert the text a row
+// carries independently of how it was painted.
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			i++
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}

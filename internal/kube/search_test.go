@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -646,6 +647,141 @@ func TestScatteredMatchPrefersTheTightestWindow(t *testing.T) {
 	spread := mscore(t, m, "a"+filler+"z"+"b"+filler+"z"+"c")
 	if tightened <= spread {
 		t.Fatalf("tightened window (%d) should outrank the genuinely spread one (%d)", tightened, spread)
+	}
+}
+
+// --- matched spans (SEARCH-06) ---
+
+// The spans are what a consumer paints, so this pins the shape of every case it
+// can be handed: one contiguous run, several runs for a subsequence, and nothing
+// at all — which is a normal answer, not an error.
+func TestMatchSpans(t *testing.T) {
+	for _, tc := range []struct {
+		needle, name string
+		want         []MatchSpan
+	}{
+		// The plain case, and the one the table could have re-derived itself.
+		{needle: "api", name: "api-0", want: []MatchSpan{{Start: 0, End: 3}}},
+		// Case-insensitive, and the offsets are into the *original* name.
+		{needle: "api", name: "MY-API-0", want: []MatchSpan{{Start: 3, End: 6}}},
+		// Scattered: the runs a consumer could not have found by searching for the
+		// query, which is the whole reason the hit carries them (D153).
+		{needle: "apisrv", name: "api-server", want: []MatchSpan{{Start: 0, End: 3}, {Start: 4, End: 5}, {Start: 6, End: 8}}},
+		// A single-rune scattered match still coalesces into whole runs.
+		{needle: "wbp", name: "web-pod", want: []MatchSpan{{Start: 0, End: 1}, {Start: 2, End: 3}, {Start: 4, End: 5}}},
+		// The tightened window, not the forward-greedy one: the score is charged
+		// against the trailing `ab.c` (see TestScatteredMatchPrefersTheTightestWindow),
+		// so that is what the marks must point at — a(0) and b(21) are where a
+		// forward-only walk would have put them.
+		{
+			needle: "abc",
+			name:   "a" + strings.Repeat("z", 20) + "b" + strings.Repeat("z", 20) + "ab.c",
+			want:   []MatchSpan{{Start: 42, End: 44}, {Start: 45, End: 46}},
+		},
+		// Nothing to mark: no match, no name, and no needle (a label-only query).
+		{needle: "api", name: "nginx", want: nil},
+		{needle: "api", name: "", want: nil},
+		{needle: "", name: "api-0", want: nil},
+	} {
+		got := NewNameMatcher(tc.needle).MatchSpans(tc.name)
+		if !equalSpans(got, tc.want) {
+			t.Errorf("MatchSpans(%q, %q) = %v; want %v", tc.needle, tc.name, got, tc.want)
+		}
+	}
+}
+
+// The marks explain the ranking, so they must point at the occurrence the score
+// was read from — not merely at *an* occurrence. `api` in `xapiy-api-0` scores on
+// the second one (it follows a separator); marking the first would tell the reader
+// the row ranked where it did for a reason that is not the reason.
+func TestMatchSpansMarkTheScoredOccurrence(t *testing.T) {
+	m := NewNameMatcher("api")
+	const name = "xapiy-api-0"
+	spans := m.MatchSpans(name)
+	want := []MatchSpan{{Start: 6, End: 9}}
+	if !equalSpans(spans, want) {
+		t.Fatalf("MatchSpans(%q) = %v; want %v (the occurrence after the separator)", name, spans, want)
+	}
+	// And the claim that makes it load-bearing: that occurrence is the one that
+	// scores, so the two would have to move together.
+	if got, buried := mscore(t, m, name), mscore(t, m, "xapiy-zzz-0"); got <= buried {
+		t.Fatalf("the separator occurrence should be the scoring one: %d vs %d", got, buried)
+	}
+}
+
+// Whatever the matcher accepts it can explain: every match has at least one span,
+// every span lies inside the name, and the spans are sorted and disjoint — the
+// three properties a painter relies on and none of which it re-checks.
+func TestMatchSpansAgreeWithMatch(t *testing.T) {
+	names := []string{"api-0", "my-api-server", "API", "a-p-i", "alpha-pod-images", "nginx", "ipa", "ap", "", "xapiy-api-0"}
+	for _, needle := range []string{"api", "apisrv", "a", ""} {
+		m := NewNameMatcher(needle)
+		for _, name := range names {
+			_, _, ok := m.Match(name)
+			spans := m.MatchSpans(name)
+			if !ok || needle == "" {
+				if spans != nil {
+					t.Errorf("MatchSpans(%q, %q) = %v; want nil for a non-match / empty needle", needle, name, spans)
+				}
+				continue
+			}
+			if len(spans) == 0 {
+				t.Errorf("MatchSpans(%q, %q) is empty though Match reported a hit", needle, name)
+				continue
+			}
+			last := 0
+			for i, sp := range spans {
+				if sp.Start < 0 || sp.End > utf8.RuneCountInString(name) || sp.Start >= sp.End {
+					t.Errorf("MatchSpans(%q, %q)[%d] = %v is out of range for a %d-rune name",
+						needle, name, i, sp, utf8.RuneCountInString(name))
+				}
+				if i > 0 && sp.Start <= last {
+					t.Errorf("MatchSpans(%q, %q) is not sorted and disjoint: %v", needle, name, spans)
+				}
+				last = sp.End
+			}
+		}
+	}
+}
+
+func equalSpans(a, b []MatchSpan) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// The spans reach the consumer on the hit itself, and only for the half of a query
+// that matches a name: a label-selector hit carries none, because the selector
+// matched something the name never showed.
+func TestSearchCarriesMatchSpans(t *testing.T) {
+	pods := res("", "v1", "Pod", "pods", true)
+	f := &fakeLister{tables: map[string]*Table{"pods": tbl("web", "api-0", "a-p-i")}}
+
+	spans := map[string][]MatchSpan{}
+	for ev := range searchRows(context.Background(), f, []Resource{pods}, "web", nameQ("api"), 0) {
+		if ev.Type == SearchMatch {
+			spans[ev.Hit.Ref.Name] = ev.Hit.Match
+		}
+	}
+	if want := []MatchSpan{{Start: 0, End: 3}}; !equalSpans(spans["api-0"], want) {
+		t.Errorf("api-0 spans = %v; want %v", spans["api-0"], want)
+	}
+	if want := ([]MatchSpan{{Start: 0, End: 1}, {Start: 2, End: 3}, {Start: 4, End: 5}}); !equalSpans(spans["a-p-i"], want) {
+		t.Errorf("a-p-i spans = %v; want %v", spans["a-p-i"], want)
+	}
+
+	f2 := &fakeLister{tables: map[string]*Table{"pods": tbl("web", "api-0")}}
+	q := SearchQuery{LabelSelector: "app=web"}
+	for ev := range searchRows(context.Background(), f2, []Resource{pods}, "web", q, 0) {
+		if ev.Type == SearchMatch && ev.Hit.Match != nil {
+			t.Errorf("a label-selector hit carries spans %v; want none", ev.Hit.Match)
+		}
 	}
 }
 

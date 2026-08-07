@@ -6814,3 +6814,41 @@ for as long as it was open. What a later leg must not silently contradict:
    state with no other evidence on screen, which is D146's test for a marker. `[trimmed]` is
    a fixed word, not a count of what was dropped: the count would change on every trim and
    the reader can act on none of it. It clears only with the buffer (`Restream`).
+
+## D246 — A cluster-search hit carries the runes it matched (2026-08-07, SEARCH-06)
+
+FILT-02/D239 painted the table's `/` matches, and the obvious move was to do the same
+thing here. It does not transfer: a table match is a substring by construction, so the
+view can re-derive the spans from the query at paint time, while a cluster hit may be a
+**subsequence** (D153 — `wbp` matching `web-pod`) or a **label-selector** hit (D151) that
+matches nothing the name shows. Only the matcher that scored the hit knows what to mark.
+What a later leg must not silently contradict:
+
+1. **`kube.SearchHit.Match` is the marks, in the *name's* rune space.** The offsets are
+   into `Ref.Name` — not into whatever row a consumer builds around it — so the shift into
+   a display line belongs to the side that laid the line out. `searchview` derives it as
+   "the label's rune length minus the name's", because the label ends with the name by
+   construction and that stays true if the row ever gains a column; re-adding the kind
+   column, its padding and the namespace by hand does not. `nil` is the normal answer for a
+   label-selector hit, an empty name half, or a non-match, and means *render it plainly*.
+
+2. **The marks are the occurrence the score was read from.** Not *an* occurrence: the best
+   contiguous one, or the tightened subsequence window `scatteredScore` charges for its
+   gaps — the same window, walked the same way, so the marks explain the ranking instead of
+   offering a second opinion about it. This is the one place kubecom's two highlights
+   differ on purpose: the table marks **every** occurrence (D239) because there the query
+   is a substring and each occurrence is equally why the row survived; here the score names
+   one reading of the name and the marks say which. A leg that makes `MatchSpans` mark
+   everything must move the score with it.
+
+3. **Spans are a second pass, not an extra return from `Match`.** `Match` runs over every
+   row of every kind in a cluster-wide sweep and allocates nothing; `MatchSpans` allocates,
+   and is called only for a hit that already survived the cap and the scattered budget. A
+   later leg that wants spans in the picker (PAL-01 ranks with the same matcher) pays the
+   same way — per shown row, never per scanned one.
+
+4. **The cursor row keeps its marks**, as it does in the table (D239 pt 3), and for a
+   sharper reason: the list is ranked, so the best hit is under the cursor from the moment
+   it arrives, and a rule letting the bar swallow the marks would hide them on exactly the
+   row the reader is looking at. `styles.Match` carries its own background, so the two
+   never become ambiguous where they meet.
