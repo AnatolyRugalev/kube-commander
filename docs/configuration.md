@@ -53,10 +53,28 @@ on whatever your terminal happened to be. If your terminal ignores the request
 (some multiplexers filter it), kubecom looks exactly as it did before: text on your
 own background.
 
+**kubecom checks, and tells you when it matters.** Shortly after launch — and again
+after you switch theme with `T` — it asks the terminal what its background actually
+is. If the answer is the palette's own, the request landed and nothing is said. If
+it is a different colour of the same polarity (another dark background under a dark
+palette), nothing is said either: that is how kubecom has always rendered. Only when
+the two are *opposite* does it show one line, because that is when the text is about
+to be hard to read:
+
+```
+gruvbox-dark is dark but the terminal stayed light — background not applied
+```
+
+Nothing is disabled and the theme still applies — it is a heads-up, not a refusal.
+`~/.cache/kubecom/kubecom.log` gets the same event with both colours and what to do
+about it: in tmux, `set-option -g allow-passthrough on` lets the request through;
+otherwise pick a palette that matches your terminal, or set your terminal's
+background to the palette's. A terminal that answers no such question at all is left
+alone — silence is not evidence.
+
 All built-ins are still **dark** palettes. A light one (Catppuccin Latte, Solarized
-Light) is now possible and is not shipped yet — it needs the terminals that ignore
-the background request thought through first, since there its dark text would land
-on your dark background.
+Light) is coming next, into a kubecom that now reports the mismatch above rather
+than silently rendering dark text on your dark background.
 
 Ported palettes keep their upstream names and attribution: Catppuccin
 (MIT, © 2021 Catppuccin), Dracula (MIT, © 2023 Dracula Theme), gruvbox

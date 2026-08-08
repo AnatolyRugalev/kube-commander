@@ -1051,6 +1051,13 @@ type Model struct {
 	// separate so an error and a notice clear on independent timers.
 	statusNoticeGen int
 
+	// canvasGen tags the deferred canvas probe (canvas.go) so a tick armed for a
+	// palette the user has since switched away from is dropped rather than
+	// querying on its behalf. awaitingCanvas gates the answer: only a
+	// tea.BackgroundColorMsg kubecom asked for is evidence about its own request.
+	canvasGen      int
+	awaitingCanvas bool
+
 	width  int
 	height int
 }
@@ -1176,6 +1183,11 @@ func (m Model) Init() tea.Cmd {
 	// unconditional because it is free on the ticks that change nothing, and a
 	// gated one is a thing that can be left off.
 	cmds = append(cmds, scheduleAgeTick())
+	// And one deferred question: did the palette's background actually reach the
+	// terminal (canvas.go, D250)? Armed here rather than on the first
+	// WindowSizeMsg because the delay is what puts it after the first paint either
+	// way, and Init is the one place that runs exactly once.
+	cmds = append(cmds, m.scheduleCanvasProbe())
 	return tea.Batch(cmds...)
 }
 
@@ -1295,6 +1307,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.ClearNotice()
 		}
 		return m, nil
+
+	case canvasProbeMsg:
+		// The deferred "did the background land?" question (canvas.go, D250).
+		return m.handleCanvasProbe(msg)
+
+	case tea.BackgroundColorMsg:
+		// Its answer. Ignored unless kubecom asked, so an unsolicited report is not
+		// mistaken for evidence about kubecom's own request.
+		return m.handleBackgroundColor(msg)
 
 	case watchMsg:
 		return m.handleWatchMsg(msg)

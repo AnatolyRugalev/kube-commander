@@ -104,14 +104,33 @@ setting rather than in-band text:
 - Nothing for a terminal that filters the escape (tmux without passthrough is the
   case to expect). There the app renders exactly as it did before THEME-03.
 
-That last point **is** the remaining light-theme question. A light palette's dark
-text (Latte's `#4c4f69`, Solarized Light's `base00`) is readable only if the
-background request lands; where it is filtered, a light theme is dark-on-dark and
-looks like a kubecom bug. So the light slice's real work is not the values — it is
-deciding what kubecom does when it cannot paint: refuse the palette, warn, or
-detect. Until then `TestBuiltinThemesAreDarkAndLegible` measures every built-in as
-dark, and D248 pt 1 says that test is retuned deliberately in that slice, never
-deleted.
+That last point was the remaining light-theme question, and **THEME-04a answered it:
+kubecom asks** (D250). `tea.RequestBackgroundColor` sends OSC 11 as a *query* and the
+terminal's reply comes back as `tea.BackgroundColorMsg`, so what the screen actually
+is stops being a guess. The comparison against `Theme.Background` has three silences
+and one line — D250 pt 3 says why each silence is deliberate — and the line is
+`<theme> is dark but the terminal stayed light — background not applied`, with the
+remedies (tmux passthrough, a matching palette) in the log rather than in the toast.
+
+Two things worth knowing before touching that code:
+
+- **The probe must be late.** The renderer emits the background *set* on the first
+  paint and the query is a Cmd, so an immediate probe reads back the terminal's
+  *previous* background and reports a false negative on a terminal that honoured the
+  request. Measured under a pty at THEME-04a: with the 750 ms delay the bytes leave
+  in the right order — `ESC ] 11 ; #282828 BEL` at offset 342, `ESC ] 11 ; ? BEL` at
+  362.
+- **A pty answers nothing**, which exercises the "no reply" silence and is why
+  `script -qec` alone cannot check this end to end. A harness that *does* answer
+  proves both halves: replying `rgb:fbfb/f1f1/c7c7` (gruvbox-light's bg0) under
+  `theme: gruvbox-dark` puts the line on screen and a WARN with both colours in
+  `~/.cache/kubecom/kubecom.log`; replying `rgb:2828/2828/2828` says nothing. Fork a
+  pty, watch for `\x1b]11;?`, write the OSC 11 reply back into the master fd.
+
+What is left for the values slice (THEME-04b) is the values, the attribution and the
+guard retune: `TestBuiltinThemesAreDarkAndLegible` measures every built-in as dark
+today, and D248 pt 1 says that test is retuned deliberately in that slice — to
+"chrome and text sit on opposite sides of the same background" — never deleted.
 
 ## Where the values came from
 

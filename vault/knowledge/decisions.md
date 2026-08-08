@@ -6973,3 +6973,50 @@ kubecom holds the screen. Every built-in sets it (D169 pt 3, enforced by
    not the values — it is deciding what kubecom does when it cannot paint (refuse, warn,
    or detect) — and it retunes `TestBuiltinThemesAreDarkAndLegible` deliberately rather
    than deleting it. Until then every built-in, `Background` included, measures dark.
+
+## D250 — kubecom asks the terminal what its background is, and warns only on a polarity mismatch (2026-08-08, THEME-04a)
+
+D249 pt 4 left the light-palette slice one question: what does kubecom do where it cannot
+paint? The answer is **detect** — of the three options that decision named (refuse, warn,
+detect), refusing overrides an explicit `theme:` on a guess, and warning unconditionally
+puts a toast on a working screen at every launch. `tea.RequestBackgroundColor` (OSC 11 as a
+*query*) makes the screen an observable fact instead, and the warning is spent only where
+the reader is about to lose legibility.
+
+1. **The terminal's own answer is the only evidence; environment sniffing is not.** kubecom
+   cannot tell from inside whether the escape it emitted survived the trip, and a list of
+   `$TERM`/`$TMUX` values believed to filter OSC 11 is wrong the day it is written and
+   silently wrong thereafter. So kubecom asks and compares the reply against
+   `Theme.Background`. A leg that wants to know whether the canvas landed asks the same
+   way; it does not add a terminal-capability table.
+
+2. **The probe is deliberately late, single, and generation-tagged.** The renderer emits
+   the background *set* on the first paint and the query is a Cmd, so an immediate probe
+   races its own set and reads back the terminal's previous background — a false negative
+   on a terminal where the request worked. It fires `canvasProbeDelay` (750 ms) after Init
+   and again after a runtime theme switch, which bumps `canvasGen` and closes
+   `awaitingCanvas` so the departed palette's tick and its in-flight answer are both
+   dropped. Only a reply kubecom asked for is read as evidence: terminals report their
+   background unprompted, and an unsolicited report says nothing about kubecom's request.
+
+3. **Three silences, and they are the decision.** Colors match → it landed. Colors differ
+   but polarities agree → it did not land and does not matter; that is how all eleven
+   built-ins render on a terminal that ignores the request, and warning there would toast
+   a working screen at every launch. No reply at all → a terminal that answers no query is
+   indistinguishable from a slow one, and "unknown" is not evidence. Only opposite
+   polarities warn. A later leg that widens this to "warn whenever the colors differ" has
+   re-introduced the noise this shape exists to avoid.
+
+4. **The line names the observation, never the cause, and nothing is refused.** `<theme> is
+   dark but the terminal stayed light — background not applied`: kubecom cannot distinguish
+   a terminal that filtered the request from one that declined it, so it must not say
+   "tmux". The remedies (passthrough, a matching palette, a matching terminal) go to the
+   log, which is surfaceError's own split (D159). The theme still applies — a heads-up, not
+   a veto, because the user asked for it and principle 3 says degrade rather than override.
+
+5. **Polarity is measured, not declared.** `Theme` gains no `Dark bool`: `Background` is
+   already the claim, and a flag beside it drifts the first time a palette is retuned.
+   `styles.IsDark` is the registry's own admission threshold (`darkLuminance` = 0.2, D248
+   pt 1) exported from `luminance.go`, so "dark enough to be admitted" and "dark" are one
+   number and cannot disagree. A nil color reads as dark — the conservative answer, since
+   nil means unknown and an unknown screen must raise no alarm.

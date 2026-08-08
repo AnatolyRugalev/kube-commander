@@ -2,7 +2,6 @@ package styles
 
 import (
 	"image/color"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,30 +230,12 @@ func TestBuiltinRegistryIsTheDocumentedSet(t *testing.T) {
 	}
 }
 
-// relativeLuminance is WCAG 2.1's L, over the sRGB channels lipgloss hands back
-// (16-bit, alpha-premultiplied — every theme color is opaque, so the premultiply
-// is a no-op here).
-func relativeLuminance(c color.Color) float64 {
-	r, g, b, _ := c.RGBA()
-	lin := func(v uint32) float64 {
-		s := float64(v) / 65535
-		if s <= 0.03928 {
-			return s / 12.92
-		}
-		return math.Pow((s+0.055)/1.055, 2.4)
-	}
-	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
-}
-
-// contrastRatio is WCAG 2.1's ratio between two colors, 1 (identical) to 21
-// (black on white).
-func contrastRatio(a, b color.Color) float64 {
-	la, lb := relativeLuminance(a), relativeLuminance(b)
-	if la < lb {
-		la, lb = lb, la
-	}
-	return (la + 0.05) / (lb + 0.05)
-}
+// The WCAG arithmetic this file measures with moved into the package itself at
+// THEME-04a (luminance.go): the shell needs the same threshold to decide whether
+// the palette's polarity matches the screen it is actually painting on (D250),
+// and two implementations of "is this dark?" would let a palette pass the guard
+// below and then be described to the user as the other polarity. The tests call
+// the exported functions so there is exactly one answer.
 
 func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 	// "Is it dark?" is the registry's admission criterion, and until THEME-02
@@ -273,7 +254,7 @@ func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 	// D248 pt 1 stands: admitting a light palette means rewriting this test to
 	// "chrome and text sit on opposite sides of the same background", deliberately
 	// and in that slice — never deleting it.
-	const maxChromeLuminance = 0.2
+	const maxChromeLuminance = darkLuminance
 	const minContrast = 4.5
 	for _, th := range Themes() {
 		for _, bg := range []struct {
@@ -284,7 +265,7 @@ func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 			{"Selection", th.Selection},
 			{"StatusBarBg", th.StatusBarBg},
 		} {
-			if l := relativeLuminance(bg.color); l > maxChromeLuminance {
+			if l := RelativeLuminance(bg.color); l > maxChromeLuminance {
 				t.Errorf("theme %q: %s luminance %.3f > %.3f — not a dark palette (D236 pt 3)",
 					th.Name, bg.role, l, maxChromeLuminance)
 			}
@@ -299,7 +280,7 @@ func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 			{"the selected row", th.SelectionFg, th.Selection},
 			{"the status bar", th.StatusBarFg, th.StatusBarBg},
 		} {
-			if r := contrastRatio(pair.fg, pair.bg); r < minContrast {
+			if r := ContrastRatio(pair.fg, pair.bg); r < minContrast {
 				t.Errorf("theme %q: %s contrasts %.2f:1, want at least %.1f:1",
 					th.Name, pair.what, r, minContrast)
 			}

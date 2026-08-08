@@ -2,6 +2,10 @@
 
 - Created: 2026-08-08
 - By: THEME-03
+- Amended: 2026-08-08 by THEME-04a — item 7 added, and it changes what item 6 costs you:
+  kubecom now asks the terminal what its background actually is and says so when the
+  answer disagrees with the palette (D250), so the multiplexer question can be answered
+  by reading the screen rather than by squinting at it.
 - Priority: normal
 - Blocks: none (advisory — the mechanism is verified end-to-end in a sandbox pty: the
   escape is emitted with the palette's own value, re-emitted on a runtime switch, and
@@ -56,6 +60,30 @@ is. Five things, and the last two are the ones that decide the light-palette sli
    which is fine for the ten dark palettes and is **not** fine for a light one — dark
    text on your dark background. Please say which multiplexer, which version, and
    whether the background lands.
+
+7. **What kubecom says about item 6 — added by THEME-04a.** About a second after launch
+   kubecom asks the terminal for its background and compares the answer with the
+   palette's. It stays quiet when they match, and quiet when they merely differ in the
+   same direction (a dark terminal under a dark palette). It shows one status-bar line
+   only when they are *opposite*:
+
+   ```
+   gruvbox-dark is dark but the terminal stayed light — background not applied
+   ```
+
+   Two questions, and neither needs a light palette to answer:
+
+   - **Does your multiplexer answer the question at all?** Run inside it with any theme
+     and check `~/.cache/kubecom/kubecom.log` for a line reading `the theme's background
+     did not reach the terminal`. Its absence means either the request landed *or* the
+     terminal never replied, and those two are worth telling apart — say which
+     multiplexer and whether you saw a WARN.
+   - **Does the line ever appear when it should not?** This is the one that would make
+     THEME-04b wrong. Set your terminal to a *light* background, run with any built-in
+     (all eleven are dark), and see the line — it should be correct there. Then set your
+     terminal dark and confirm it is silent at every launch. A toast that shows up on a
+     screen that looks fine is worse than no check, and it is the failure mode the three
+     silences in D250 pt 3 are shaped to avoid.
 
 ## Why the agent can't do it
 

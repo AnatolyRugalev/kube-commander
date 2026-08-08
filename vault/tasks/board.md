@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-08 — THEME-03 done: a theme now paints the whole screen, as the terminal's own background for as long as kubecom runs (D249). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-08 — THEME-04a done: kubecom asks the terminal what its background actually is and says so when the palette's polarity disagrees (D250). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **THEME-04a** Notice when the canvas did not land, and say so
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
+_(none)_
 
 ## Blocked
 
@@ -369,15 +368,9 @@ mechanism is **04a** and the palettes are **04b**. 04a is not speculative work f
 that does not exist yet: the same mismatch is live today in the other direction, since ten
 dark palettes on a *light* terminal that filters the escape are dark-on-dark right now.
 
-- [ ] **THEME-04a** Notice when the canvas did not land, and say so
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
-      notes: The case D249 pt 3 names — a terminal that filters the background escape (a
-      multiplexer without passthrough) leaves kubecom rendering on whatever the terminal
-      already is. Decide and record which of refuse / warn / detect kubecom does. Human
-      task `2026-08-08-app-background-look` pt 6 is the observation that should inform it;
-      carry it forward rather than wait on it.
+- [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [ ] **THEME-04b** The light palettes
-      status: todo | owner: — | added: 2026-08-08 | blocked-on: THEME-04a
+      status: todo | owner: — | added: 2026-08-08
       notes: `catppuccin-latte` and `solarized-light`, both already surveyed in
       `vault/knowledge/themes.md` — values transcribed from the upstream data file (D236
       pt 1), attributed in the constructor, into a kubecom that already handles 04a's
@@ -617,6 +610,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-04a** kubecom asks the terminal for its background after the first paint and warns only when the palette's polarity disagrees with the answer — done 2026-08-08 (D250)
 
 - [x] **THEME-03** `Theme.Background`, set in all eleven built-ins and painted by the root View as the terminal's own background — done 2026-08-08 (D249)
 

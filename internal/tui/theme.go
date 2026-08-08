@@ -131,7 +131,13 @@ func (m Model) applyThemeNamed(name string) (tea.Model, tea.Cmd) {
 	}
 	m.applyStyles(styles.New(theme))
 	notice := m.surfaceNotice("theme " + theme.Name)
-	return m, tea.Batch(notice, m.persistTheme(theme.Name))
+	// The new palette carries a new canvas, so the question canvas.go asks at launch
+	// has to be asked again: a switch between two palettes of opposite polarity is
+	// exactly when a terminal that ignores the request starts mattering. The bump
+	// retires the previous palette's tick and its in-flight answer (D250 pt 2).
+	m.canvasGen++
+	m.awaitingCanvas = false
+	return m, tea.Batch(notice, m.persistTheme(theme.Name), m.scheduleCanvasProbe())
 }
 
 // persistTheme records the picked theme in the user's config so the next launch opens
