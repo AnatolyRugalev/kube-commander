@@ -7,7 +7,9 @@ _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions an
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
+      notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
 
 ## Blocked
 
@@ -383,7 +385,7 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
 - [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
-      status: todo | owner: — | added: 2026-08-08
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
       notes: Found by measurement in LOGS-SEL-03, not by a dogfood. `styles.New` builds
       `Match` as `StatusBarBg` on `Warn` — right while every built-in was dark, wrong since
       THEME-04b: on `catppuccin-latte` a matched span is near-white on mid yellow at
