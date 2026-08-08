@@ -7,7 +7,9 @@ _Last updated: 2026-08-08 — THEME-02 done: five more palettes ported from thei
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-03** Give `Theme` a `Background` role and have the panes paint it, so a light
+      palette is possible
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-08
 
 ## Blocked
 
