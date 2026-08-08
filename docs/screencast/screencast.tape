@@ -38,14 +38,21 @@ Set Height 700
 Set Padding 20
 Set Framerate 24
 Set TypingSpeed 90ms
-
 # A clean prompt to start from: the tour is about kubecom, not about the shell.
+# Set up a tmux session for the captions.
 Hide
+Type@1ms "./docs/screencast/setup.sh" Enter
+Sleep 1s
+
+Type@1ms "export PATH=$PWD/bin:$PATH" Enter
+
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Welcome to kubecom!'" Enter
+
 # kubecom-input: clear the recording shell
-Type "clear"
+Type@1ms "clear"
 # kubecom-input: run it
 Enter
-Sleep 500ms
 Show
 
 # ---------------------------------------------------------------- launch -----
@@ -55,72 +62,87 @@ Show
 Type "kubecom"
 # kubecom-input: run it
 Enter
-Sleep 5s
+Sleep 1s
 
 # ------------------------------------------------------- browse: open Pods ---
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]The command palette is your central hub for navigation'" Enter
+Show
+
 # `:` is the command palette — one place you type what you want to do. The verb and
 # its argument are one line in one box (PAL-03a): the tour types the verb, Enters to
 # commit it, then types the kind into the same box — `:` → "resource" → Pods.
 # kubecom-action: app.palette
 Type ":"
-Sleep 1500ms
+Sleep 500ms
 # kubecom-input: narrow the palette to the resource switch
 Type "resource"
-Sleep 1200ms
+Sleep 500ms
 # kubecom-action: nav.drillIn
 Enter
-Sleep 1s
+Sleep 500ms
 # kubecom-input: narrow the palette's resource argument to Pods
 Type "pods"
-Sleep 1500ms
+Sleep 500ms
 # kubecom-action: nav.drillIn
 Enter
-Sleep 4s
+Sleep 3s
 
 # ---------------------------------------------------------------- filter -----
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Filter live resources as you type'" Enter
+Show
+
 # The table is a live watch, not a snapshot. `/` narrows it as you type; Enter
 # keeps the narrowing and hands the keys back to navigation.
 # kubecom-action: app.filter
-Type "/"
+Type ":ns"
 Sleep 500ms
-# kubecom-input: TUNE — the filter query; matches the namespace column too
-Type "kube-system"
-Sleep 2s
-# kubecom-action: nav.drillIn
+Type " shop"
+Sleep 500ms
 Enter
 Sleep 1s
 # kubecom-action: nav.down
-Type "j"
-Sleep 400ms
-# kubecom-action: nav.down
-Type "j"
-Sleep 1500ms
+Type "/storefront"
+Enter
+Sleep 1s
 
 # ------------------------------------------------------------------ logs -----
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press L to tail logs for the selected pod'" Enter
+Show
+
 # `L` gives logs the whole screen and tails the container live.
 # kubecom-action: res.logs
 Type "L"
 Sleep 5s
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Grep logs instantly without interrupting the stream'" Enter
+Show
+
 # `/` greps the stream *while it keeps following* — nothing is re-fetched.
 # kubecom-action: app.filter
 Type "/"
 Sleep 500ms
 # kubecom-input: TUNE — the log grep query
 Type "info"
-Sleep 3s
+Sleep 2s
 # kubecom-action: nav.back
 Escape
-Sleep 1s
-# `t` puts each line's server timestamp ahead of its message (a display toggle:
-# the buffer already has them, so nothing re-streams).
-# kubecom-action: logs.timestamps
-Type "t"
-Sleep 3s
 # kubecom-action: app.quit
 Type "q"
 Sleep 1500ms
 
 # -------------------------------------------------------------- describe -----
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press D to describe the selected resource'" Enter
+Show
+
 # `D` describes the selected row in the shared centered viewer; it scrolls like
 # any other view.
 # kubecom-action: res.describe
@@ -134,6 +156,11 @@ Escape
 Sleep 1s
 
 # -------------------------------------------------- cluster-wide search -------
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Ctrl+S searches across all resources in the cluster'" Enter
+Show
+
 # Ctrl+S searches across kinds at once — Kind, namespace, name — ranked, best
 # match first, streaming in as each kind answers.
 # kubecom-action: search.cluster
@@ -150,6 +177,15 @@ Escape
 Sleep 1s
 
 # ------------------------------------------------------------------ quit -----
+Hide
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Thanks for watching'" Enter
+Show
+
 # kubecom-action: app.quit
 Type "q"
 Sleep 2s
+
+Hide
+Type@1ms "./docs/screencast/teardown.sh" Enter
+Sleep 1s

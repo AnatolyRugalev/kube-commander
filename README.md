@@ -4,6 +4,8 @@ A fast, vim-friendly, zero-deploy Kubernetes TUI — *"the kubernetes-dashboard 
 your terminal."* Browse and operate any cluster over SSH, in real time, with no
 in-cluster deployment and **no `kubectl` binary required**.
 
+![kubecom — browse, filter, logs, describe](docs/screencast.gif)
+
 > ### 🚧 `v1` is a ground-up rewrite in progress
 >
 > This branch (`v1`) rebuilds the 2020 codebase from scratch on a modern Go stack

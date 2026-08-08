@@ -1,4 +1,4 @@
-# Record the screencast GIF from `docs/screencast.tape` and commit it with the README line
+# Record the screencast GIF from `docs/screencast/screencast.tape` and commit it with the README line
 
 - Created: 2026-07-30
 - By: M5-09
@@ -7,7 +7,7 @@
   keybindings docs current and accurate"; the tape, the `make screencast` target and their
   drift guards have landed, so M5-06…M5-11 all proceed. M5-10's pre-flight should carry this
   item forward, not wait on it.)
-- Status: open
+- Status: open (Note: status bar narration is implemented, but sequence needs refinement later)
 
 ## What's needed
 
@@ -44,7 +44,7 @@ make screencast                                     # builds ./bin/kubecom, runs
 
 ### What the tape assumes about your cluster
 
-Read the header of [`docs/screencast.tape`](../../docs/screencast.tape) — it names two
+Read the header of [`docs/screencast/screencast.tape`](../../docs/screencast/screencast.tape) — it names two
 `TUNE` strings, and they are the only cluster-specific text in it:
 
 - the **table filter** (`kube-system`) — narrows the pod list on screen;

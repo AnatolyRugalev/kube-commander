@@ -52,7 +52,7 @@ test-envtest:
 # Record the README screencast (docs/screencast.gif) from the committed tape.
 # Not part of `check`: it needs vhs (https://github.com/charmbracelet/vhs), a real
 # terminal and a real cluster in the current kubeconfig context — see the header of
-# docs/screencast.tape for what the tour assumes, and D181 for why the recording is
+# docs/screencast/screencast.tape for what the tour assumes, and D181 for why the recording is
 # a human's and not an agent's.
 #
 # The binary is built here and put first on PATH so the recording is always of this
@@ -60,4 +60,4 @@ test-envtest:
 BIN_DIR ?= $(CURDIR)/bin
 screencast:
 	go build -o $(BIN_DIR)/kubecom ./cmd/kubecom
-	PATH="$(BIN_DIR):$$PATH" vhs docs/screencast.tape
+	PATH="$(BIN_DIR):$$PATH" vhs docs/screencast/screencast.tape
