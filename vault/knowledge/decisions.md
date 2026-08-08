@@ -6935,3 +6935,41 @@ rather than descriptions:
    for this (`nord1`, "a lighter background color for UI elements like status bars") and
    the others follow the same step. Catppuccin goes the other way — *darker*, to `mantle`
    — and that stays as it is; the constraint is "not the base", not a direction.
+
+## D249 — The theme's canvas is the terminal's background, painted once by the root View (2026-08-08, THEME-03)
+
+`Theme` gains a fourteenth role, `Background`, and it reaches the screen as
+`tea.View.BackgroundColor` — the terminal's own default background for as long as
+kubecom holds the screen. Every built-in sets it (D169 pt 3, enforced by
+`TestBuiltinThemesAreComplete`), and `View` reads it off `m.styles` on every frame.
+
+1. **No component paints the canvas, and none may start.** This is the constraint,
+   because per-component painting is the design a later leg will reach for first and it
+   does not work: lipgloss does not re-open an outer background after a nested style's
+   reset, so a composed frame wrapped in a background style comes back painted at its
+   margins and bare wherever a colored span already ran (measured on lipgloss v2.0.0;
+   the working note is in `vault/knowledge/themes.md`). The rest of the screen — the gap
+   between the panes, a pane's border, the tail of a short line, the rows an overlay
+   does not cover — is nobody's component at all. A single terminal-level default is the
+   only thing that reaches all of it, so `styles.New` deliberately derives **no** Style
+   from `Background`, and adding one would reintroduce the half-painted frame.
+
+2. **Terminal-level state is the price, and Bubble Tea pays it.** The renderer emits the
+   escape on the first frame, re-emits on change (a runtime theme switch repaints with
+   nothing added to `applyStyles`), and writes the reset from `close()` — which runs on
+   quit *and* on `ReleaseTerminal`, so every `tea.ExecProcess` suspend hands the user's
+   own terminal to `$EDITOR` and `exec`. A leg that starts driving the terminal outside
+   the `View` contract loses that lifecycle and owns the reset itself.
+
+3. **A nil `Background` resets to the terminal's own — it is not black.** A zero `Theme`
+   must leave the user's terminal alone, which is also kubecom's behavior before this
+   decision. The same fallback covers a terminal that filters the escape (a multiplexer
+   without passthrough): kubecom renders exactly as it did before, text on whatever the
+   terminal is.
+
+4. **That fallback is what still gates a light palette, and D248 pt 1 is unchanged.**
+   D236 pt 3's blocker ("kubecom paints no app background") is gone, but where the
+   escape does not land a light palette is dark-on-dark. So the light slice's work is
+   not the values — it is deciding what kubecom does when it cannot paint (refuse, warn,
+   or detect) — and it retunes `TestBuiltinThemesAreDarkAndLegible` deliberately rather
+   than deleting it. Until then every built-in, `Background` included, measures dark.

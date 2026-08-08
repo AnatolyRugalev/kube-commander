@@ -7,7 +7,7 @@ a palette without re-running the research.
 
 ## What we are actually copying
 
-A theme in kubecom is thirteen hex values in `internal/tui/styles/themes.go`
+A theme in kubecom is fourteen hex values in `internal/tui/styles/themes.go`
 (`Theme`, D169 pt 3) — no code, no config format, no artwork. The upstream
 projects licence far more than that, and the licences below all permit
 redistribution with attribution, so the honest thing is to **attribute in the
@@ -20,7 +20,7 @@ Two caveats worth keeping straight:
 - **A name is API** (D169 pt 1). `catppuccin-mocha`, not `mocha` — the family
   prefix is also what makes the flavors filter as one group in the theme picker.
 - **Do not claim to *be* the upstream theme.** kubecom maps a palette onto its
-  own thirteen semantic roles; a port is kubecom's reading of the scheme, and the
+  own fourteen semantic roles; a port is kubecom's reading of the scheme, and the
   doc comment says which upstream role each kubecom role took.
 
 ## Licence findings (verified 2026-08-06, not assumed)
@@ -70,20 +70,48 @@ D248 pt 2: `rose-pine` is Rosé Pine's `main` and `tokyo-night` is Tokyo Night's
 (same reason as `solarized-dark`, D169 pt 1). Adding `rose-pine-moon` later is a
 *new* name beside `rose-pine`, never a rename of it.
 
-## The light-theme wall (why Latte and solarized-light are not here)
+## The app background: how it is painted, and what that leaves for a light theme
 
-**kubecom never paints an app background.** `styles.New` sets a background on
-exactly three things — the selected row, the status bar, and a search match —
-and everything else renders as foreground text over whatever the terminal
-already is. Every built-in so far is dark because that is the only thing that
-works: a light palette's dark text (Latte's `#4c4f69`, Solarized Light's
-`base00`) drawn on a dark terminal is unreadable, and it would look like a
-kubecom rendering bug rather than a mismatched terminal.
+Before THEME-03 kubecom painted a background on exactly three things — the
+selected row, the status bar and a search match — and everything else was
+foreground text over whatever the terminal already was. `Theme.Background`
+(THEME-03, **D249**) is the canvas, and it is painted **once, by the root
+`View`**, as `tea.View.BackgroundColor` — the terminal's own default background
+for as long as kubecom holds the screen.
 
-Shipping a light theme therefore means adding a `Background` role to `Theme` and
-having the panes actually paint it — which by D169 pt 3 must be filled in *every*
-built-in in the same leg, and which changes how every component renders. That is
-its own slice (THEME-03), not a footnote on a palette port.
+**Do not try to paint it with lipgloss styles instead.** That is the obvious
+design and it does not work, which is worth knowing before someone re-derives it:
+lipgloss does not re-open an outer background after a nested style's reset. Wrap
+an already-composed frame in `NewStyle().Background(c).Width(w).Height(h)` and
+what comes back is painted at the margins and bare everywhere a colored span
+already ran — the sequence is `48;2;…m` … `[m` … and the rest of the line is the
+terminal's default again. Measured on lipgloss v2.0.0 at THEME-03; the border
+glyphs and the pane interior both come back unpainted. Per-component painting
+would be the same failure spread over eleven components plus the gaps between
+them, which nothing owns.
+
+What `tea.View.BackgroundColor` buys, in exchange for being a terminal-level
+setting rather than in-band text:
+
+- Every cell, including the ones no component draws: the gap between the panes,
+  a pane's border, the unfilled tail of a short line, the erased rows below a
+  short overlay.
+- Bubble Tea's own lifecycle. `cursedRenderer` emits the OSC on the first frame,
+  re-emits it when the color changes (so a runtime theme switch repaints), and
+  writes `ResetBackgroundColor` from `close()` — which runs on quit **and** on
+  `ReleaseTerminal`, i.e. every `tea.ExecProcess` suspend. `$EDITOR` and `exec`
+  therefore get the user's own terminal back, not kubecom's.
+- Nothing for a terminal that filters the escape (tmux without passthrough is the
+  case to expect). There the app renders exactly as it did before THEME-03.
+
+That last point **is** the remaining light-theme question. A light palette's dark
+text (Latte's `#4c4f69`, Solarized Light's `base00`) is readable only if the
+background request lands; where it is filtered, a light theme is dark-on-dark and
+looks like a kubecom bug. So the light slice's real work is not the values — it is
+deciding what kubecom does when it cannot paint: refuse the palette, warn, or
+detect. Until then `TestBuiltinThemesAreDarkAndLegible` measures every built-in as
+dark, and D248 pt 1 says that test is retuned deliberately in that slice, never
+deleted.
 
 ## Where the values came from
 

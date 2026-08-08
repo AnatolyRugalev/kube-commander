@@ -4481,16 +4481,6 @@ func (m Model) routeNav(a keymap.Action) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View implements tea.Model. Until the first WindowSizeMsg it renders nothing so
-// the layout is never sized to a zero terminal. Normally it stacks the status bar
-// (top), the two-pane body (menu + table side by side), and the dedicated key-hint
-// line (bottom); when the help overlay is open it is composited over the body area,
-// the status bar staying pinned above and the hint line below.
-//
-// Every returned view sets AltScreen: in bubbletea v2 full-screen mode is a
-// property of the View (v.AltScreen), not a program option — the v1-era
-// tea.WithAltScreen() no longer exists — so the root model, which owns View, is
-// where kubecom requests the alternate screen buffer (D70).
 // browseBody renders the two-pane browse layout: the resource menu (left) beside
 // the resource table (right). Until the user drills into a resource the right pane
 // shows the welcome page rather than a blank table; once a watch is live
@@ -4508,14 +4498,46 @@ func (m Model) browseBody() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), right)
 }
 
+// screen applies the terminal-level properties every frame carries, whatever is
+// drawn in it. They live here rather than at each return so a new one cannot be
+// set on the sized frame and forgotten on the pre-size one (which is what the
+// terminal shows for the whole first paint):
+//
+//   - **AltScreen.** In bubbletea v2 full-screen mode is a property of the View,
+//     not a program option — the v1-era tea.WithAltScreen() no longer exists — so
+//     the root model, which owns View, is where kubecom requests the alternate
+//     screen buffer (D70).
+//   - **BackgroundColor.** The theme's canvas, handed to the terminal as its
+//     default background for as long as kubecom holds the screen (D249). This is
+//     what makes Theme.Background reach every cell — panes, borders, the gap
+//     between the two panes, the unfilled tail of a short line — none of which any
+//     component paints. Reading it off m.styles every frame is also what makes a
+//     runtime theme switch repaint the canvas: applyStyles need do nothing.
+//     A nil Background (a zero Theme) resets the terminal to its own default,
+//     which is kubecom's behavior before this existed.
+//   - **MouseMode.** Also per-View in v2. It is opt-in (off by default) so the
+//     terminal keeps its native select-to-copy; only when the user toggles mouse
+//     capture on does View request it, and switching back to MouseModeNone tears
+//     the reporting down again (D97, superseding D86's unconditional capture).
+func (m Model) screen(v tea.View) tea.View {
+	v.AltScreen = true
+	v.BackgroundColor = m.styles.Theme.Background
+	if m.mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
+	return v
+}
+
+// View implements tea.Model. Until the first WindowSizeMsg it renders nothing so
+// the layout is never sized to a zero terminal. Normally it stacks the status bar
+// (top), the two-pane body (menu + table side by side), and the dedicated key-hint
+// line (bottom); when the help overlay is open it is composited over the body area,
+// the status bar staying pinned above and the hint line below. Both returns go
+// through screen, which carries the terminal-level properties (alt screen, the
+// theme's background, mouse reporting).
 func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		v := tea.NewView("")
-		v.AltScreen = true
-		if m.mouseEnabled {
-			v.MouseMode = tea.MouseModeCellMotion
-		}
-		return v
+		return m.screen(tea.NewView(""))
 	}
 
 	// The two-pane browse view is always drawn first; an open modal is composited
@@ -4554,16 +4576,5 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.forwardsPanelView(), m.width, m.bodyHeight())
 	}
 
-	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View()))
-	v.AltScreen = true
-	// Mouse reporting is a per-View property in bubbletea v2 (like AltScreen), not a
-	// program option — the root model owns View, so it is where kubecom requests it.
-	// It is opt-in (off by default) so the terminal keeps its native select-to-copy;
-	// only when the user toggles mouse capture on does View request it, and switching
-	// back to MouseModeNone tears the reporting down again (D97, superseding D86's
-	// unconditional capture).
-	if m.mouseEnabled {
-		v.MouseMode = tea.MouseModeCellMotion
-	}
-	return v
+	return m.screen(tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View())))
 }

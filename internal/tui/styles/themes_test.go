@@ -14,6 +14,7 @@ import (
 // to Theme fails to compile here until it is covered).
 func themeColors(t Theme) map[string]color.Color {
 	return map[string]color.Color{
+		"Background":  t.Background,
 		"Foreground":  t.Foreground,
 		"Subtle":      t.Subtle,
 		"Primary":     t.Primary,
@@ -169,10 +170,13 @@ func TestDefaultThemeIsCatppuccinFrappe(t *testing.T) {
 }
 
 func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
-	// The family ships its dark flavors only: kubecom paints no app background,
-	// so Latte's dark text would land on whatever the terminal already is
-	// (D236 pt 3). Each name is `catppuccin-<flavor>` so the family filters as
-	// one in the theme picker.
+	// The family ships its dark flavors only. D236 pt 3's reason — kubecom paints
+	// no app background, so Latte's dark text lands on whatever the terminal
+	// already is — was removed by THEME-03 (D249); what still keeps Latte out is
+	// that TestBuiltinThemesAreDarkAndLegible below measures every built-in as
+	// dark, and D248 pt 1 says the light slice retunes that test deliberately
+	// rather than smuggling a palette past it. Each name is `catppuccin-<flavor>`
+	// so the family filters as one in the theme picker.
 	want := map[string]bool{
 		"catppuccin-frappe":    true,
 		"catppuccin-macchiato": true,
@@ -193,7 +197,7 @@ func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
 		}
 	}
 	if _, ok := ByName("catppuccin-latte"); ok {
-		t.Error("catppuccin-latte is registered, but no built-in sets an app background yet (D236 pt 3)")
+		t.Error("catppuccin-latte is registered, but the darkness guard has not been retuned for a light palette (D248 pt 1)")
 	}
 }
 
@@ -253,16 +257,22 @@ func contrastRatio(a, b color.Color) float64 {
 }
 
 func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
-	// "Is it dark?" is the registry's admission criterion until kubecom paints an
-	// app background (D236 pt 3), and until this test nothing enforced it — a light
-	// palette could join the registry and render its dark text over whatever the
-	// terminal already is, which looks like a kubecom bug rather than a mismatch.
+	// "Is it dark?" is the registry's admission criterion, and until THEME-02
+	// nothing enforced it — a light palette could join and render its dark text
+	// over whatever the terminal already is. THEME-03 changed *where* that lands
+	// but not the criterion: kubecom now paints Background across the screen
+	// (D249), so the palette owns the whole canvas rather than three widgets, and
+	// a light one among ten dark ones is still the mismatch this guards.
 	//
 	// Dark means two things, and both are asserted because either alone is
-	// satisfiable by a palette nobody would want: the chrome kubecom *does* paint
+	// satisfiable by a palette nobody would want: every background kubecom paints
 	// is dark in absolute terms, and the text it paints there is lighter than it.
 	// The 4.5 floor is WCAG AA for body text; solarized-dark, the registry's
 	// lowest-contrast member by design, sits at 4.86.
+	//
+	// D248 pt 1 stands: admitting a light palette means rewriting this test to
+	// "chrome and text sit on opposite sides of the same background", deliberately
+	// and in that slice — never deleting it.
 	const maxChromeLuminance = 0.2
 	const minContrast = 4.5
 	for _, th := range Themes() {
@@ -270,6 +280,7 @@ func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 			role  string
 			color color.Color
 		}{
+			{"Background", th.Background},
 			{"Selection", th.Selection},
 			{"StatusBarBg", th.StatusBarBg},
 		} {
@@ -282,12 +293,39 @@ func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
 			what   string
 			fg, bg color.Color
 		}{
+			// The canvas pair is the one THEME-03 made assertable: before it, the
+			// background under ordinary text was the terminal's and unknowable here.
+			{"body text on the canvas", th.Foreground, th.Background},
 			{"the selected row", th.SelectionFg, th.Selection},
 			{"the status bar", th.StatusBarFg, th.StatusBarBg},
 		} {
 			if r := contrastRatio(pair.fg, pair.bg); r < minContrast {
 				t.Errorf("theme %q: %s contrasts %.2f:1, want at least %.1f:1",
 					th.Name, pair.what, r, minContrast)
+			}
+		}
+	}
+}
+
+func TestBuiltinChromeIsVisibleAgainstTheCanvas(t *testing.T) {
+	// The canvas is now painted, so the shades that used to be "not the terminal's
+	// background, probably" are drawn against a background kubecom controls: a
+	// status bar or a selected row equal to Background is an invisible widget
+	// rather than a subtle one. D248 pt 3 said the bar takes a shade that is not
+	// the base and left the direction free; this is that constraint, now checkable
+	// — and it is deliberately inequality rather than a luminance gap, because
+	// Catppuccin goes darker than base and everything else goes lighter.
+	for _, th := range Themes() {
+		for _, role := range []struct {
+			name  string
+			color color.Color
+		}{
+			{"Selection", th.Selection},
+			{"StatusBarBg", th.StatusBarBg},
+		} {
+			if role.color == th.Background {
+				t.Errorf("theme %q: %s is the same color as Background — the widget is invisible (D248 pt 3)",
+					th.Name, role.name)
 			}
 		}
 	}

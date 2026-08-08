@@ -253,6 +253,58 @@ func TestApplyStylesKeepsComponentState(t *testing.T) {
 	}
 }
 
+// TestViewHandsTheCanvasToTheTerminal is THEME-03's headline invariant: the new
+// Background role is not decorative, it reaches the screen. It reaches it as the
+// View's BackgroundColor rather than as a Style, because nothing kubecom draws
+// covers the whole canvas — the gap between the panes, a pane's border, the tail
+// of a short line and every cell of an unfilled overlay row are all default
+// background, and only the terminal's own default paints those (D249).
+//
+// Both frames are asserted, and the pre-size one is the load-bearing half: it is
+// what the terminal shows for the whole first paint, and it is the return a new
+// property is easiest to forget.
+func TestViewHandsTheCanvasToTheTerminal(t *testing.T) {
+	for _, th := range styles.Themes() {
+		m := sizedWith(t, WithTheme(th))
+		if got := m.View().BackgroundColor; got != th.Background {
+			t.Errorf("theme %q: sized View BackgroundColor = %v, want the theme's canvas %v",
+				th.Name, got, th.Background)
+		}
+		if got := New(WithTheme(th)).View().BackgroundColor; got != th.Background {
+			t.Errorf("theme %q: pre-size View BackgroundColor = %v, want the theme's canvas %v",
+				th.Name, got, th.Background)
+		}
+	}
+}
+
+// TestApplyStylesRepaintsTheCanvas is the runtime half. A theme picked from
+// inside kubecom fans out through applyStyles to every component (M4-12b), but
+// the canvas is not a component — it is read off m.styles by View on each frame,
+// which is what makes it follow a live switch with nothing added to the fan-out.
+// The test exists so a later leg that caches the color into a field learns that
+// it has to invalidate it.
+func TestApplyStylesRepaintsTheCanvas(t *testing.T) {
+	m := sizedWith(t)
+	if got, want := m.View().BackgroundColor, styles.DefaultTheme().Background; got != want {
+		t.Fatalf("BackgroundColor = %v, want the default canvas %v", got, want)
+	}
+	m.applyStyles(styles.New(styles.MonokaiTheme()))
+	if got, want := m.View().BackgroundColor, styles.MonokaiTheme().Background; got != want {
+		t.Errorf("after a live restyle BackgroundColor = %v, want monokai's canvas %v", got, want)
+	}
+}
+
+// TestZeroThemeLeavesTheTerminalAlone pins the degradation: a Theme with no
+// Background hands the terminal nil, which bubbletea renders as "reset to your
+// own default" rather than as black. That is kubecom's behavior before THEME-03
+// and the only sane reading of an unset role — a zero Theme must not repaint the
+// user's terminal in whatever a nil color coerces to.
+func TestZeroThemeLeavesTheTerminalAlone(t *testing.T) {
+	if got := sizedWith(t, WithTheme(styles.Theme{})).View().BackgroundColor; got != nil {
+		t.Errorf("a zero Theme set BackgroundColor = %v, want nil (reset to the terminal's own)", got)
+	}
+}
+
 // stripANSI removes SGR escape sequences so a comparison sees the glyphs alone.
 func stripANSI(s string) string {
 	var b strings.Builder

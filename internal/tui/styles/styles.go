@@ -28,7 +28,12 @@ type Theme struct {
 	// Name identifies the theme (for a future theme picker / config field).
 	Name string
 
-	// Base text colors.
+	// The canvas. Background is the color every cell kubecom does not explicitly
+	// paint takes: the root View hands it to the terminal as its default
+	// background for as long as kubecom holds the screen (D249), so panes,
+	// borders, gaps and the areas between them all sit on it rather than on
+	// whatever the terminal happened to be. Foreground is the text drawn there.
+	Background color.Color // app background (the terminal's default while running)
 	Foreground color.Color // default text
 	Subtle     color.Color // muted secondary text (help descriptions, hints)
 
@@ -117,6 +122,13 @@ type Styles struct {
 // New derives a Styles from a Theme. It is the only place a color becomes a
 // style, so the mapping from semantic role to concrete styling lives in exactly
 // one spot. Pure: same Theme in, equal Styles out; no globals touched.
+//
+// Theme.Background deliberately becomes no Style here. It is not a role a
+// component paints — it is the screen's default, applied once by the root View
+// (D249). A Styles field for it would invite exactly the per-component painting
+// that cannot work: lipgloss does not re-open an outer background after a nested
+// style's reset, so a frame wrapped in a background style comes back painted at
+// its margins and bare wherever a colored span already ran.
 func New(t Theme) Styles {
 	base := lipgloss.NewStyle().Foreground(t.Foreground)
 	pane := lipgloss.NewStyle().

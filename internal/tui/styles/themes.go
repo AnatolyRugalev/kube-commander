@@ -15,38 +15,45 @@ import (
 // separately-tuned palettes.
 type catppuccinFlavor struct {
 	text, overlay1, blue, surface0, surface1 string
-	rosewater, mantle, red, yellow, green    string
+	rosewater, base, mantle, red             string
+	yellow, green                            string
 }
 
 // The four flavors' values, transcribed from catppuccin/palette. Latte (the
-// light flavor) is deliberately absent — kubecom paints no app background, so a
-// light palette's dark text lands on whatever the terminal is (D236 pt 3).
+// light flavor) is still absent: THEME-03 gave kubecom an app background, which
+// removes D236 pt 3's blocker, but admitting a light palette also means retuning
+// the darkness guard, and that is the light slice's own work rather than a rider
+// on this one.
 var (
 	catppuccinFrappeFlavor = catppuccinFlavor{
 		text: "#c6d0f5", overlay1: "#838ba7", blue: "#8caaee",
 		surface0: "#414559", surface1: "#51576d", rosewater: "#f2d5cf",
-		mantle: "#292c3c", red: "#e78284", yellow: "#e5c890", green: "#a6d189",
+		base: "#303446", mantle: "#292c3c",
+		red: "#e78284", yellow: "#e5c890", green: "#a6d189",
 	}
 	catppuccinMacchiatoFlavor = catppuccinFlavor{
 		text: "#cad3f5", overlay1: "#8087a2", blue: "#8aadf4",
 		surface0: "#363a4f", surface1: "#494d64", rosewater: "#f4dbd6",
-		mantle: "#1e2030", red: "#ed8796", yellow: "#eed49f", green: "#a6da95",
+		base: "#24273a", mantle: "#1e2030",
+		red: "#ed8796", yellow: "#eed49f", green: "#a6da95",
 	}
 	catppuccinMochaFlavor = catppuccinFlavor{
 		text: "#cdd6f4", overlay1: "#7f849c", blue: "#89b4fa",
 		surface0: "#313244", surface1: "#45475a", rosewater: "#f5e0dc",
-		mantle: "#181825", red: "#f38ba8", yellow: "#f9e2af", green: "#a6e3a1",
+		base: "#1e1e2e", mantle: "#181825",
+		red: "#f38ba8", yellow: "#f9e2af", green: "#a6e3a1",
 	}
 )
 
 // catppuccinTheme maps a flavor onto kubecom's semantic roles under the given
-// name. The mapping is the family's, not the flavor's: text/overlay1 for the two
-// text weights, blue as the accent, surface0/surface1 for selection and chrome,
-// rosewater for headers, mantle behind the status bar, and the flavor's own
-// red/yellow/green for the semantic trio.
+// name. The mapping is the family's, not the flavor's: base as the canvas,
+// text/overlay1 for the two text weights, blue as the accent, surface0/surface1
+// for selection and chrome, rosewater for headers, mantle behind the status bar,
+// and the flavor's own red/yellow/green for the semantic trio.
 func catppuccinTheme(name string, f catppuccinFlavor) Theme {
 	return Theme{
 		Name:        name,
+		Background:  lipgloss.Color(f.base),
 		Foreground:  lipgloss.Color(f.text),
 		Subtle:      lipgloss.Color(f.overlay1),
 		Primary:     lipgloss.Color(f.blue),
@@ -89,6 +96,7 @@ func CatppuccinMochaTheme() Theme {
 func MonokaiTheme() Theme {
 	return Theme{
 		Name:        "monokai",
+		Background:  lipgloss.Color("#272822"),
 		Foreground:  lipgloss.Color("#f8f8f2"),
 		Subtle:      lipgloss.Color("#75715e"),
 		Primary:     lipgloss.Color("#66d9ef"),
@@ -112,6 +120,7 @@ func MonokaiTheme() Theme {
 func SolarizedDarkTheme() Theme {
 	return Theme{
 		Name:        "solarized-dark",
+		Background:  lipgloss.Color("#002b36"), // base03
 		Foreground:  lipgloss.Color("#839496"), // base0
 		Subtle:      lipgloss.Color("#586e75"), // base01
 		Primary:     lipgloss.Color("#268bd2"), // blue
@@ -137,6 +146,7 @@ func SolarizedDarkTheme() Theme {
 func DraculaTheme() Theme {
 	return Theme{
 		Name:        "dracula",
+		Background:  lipgloss.Color("#282a36"), // Background
 		Foreground:  lipgloss.Color("#f8f8f2"), // Foreground
 		Subtle:      lipgloss.Color("#6272a4"), // Comment
 		Primary:     lipgloss.Color("#bd93f9"), // Purple
@@ -165,6 +175,7 @@ func DraculaTheme() Theme {
 func GruvboxDarkTheme() Theme {
 	return Theme{
 		Name:        "gruvbox-dark",
+		Background:  lipgloss.Color("#282828"), // dark0 (bg0)
 		Foreground:  lipgloss.Color("#ebdbb2"), // light1 (fg1)
 		Subtle:      lipgloss.Color("#928374"), // gray_245
 		Primary:     lipgloss.Color("#83a598"), // bright_blue
@@ -191,6 +202,7 @@ func GruvboxDarkTheme() Theme {
 func NordTheme() Theme {
 	return Theme{
 		Name:        "nord",
+		Background:  lipgloss.Color("#2e3440"), // nord0
 		Foreground:  lipgloss.Color("#d8dee9"), // nord4
 		Subtle:      lipgloss.Color("#4c566a"), // nord3
 		Primary:     lipgloss.Color("#88c0d0"), // nord8
@@ -219,6 +231,7 @@ func NordTheme() Theme {
 func RosePineTheme() Theme {
 	return Theme{
 		Name:        "rose-pine",
+		Background:  lipgloss.Color("#191724"), // base
 		Foreground:  lipgloss.Color("#e0def4"), // text
 		Subtle:      lipgloss.Color("#908caa"), // subtle
 		Primary:     lipgloss.Color("#c4a7e7"), // iris
@@ -245,6 +258,7 @@ func RosePineTheme() Theme {
 func TokyoNightTheme() Theme {
 	return Theme{
 		Name:        "tokyo-night",
+		Background:  lipgloss.Color("#1a1b26"), // bg
 		Foreground:  lipgloss.Color("#c0caf5"), // fg
 		Subtle:      lipgloss.Color("#565f89"), // comment
 		Primary:     lipgloss.Color("#7aa2f7"), // blue

@@ -45,10 +45,18 @@ keys:
 | `solarized-dark` | Solarized's dark variant |
 | `tokyo-night` | Tokyo Night's `night` style — the darkest of its three |
 
-All built-ins are **dark** palettes: kubecom draws text over your terminal's own
-background rather than painting one, so a light palette (Catppuccin Latte,
-Solarized Light) would be unreadable on a dark terminal. Light themes wait on
-kubecom painting its own background.
+A theme now paints the **whole screen**, not just the text on it: while kubecom is
+running it sets your terminal's background to the palette's own, and restores it on
+exit — including while an editor or a shell is suspended in front of it. So the
+panes, their borders and the space between them all sit on the palette rather than
+on whatever your terminal happened to be. If your terminal ignores the request
+(some multiplexers filter it), kubecom looks exactly as it did before: text on your
+own background.
+
+All built-ins are still **dark** palettes. A light one (Catppuccin Latte, Solarized
+Light) is now possible and is not shipped yet — it needs the terminals that ignore
+the background request thought through first, since there its dark text would land
+on your dark background.
 
 Ported palettes keep their upstream names and attribution: Catppuccin
 (MIT, © 2021 Catppuccin), Dracula (MIT, © 2023 Dracula Theme), gruvbox
@@ -56,7 +64,7 @@ Ported palettes keep their upstream names and attribution: Catppuccin
 the licence lives), Monokai, Nord (MIT, © 2016-present Sven Greb), Rosé Pine
 (MIT, © 2023 Rosé Pine), Solarized (MIT, © 2011 Ethan Schoonover) and Tokyo
 Night (**Apache-2.0**, folke). Each palette is kubecom's reading of the scheme
-onto its own thirteen roles, not a claim to be the upstream theme.
+onto its own fourteen roles, not a claim to be the upstream theme.
 
 The name is matched ignoring case and surrounding space, but it is never guessed
 at: an unknown name launches on the default theme and shows a brief startup notice

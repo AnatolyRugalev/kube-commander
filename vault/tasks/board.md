@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-08 — THEME-02 done: five more palettes ported from their upstream data files, taking the built-in registry to eleven (D248). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-08 — THEME-03 done: a theme now paints the whole screen, as the terminal's own background for as long as kubecom runs (D249). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **THEME-03** Give `Theme` a `Background` role and have the panes paint it, so a light
-      palette is possible
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-08
+_(none)_
 
 ## Blocked
 
@@ -351,33 +349,32 @@ Feedback `2026-08-06-more-themes`: ship ~10 built-in palettes, Catppuccin among 
 **check each one's licence rather than assuming MIT**. THEME-01 did the survey — the
 candidates, their licence files and the two that are not plain MIT are in
 `vault/knowledge/themes.md` — and landed the Catppuccin dark flavors, taking the registry
-from 3 to 6. **THEME-02 closed the count** at eleven (D248), so the palette half of the
-feedback is met and only THEME-03, the light-theme precondition, is left.
+from 3 to 6. **THEME-02 closed the count** at eleven (D248), and **THEME-03 landed the
+canvas** (D249), so the feedback is met in full and what is left is the light palettes it
+unblocked.
 
-Two constraints the remaining slices inherit (**D236** pt 2/3): **`default` and
+Two constraints the remaining slices inherit (**D236** pt 2, **D249**): **`default` and
 `catppuccin-frappe` are one palette under two names** (kubecom's default has always been
 Frappé and D169 pt 1 will not let the name move) and it is the registry's only permitted
-duplicate; and **no light palette lands until kubecom paints an app background** — today it
-sets one on three things only, so Latte's dark text would render on whatever the terminal
-already is.
+duplicate; and **no component paints the canvas** — `Theme.Background` reaches the screen
+once, as the root `View`'s terminal background, because lipgloss will not re-open an outer
+background after a nested reset and half the screen is nobody's component anyway.
 
 - [x] **THEME-02** The five remaining schemes ported; registry at eleven — done 2026-08-08 (D248)
-- [ ] **THEME-03** Give `Theme` a `Background` role and have the panes paint it, so a light
-      palette is possible
-      status: todo | owner: — | added: 2026-08-06
-      notes: The precondition D236 pt 3 names, the only thing blocking `catppuccin-latte`
-      / `solarized-light`, and now **the whole of what is left on this line** — THEME-02
-      closed the palette count at eleven, which is the feedback's "~10". By D169 pt 3 the
-      new role must be set in *every* built-in in the same leg
-      (`TestBuiltinThemesAreComplete` enforces it) and the panes must actually render it —
-      a role nothing paints is worse than no role. Check what a painted background does to
-      the overlay/help surfaces and to a terminal whose own background already matches.
-      One thing THEME-02 added that this slice must handle rather than route around:
-      `TestBuiltinThemesAreDarkAndLegible` now *measures* "is it dark?" (chrome luminance
-      ≤ 0.2, text ≥ 4.5:1), so admitting a light palette means changing that test
-      deliberately — to "chrome and text sit on opposite sides of the same background" —
-      never deleting it (D248 pt 1). Ship the light palettes as a follow-up slice, not as
-      a rider.
+- [x] **THEME-03** `Theme.Background` painted by the root View — done 2026-08-08 (D249)
+- [ ] **THEME-04** The light palettes, and what kubecom does where it cannot paint
+      status: todo | owner: — | added: 2026-08-08
+      notes: What THEME-03 unblocked (D249 pt 4) and what D236 pt 3 was always waiting for:
+      `catppuccin-latte` and `solarized-light`, both already surveyed in
+      `vault/knowledge/themes.md`. The values are the easy half. The slice's real work is
+      the case D249 pt 3 names — a terminal that filters the background escape (a
+      multiplexer without passthrough) renders a light palette as dark-on-dark, which
+      looks like a kubecom bug — so decide and record what happens there: refuse the
+      palette, warn at startup, or detect. Human task `2026-08-08-app-background-look`
+      pt 6 is the observation that should inform it; carry it forward rather than wait on
+      it. Then retune `TestBuiltinThemesAreDarkAndLegible` **deliberately** to "chrome and
+      text sit on opposite sides of the same background" — never delete it (D248 pt 1) —
+      and drop the two name-specific latte guards it makes redundant.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -610,6 +607,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-03** `Theme.Background`, set in all eleven built-ins and painted by the root View as the terminal's own background — done 2026-08-08 (D249)
 
 - [x] **THEME-02** `dracula`, `gruvbox-dark`, `nord`, `rose-pine` and `tokyo-night` ported from their upstream data files, taking the built-in registry to eleven and meeting the feedback's "~10" — done 2026-08-08 (D248)
 
