@@ -2,6 +2,9 @@
 
 - Created: 2026-07-30
 - By: M5-01a
+- Amended: 2026-08-08 by LOGS-SEL-03 — item 6 added (the cursor bar under a `/` highlight).
+  It needs no crash-looper at all, only a pod with a few hundred log lines, so it is the
+  cheapest thing here: do it on whatever pod you open first, before the rest.
 - Priority: normal
 - Blocks: none (advisory — every claim below is covered by hermetic tests against a fake
   streamer; what a sandbox cannot supply is a real kubelet serving a real terminated
@@ -47,6 +50,22 @@ press `Ctrl+P`.
    (e.g. the query from the running instance is noise in the dead one), that is a taste
    call only a user can make, and reverting it is a one-line change (`Restream` →
    `Reset`).
+6. **Can you tell the cursor from a match, on the same line?** (Added 2026-08-08 by
+   LOGS-SEL-03 — the eye half of a question the rest of which was settled by measurement.)
+   Any pod with a few hundred lines will do. Open `L`, type `/` and a query that hits often
+   (a word in most lines), then move `j`/`k` onto a matching line and press `v` to start a
+   selection. On that one line there are now two backgrounds: the selection bar under the
+   whole line, and the yellow match highlight inside it. **Are they two things, or one
+   wash?** kubecom deliberately keeps both — blanking the highlight on the cursor's line
+   would hide the answer on the line you are reading (D252 pt 1), and the ratio between the
+   two backgrounds measures 4.05–9.89:1 across the dark palettes, which is why the
+   measurement was taken as the answer. What it cannot tell you is whether it *reads* that
+   way at your terminal's contrast and font. If one swallows the other, say which, and on
+   which theme — the fix is a role's colors, not the design.
+   - **Not on `catppuccin-latte` or `solarized-light`.** Both are known-bad here until
+     **THEME-05** lands: the highlight is near-white on yellow (2.15:1 / 2.62:1), which is
+     a separate defect that would tell you nothing about this question. Use the default or
+     any other dark palette.
 
 ## Result
 

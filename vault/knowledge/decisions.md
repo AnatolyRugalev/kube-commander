@@ -7055,3 +7055,39 @@ screen (D249) and THEME-04a made kubecom report the case where that paint does n
    ladder rather than shades of a dark one. A future leg that wants to retune a role for
    the light flavor alone is proposing to split the family; it must retune the mapping for
    all four, or say why the family is no longer one.
+
+## D252 — the cursor bar and the match highlight share a line; the yank gesture set is closed (2026-08-08, LOGS-SEL-03)
+
+The two questions feedback `2026-08-07-logs-selection-and-yank` left open, answered
+so a later leg stops re-deriving them.
+
+1. **They coexist; neither yields while visual mode is active.** D242 pt 3's answer
+   stands, and is now measured rather than argued: `Match` paints its own background
+   *inside* the `Selection` bar (`logsview.highlight` takes the bar as `base` and
+   renders the matched spans over it), and across the eleven dark built-ins the two
+   backgrounds are separated by **4.05:1 to 9.89:1** — the bar and the highlight are
+   two visibly different things, not one wash. So a later leg must **not** blank one
+   of them on the cursor's line: in a grep the match is *why* the line is on screen,
+   and the bar is where the reader is. This is the table's rule (D239) holding in the
+   logs view for the same reason.
+
+2. **`y` on the cursor line and `gg v G y` for the buffer are the whole gesture set.**
+   No `logs.yankAll` action: it would be a second name for a composition that already
+   works and that the README already teaches, and "everything visible" is ambiguous
+   the moment `w` wraps a line or `/` narrows the set — screen rows are not log lines
+   (D242 pt 2). If a dogfood ever asks for it, it must be defined over *shown log
+   lines* and inherit the buffer cap (D245), never over what the viewport happens to
+   show.
+
+3. **The `Match` pair is body text, and is held to the body floor.** The measurement
+   that answered pt 1 found the role itself is mapped for a dark canvas: `Match` is
+   `StatusBarBg` on `Warn` (`styles.New`), which on the two light palettes admitted at
+   THEME-04b renders near-white on mid yellow — **2.15:1** (`catppuccin-latte`) and
+   **2.62:1** (`solarized-light`) — and on Latte leaves the highlight **1.70:1** from
+   the bar it sits in. A matched span carries the log's own text, so it is body text
+   under D251 pt 1's **4.5:1**, on the same argument that floor already rests on. No
+   palette-native shade clears it (Latte's best is `Foreground` at 3.05), so **THEME-05**
+   must change the *mapping* — it may not swap in another existing role and call it
+   fixed, and it may not lower the floor to fit. The same style paints the table filter
+   (FILT-02) and cluster-search hits (SEARCH-06), so the fix is one place for three
+   surfaces.

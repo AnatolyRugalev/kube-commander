@@ -225,3 +225,44 @@ rather than a mapping error (Latte's rosewater is a pale peach; it is what Latte
 roles — nord's subtle is 1.69:1. Nobody should "fix" it by substituting a value
 Catppuccin did not publish. If it reads badly in practice the honest fix is a
 different *role* mapping for the family, applied to all four flavors.
+
+## The `Match` highlight is mapped for a dark canvas (measured 2026-08-08, LOGS-SEL-03)
+
+`styles.New` builds `Match` as **`StatusBarBg` on `Warn`** — a dark chrome shade on
+the palette's yellow. That reads as "dark text on a highlighter pen" only while
+`StatusBarBg` is dark, which was true of every built-in until THEME-04b. Measured
+across the registry (contrast ratios; the bar is `Selection`, the canvas is
+`Background`):
+
+| theme | matched text on its highlight | highlight vs the cursor bar | highlight vs the canvas |
+|---|---|---|---|
+| catppuccin-mocha | 13.81 | 9.89 | 12.91 |
+| catppuccin-macchiato | 11.16 | 7.76 | 10.20 |
+| rose-pine | 10.06 | 6.38 | 10.77 |
+| default / catppuccin-frappe | 8.55 | 5.85 | 7.62 |
+| dracula | 8.19 | 8.19 | 12.74 |
+| monokai | 7.69 | 6.47 | 10.44 |
+| gruvbox-dark | 6.84 | 5.20 | 8.69 |
+| tokyo-night | 6.72 | 4.47 | 8.55 |
+| nord | 6.44 | 5.52 | 8.00 |
+| solarized-dark | 4.05 | 4.05 | 4.68 |
+| **solarized-light** | **2.62** | **2.62** | **2.98** |
+| **catppuccin-latte** | **2.15** | **1.70** | **2.31** |
+
+The middle column is the one LOGS-SEL-03 asked about and it is comfortable on every
+dark palette: a highlight inside the cursor bar stays a distinguishable second thing,
+which is why D252 pt 1 keeps both. The first column is the defect the measurement
+found — on the two light palettes the matched span is near-white text on mid yellow,
+and on Latte the highlight is also within 1.70:1 of the bar, so under the cursor it
+nearly disappears into it. `solarized-dark` at 4.05 is the same low-contrast-by-design
+scheme that forced D251 pt 2, and is the registry's edge case rather than its norm.
+
+**No shade in either light palette fixes it in place.** Measured against that palette's
+own `Warn`, the best available candidates are Latte `Foreground` **3.05** and
+Solarized Light `StatusBarFg` **4.05** — both under the 4.5 the body pair clears, because
+these schemes' yellows sit mid-luminance and a light palette has nothing dark enough
+above them. So **THEME-05** has to change the mapping itself (a derived shade, or marking
+a match by weight rather than paint where paint cannot carry it), not pick a different
+role — and per D252 pt 3 it may not lower the floor instead. Whatever it does lands in
+one place and fixes three surfaces: the logs grep, the table filter (FILT-02) and
+cluster-search hits (SEARCH-06) all render through `styles.Match`.

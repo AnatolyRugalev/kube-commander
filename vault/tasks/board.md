@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-08 — THEME-04b done: the two light palettes ship and the registry's admission guard now asks for coherence rather than darkness (D251), closing the THEME line. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-08
-      notes: See the LOGS-SEL section below for the two questions.
+_(none)_
 
 ## Blocked
 
@@ -171,7 +169,7 @@ bounded (D230) — D245 pt 1 is, and it is the constraint the two constants now 
 
 - [x] **LOGS-07** Logs buffer bounded at 10 000 lines, trimmed from the top — done 2026-08-07 (D245)
 
-### Logs selection and yank (LOGS-SEL — feedback-driven)
+### Logs selection and yank (LOGS-SEL — feedback-driven) — closed at LOGS-SEL-03
 Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
 there is no way to say "this line" and therefore no way to copy one. The only route today is
 `M` (drop mouse capture) and the terminal's own select-to-copy, which costs the mouse, cannot
@@ -195,16 +193,24 @@ the cursor counts log lines, it addresses the *shown* set with `shownIdx` as the
 back to raw text, Selection and Match share the cursor's line, the bar is derived on the way
 to the viewport rather than cached into `shownLines`, and following owns the cursor.
 
-- [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-08
-      notes: Cheap follow-ups, unblocked by LOGS-SEL-02 but worth doing only once it has
-      been used against a real cluster, because both
-      are legibility judgements a test cannot make. (1) Whether the selection bar and the `/`
-      match highlight stay legible together on one line or one must yield while visual mode
-      is active — D242 pt 3 says they coexist, on the same argument D239 made for the table,
-      and this is the check of it. (2) Whether a "yank everything visible" shortcut earns a
-      binding or `gg v G y` is enough. The third open question — what happens at the top of
-      the buffer while lines stream in above — is answered by LOGS-07's cap, not here.
+LOGS-SEL-03 closed both of the questions the feedback left, and **this line is now closed**
+(**D252**). They were written as legibility judgements only a dogfood could make, which is
+why two legs skipped them; the first is in fact *measurable* — a contrast between two
+backgrounds — and measuring it is what answered it. (1) The bar and the `/` highlight
+**coexist**, neither yields: `Match` paints inside the bar and the two backgrounds are
+4.05–9.89:1 apart across the eleven dark built-ins, so blanking either on the cursor's line
+is forbidden rather than merely unnecessary. (2) **No yank-all binding** — `y` already
+copies the cursor's line, `gg v G y` the buffer, and "everything visible" is ambiguous once
+`w` wraps or `/` narrows. The third question the feedback raised (the top of the buffer
+while lines stream in above) was already answered by LOGS-07's cap. What is left for a
+human is only the eye: item 6 of `human-tasks/2026-07-30-previous-logs-crashloop-dogfood`.
+
+The same measurement found a **defect it did not cause**: `styles.Match` is `StatusBarBg`
+on `Warn`, mapped when every palette was dark, and on the two light ones admitted at
+THEME-04b a matched span renders near-white on yellow (2.15:1, 2.62:1). That is **THEME-05**
+below, and D252 pt 3 holds it to the body-text floor.
+
+- [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 
 ### Diagnostics (DIAG — feedback-driven) — closed
 Feedback `2026-07-29-external-secrets-crd-error` ("need to find the actual error"): opening
@@ -353,8 +359,9 @@ candidates, their licence files and the two that are not plain MIT are in
 `vault/knowledge/themes.md` — and landed the Catppuccin dark flavors, taking the registry
 from 3 to 6. **THEME-02 closed the count** at eleven (D248), **THEME-03 landed the canvas**
 (D249), **THEME-04a made kubecom report a canvas that did not arrive** (D250) and
-**THEME-04b landed the two light palettes** (D251), taking the registry to thirteen. **This
-line is closed** — the feedback is met in full and every slice it opened is done. A further
+**THEME-04b landed the two light palettes** (D251), taking the registry to thirteen. The
+feedback that opened this line is met in full, and the line **reopened at THEME-05**: the
+first light palettes exposed a role still mapped for a dark canvas. A further
 palette (`gruvbox-light` is the obvious one) is a values-only leg against the criterion D251
 pt 1 now states; it needs no new decision and should be raised as its own item.
 
@@ -375,6 +382,23 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
+- [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
+      status: todo | owner: — | added: 2026-08-08
+      notes: Found by measurement in LOGS-SEL-03, not by a dogfood. `styles.New` builds
+      `Match` as `StatusBarBg` on `Warn` — right while every built-in was dark, wrong since
+      THEME-04b: on `catppuccin-latte` a matched span is near-white on mid yellow at
+      **2.15:1** and sits **1.70:1** from the `Selection` bar it can appear inside, on
+      `solarized-light` **2.62:1**. D252 pt 3 fixes the target: a matched span carries the
+      log's own text, so it is body text under D251 pt 1's 4.5:1 floor, which this slice may
+      not lower. Swapping in another *existing* role does not reach it either — the measured
+      best per palette is Latte `Foreground` 3.05 and Solarized Light `StatusBarFg` 4.05
+      (the candidate table is in `vault/knowledge/themes.md`) — so the mapping itself has to
+      change: a shade derived from the palette, or marking a match by weight (bold/underline)
+      where paint cannot carry it, chosen once for all thirteen rather than per palette. One
+      style, three surfaces — the logs grep (D242), the table filter (FILT-02) and
+      cluster-search hits (SEARCH-06) — so land the guard next to the existing contrast tests
+      in `internal/tui/styles`, and keep D252 pt 1: the highlight must stay distinguishable
+      from the bar, not merely legible on the canvas.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -607,6 +631,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 
 - [x] **THEME-04b** `catppuccin-latte` and `solarized-light` ported, taking the registry to thirteen, with the admission guard retuned from "dark" to "chrome and text on opposite sides of one canvas" — done 2026-08-08 (D251)
 
