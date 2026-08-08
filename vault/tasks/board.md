@@ -7,7 +7,8 @@ _Last updated: 2026-08-08 — THEME-03 done: a theme now paints the whole screen
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-04a** Notice when the canvas did not land, and say so
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
 
 ## Blocked
 
@@ -362,19 +363,28 @@ background after a nested reset and half the screen is nobody's component anyway
 
 - [x] **THEME-02** The five remaining schemes ported; registry at eleven — done 2026-08-08 (D248)
 - [x] **THEME-03** `Theme.Background` painted by the root View — done 2026-08-08 (D249)
-- [ ] **THEME-04** The light palettes, and what kubecom does where it cannot paint
-      status: todo | owner: — | added: 2026-08-08
-      notes: What THEME-03 unblocked (D249 pt 4) and what D236 pt 3 was always waiting for:
-      `catppuccin-latte` and `solarized-light`, both already surveyed in
-      `vault/knowledge/themes.md`. The values are the easy half. The slice's real work is
-      the case D249 pt 3 names — a terminal that filters the background escape (a
-      multiplexer without passthrough) renders a light palette as dark-on-dark, which
-      looks like a kubecom bug — so decide and record what happens there: refuse the
-      palette, warn at startup, or detect. Human task `2026-08-08-app-background-look`
-      pt 6 is the observation that should inform it; carry it forward rather than wait on
-      it. Then retune `TestBuiltinThemesAreDarkAndLegible` **deliberately** to "chrome and
-      text sit on opposite sides of the same background" — never delete it (D248 pt 1) —
-      and drop the two name-specific latte guards it makes redundant.
+THEME-04 was **split** (2026-08-08): D249 pt 4 puts the decision — what kubecom does where
+it cannot paint — *before* the values, and the two halves are separately green, so the
+mechanism is **04a** and the palettes are **04b**. 04a is not speculative work for a palette
+that does not exist yet: the same mismatch is live today in the other direction, since ten
+dark palettes on a *light* terminal that filters the escape are dark-on-dark right now.
+
+- [ ] **THEME-04a** Notice when the canvas did not land, and say so
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
+      notes: The case D249 pt 3 names — a terminal that filters the background escape (a
+      multiplexer without passthrough) leaves kubecom rendering on whatever the terminal
+      already is. Decide and record which of refuse / warn / detect kubecom does. Human
+      task `2026-08-08-app-background-look` pt 6 is the observation that should inform it;
+      carry it forward rather than wait on it.
+- [ ] **THEME-04b** The light palettes
+      status: todo | owner: — | added: 2026-08-08 | blocked-on: THEME-04a
+      notes: `catppuccin-latte` and `solarized-light`, both already surveyed in
+      `vault/knowledge/themes.md` — values transcribed from the upstream data file (D236
+      pt 1), attributed in the constructor, into a kubecom that already handles 04a's
+      mismatch. Then retune `TestBuiltinThemesAreDarkAndLegible` **deliberately** to
+      "chrome and text sit on opposite sides of the same background" — never delete it
+      (D248 pt 1) — and drop the two name-specific latte guards it makes redundant.
+      `wantBuiltins`, the docs table and both "Eleven are built in" lines move with it.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
