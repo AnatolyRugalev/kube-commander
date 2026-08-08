@@ -7,7 +7,8 @@ _Last updated: 2026-08-08 — THEME-04a done: kubecom asks the terminal what its
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-04b** The light palettes
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
 
 ## Blocked
 
@@ -370,7 +371,7 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [ ] **THEME-04b** The light palettes
-      status: todo | owner: — | added: 2026-08-08
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
       notes: `catppuccin-latte` and `solarized-light`, both already surveyed in
       `vault/knowledge/themes.md` — values transcribed from the upstream data file (D236
       pt 1), attributed in the constructor, into a kubecom that already handles 04a's
