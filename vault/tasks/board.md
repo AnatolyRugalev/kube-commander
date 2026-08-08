@@ -3,13 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-07 — AUTH-07 done: fd 2 points at the log for the life of the TUI, so nothing but kubecom paints on the terminal (D247). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-08 — THEME-02 done: five more palettes ported from their upstream data files, taking the built-in registry to eleven (D248). Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **THEME-02** Port the five remaining schemes: `dracula`, `gruvbox-dark`, `nord`,
-      `rose-pine`, `tokyo-night`
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-08
+_(none)_
 
 ## Blocked
 
@@ -351,7 +349,8 @@ Feedback `2026-08-06-more-themes`: ship ~10 built-in palettes, Catppuccin among 
 **check each one's licence rather than assuming MIT**. THEME-01 did the survey — the
 candidates, their licence files and the two that are not plain MIT are in
 `vault/knowledge/themes.md` — and landed the Catppuccin dark flavors, taking the registry
-from 3 to 6.
+from 3 to 6. **THEME-02 closed the count** at eleven (D248), so the palette half of the
+feedback is met and only THEME-03, the light-theme precondition, is left.
 
 Two constraints the remaining slices inherit (**D236** pt 2/3): **`default` and
 `catppuccin-frappe` are one palette under two names** (kubecom's default has always been
@@ -360,26 +359,23 @@ duplicate; and **no light palette lands until kubecom paints an app background**
 sets one on three things only, so Latte's dark text would render on whatever the terminal
 already is.
 
-- [ ] **THEME-02** Port the five remaining schemes: `dracula`, `gruvbox-dark`, `nord`,
-      `rose-pine`, `tokyo-night`
-      status: todo | owner: — | added: 2026-08-06
-      notes: Takes the registry to 11, which is the feedback's "~10". Licences already
-      verified (`knowledge/themes.md`) — attribute each in its constructor doc comment per
-      D236 pt 1, and note that **Tokyo Night is Apache-2.0** and **gruvbox upstream has no
-      licence file** (cite the author's community fork). Transcribe from each project's own
-      data file, not a port. Same thirteen roles, same shape as `catppuccinTheme`; map the
-      status bar onto the scheme's *second*-darkest background, not its base (a bar that
-      matches the terminal background is invisible). README's theme table is hand-written
-      and lists every name — update it in the same leg. Splittable if the diff runs long.
+- [x] **THEME-02** The five remaining schemes ported; registry at eleven — done 2026-08-08 (D248)
 - [ ] **THEME-03** Give `Theme` a `Background` role and have the panes paint it, so a light
       palette is possible
       status: todo | owner: — | added: 2026-08-06
-      notes: The precondition D236 pt 3 names, and the only thing blocking `catppuccin-latte`
-      / `solarized-light`. By D169 pt 3 the new role must be set in *every* built-in in the
-      same leg (`TestBuiltinThemesAreComplete` enforces it) and the panes must actually
-      render it — a role nothing paints is worse than no role. Check what a painted
-      background does to the overlay/help surfaces and to a terminal whose own background
-      already matches. Ship the light palettes as a follow-up slice, not as a rider.
+      notes: The precondition D236 pt 3 names, the only thing blocking `catppuccin-latte`
+      / `solarized-light`, and now **the whole of what is left on this line** — THEME-02
+      closed the palette count at eleven, which is the feedback's "~10". By D169 pt 3 the
+      new role must be set in *every* built-in in the same leg
+      (`TestBuiltinThemesAreComplete` enforces it) and the panes must actually render it —
+      a role nothing paints is worse than no role. Check what a painted background does to
+      the overlay/help surfaces and to a terminal whose own background already matches.
+      One thing THEME-02 added that this slice must handle rather than route around:
+      `TestBuiltinThemesAreDarkAndLegible` now *measures* "is it dark?" (chrome luminance
+      ≤ 0.2, text ≥ 4.5:1), so admitting a light palette means changing that test
+      deliberately — to "chrome and text sit on opposite sides of the same background" —
+      never deleting it (D248 pt 1). Ship the light palettes as a follow-up slice, not as
+      a rider.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -612,6 +608,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-02** `dracula`, `gruvbox-dark`, `nord`, `rose-pine` and `tokyo-night` ported from their upstream data files, taking the built-in registry to eleven and meeting the feedback's "~10" — done 2026-08-08 (D248)
 
 - [x] **AUTH-07** fd 2 points at the log file for the life of the TUI, and back at the terminal only inside a suspend, so a credential plugin's stderr can no longer paint over the panes — done 2026-08-07 (D247)
 

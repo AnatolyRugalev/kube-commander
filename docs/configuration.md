@@ -29,7 +29,7 @@ keys:
 
 ## Themes
 
-`theme:` picks the palette kubecom renders with. Six are built in:
+`theme:` picks the palette kubecom renders with. Eleven are built in:
 
 | Name | |
 |------|--|
@@ -37,8 +37,13 @@ keys:
 | `catppuccin-frappe` | Catppuccin's mid-dark flavor — the same palette as `default` |
 | `catppuccin-macchiato` | Catppuccin, darker and cooler than Frappé |
 | `catppuccin-mocha` | Catppuccin's darkest flavor |
+| `dracula` | Dracula: high-contrast, purple accent and a pink header |
+| `gruvbox-dark` | gruvbox's dark variant at medium contrast — warm, retro, low-glare |
 | `monokai` | the classic warm dark palette, cyan accent |
+| `nord` | Nord's arctic blue-greys, muted throughout |
+| `rose-pine` | Rosé Pine's `main` variant: muted plum with a rose header |
 | `solarized-dark` | Solarized's dark variant |
+| `tokyo-night` | Tokyo Night's `night` style — the darkest of its three |
 
 All built-ins are **dark** palettes: kubecom draws text over your terminal's own
 background rather than painting one, so a light palette (Catppuccin Latte,
@@ -46,7 +51,12 @@ Solarized Light) would be unreadable on a dark terminal. Light themes wait on
 kubecom painting its own background.
 
 Ported palettes keep their upstream names and attribution: Catppuccin
-(MIT, © 2021 Catppuccin), Monokai, Solarized (MIT, © 2011 Ethan Schoonover).
+(MIT, © 2021 Catppuccin), Dracula (MIT, © 2023 Dracula Theme), gruvbox
+(MIT, © 2018 Pavel Pertsev — from the author's community fork, which is where
+the licence lives), Monokai, Nord (MIT, © 2016-present Sven Greb), Rosé Pine
+(MIT, © 2023 Rosé Pine), Solarized (MIT, © 2011 Ethan Schoonover) and Tokyo
+Night (**Apache-2.0**, folke). Each palette is kubecom's reading of the scheme
+onto its own thirteen roles, not a claim to be the upstream theme.
 
 The name is matched ignoring case and surrounding space, but it is never guessed
 at: an unknown name launches on the default theme and shows a brief startup notice

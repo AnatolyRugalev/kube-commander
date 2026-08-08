@@ -6897,3 +6897,41 @@ What a later leg must not silently contradict:
    `internal/` writes to stdout/stderr, and the log is reached through the injected
    `slog.Logger` (D159). The redirect is a backstop for the libraries kubecom does not
    control, not a channel kubecom may start using.
+
+## D248 — "Dark" is a measured admission criterion, and a bare scheme name means that scheme's default variant (2026-08-08, THEME-02)
+
+THEME-02 took the registry from six built-ins to eleven (`dracula`, `gruvbox-dark`,
+`nord`, `rose-pine`, `tokyo-night`, each transcribed from the upstream data file
+`vault/knowledge/themes.md` names). Two of the things it settled are constraints
+rather than descriptions:
+
+1. **D236 pt 3's "is it dark?" now has a number, and THEME-03 owes it an argument.**
+   Until this leg the criterion was prose and nothing enforced it, so a light palette
+   could have joined the registry and rendered its dark text over whatever the terminal
+   already is. `TestBuiltinThemesAreDarkAndLegible` fixes both halves: every built-in's
+   `Selection` and `StatusBarBg` sit at relative luminance ≤ 0.2, and the text kubecom
+   paints on each contrasts at least 4.5:1 (WCAG AA; solarized-dark, the registry's
+   lowest-contrast member by design, sits at 4.86). The floor is a *guard*, not a
+   ceiling on palettes: THEME-03 adds a `Background` role and then light palettes become
+   possible, and the leg that lands them has to **change this test deliberately** —
+   relaxing the luminance bound to "chrome and text are on opposite sides of the same
+   background" — rather than delete it. A registry that admits both polarities still
+   needs to know which one each member is.
+
+2. **A bare scheme name means the scheme's own default variant; a suffix is for peers.**
+   D236 pt 4 says a flavor family is `<scheme>-<flavor>`, and that holds where the
+   variants are peers with no default among them (`catppuccin-*`) or where the split is
+   dark/light (`gruvbox-dark`, `solarized-dark`, which D169 pt 1 required so a light port
+   lands beside them). It does **not** hold where the scheme has a canonical variant the
+   bare name already means: `rose-pine` is Rosé Pine's `main`, `tokyo-night` is Tokyo
+   Night's `night`. The consequence is the part a later leg must not get wrong — adding
+   `rose-pine-moon` or `tokyo-night-storm` is adding a *new* name beside the existing
+   one, never renaming `rose-pine` to `rose-pine-main` to make the family look tidy.
+   A theme name is persisted in `config.yaml` and renaming one is a migration (D169 pt 1).
+
+3. **The status bar takes the first background shade above the scheme's base.** Applied
+   five times here and worth stating once: the terminal's own background is probably the
+   scheme's base, so a bar painted in `base` is invisible. Nord documents the exact shade
+   for this (`nord1`, "a lighter background color for UI elements like status bars") and
+   the others follow the same step. Catppuccin goes the other way — *darker*, to `mantle`
+   — and that stays as it is; the constraint is "not the base", not a direction.

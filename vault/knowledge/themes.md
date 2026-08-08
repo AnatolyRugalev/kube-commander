@@ -57,8 +57,18 @@ Shipped after THEME-01 (6): `default`, `catppuccin-frappe`,
 `catppuccin-macchiato`, `catppuccin-mocha`, `monokai`, `solarized-dark`.
 `default` **is** the Frappé palette under its own name (D236 pt 2).
 
-Queued for THEME-02 (→ 11): `dracula`, `gruvbox-dark`, `nord`, `rose-pine`,
-`tokyo-night`.
+**Shipped after THEME-02 (11)**: the five queued ones landed —
+`dracula`, `gruvbox-dark`, `nord`, `rose-pine`, `tokyo-night` — each transcribed
+from the upstream data file named under "Where the values came from" below, each
+attributed in its constructor's doc comment, and each held to the registry by
+`TestPortedPalettesCarryTheirAttribution`. The feedback's "~10" is met.
+
+Two of the five are named without a variant suffix, which is deliberate and is
+D248 pt 2: `rose-pine` is Rosé Pine's `main` and `tokyo-night` is Tokyo Night's
+`night`, because in both schemes the bare name already means that variant.
+`gruvbox-dark` keeps its suffix because the dark/light split has no default
+(same reason as `solarized-dark`, D169 pt 1). Adding `rose-pine-moon` later is a
+*new* name beside `rose-pine`, never a rename of it.
 
 ## The light-theme wall (why Latte and solarized-light are not here)
 
@@ -87,3 +97,27 @@ The one transcription worth double-checking on any future port is the **status
 bar background**: kubecom uses the flavor's *mantle* (one step darker than
 `base`), which reads as a bar against the terminal. Using `base` makes the bar
 vanish on a terminal already set to the scheme's background.
+
+THEME-02's five ports go the *other* way from Catppuccin — the first background
+shade **above** base (`nord1`, gruvbox `dark1`, rose-pine `surface`, tokyo-night
+`bg_highlight`, dracula "Current Line") — which is also what `monokai` and
+`solarized-dark` already did. Either direction is fine; the constraint is only
+"not the base" (D248 pt 3). Nord is the useful precedent to cite, because
+upstream documents `nord1` as exactly this: "a lighter background color for UI
+elements like status bars".
+
+Dracula is the one scheme whose published palette has a **single** shade above
+the background, so `Selection` and `StatusBarBg` share it. That is not an
+oversight — solarized-dark already does the same — and `TestBuiltinThemesRenderDistinctly`
+still passes because distinctness is between *themes*, not between roles.
+
+### What "dark" means now
+
+D236 pt 3's admission criterion stopped being prose at THEME-02:
+`TestBuiltinThemesAreDarkAndLegible` requires every built-in's `Selection` and
+`StatusBarBg` to sit at relative luminance ≤ 0.2 and the text painted on each to
+contrast ≥ 4.5:1. The registry's measured spread, so a new port knows where it
+would land: selected-row contrast runs 4.86 (solarized-dark) to 8.69
+(catppuccin-mocha), status-bar contrast 4.86 to 12.5 (rose-pine). A port that
+comes out under 4.5 has almost always mapped the *wrong shade* to a background
+role, not found a genuinely low-contrast scheme.

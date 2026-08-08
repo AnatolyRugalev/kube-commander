@@ -366,8 +366,9 @@ stops them all, and quitting kubecom stops them all too.
   the defaults, and run `kubecom keys` to print your effective map.
 - **Themes.** `T` (`theme.switch`) opens the palette on `:theme ` and switches
   palette immediately; the pick is written back to `config.yaml` so the next launch
-  opens on it. Six are built in — Catppuccin (Frappé, Macchiato, Mocha), Monokai and
-  Solarized Dark. See [themes](docs/configuration.md#themes).
+  opens on it. Eleven are built in — Catppuccin (Frappé, Macchiato, Mocha), Dracula,
+  gruvbox Dark, Monokai, Nord, Rosé Pine, Solarized Dark and Tokyo Night, all dark.
+  See [themes](docs/configuration.md#themes).
 - **The resource menu.** Each kubeconfig context can add its own resource types
   (chiefly CRDs the built-in menu doesn't know) from a per-context YAML file. See
   [per-context menu](docs/configuration.md#per-context-menu).

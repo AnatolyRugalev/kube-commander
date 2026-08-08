@@ -2,6 +2,9 @@ package styles
 
 import (
 	"image/color"
+	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -191,5 +194,190 @@ func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
 	}
 	if _, ok := ByName("catppuccin-latte"); ok {
 		t.Error("catppuccin-latte is registered, but no built-in sets an app background yet (D236 pt 3)")
+	}
+}
+
+// wantBuiltins is the registry as the docs describe it. Listing the names once,
+// here, is what makes "eleven built-in palettes" a checked claim: the generic
+// tests above hold the registry's *shape* (complete, unique, sorted) and would
+// pass just as happily with a palette silently dropped.
+var wantBuiltins = []string{
+	"default",
+	"catppuccin-frappe",
+	"catppuccin-macchiato",
+	"catppuccin-mocha",
+	"dracula",
+	"gruvbox-dark",
+	"monokai",
+	"nord",
+	"rose-pine",
+	"solarized-dark",
+	"tokyo-night",
+}
+
+func TestBuiltinRegistryIsTheDocumentedSet(t *testing.T) {
+	got := ThemeNames()
+	if len(got) != len(wantBuiltins) {
+		t.Fatalf("ThemeNames() = %v (%d), want %v (%d)", got, len(got), wantBuiltins, len(wantBuiltins))
+	}
+	for i, name := range wantBuiltins {
+		if got[i] != name {
+			t.Errorf("ThemeNames()[%d] = %q, want %q", i, got[i], name)
+		}
+	}
+}
+
+// relativeLuminance is WCAG 2.1's L, over the sRGB channels lipgloss hands back
+// (16-bit, alpha-premultiplied — every theme color is opaque, so the premultiply
+// is a no-op here).
+func relativeLuminance(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	lin := func(v uint32) float64 {
+		s := float64(v) / 65535
+		if s <= 0.03928 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
+// contrastRatio is WCAG 2.1's ratio between two colors, 1 (identical) to 21
+// (black on white).
+func contrastRatio(a, b color.Color) float64 {
+	la, lb := relativeLuminance(a), relativeLuminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
+	// "Is it dark?" is the registry's admission criterion until kubecom paints an
+	// app background (D236 pt 3), and until this test nothing enforced it — a light
+	// palette could join the registry and render its dark text over whatever the
+	// terminal already is, which looks like a kubecom bug rather than a mismatch.
+	//
+	// Dark means two things, and both are asserted because either alone is
+	// satisfiable by a palette nobody would want: the chrome kubecom *does* paint
+	// is dark in absolute terms, and the text it paints there is lighter than it.
+	// The 4.5 floor is WCAG AA for body text; solarized-dark, the registry's
+	// lowest-contrast member by design, sits at 4.86.
+	const maxChromeLuminance = 0.2
+	const minContrast = 4.5
+	for _, th := range Themes() {
+		for _, bg := range []struct {
+			role  string
+			color color.Color
+		}{
+			{"Selection", th.Selection},
+			{"StatusBarBg", th.StatusBarBg},
+		} {
+			if l := relativeLuminance(bg.color); l > maxChromeLuminance {
+				t.Errorf("theme %q: %s luminance %.3f > %.3f — not a dark palette (D236 pt 3)",
+					th.Name, bg.role, l, maxChromeLuminance)
+			}
+		}
+		for _, pair := range []struct {
+			what   string
+			fg, bg color.Color
+		}{
+			{"the selected row", th.SelectionFg, th.Selection},
+			{"the status bar", th.StatusBarFg, th.StatusBarBg},
+		} {
+			if r := contrastRatio(pair.fg, pair.bg); r < minContrast {
+				t.Errorf("theme %q: %s contrasts %.2f:1, want at least %.1f:1",
+					th.Name, pair.what, r, minContrast)
+			}
+		}
+	}
+}
+
+func TestPortedPalettesCarryTheirAttribution(t *testing.T) {
+	// D236 pt 1: a ported palette carries project, licence and copyright line in
+	// its doc comment, because nothing upstream is vendored — a theme is thirteen
+	// hex values — so the comment *is* the notice, and it is the only thing that
+	// stops kubecom shipping someone's scheme anonymously.
+	//
+	// The assertion is over the file rather than over a particular declaration's
+	// doc: the Catppuccin family attributes once on the shared flavor type that
+	// all four constructors read from, which is the right place for it, and a
+	// per-constructor check would push that notice into four copies. Only the
+	// schemes whose licence `vault/knowledge/themes.md` actually verified are
+	// listed — monokai has no entry there, and inventing one is worse than none.
+	src, err := os.ReadFile("themes.go")
+	if err != nil {
+		t.Fatalf("read themes.go: %v", err)
+	}
+	// Strip the comment markers and collapse runs of whitespace before matching:
+	// a notice is prose in a wrapped doc comment, so "© 2021 Catppuccin" is split
+	// across two lines today and would be split somewhere else after any edit that
+	// rewraps the paragraph. A literal-substring guard would fail on a reflow,
+	// which is not the drift this test is here to catch.
+	text := strings.Join(strings.Fields(strings.ReplaceAll(string(src), "//", " ")), " ")
+	for _, want := range []struct {
+		scheme string
+		notice []string
+	}{
+		{"catppuccin", []string{"catppuccin/palette", "MIT", "© 2021 Catppuccin"}},
+		{"dracula", []string{"dracula/dracula-theme", "MIT", "© 2023 Dracula Theme"}},
+		{"gruvbox-dark", []string{"gruvbox-community/gruvbox", "MIT", "© 2018 Pavel Pertsev"}},
+		{"nord", []string{"nordtheme/nord", "MIT", "© 2016-present Sven Greb"}},
+		{"rose-pine", []string{"rose-pine/rose-pine-theme", "MIT", "© 2023 Rosé Pine"}},
+		// Tokyo Night is the one that is **not** MIT. D236 pt 1 forbids folding it
+		// into an "all MIT" line, so the licence it must name is asserted by name.
+		{"tokyo-night", []string{"folke/tokyonight.nvim", "Apache-2.0", "folke"}},
+	} {
+		for _, s := range want.notice {
+			if !strings.Contains(text, s) {
+				t.Errorf("themes.go: %s port is missing %q from its attribution (D236 pt 1)", want.scheme, s)
+			}
+		}
+	}
+}
+
+// themeDocs are the user-facing documents that name the built-in palettes: the
+// docs page with the table, and the README's one-line summary that links to it.
+var themeDocs = []string{
+	filepath.Join("..", "..", "..", "docs", "configuration.md"),
+	filepath.Join("..", "..", "..", "README.md"),
+}
+
+// countWords spells the registry sizes the docs are likely to reach. Both theme
+// documents open by counting the built-ins in prose, and a count is exactly the
+// kind of claim that stays behind when a palette is added.
+var countWords = map[int]string{
+	6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven",
+	12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen",
+}
+
+func TestThemeDocsListEveryBuiltinAndCountThemRight(t *testing.T) {
+	// The table and the README summary are both hand-written, so adding a palette
+	// to the registry is the easy half and remembering the docs is the half that
+	// silently doesn't happen.
+	table, err := os.ReadFile(themeDocs[0])
+	if err != nil {
+		t.Fatalf("read %s: %v", themeDocs[0], err)
+	}
+	for _, name := range ThemeNames() {
+		if !strings.Contains(string(table), "`"+name+"`") {
+			t.Errorf("%s does not list the built-in theme %q", themeDocs[0], name)
+		}
+	}
+
+	n := len(ThemeNames())
+	word, ok := countWords[n]
+	if !ok {
+		t.Fatalf("the registry has %d themes and countWords does not spell that — extend the map", n)
+	}
+	want := word + " are built in"
+	for _, path := range themeDocs {
+		doc, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(doc), want) {
+			t.Errorf("%s does not say %q — the registry has %d built-in themes", path, want, n)
+		}
 	}
 }
