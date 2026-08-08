@@ -7,7 +7,9 @@ _Last updated: 2026-08-07 — AUTH-07 done: fd 2 points at the log for the life 
 
 ## In Progress
 
-_(none)_
+- [ ] **THEME-02** Port the five remaining schemes: `dracula`, `gruvbox-dark`, `nord`,
+      `rose-pine`, `tokyo-night`
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-06 | claimed: 2026-08-08
 
 ## Blocked
 
