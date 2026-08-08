@@ -7,7 +7,9 @@ _Last updated: 2026-08-08 — THEME-04b done: the two light palettes ship and th
 
 ## In Progress
 
-_(none)_
+- [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-08
+      notes: See the LOGS-SEL section below for the two questions.
 
 ## Blocked
 
@@ -194,7 +196,7 @@ back to raw text, Selection and Match share the cursor's line, the bar is derive
 to the viewport rather than cached into `shownLines`, and following owns the cursor.
 
 - [ ] **LOGS-SEL-03** Decide the two open questions the selection feedback left
-      status: todo | owner: — | added: 2026-08-07
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-07 | claimed: 2026-08-08
       notes: Cheap follow-ups, unblocked by LOGS-SEL-02 but worth doing only once it has
       been used against a real cluster, because both
       are legibility judgements a test cannot make. (1) Whether the selection bar and the `/`
