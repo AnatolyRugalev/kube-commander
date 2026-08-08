@@ -29,12 +29,14 @@ keys:
 
 ## Themes
 
-`theme:` picks the palette kubecom renders with. Eleven are built in:
+`theme:` picks the palette kubecom renders with. Thirteen are built in — eleven
+dark and two light:
 
 | Name | |
 |------|--|
 | `default` | dark-friendly, blue accent (used when `theme:` is absent) — this is Catppuccin Frappé |
 | `catppuccin-frappe` | Catppuccin's mid-dark flavor — the same palette as `default` |
+| `catppuccin-latte` | **light** — Catppuccin's light flavor |
 | `catppuccin-macchiato` | Catppuccin, darker and cooler than Frappé |
 | `catppuccin-mocha` | Catppuccin's darkest flavor |
 | `dracula` | Dracula: high-contrast, purple accent and a pink header |
@@ -43,6 +45,7 @@ keys:
 | `nord` | Nord's arctic blue-greys, muted throughout |
 | `rose-pine` | Rosé Pine's `main` variant: muted plum with a rose header |
 | `solarized-dark` | Solarized's dark variant |
+| `solarized-light` | **light** — Solarized's light variant |
 | `tokyo-night` | Tokyo Night's `night` style — the darkest of its three |
 
 A theme now paints the **whole screen**, not just the text on it: while kubecom is
@@ -72,9 +75,14 @@ otherwise pick a palette that matches your terminal, or set your terminal's
 background to the palette's. A terminal that answers no such question at all is left
 alone — silence is not evidence.
 
-All built-ins are still **dark** palettes. A light one (Catppuccin Latte, Solarized
-Light) is coming next, into a kubecom that now reports the mismatch above rather
-than silently rendering dark text on your dark background.
+**The two light palettes are worth one extra thought.** `catppuccin-latte` and
+`solarized-light` paint a light canvas, so on a dark terminal they depend on the
+background actually reaching the screen — and that is precisely the case the check
+above exists for. If you run inside tmux without passthrough, expect the line
+`catppuccin-latte is light but the terminal stayed dark`; turn passthrough on, or
+set your terminal's background to the palette's (`#eff1f5` for Latte, `#fdf6e3` for
+Solarized Light), and it goes quiet. On a terminal that honours the request they
+need nothing.
 
 Ported palettes keep their upstream names and attribution: Catppuccin
 (MIT, © 2021 Catppuccin), Dracula (MIT, © 2023 Dracula Theme), gruvbox

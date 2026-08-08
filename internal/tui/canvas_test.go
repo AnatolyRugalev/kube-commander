@@ -86,7 +86,7 @@ func TestCanvasThatLandedIsSilent(t *testing.T) {
 }
 
 func TestADifferentBackgroundOfTheSamePolarityIsSilent(t *testing.T) {
-	// This is the ordinary case for all eleven built-ins on a terminal that ignores
+	// This is the ordinary case for the eleven dark built-ins on a terminal that ignores
 	// the request, and it is exactly how kubecom rendered before D249 — dark text
 	// weights on a dark terminal that is merely a different dark. Warning here would
 	// put a toast on a working screen at every launch, which is the failure mode

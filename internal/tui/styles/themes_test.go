@@ -112,7 +112,9 @@ func TestByNameIsLenientAboutCaseAndSpace(t *testing.T) {
 func TestByNameRejectsUnknownAndPartialNames(t *testing.T) {
 	// Lenient about formatting, never fuzzy: a near-miss must be reported as
 	// unknown so the caller can degrade loudly rather than silently pick.
-	for _, in := range []string{"", "   ", "nope", "mono", "solarized", "solarized-light"} {
+	// `solarized` stays in this list and `solarized-light` left it at THEME-04b:
+	// the family name is still not a theme, but the light variant now is.
+	for _, in := range []string{"", "   ", "nope", "mono", "solarized", "catppuccin"} {
 		if got, ok := ByName(in); ok {
 			t.Errorf("ByName(%q) = %q, want not found", in, got.Name)
 		}
@@ -168,16 +170,16 @@ func TestDefaultThemeIsCatppuccinFrappe(t *testing.T) {
 	}
 }
 
-func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
-	// The family ships its dark flavors only. D236 pt 3's reason — kubecom paints
-	// no app background, so Latte's dark text lands on whatever the terminal
-	// already is — was removed by THEME-03 (D249); what still keeps Latte out is
-	// that TestBuiltinThemesAreDarkAndLegible below measures every built-in as
-	// dark, and D248 pt 1 says the light slice retunes that test deliberately
-	// rather than smuggling a palette past it. Each name is `catppuccin-<flavor>`
-	// so the family filters as one in the theme picker.
+func TestCatppuccinShipsAllFourFlavorsNamedForTheFlavor(t *testing.T) {
+	// The family now ships whole. Latte waited on three things, all landed: an app
+	// background to paint (THEME-03/D249), a report when that background does not
+	// reach the screen (THEME-04a/D250), and the deliberate retune of the
+	// admission guard below from "dark" to "coherent" (THEME-04b/D251) — which is
+	// what D248 pt 1 required instead of smuggling a light palette past it. Each
+	// name is `catppuccin-<flavor>` so the family filters as one in the picker.
 	want := map[string]bool{
 		"catppuccin-frappe":    true,
+		"catppuccin-latte":     true,
 		"catppuccin-macchiato": true,
 		"catppuccin-mocha":     true,
 	}
@@ -195,18 +197,16 @@ func TestCatppuccinFlavorsAreDarkAndNamedForTheFlavor(t *testing.T) {
 			t.Errorf("built-in %q is missing", name)
 		}
 	}
-	if _, ok := ByName("catppuccin-latte"); ok {
-		t.Error("catppuccin-latte is registered, but the darkness guard has not been retuned for a light palette (D248 pt 1)")
-	}
 }
 
 // wantBuiltins is the registry as the docs describe it. Listing the names once,
-// here, is what makes "eleven built-in palettes" a checked claim: the generic
+// here, is what makes "thirteen built-in palettes" a checked claim: the generic
 // tests above hold the registry's *shape* (complete, unique, sorted) and would
 // pass just as happily with a palette silently dropped.
 var wantBuiltins = []string{
 	"default",
 	"catppuccin-frappe",
+	"catppuccin-latte",
 	"catppuccin-macchiato",
 	"catppuccin-mocha",
 	"dracula",
@@ -215,6 +215,7 @@ var wantBuiltins = []string{
 	"nord",
 	"rose-pine",
 	"solarized-dark",
+	"solarized-light",
 	"tokyo-night",
 }
 
@@ -237,37 +238,58 @@ func TestBuiltinRegistryIsTheDocumentedSet(t *testing.T) {
 // below and then be described to the user as the other polarity. The tests call
 // the exported functions so there is exactly one answer.
 
-func TestBuiltinThemesAreDarkAndLegible(t *testing.T) {
-	// "Is it dark?" is the registry's admission criterion, and until THEME-02
-	// nothing enforced it — a light palette could join and render its dark text
-	// over whatever the terminal already is. THEME-03 changed *where* that lands
-	// but not the criterion: kubecom now paints Background across the screen
-	// (D249), so the palette owns the whole canvas rather than three widgets, and
-	// a light one among ten dark ones is still the mismatch this guards.
+func TestBuiltinThemeChromeAndTextAreOppositePolarities(t *testing.T) {
+	// This is the registry's admission criterion, retuned at THEME-04b exactly as
+	// D248 pt 1 required — deliberately, in the slice that admits a light palette,
+	// and never by deleting it.
 	//
-	// Dark means two things, and both are asserted because either alone is
-	// satisfiable by a palette nobody would want: every background kubecom paints
-	// is dark in absolute terms, and the text it paints there is lighter than it.
-	// The 4.5 floor is WCAG AA for body text; solarized-dark, the registry's
-	// lowest-contrast member by design, sits at 4.86.
+	// It used to read "every background is dark", which was the right rule while
+	// every built-in was: until THEME-02 nothing enforced polarity at all, and a
+	// light palette could join and render its dark text over whatever the terminal
+	// happened to be. THEME-03 (D249) removed that hazard — kubecom paints
+	// Background across the whole screen, so the palette owns the canvas — and
+	// THEME-04a (D250) covered what is left of it, reporting the case where the
+	// paint does not reach the terminal. What survives is not darkness but
+	// *coherence*: a palette must agree with itself.
 	//
-	// D248 pt 1 stands: admitting a light palette means rewriting this test to
-	// "chrome and text sit on opposite sides of the same background", deliberately
-	// and in that slice — never deleting it.
-	const maxChromeLuminance = darkLuminance
+	// So the rule is now three things (D251 pt 1), and each is satisfiable alone by
+	// a palette nobody would want:
+	//
+	//  1. The chrome — the selected row and the status bar — sits on the same side
+	//     of the luminance threshold as the canvas. A light status bar on a dark
+	//     canvas is a glare stripe, not a widget.
+	//  2. The text painted on each of those sits on the *other* side. This is what
+	//     "dark palette" was really buying, stated without naming a polarity.
+	//  3. Every text/background pair still clears 4.5:1, WCAG AA for body text —
+	//     unchanged, and the floor no palette may lower. solarized-dark is the
+	//     registry's lowest by design at 4.86; solarized-light is the reason its
+	//     port shifts one rung up its own ladder (D251 pt 2).
 	const minContrast = 4.5
 	for _, th := range Themes() {
+		canvasIsDark := IsDark(th.Background)
 		for _, bg := range []struct {
 			role  string
 			color color.Color
 		}{
-			{"Background", th.Background},
 			{"Selection", th.Selection},
 			{"StatusBarBg", th.StatusBarBg},
 		} {
-			if l := RelativeLuminance(bg.color); l > maxChromeLuminance {
-				t.Errorf("theme %q: %s luminance %.3f > %.3f — not a dark palette (D236 pt 3)",
-					th.Name, bg.role, l, maxChromeLuminance)
+			if IsDark(bg.color) != canvasIsDark {
+				t.Errorf("theme %q: %s (luminance %.3f) is not the same polarity as Background (%.3f) — the chrome fights the canvas (D251 pt 1)",
+					th.Name, bg.role, RelativeLuminance(bg.color), RelativeLuminance(th.Background))
+			}
+		}
+		for _, fg := range []struct {
+			role  string
+			color color.Color
+		}{
+			{"Foreground", th.Foreground},
+			{"SelectionFg", th.SelectionFg},
+			{"StatusBarFg", th.StatusBarFg},
+		} {
+			if IsDark(fg.color) == canvasIsDark {
+				t.Errorf("theme %q: %s (luminance %.3f) is the same polarity as Background (%.3f) — text on its own background (D251 pt 1)",
+					th.Name, fg.role, RelativeLuminance(fg.color), RelativeLuminance(th.Background))
 			}
 		}
 		for _, pair := range []struct {
@@ -343,6 +365,10 @@ func TestPortedPalettesCarryTheirAttribution(t *testing.T) {
 		{"gruvbox-dark", []string{"gruvbox-community/gruvbox", "MIT", "© 2018 Pavel Pertsev"}},
 		{"nord", []string{"nordtheme/nord", "MIT", "© 2016-present Sven Greb"}},
 		{"rose-pine", []string{"rose-pine/rose-pine-theme", "MIT", "© 2023 Rosé Pine"}},
+		// Solarized was verified in `vault/knowledge/themes.md` at THEME-01 but
+		// never carried its notice in-tree; THEME-04b added the second port and the
+		// notice with it, on both constructors.
+		{"solarized", []string{"altercation/solarized", "MIT", "© 2011 Ethan Schoonover"}},
 		// Tokyo Night is the one that is **not** MIT. D236 pt 1 forbids folding it
 		// into an "all MIT" line, so the licence it must name is asserted by name.
 		{"tokyo-night", []string{"folke/tokyonight.nvim", "Apache-2.0", "folke"}},

@@ -7020,3 +7020,38 @@ the reader is about to lose legibility.
    pt 1) exported from `luminance.go`, so "dark enough to be admitted" and "dark" are one
    number and cannot disagree. A nil color reads as dark — the conservative answer, since
    nil means unknown and an unknown screen must raise no alarm.
+
+## D251 — a built-in palette is admitted for coherence, not for darkness (2026-08-08, THEME-04b)
+
+`catppuccin-latte` and `solarized-light` are the registry's first light palettes, and the
+question they force is what the admission guard was ever protecting. Not darkness: D236
+pt 3's "dark only" existed because kubecom painted no canvas, so a light palette's dark
+text landed on whatever the terminal already was. THEME-03 gave the palette the whole
+screen (D249) and THEME-04a made kubecom report the case where that paint does not arrive
+(D250), which leaves the real invariant — a palette must agree with itself.
+
+1. **The criterion is internal polarity plus the unchanged contrast floor.**
+   `TestBuiltinThemeChromeAndTextAreOppositePolarities` (the retune D248 pt 1 required,
+   never a deletion) holds three things for every built-in: `Selection` and `StatusBarBg`
+   sit on the **same** side of `darkLuminance` as `Background`; `Foreground`, `SelectionFg`
+   and `StatusBarFg` sit on the **other** side; and every text/background pair still
+   clears **4.5:1**. The polarity threshold is the one in `luminance.go` that D250 pt 5
+   already shares with the runtime check, so a palette cannot be admitted as coherent and
+   then described to the user as the other polarity. A future light palette is judged by
+   this and needs no new exemption; a leg that wants to admit one by lowering 4.5 has
+   misread which half is the constraint.
+
+2. **A port may move along the upstream ladder to clear the floor; it may not invent a
+   value or lower the floor.** Solarized's canonical light body pair (base00 on base3)
+   measures 4.13:1 — the scheme is low-contrast by design and its light end is the lower
+   one. `solarized-light` therefore takes the next rung of Solarized's *own* published
+   ladder for each text role (body base01, chrome text base02), shifting the ladder whole
+   so the dark port's relationship — chrome text one step more emphasized than body — is
+   preserved. The departure is stated in the constructor. What is forbidden is the other
+   two moves: a hex value upstream never published, and a threshold bent to fit.
+
+3. **Latte is the family's fourth flavor, not a light theme beside it.** It goes through
+   `catppuccinTheme` unchanged, because that function's roles name rungs of a flavor's
+   ladder rather than shades of a dark one. A future leg that wants to retune a role for
+   the light flavor alone is proposing to split the family; it must retune the mapping for
+   all four, or say why the family is no longer one.

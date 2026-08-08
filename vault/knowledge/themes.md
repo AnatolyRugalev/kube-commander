@@ -70,6 +70,12 @@ D248 pt 2: `rose-pine` is Rosé Pine's `main` and `tokyo-night` is Tokyo Night's
 (same reason as `solarized-dark`, D169 pt 1). Adding `rose-pine-moon` later is a
 *new* name beside `rose-pine`, never a rename of it.
 
+**Shipped after THEME-04b (13)**: `catppuccin-latte` and `solarized-light`, the
+registry's first light palettes. `solarized-light` is the name D169 pt 1 reserved
+when `solarized-dark` was named for its variant, and it landed beside it exactly as
+planned — no rename. `gruvbox-light` is the obvious next one and nothing needs
+deciding for it; the values slice is all that is missing.
+
 ## The app background: how it is painted, and what that leaves for a light theme
 
 Before THEME-03 kubecom painted a background on exactly three things — the
@@ -127,10 +133,10 @@ Two things worth knowing before touching that code:
   `~/.cache/kubecom/kubecom.log`; replying `rgb:2828/2828/2828` says nothing. Fork a
   pty, watch for `\x1b]11;?`, write the OSC 11 reply back into the master fd.
 
-What is left for the values slice (THEME-04b) is the values, the attribution and the
-guard retune: `TestBuiltinThemesAreDarkAndLegible` measures every built-in as dark
-today, and D248 pt 1 says that test is retuned deliberately in that slice — to
-"chrome and text sit on opposite sides of the same background" — never deleted.
+**THEME-04b then landed the values** (`catppuccin-latte`, `solarized-light`),
+taking the registry to thirteen — eleven dark, two light — and retuned the guard as
+D248 pt 1 required. See "What 'dark' means now" (renamed below) for what replaced
+it.
 
 ## Where the values came from
 
@@ -158,13 +164,64 @@ the background, so `Selection` and `StatusBarBg` share it. That is not an
 oversight — solarized-dark already does the same — and `TestBuiltinThemesRenderDistinctly`
 still passes because distinctness is between *themes*, not between roles.
 
-### What "dark" means now
+### The admission criterion: it is coherence, not darkness
 
-D236 pt 3's admission criterion stopped being prose at THEME-02:
-`TestBuiltinThemesAreDarkAndLegible` requires every built-in's `Selection` and
-`StatusBarBg` to sit at relative luminance ≤ 0.2 and the text painted on each to
-contrast ≥ 4.5:1. The registry's measured spread, so a new port knows where it
-would land: selected-row contrast runs 4.86 (solarized-dark) to 8.69
-(catppuccin-mocha), status-bar contrast 4.86 to 12.5 (rose-pine). A port that
-comes out under 4.5 has almost always mapped the *wrong shade* to a background
-role, not found a genuinely low-contrast scheme.
+D236 pt 3's criterion stopped being prose at THEME-02 ("every background is dark,
+text on it contrasts ≥ 4.5:1") and stopped being *darkness* at THEME-04b, when the
+first light palettes joined. The test kept its job and changed its rule
+(`TestBuiltinThemeChromeAndTextAreOppositePolarities`, **D251 pt 1**):
+
+1. `Selection` and `StatusBarBg` sit on the **same** side of luminance 0.2 as
+   `Background` — chrome that agrees with the canvas.
+2. `Foreground`, `SelectionFg` and `StatusBarFg` sit on the **other** side.
+3. Every text/background pair still clears **4.5:1** — unchanged, and the floor a
+   port may not lower.
+
+The single threshold is `darkLuminance` in `luminance.go`, shared with the runtime
+polarity check (D250), so a palette cannot pass admission and then be described to
+the user as the other polarity.
+
+The registry's measured spread at thirteen, so a new port knows where it lands:
+
+| | lowest | highest |
+|---|---|---|
+| body text on the canvas | 4.75 (solarized-dark) | 13.94 (monokai) |
+| the selected row | 4.86 (solarized-dark) | 8.69 (catppuccin-mocha) |
+| the status bar | 4.86 (solarized-dark) | 12.50 (rose-pine) |
+
+A port that comes out under 4.5 has almost always mapped the *wrong shade* to a
+background role rather than found a genuinely low-contrast scheme — **except at
+Solarized's light end**, which is the one case where the scheme really is that
+low: see below.
+
+### The two light palettes, and the one deliberate departure
+
+`catppuccin-latte` needed nothing special. The Catppuccin family maps through one
+function (`catppuccinTheme`) whose roles name *rungs* of a flavor's ladder, and
+Catppuccin builds Latte on the same rungs, so the palette inverts with no change to
+the mapping at all. It measures body 7.06, selected row 5.17, status bar 6.57.
+
+`solarized-light` needed one. Solarized is designed as a single palette read from
+either end (light swaps base03↔base3, base02↔base2, base01↔base1, base00↔base0,
+accents unchanged), but its canonical light body pair — **base00 on base3 —
+measures 4.13:1**, below the 4.5 floor. Solarized is low-contrast by design and its
+light end is the lower of the two. The port therefore takes the *next rung of
+Solarized's own ladder* for each text role: body is **base01** (the scheme's
+"optional emphasized content" for a light background, 4.99:1) and chrome text is
+**base02** (10.61:1). The whole ladder shifts, which preserves the dark port's own
+relationship — chrome text one step more emphasized than body — rather than a
+single value nudged to clear a threshold. **D251 pt 2** states the rule this is an
+instance of: a port may move to another rung of the upstream ladder, and may not
+invent a value or lower the floor.
+
+### What the guard does not measure, and what that costs a light palette
+
+Only `Foreground`/`SelectionFg`/`StatusBarFg` are held to 4.5. `Header`, `Subtle`
+and `Primary` are not, and on a light canvas they land lower than their dark
+siblings — Latte's rosewater header is 2.34:1 and Solarized Light's cyan header
+2.93:1, against 5.37–12.95 across the dark ports. That is upstream's own palette
+rather than a mapping error (Latte's rosewater is a pale peach; it is what Latte
+*is*), and it is inside the range the dark registry already tolerates for these
+roles — nord's subtle is 1.69:1. Nobody should "fix" it by substituting a value
+Catppuccin did not publish. If it reads badly in practice the honest fix is a
+different *role* mapping for the family, applied to all four flavors.

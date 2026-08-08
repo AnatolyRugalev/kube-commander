@@ -18,7 +18,8 @@ import (
 // Where it does not land kubecom draws its text over whatever the terminal
 // already is, which is invisible while every palette is dark on a dark terminal
 // and unreadable the moment the two polarities disagree — a dark palette on a
-// light terminal today, a light palette on a dark one once THEME-04b lands.
+// light terminal, and since THEME-04b (`catppuccin-latte`, `solarized-light`) a
+// light palette on a dark one.
 //
 // So kubecom asks. `tea.RequestBackgroundColor` sends OSC 11 as a query and the
 // terminal's own answer comes back as `tea.BackgroundColorMsg`, which is the only

@@ -366,8 +366,9 @@ stops them all, and quitting kubecom stops them all too.
   the defaults, and run `kubecom keys` to print your effective map.
 - **Themes.** `T` (`theme.switch`) opens the palette on `:theme ` and switches
   palette immediately; the pick is written back to `config.yaml` so the next launch
-  opens on it. Eleven are built in — Catppuccin (Frappé, Macchiato, Mocha), Dracula,
-  gruvbox Dark, Monokai, Nord, Rosé Pine, Solarized Dark and Tokyo Night, all dark.
+  opens on it. Thirteen are built in — Catppuccin (Frappé, Latte, Macchiato, Mocha),
+  Dracula, gruvbox Dark, Monokai, Nord, Rosé Pine, Solarized (Dark and Light) and
+  Tokyo Night; eleven dark, and Latte and Solarized Light are light.
   A theme paints the whole screen: kubecom sets your terminal's background to the
   palette's while it runs and restores it on exit.
   See [themes](docs/configuration.md#themes).

@@ -3,12 +3,11 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-08 — THEME-04a done: kubecom asks the terminal what its background actually is and says so when the palette's polarity disagrees (D250). Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-08 — THEME-04b done: the two light palettes ship and the registry's admission guard now asks for coherence rather than darkness (D251), closing the THEME line. Per-leg history: `vault/journal/`._
 
 ## In Progress
 
-- [ ] **THEME-04b** The light palettes
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
+_(none)_
 
 ## Blocked
 
@@ -350,11 +349,14 @@ Feedback `2026-08-06-more-themes`: ship ~10 built-in palettes, Catppuccin among 
 **check each one's licence rather than assuming MIT**. THEME-01 did the survey — the
 candidates, their licence files and the two that are not plain MIT are in
 `vault/knowledge/themes.md` — and landed the Catppuccin dark flavors, taking the registry
-from 3 to 6. **THEME-02 closed the count** at eleven (D248), and **THEME-03 landed the
-canvas** (D249), so the feedback is met in full and what is left is the light palettes it
-unblocked.
+from 3 to 6. **THEME-02 closed the count** at eleven (D248), **THEME-03 landed the canvas**
+(D249), **THEME-04a made kubecom report a canvas that did not arrive** (D250) and
+**THEME-04b landed the two light palettes** (D251), taking the registry to thirteen. **This
+line is closed** — the feedback is met in full and every slice it opened is done. A further
+palette (`gruvbox-light` is the obvious one) is a values-only leg against the criterion D251
+pt 1 now states; it needs no new decision and should be raised as its own item.
 
-Two constraints the remaining slices inherit (**D236** pt 2, **D249**): **`default` and
+Two constraints any later palette inherits (**D236** pt 2, **D249**): **`default` and
 `catppuccin-frappe` are one palette under two names** (kubecom's default has always been
 Frappé and D169 pt 1 will not let the name move) and it is the registry's only permitted
 duplicate; and **no component paints the canvas** — `Theme.Background` reaches the screen
@@ -370,15 +372,7 @@ that does not exist yet: the same mismatch is live today in the other direction,
 dark palettes on a *light* terminal that filters the escape are dark-on-dark right now.
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
-- [ ] **THEME-04b** The light palettes
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08
-      notes: `catppuccin-latte` and `solarized-light`, both already surveyed in
-      `vault/knowledge/themes.md` — values transcribed from the upstream data file (D236
-      pt 1), attributed in the constructor, into a kubecom that already handles 04a's
-      mismatch. Then retune `TestBuiltinThemesAreDarkAndLegible` **deliberately** to
-      "chrome and text sit on opposite sides of the same background" — never delete it
-      (D248 pt 1) — and drop the two name-specific latte guards it makes redundant.
-      `wantBuiltins`, the docs table and both "Eleven are built in" lines move with it.
+- [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -611,6 +605,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-04b** `catppuccin-latte` and `solarized-light` ported, taking the registry to thirteen, with the admission guard retuned from "dark" to "chrome and text on opposite sides of one canvas" — done 2026-08-08 (D251)
 
 - [x] **THEME-04a** kubecom asks the terminal for its background after the first paint and warns only when the palette's polarity disagrees with the answer — done 2026-08-08 (D250)
 

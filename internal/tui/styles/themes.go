@@ -19,12 +19,18 @@ type catppuccinFlavor struct {
 	yellow, green                            string
 }
 
-// The four flavors' values, transcribed from catppuccin/palette. Latte (the
-// light flavor) is still absent: THEME-03 gave kubecom an app background, which
-// removes D236 pt 3's blocker, but admitting a light palette also means retuning
-// the darkness guard, and that is the light slice's own work rather than a rider
-// on this one.
+// All four flavors' values, transcribed from catppuccin/palette. Latte, the light
+// one, joined at THEME-04b: THEME-03 gave kubecom an app background (D249),
+// THEME-04a made it report a canvas that did not land (D250), and this slice
+// retuned the registry's admission guard from "dark" to "coherent" (D251) — the
+// three things D236 pt 3 was waiting for.
 var (
+	catppuccinLatteFlavor = catppuccinFlavor{
+		text: "#4c4f69", overlay1: "#8c8fa1", blue: "#1e66f5",
+		surface0: "#ccd0da", surface1: "#bcc0cc", rosewater: "#dc8a78",
+		base: "#eff1f5", mantle: "#e6e9ef",
+		red: "#d20f39", yellow: "#df8e1d", green: "#40a02b",
+	}
 	catppuccinFrappeFlavor = catppuccinFlavor{
 		text: "#c6d0f5", overlay1: "#838ba7", blue: "#8caaee",
 		surface0: "#414559", surface1: "#51576d", rosewater: "#f2d5cf",
@@ -50,6 +56,13 @@ var (
 // text/overlay1 for the two text weights, blue as the accent, surface0/surface1
 // for selection and chrome, rosewater for headers, mantle behind the status bar,
 // and the flavor's own red/yellow/green for the semantic trio.
+//
+// The mapping is polarity-agnostic, and Latte goes through it unchanged. Every
+// role names a *rung* of the flavor's own ladder — text is the flavor's text,
+// mantle is the step off base the status bar sits on — and Catppuccin builds
+// Latte on the same rungs it builds the dark three on. So the whole palette
+// inverts while not one line here changes, which is what makes Latte the
+// family's fourth flavor rather than a separately-tuned light theme.
 func catppuccinTheme(name string, f catppuccinFlavor) Theme {
 	return Theme{
 		Name:        name,
@@ -76,6 +89,14 @@ func catppuccinTheme(name string, f catppuccinFlavor) Theme {
 // both names rather than one of them moving (D236 pt 2).
 func CatppuccinFrappeTheme() Theme {
 	return catppuccinTheme("catppuccin-frappe", catppuccinFrappeFlavor)
+}
+
+// CatppuccinLatteTheme is Catppuccin's Latte flavor — the family's light one, and
+// the first light palette in kubecom's registry. Nothing about the mapping is
+// special-cased for it (see catppuccinTheme); what it needed was a kubecom that
+// paints the canvas (D249) and says so when the canvas did not land (D250).
+func CatppuccinLatteTheme() Theme {
+	return catppuccinTheme("catppuccin-latte", catppuccinLatteFlavor)
 }
 
 // CatppuccinMacchiatoTheme is Catppuccin's Macchiato flavor: darker and cooler
@@ -113,10 +134,12 @@ func MonokaiTheme() Theme {
 	}
 }
 
-// SolarizedDarkTheme is a port of Ethan Schoonover's Solarized (dark variant):
+// SolarizedDarkTheme is a port of Ethan Schoonover's Solarized, dark variant
+// (https://github.com/altercation/solarized, MIT, © 2011 Ethan Schoonover):
 // low-contrast blue-grey base tones with the palette's accent hues mapped onto
 // kubecom's semantic roles. Named for the variant rather than the family so a
-// light port can land beside it without renaming this one (D169).
+// light port can land beside it without renaming this one (D169) — which is
+// exactly what SolarizedLightTheme below then did.
 func SolarizedDarkTheme() Theme {
 	return Theme{
 		Name:        "solarized-dark",
@@ -131,6 +154,42 @@ func SolarizedDarkTheme() Theme {
 		Header:      lipgloss.Color("#2aa198"), // cyan
 		StatusBarFg: lipgloss.Color("#93a1a1"), // base1
 		StatusBarBg: lipgloss.Color("#073642"), // base02
+		Error:       lipgloss.Color("#dc322f"), // red
+		Warn:        lipgloss.Color("#b58900"), // yellow
+		Success:     lipgloss.Color("#859900"), // green
+	}
+}
+
+// SolarizedLightTheme is the light half of the same scheme
+// (https://github.com/altercation/solarized, MIT, © 2011 Ethan Schoonover).
+// Solarized is designed as one palette read from either end — light swaps
+// base03↔base3, base02↔base2, base01↔base1 and base00↔base0, leaving the eight
+// accents alone — so this is SolarizedDarkTheme's mirror, with **one deliberate
+// departure** (D251 pt 2).
+//
+// The departure: the scheme's canonical light body pair, base00 on base3,
+// measures 4.13:1 — below the 4.5:1 floor every built-in is held to, because
+// Solarized is low-contrast by design and its light end is the lower of the two.
+// Rather than lower the floor or invent a value, the port takes the next rung of
+// Solarized's own ladder for each text role: body text is base01 (the scheme's
+// "optional emphasized content" for a light background, 4.98:1 on base3) and the
+// chrome text is base02 (10.6:1 on base2). That preserves the dark port's own
+// relationship — chrome text one step more emphasized than body text — and it is
+// the whole ladder that shifts, not a single value picked to clear a threshold.
+func SolarizedLightTheme() Theme {
+	return Theme{
+		Name:        "solarized-light",
+		Background:  lipgloss.Color("#fdf6e3"), // base3
+		Foreground:  lipgloss.Color("#586e75"), // base01
+		Subtle:      lipgloss.Color("#93a1a1"), // base1
+		Primary:     lipgloss.Color("#268bd2"), // blue
+		Selection:   lipgloss.Color("#eee8d5"), // base2
+		SelectionFg: lipgloss.Color("#073642"), // base02
+		Border:      lipgloss.Color("#93a1a1"), // base1
+		BorderFocus: lipgloss.Color("#268bd2"), // blue
+		Header:      lipgloss.Color("#2aa198"), // cyan
+		StatusBarFg: lipgloss.Color("#073642"), // base02
+		StatusBarBg: lipgloss.Color("#eee8d5"), // base2
 		Error:       lipgloss.Color("#dc322f"), // red
 		Warn:        lipgloss.Color("#b58900"), // yellow
 		Success:     lipgloss.Color("#859900"), // green
@@ -281,6 +340,7 @@ func TokyoNightTheme() Theme {
 var builtins = []func() Theme{
 	DefaultTheme,
 	CatppuccinFrappeTheme,
+	CatppuccinLatteTheme,
 	CatppuccinMacchiatoTheme,
 	CatppuccinMochaTheme,
 	DraculaTheme,
@@ -289,6 +349,7 @@ var builtins = []func() Theme{
 	NordTheme,
 	RosePineTheme,
 	SolarizedDarkTheme,
+	SolarizedLightTheme,
 	TokyoNightTheme,
 }
 
