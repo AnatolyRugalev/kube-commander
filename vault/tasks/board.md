@@ -381,6 +381,11 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
+- [ ] **THEME-06** `gruvbox-light` ported; registry at fourteen
+      status: in-progress | owner: deepseek-v4 | added: 2026-08-09
+      notes: Values-only leg (the board note at line 364 names it) — the fork's own light-mode
+      palette: bg0=light0, fg1=dark1, chrome on light2/light1, and the `faded_*` accent set
+      (`internal/tui/styles/themes.go`).
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
