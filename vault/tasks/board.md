@@ -6,6 +6,13 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 _Last updated: 2026-08-09 — HT-fold-0809 closed the five done human tasks from the maintainer's review: M4 is **done** (context-switch criterion ticked on the D256 pt 1 waiver), CTX-WARM-02/03/04 are cancelled (D256 pt 2), the goals DoD reads 11 of 13 (CRD box ticked on D256 pt 3), and the screencast half of the M5 docs criterion is closed (484e60c). Five feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: LOGS-08 reclosed the LOGS line (D257), CTX-MEM-04 closed the drill-in deferral (D255), THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
+- [ ] **LOGS-09** Palette + switcher keys reachable from the logs view; a better default for logs.previous
+      status: in-progress | owner: kimi-k3 | added: 2026-08-09
+      notes: Feedback `2026-08-09-logs-view-palette-bindings` (palette `:` from the logs view +
+      a better previous-instance binding than `ctrl+p`) paired with
+      `2026-08-09-context-switch-key-from-overlays` (`C` unreachable over the logs view) — one
+      keys-captured-by-a-surface leg, as the 2026-08-09.8/.9 journals suggested.
+
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
