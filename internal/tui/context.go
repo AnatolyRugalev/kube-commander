@@ -83,6 +83,10 @@ type ContextState struct {
 	// untouched), and a kind the new cluster does not serve restores nothing, silently
 	// (D240 pt 3).
 	LastResource *config.MenuResource
+	// LastSortCol is the name of the column the table was last sorted on.
+	LastSortCol string
+	// LastSortAsc is true if the last sort was ascending.
+	LastSortAsc bool
 	// Resourcer writes a kind opened on the new context back to *its* state file. It
 	// rides here for the reason Persister and Pinner do: bound to one context's state
 	// path, so a switch that carried the launch context's writer over would record the
@@ -249,6 +253,8 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		// rebinding the writer alongside keeps the two halves naming one context.
 		m.resPersister = msg.state.Resourcer
 		m.lastResource = msg.state.LastResource
+		m.lastSortCol = msg.state.LastSortCol
+		m.lastSortAsc = msg.state.LastSortAsc
 		m.restorePending = msg.state.LastResource != nil
 	}
 

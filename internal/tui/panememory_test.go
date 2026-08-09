@@ -33,6 +33,10 @@ func (f *fakeResourcer) PersistResource(r config.MenuResource) error {
 	return f.err
 }
 
+func (f *fakeResourcer) PersistViewState(col string, asc bool) error {
+	return f.err
+}
+
 // widgetResource is a CRD kind the seed menu does not list, so a test that restores it
 // proves the restore waits for discovery rather than resolving against the seed.
 func widgetResource() kube.Resource {
@@ -143,7 +147,7 @@ func TestReSelectingTheRecordedKindWritesNothing(t *testing.T) {
 func TestLaunchRestoresTheRememberedKindAfterDiscovery(t *testing.T) {
 	fw := preloadedWatcher()
 	entry := widgetEntry()
-	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry))
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry, "", false))
 
 	// Before the pass the menu is the seed, which does not list the kind — and nothing
 	// has been opened.
@@ -174,7 +178,7 @@ func TestLaunchRestoresTheRememberedKindAfterDiscovery(t *testing.T) {
 func TestARestoreIsNotAWriteBack(t *testing.T) {
 	fr := &fakeResourcer{}
 	entry := widgetEntry()
-	m := sizedWith(t, WithWatcher(preloadedWatcher()), WithLastResource(&entry), WithResourcePersister(fr))
+	m := sizedWith(t, WithWatcher(preloadedWatcher()), WithLastResource(&entry, "", false), WithResourcePersister(fr))
 
 	next, cmd := m.Update(DiscoveryReadyMsg{gen: m.discoveryGen, Result: kube.DiscoveryResult{
 		Resources: []kube.Resource{widgetResource()},
@@ -197,7 +201,7 @@ func TestARestoreIsNotAWriteBack(t *testing.T) {
 func TestARememberedKindTheClusterDoesNotServeIsSilent(t *testing.T) {
 	fw := preloadedWatcher()
 	entry := widgetEntry()
-	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry))
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry, "", false))
 
 	next, cmd := m.Update(DiscoveryReadyMsg{gen: m.discoveryGen, Result: kube.DiscoveryResult{}})
 	m = next.(Model)
@@ -226,7 +230,7 @@ func TestARememberedKindTheClusterDoesNotServeIsSilent(t *testing.T) {
 func TestARememberedKindInAFailedGroupIsSilent(t *testing.T) {
 	fw := preloadedWatcher()
 	entry := config.MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment"}
-	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry))
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry, "", false))
 
 	m = discover(t, m, kube.DiscoveryResult{
 		Failed: []kube.FailedGroup{{Group: "apps", Version: "v1", Err: errPaneMemory}},
@@ -243,7 +247,7 @@ func TestARememberedKindInAFailedGroupIsSilent(t *testing.T) {
 func TestARestoreYieldsToAReaderWhoDrilledInFirst(t *testing.T) {
 	fw := preloadedWatcher()
 	entry := widgetEntry()
-	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry))
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry, "", false))
 
 	next, _ := m.selectResource(gvrResource("pods"))
 	m = next.(Model)
@@ -267,7 +271,7 @@ func TestARestoreYieldsToAReaderWhoDrilledInFirst(t *testing.T) {
 func TestTheRestoreIsAttemptedOncePerCluster(t *testing.T) {
 	fw := preloadedWatcher()
 	entry := widgetEntry()
-	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry))
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(&entry, "", false))
 
 	m = discover(t, m, kube.DiscoveryResult{}) // the kind is not served — restore misses.
 	if m.hasCurrent {
@@ -299,7 +303,7 @@ func TestSwitchRebindsThePaneMemory(t *testing.T) {
 	oldEntry := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod"}
 	m := browsingModel(t, preloadedWatcher(),
 		WithClusterConnector(fc), WithContextStateLoader(fs), WithContext("dev"),
-		WithLastResource(&oldEntry), WithResourcePersister(oldFR),
+		WithLastResource(&oldEntry, "", false), WithResourcePersister(oldFR),
 	)
 
 	next, cmd := m.switchContext("prod")

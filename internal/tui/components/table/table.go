@@ -244,9 +244,40 @@ func (m Model) SortColumn() (int, bool) {
 	return m.sortCol, true
 }
 
+// SortColumnName returns the name of the column currently sorted on and true,
+// or false when the table is in its unsorted (watch) order. It backs view-state
+// persistence so the kind's sort can be restored across a context switch.
+func (m Model) SortColumnName() (string, bool) {
+	if m.sortCol < 0 || m.sortCol >= len(m.visible) {
+		return "", false
+	}
+	return m.table.Columns[m.visible[m.sortCol]].Name, true
+}
+
 // SortDescending reports whether the active sort is descending (false when
 // unsorted or ascending).
 func (m Model) SortDescending() bool { return m.sortCol >= 0 && m.sortDesc }
+
+// SortByColumnName applies a stable sort to the displayed rows by the visible
+// column with the given name (case-insensitive), preserving the selection. An
+// unknown name is ignored. It is the programmatic restore path for a remembered
+// sort (CTX-MEM-03).
+func (m *Model) SortByColumnName(name string, descending bool) {
+	if name == "" {
+		return
+	}
+	for i, ci := range m.visible {
+		if strings.EqualFold(m.table.Columns[ci].Name, name) {
+			selUID := m.selectedUID()
+			m.sortCol = i
+			m.sortDesc = descending
+			m.applyFilter()
+			m.restoreSelection(selUID)
+			m.clampOffset()
+			return
+		}
+	}
+}
 
 // VisibleColumnCount is the number of columns currently shown (the priority-0 set,
 // or every column when the server sent none). It backs the app's sort-column cycle

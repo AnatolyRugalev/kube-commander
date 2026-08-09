@@ -43,6 +43,12 @@ type State struct {
 	// distinguishable and `omitempty` does not omit a zero struct. Nil is the state of a
 	// context that has only ever been browsed at the menu, and it restores nothing.
 	LastResource *MenuResource `json:"lastResource,omitempty"`
+
+	// LastSortColumn is the name of the column the table was last sorted on.
+	LastSortColumn string `json:"lastSortColumn,omitempty"`
+
+	// LastSortAscending is true if the last sort was ascending.
+	LastSortAscending bool `json:"lastSortAscending,omitempty"`
 }
 
 // Pin adds r to the context's pinned kinds, returning false when the GVR is already

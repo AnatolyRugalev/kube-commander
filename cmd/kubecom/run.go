@@ -201,7 +201,7 @@ func runTUI(opts runOptions) error {
 		// pass reconciles (CTX-MEM-02/D240) — the same file, the same seam shape and the
 		// same silent degrade as the namespace above. Unlike the namespace there is no
 		// flag to override it: -n names a scope for the run, and nothing names a kind.
-		tui.WithLastResource(state.LastResource),
+		tui.WithLastResource(state.LastResource, state.LastSortColumn, state.LastSortAscending),
 		tui.WithResourcePersister(resourcer),
 		tui.WithContext(ctxName),
 		tui.WithKubeconfig(opts.kubeconfig),
@@ -344,14 +344,12 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 	// the new context's pins, not the departing context's, and both lists carried in
 	// ContextState are what the post-switch menu rebuild folds in (D163).
 	st := tui.ContextState{
-		MenuExtras: extras,
-		Pinned:     state.PinnedResources,
-		Namespace:  state.LastNamespace,
-		// The third thing this file remembers per context (CTX-MEM-02/D240): the kind
-		// the reader left open. It rides the same message as the namespace because it
-		// is the same disk read keyed by the same name, and because a switch must land
-		// on the *new* context's memory or none at all.
+		MenuExtras:   extras,
+		Pinned:       state.PinnedResources,
+		Namespace:    state.LastNamespace,
 		LastResource: state.LastResource,
+		LastSortCol:  state.LastSortColumn,
+		LastSortAsc:  state.LastSortAscending,
 	}
 	if statePath != "" {
 		// Guarded so the interface fields stay true nils when the state path is
@@ -548,8 +546,13 @@ func (p *statePersister) PersistPin(r config.MenuResource) error {
 // the recorded GVR is unchanged (recordResource), so reaching here means the file is
 // genuinely out of date.
 func (p *statePersister) PersistResource(r config.MenuResource) error {
-	entry := r
-	p.state.LastResource = &entry
+	p.state.LastResource = &r
+	return p.state.SaveFile(p.path)
+}
+
+func (p *statePersister) PersistViewState(sortCol string, sortAsc bool) error {
+	p.state.LastSortColumn = sortCol
+	p.state.LastSortAscending = sortAsc
 	return p.state.SaveFile(p.path)
 }
 

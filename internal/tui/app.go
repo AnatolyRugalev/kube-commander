@@ -779,6 +779,8 @@ type Model struct {
 	// per-context rather than per-cluster, so the switch rebinds it (D163) and
 	// resetCluster leaves it alone.
 	lastResource   *config.MenuResource
+	lastSortCol    string
+	lastSortAsc    bool
 	restorePending bool
 	// resPersister writes lastResource back to the per-context state file (nil →
 	// memory-inert). Bound to one context's state path, so the switch rebinds it for
@@ -1678,6 +1680,10 @@ func (m Model) handleWatchMsg(w watchMsg) (tea.Model, tea.Cmd) {
 	switch inner := w.msg.(type) {
 	case ResourceEventMsg:
 		m.table.ApplyEvent(inner.Event)
+		if inner.Event.Type == kube.WatchReset && m.lastSortCol != "" {
+			m.table.SortByColumnName(m.lastSortCol, !m.lastSortAsc)
+			m.lastSortCol = "" // consumed
+		}
 		// A search drill-in switched to this kind and is waiting for its object's row;
 		// select it as soon as the watch delivers it (SEARCH-02b).
 		m.applyPendingSelect()
@@ -3912,7 +3918,7 @@ func (m Model) sortNext() (tea.Model, tea.Cmd) {
 	default:
 		m.table.ClearSort() // past the last column: back to the watch order
 	}
-	return m, nil
+	return m, m.recordViewState()
 }
 
 // syncHints refreshes the persistent bottom key-hint to match what currently holds

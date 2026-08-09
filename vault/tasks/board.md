@@ -5,18 +5,6 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
 _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
 ## In Progress
-- [ ] **CTX-MEM-03** Bring the table's own view state back with the pane
-      status: in-progress | owner: antigravity | added: 2026-08-07 | claimed: 2026-08-09
-      notes: Unblocked — CTX-MEM-02 landed the seam and the two attachment points D243
-      names, so this slice adds fields to config.State.LastResource's neighbourhood and
-      replays them in restoreLastResource, not a new mechanism. The feedback names "where I'd drilled in, scroll position". Sort column +
-      direction (M2-13a) is plainly durable and is a column name, so it stores like the
-      GVR. The cursor is the open question and this slice's real work: a row identity is
-      a UID (D98), which is meaningless on another cluster and stale on this one after
-      time away — so decide, and record, whether the cursor is remembered by UID with a
-      miss falling back to the top row, or whether it is deliberately session-only. A
-      filter is a transient question and the default answer is no; argue it if you
-      disagree. Whatever lands must keep D240 pt 3: a miss is silent, never an error.
 - [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
       status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
       notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
@@ -809,6 +797,7 @@ on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a hum
 - [x] **M5-01** Audit the Definition of Done against named evidence — 6 of 13 boxes ticked, every unticked box names what closes it; found two gaps (no previous-logs surface → M5-01a, the DoD's YAML bullet vs D135 → M5-01b) — done 2026-07-30 (D174)
 - [x] **M5-PLAN** Expand M5 (release & docs) into ordered, leg-sized Backlog slices M5-01…M5-11 — M5 set in-progress; found four concrete gaps (unticked DoD, unset `Commit`/`Date` ldflags, no release workflow, a migration note stale since themes landed) — done 2026-07-30 (D173)
 
+- [x] **CTX-MEM-03** Bring the table's own view state back with the pane — done 2026-08-09 (none)
 - [x] **M4-12b-2** Theme picker + write-back — `T` picks a theme, `applyStyles` repaints it live and the name is written back to `config.yaml` load-modify-save; closes M4 — done 2026-07-30 (D172)
 
 - [x] **M4-12b-1** Live restyle mechanism — `SetStyles` on all eleven components plus the `applyStyles` fan-out; three re-derive rather than assign, and nothing calls it yet — done 2026-07-30 (D171)

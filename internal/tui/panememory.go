@@ -24,6 +24,7 @@ import (
 // browsing applies for the session and is simply not recorded.
 type ResourcePersister interface {
 	PersistResource(r config.MenuResource) error
+	PersistViewState(sortCol string, sortAsc bool) error
 }
 
 // WithResourcePersister wires the per-context state writer the shell calls when a
@@ -37,9 +38,11 @@ func WithResourcePersister(p ResourcePersister) Option {
 // when the launch discovery pass reconciles — by then the menu holds the cluster's real
 // API surface, so a remembered CRD is resolvable rather than merely absent (D240 pt 4).
 // Nil (the default, and every hermetic test that does not wire one) restores nothing.
-func WithLastResource(r *config.MenuResource) Option {
+func WithLastResource(r *config.MenuResource, sortCol string, sortAsc bool) Option {
 	return func(m *Model) {
 		m.lastResource = r
+		m.lastSortCol = sortCol
+		m.lastSortAsc = sortAsc
 		m.restorePending = r != nil
 	}
 }
@@ -74,6 +77,27 @@ func (m *Model) recordResource(entry config.MenuResource) tea.Cmd {
 	return func() tea.Msg {
 		if err := p.PersistResource(stored); err != nil {
 			return NewErrorMsg("persist resource", err)
+		}
+		return nil
+	}
+}
+
+// recordViewState notes the table's current view state (sort column and direction)
+// and returns the Cmd that writes it to the state file, or nil when there is nothing
+// to do. Called when the sort changes so a context switch restores it.
+func (m *Model) recordViewState() tea.Cmd {
+	if m.resPersister == nil {
+		return nil
+	}
+	colName, sorted := m.table.SortColumnName()
+	var sortAsc bool
+	if sorted {
+		sortAsc = !m.table.SortDescending()
+	}
+	p := m.resPersister
+	return func() tea.Msg {
+		if err := p.PersistViewState(colName, sortAsc); err != nil {
+			return NewErrorMsg("persist view state", err)
 		}
 		return nil
 	}
