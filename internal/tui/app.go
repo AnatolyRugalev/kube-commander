@@ -4282,9 +4282,10 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	}
 	// The dedicated logs view (LOGS-02) is a full-screen mini-app: while it is up it
 	// captures every action — scrolling, the live grep, the follow toggle, close — and
-	// swallows the rest, so the browse panes underneath never move. It opens no overlay
-	// and no overlay can open over it, so its precedence relative to the viewer below is
-	// only a formality; it is listed here beside the other capturing surfaces.
+	// swallows the rest, so the browse panes underneath never move. The one exception
+	// is the palette family (LOGS-09/D258): the command palette and its argument
+	// stages open over the view, and while one is up Update routes keys to the
+	// picker, so this branch is not reached until it closes.
 	if m.logsView.Active() {
 		return m.handleLogsAction(a)
 	}
@@ -4592,8 +4593,14 @@ func (m Model) View() tea.View {
 	case m.logsView.Active():
 		// The logs mini-app is the other full-screen view (LOGS-02): logs want every
 		// row for throughput, so it too replaces the browse body rather than centering
-		// as an overlay, and it likewise opens no overlay while it is up.
+		// as an overlay. The one overlay it opens is the command palette (LOGS-09/
+		// D258): the view passes the palette family through, and the modal composites
+		// centered on top of it — the single-overlay invariant holds, and no other
+		// surface can open over the logs view.
 		body = m.logsView.View()
+		if m.cmdPicker.Active() {
+			body = overlayCenter(body, m.cmdPicker.View(), m.width, m.bodyHeight())
+		}
 	case m.modal.Active():
 		// The confirm modal (M3-09) is the topmost overlay: it opens over the browse
 		// view (never over another overlay), so listing it first keeps the switch's

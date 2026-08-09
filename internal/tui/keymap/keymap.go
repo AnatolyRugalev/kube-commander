@@ -424,18 +424,19 @@ var defaultBindings = map[Action][]string{
 	// there is no need to reach for it mid-query — and with the grep open `t` types a
 	// `t` like every other letter (D140 pt 1). `t` is free in the browse context.
 	ActionLogsTimestamps: {"t"},
-	// The previous-instance toggle joins the ctrl+<letter> family rather than taking a
-	// plain letter, for two reasons. The mnemonic one: `p` — kubectl's own flag for
-	// this — is already the port picker's local-port prompt (FB-pf-local-port/D139)
-	// and `P` is res.children (D165), so the letter this gesture wants is spent twice
-	// over, and ctrl+p is the nearest thing to it that is free. The behavioural one:
-	// this is the one logs gesture that is worth reaching for *mid-query* — you grep a
-	// crash-looping pod for the stack trace, find the running instance has not printed
-	// it yet, and want the same look at the instance that died — and only a key
-	// carrying no text survives the open grep field (D140 pt 1), exactly as logs.regex
-	// takes ctrl+r. ctrl+p is free in the browse context and is not a reserved nav
-	// chord (D10).
-	ActionLogsPrevious: {"ctrl+p"},
+	// The previous-instance toggle takes a plain letter like the other logs display
+	// toggles (feedback `2026-08-09-logs-view-palette-bindings`: "Ctrl+P is a bit
+	// weird"), `o` reading as the **o**ld/**o**ther instance — the mnemonic `p` is
+	// the port picker's local-port prompt (FB-pf-local-port/D139) and `P` is
+	// res.children (D165), so the letter this gesture wants is spent twice over, and
+	// `o` is its QWERTY neighbour, free in the browse context and not a reserved nav
+	// chord (D10). ctrl+p stays as the second binding rather than retiring: it is
+	// the one form of the gesture that survives an open grep field (D140 pt 1) —
+	// mid-query, when the stack trace is not in the running instance's tail, `o`
+	// would type into the field — and the mid-query flip was the reason the chord
+	// existed (D177). Discoverability no longer depends on either key: the palette
+	// opens over the logs view and lists this verb (LOGS-09/D258).
+	ActionLogsPrevious: {"o", "ctrl+p"},
 	// Visual mode and yank take vim's own keys, and both are plain letters for the
 	// reason the wrap and timestamps toggles are: neither is a gesture anyone reaches
 	// for mid-query — you select lines you can already see — so being swallowed by an

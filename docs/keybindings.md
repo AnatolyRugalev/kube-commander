@@ -104,7 +104,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `logs.regex` | `ctrl+r` | Toggle regex matching for the logs filter |
 | `logs.wrap` | `w` | Toggle line wrapping in the logs viewer |
 | `logs.timestamps` | `t` | Toggle timestamps in the logs viewer |
-| `logs.previous` | `ctrl+p` | Toggle logs of the previous (crashed) container instance |
+| `logs.previous` | `o` / `ctrl+p` | Toggle logs of the previous (crashed) container instance |
 | `logs.select` | `v` | Select log lines (visual mode) |
 | `logs.yank` | `y` | Copy the selected log lines |
 

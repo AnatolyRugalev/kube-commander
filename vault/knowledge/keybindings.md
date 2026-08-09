@@ -100,7 +100,7 @@ the palette's row verbs".
 | Jump to latest log line | `G` (`nav.bottom`) | logs view only; the ordinary jump-to-bottom *also re-arms* following, so it is the one "catch up and keep tailing" gesture — the inverse of "any upward scroll pauses". Incremental downward scrolling does not re-arm (LOGS-04c/D147) |
 | Toggle log line wrap | `w` (`logs.wrap`) | logs view only; soft-wrap long lines vs clip them. While clipping, `h`/`l` (`nav.left`/`nav.right`) scroll the view horizontally — the two are mutually exclusive, so one toggle covers both (LOGS-04a) |
 | Toggle log timestamps | `t` (`logs.timestamps`) | logs view only; shows each line's server timestamp ahead of its message (`kubectl logs --timestamps`). **Display only** — the stream always requests timestamps, so the toggle redraws the buffer instead of re-fetching, and the grep still matches only the message. Off by default (an RFC3339 stamp is 30 columns). Hinted nowhere — the closed-grep hint line is full, so it lives in `?` and `docs/keybindings.md` (LOGS-04b/D148) |
-| Toggle previous-instance logs | `Ctrl+p` (`logs.previous`) | logs view only; re-opens the stream with `kube.LogOptions.Previous` — the container's previous *terminated* instance (`kubectl logs -p`), which is where a `CrashLoopBackOff` explains itself. A **request** flag, not a display toggle: the buffer is replaced (two instances are two logs), but the grep, wrap and timestamps survive the flip, and the header shows `[previous]`. A no-text chord because `p` (port picker) and `P` (`res.children`) are both spent and because it is the one logs gesture worth reaching for mid-query (M5-01a/D177) |
+| Toggle previous-instance logs | `o` / `Ctrl+p` (`logs.previous`) | logs view only; re-opens the stream with `kube.LogOptions.Previous` — the container's previous *terminated* instance (`kubectl logs -p`), which is where a `CrashLoopBackOff` explains itself. A **request** flag, not a display toggle: the buffer is replaced (two instances are two logs), but the grep, wrap and timestamps survive the flip, and the header shows `[previous]`. `o` (the **o**ld/**o**ther instance) since LOGS-09/D258 — the maintainer found `Ctrl+p` weird, and the mnemonic `p`/`P` are both spent (D139/D165); the chord stays as the second binding because, carrying no text, it is the one form that fires mid-grep (D140 pt 1). Also listed by the palette over the logs view, so the key is no longer the only way to find it (M5-01a/D177) |
 | View / Edit YAML | `e` (`res.edit`) | any gettable kind; opens the object's YAML in `$EDITOR` — the single view+edit surface. Save applies (needs `update`/`patch`; a read-only save degrades to a toast). The standalone read-only YAML viewer + its `y` key were retired here (D135/M3-15c); `y` is now unbound |
 | Delete | `d` (`res.delete`) | any kind with `delete` (confirm); vim `dd` muscle memory (D133) |
 | Show the owner's pods | `P` (`res.children`) | the owner kinds `kube.HasChildren` names (Deployment/RS/StatefulSet/DaemonSet/Job/RC, Service, Node); switches the table to that owner's pods under a server-side selector, `esc` returns to the owner. `P` because lowercase `p` is the port picker's local-port prompt (M4-08/D166) |
@@ -120,9 +120,9 @@ the palette's row verbs".
 | Widen search to all namespaces | `Ctrl+w` (`search.allNamespaces`) | search view only; searches every namespace and re-runs the current query, header *replaces* the namespace it names with `all namespaces` — a header carries one namespace scope, never two (SEARCH-04b/D150). Independent of the kind widen, so all four scope combinations are reachable; never changes the app's own namespace. `Ctrl+w` because `Ctrl+a` is spent and `Ctrl+n` is `ns.switch`: it reads as cluster-**w**ide. Off again on every fresh open |
 | Help overlay | `?` | |
 | Namespace picker | `Ctrl+n` (`ns.switch`) | |
-| Command palette | `:` (`app.palette`) | app-global verb list; type to narrow, `enter` runs the verb through the same dispatch its key uses (PAL-02/D197) |
+| Command palette | `:` (`app.palette`) | app-global verb list; type to narrow, `enter` runs the verb through the same dispatch its key uses (PAL-02/D197). Opens over the logs view too — then listing the logs view's own verbs beside the globals, the row verbs withheld since their target is invisible there (LOGS-09/D258) |
 | Resource picker | `R` (`resources.switch`) | took `R` when the palette took `:`; also the palette's "Switch resource" verb (D197 pt 3) |
-| Context switcher | `:` ctx (M4) | |
+| Context switcher | `C` (M4) | opens the palette's `:context ` stage; reachable from the logs view like the rest of the palette family (LOGS-09/D258) |
 
 `a D y e d` and `L` don't collide with reserved nav keys (`d`/`D` are not in the
 reserved nav set; delete uses `d`, describe `D`, D133). The direct keys and the
@@ -135,3 +135,16 @@ menu both dispatch one typed `rowActionMsg` intent (D107); each later M3 leg
   its fallback, plus help text — so the help overlay and generated docs stay honest.
 - Never assign an action to `h j k l n g G /` or the `Ctrl+u/d/f/b` set.
 - Modal/picker views inherit `j/k` + arrows and `Enter`/`Esc` consistently.
+
+## Which surface owns a key (D258)
+
+Input is captured top-down, and a surface that owns input owns it fully: the search
+view and any open text field (the logs grep, a picker's filter, the table filter)
+take every text-carrying key as *text*; transient modals (a picker, the confirm
+modal, the help overlay, the viewer, the port-forward panel) swallow the keys they
+do not use — the way out of any of them is `esc`, and that is by design, since a
+modal is one gesture deep. The **logs view** is the one long-lived capture surface,
+and it is the exception: the palette family (`:`, `T`, `R`, `Ctrl+n`, `C`) passes
+through it, so the switchers and every logs verb stay reachable from a log stream
+(LOGS-09). Row-scoped gestures (`a`, `d`, …) stay swallowed there — their target is
+the browse table's selection, which the full-screen view hides.

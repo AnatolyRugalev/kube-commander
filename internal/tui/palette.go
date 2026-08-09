@@ -279,15 +279,30 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]picker.Item, m
 // since PAL-02, so every line a reader has already learned still resolves to the same
 // verb whether or not a row happens to be selected — the row verbs are additive, and
 // the matcher ranks them the moment anything is typed.
+//
+// Since LOGS-09 the stage can also open **over the logs view** (D258), and the second
+// list is then the logs view's own verbs — follow, grep, wrap, previous, yank… — so
+// the palette answers "what can I do here" on that surface too. The row verbs are
+// withheld there: they act on the browse table's selection, which the full-screen
+// logs view hides, and a pick like Delete would open the confirm modal *invisibly*
+// (the View draws one body; the modal would still capture input). That is D197's
+// rule, not an exception: over the logs view the row verbs' keys are swallowed, so
+// the verbs are inert exactly as their keys are.
 func (m Model) showPaletteVerbs() Model {
 	items, byLabel := paletteVerbItems()
 	m.cmdByLabel = byLabel
 	m.palArg = ""
 	m.palDirect = false // the reader is on the verb list now, however they got here.
+	m.palRowByLabel = nil
 	title := paletteTitle
-	rowItems, rowByLabel, target := m.paletteRowVerbs(byLabel)
-	m.palRowByLabel = rowByLabel
-	if target != "" {
+	if m.logsView.Active() {
+		logsItems, logsByLabel := logsVerbItems(byLabel)
+		for label, a := range logsByLabel {
+			m.cmdByLabel[label] = a
+		}
+		items = append(items, logsItems...)
+	} else if rowItems, rowByLabel, target := m.paletteRowVerbs(byLabel); target != "" {
+		m.palRowByLabel = rowByLabel
 		items = append(items, rowItems...)
 		title = paletteTitle + paletteTargetSep + target
 	}
@@ -296,6 +311,45 @@ func (m Model) showPaletteVerbs() Model {
 	m.cmdPicker.ClearQuery()
 	m.cmdPicker.SetItemsWithAliases(items)
 	return m
+}
+
+// logsVerbs is the set of logs-view actions the palette lists when it opens over the
+// logs view (LOGS-09/D258) — the discoverability the feedback asked for: every
+// gesture the view honours, findable by typing. app.filter joins them under its own
+// registry label ("Filter / search"): on this surface it is the gesture that opens
+// the live grep. Each pick dispatches through handleAction exactly as its key does
+// (D197), so the toggle fires on the view the palette was floating over.
+var logsVerbs = []keymap.Action{
+	keymap.ActionFilter,
+	keymap.ActionLogsFollow,
+	keymap.ActionLogsRegex,
+	keymap.ActionLogsWrap,
+	keymap.ActionLogsTimestamps,
+	keymap.ActionLogsPrevious,
+	keymap.ActionLogsSelect,
+	keymap.ActionLogsYank,
+}
+
+// logsVerbItems renders logsVerbs exactly as paletteVerbItems renders the globals:
+// labels are the registry's own descriptions, keyed back to the action through the
+// returned map, and a label already claimed by a global is dropped rather than
+// shadowing it (none collides today — the globals are app sentences, the logs verbs
+// are view toggles).
+func logsVerbItems(taken map[string]keymap.Action) ([]picker.Item, map[string]keymap.Action) {
+	items := make([]picker.Item, 0, len(logsVerbs))
+	byLabel := make(map[string]keymap.Action, len(logsVerbs))
+	for _, a := range logsVerbs {
+		label := a.Describe()
+		if label == "" {
+			continue // unregistered — a programming error, pinned by tests.
+		}
+		if _, dup := taken[label]; dup {
+			continue
+		}
+		byLabel[label] = a
+		items = append(items, picker.Item{Label: label, Name: string(a)})
+	}
+	return items, byLabel
 }
 
 // openPalette opens the command palette on its verb stage, labelled by each action's
@@ -422,6 +476,12 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		// so `:action ` and `:` can never offer different sets. Inertness is `a`'s own
 		// rule and is decided here, not in the key (D209 pt 2): no resource table, no
 		// row under the cursor, or no applicable action and the stage does not open.
+		// Over the logs view the stage is inert too (D258): its verbs act on a
+		// selection the full-screen view hides, and a pick like Delete would open the
+		// confirm modal invisibly while it captured input.
+		if m.logsView.Active() {
+			return m, nil, false
+		}
 		var target string
 		items, m.palRowByLabel, target = m.paletteRowVerbs(nil)
 		if len(items) == 0 {

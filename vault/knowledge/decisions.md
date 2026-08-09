@@ -7234,3 +7234,36 @@ Constraints a future leg must not silently contradict:
    knows; a client-side guess would either hide a readable log or promise one that
    is not there. The request goes out, and a repeated `ctrl+p` asks again — the
    fallback leaves the toggle fully re-armable.
+
+## D258 — the palette family passes through the logs view; `o` is the previous-instance default (2026-08-09, LOGS-09)
+
+Two feedback items, one surface: `2026-08-09-logs-view-palette-bindings`
+("Ctrl+P is a bit weird … allow command palette inside logs view at the very
+least") and `2026-08-09-context-switch-key-from-overlays` ("C doesn't work when
+popup or logs are open"). Constraints a future leg must not silently contradict:
+
+1. **The logs view passes the palette family through** — `:` opens the command
+   palette over the view; `T`/`R`/`ctrl+n`/`C` open their pre-typed stages (D207)
+   — because the logs view is a long-lived surface, not a transient modal. This is
+   the whole answer to "global actions from a log stream": ctx.switch is reachable
+   there, and a switch picked from it tears the stream down with the old cluster
+   (resetCluster, already pinned hermetically). With the grep open nothing passes:
+   the field owns every key (D140 pt 1).
+2. **Row-scoped gestures stay swallowed over the logs view**, and the palette
+   withholds row verbs there. Their target is the browse table's selection, which
+   the full-screen view hides, and a pick like Delete would open the confirm modal
+   *invisibly* — the View draws one body while the modal captures input. This is
+   D197's rule, not an exception: the verb is inert exactly as its key is.
+3. **Transient capture surfaces keep owning their keys** — pickers, the confirm
+   modal, the help overlay, the viewer, the port-forward panel, and every open
+   text field. The way out is `esc`; that is by design (a modal is one gesture
+   deep), and `vault/knowledge/keybindings.md` says so. Do not extend the
+   pass-through to them without answering the invisible-modal trap first.
+4. **The palette over the logs view lists the logs view's own verbs** (follow,
+   grep, wrap, timestamps, previous, select, yank) beside the app-globals — the
+   discoverability the feedback named — each dispatched through handleAction
+   exactly as its key is (D197).
+5. **`logs.previous` defaults to `o`, keeping `ctrl+p` as the second binding.** The
+   plain letter sits with the other logs toggles (`f`/`w`/`t`/`v`/`y`); the chord
+   stays because, carrying no text, it is the one form of the toggle that fires
+   mid-grep. `p`/`P` remain spent (D139/D165).

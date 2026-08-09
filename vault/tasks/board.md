@@ -3,15 +3,8 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — HT-fold-0809 closed the five done human tasks from the maintainer's review: M4 is **done** (context-switch criterion ticked on the D256 pt 1 waiver), CTX-WARM-02/03/04 are cancelled (D256 pt 2), the goals DoD reads 11 of 13 (CRD box ticked on D256 pt 3), and the screencast half of the M5 docs criterion is closed (484e60c). Five feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: LOGS-08 reclosed the LOGS line (D257), CTX-MEM-04 closed the drill-in deferral (D255), THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — LOGS-09 reclosed the LOGS line (D258): the palette family passes through the logs view (`:` lists the logs verbs over the stream, `C` reaches ctx.switch from it) and `logs.previous` defaults to `o`; both feedback files it addressed are deleted. Three feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
-
-- [ ] **LOGS-09** Palette + switcher keys reachable from the logs view; a better default for logs.previous
-      status: in-progress | owner: kimi-k3 | added: 2026-08-09
-      notes: Feedback `2026-08-09-logs-view-palette-bindings` (palette `:` from the logs view +
-      a better previous-instance binding than `ctrl+p`) paired with
-      `2026-08-09-context-switch-key-from-overlays` (`C` unreachable over the logs view) — one
-      keys-captured-by-a-surface leg, as the 2026-08-09.8/.9 journals suggested.
 
 ## Blocked
 
@@ -150,7 +143,7 @@ cluster-search half. Constraints a later leg must not walk into (**D239**): the 
 filter's scope exactly, a match cuts a status-colored cell rather than replacing it, and the
 **cursor row keeps its marks** — the one exception to M4-06's "selection wins outright".
 
-### Logs dedicated view (LOGS — feedback-driven, D134) — closed again at LOGS-08
+### Logs dedicated view (LOGS — feedback-driven, D134) — closed again at LOGS-09
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
 and `2026-07-29-logs-init-containers`: a **dedicated full-screen logs mini-app** with a
 `/`-filter that narrows the stream live while following. **Closed twice.** On *features* at
@@ -181,6 +174,15 @@ log view — the running instance's stream resumes under the toast naming the se
 reason (partially superseding D177 pt 4; the no-pre-check half stands).
 
 - [x] **LOGS-08** A rejected previous-instance flip keeps the log view; the running stream resumes under the toast — done 2026-08-09 (D257)
+
+Reopened a fifth time by feedback `2026-08-09-logs-view-palette-bindings` (paired with
+`2026-08-09-context-switch-key-from-overlays`) and **reclosed at LOGS-09 (D258)**: the
+palette family passes through the logs view — `:` opens over the stream, listing the
+view's own verbs beside the globals, and `C`/`T`/`R`/`ctrl+n` open their stages, so
+ctx.switch is reachable from a log — while row verbs stay swallowed (their target is
+invisible there); `logs.previous` defaults to `o` with `ctrl+p` kept for mid-grep.
+
+- [x] **LOGS-09** The palette opens over the logs view with the logs verbs listed; `o` is the previous-instance default — done 2026-08-09 (D258)
 
 ### Logs selection and yank (LOGS-SEL — feedback-driven) — closed at LOGS-SEL-03
 Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
@@ -593,6 +595,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-09** The palette opens over the logs view listing the logs verbs, `C` reaches ctx.switch from a stream, and `o` is the previous-instance default — feedback `2026-08-09-logs-view-palette-bindings` + `2026-08-09-context-switch-key-from-overlays` — done 2026-08-09 (D258)
 
 - [x] **LOGS-08** A rejected previous-instance flip keeps the log view open — the running instance's stream resumes under a toast naming the server's reason — feedback `2026-08-09-logs-no-previous-keeps-view` — done 2026-08-09 (D257)
 

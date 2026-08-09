@@ -548,8 +548,10 @@ func TestLogBatchStreamEndClosesAnEmptyView(t *testing.T) {
 	}
 }
 
-// previousKey is the default logs.previous chord (`ctrl+p`) — the instance toggle
-// (M5-01a). Like the regex chord it carries no text, so it acts while the grep is open.
+// previousKey is logs.previous's second binding (`ctrl+p`) — the instance toggle
+// (M5-01a). The primary default is the plain `o` (LOGS-09/D258); the chord stays
+// because, carrying no text, it is the one form of the gesture that acts while the
+// grep is open.
 var previousKey = tea.Key{Code: 'p', Mod: tea.ModCtrl}
 
 // crashLoopLogStreamer serves the running instance's log and rejects any request for a

@@ -267,7 +267,8 @@ func (m Model) routeLogsFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleLogsAction routes a resolved action to the open logs view. app.quit closes the
 // view rather than exiting kubecom — a full-screen pager owns the quit key while it is
 // up, exactly as the help modal, the shared viewer and the search view do. logs.previous
-// and logs.yank are handled here rather than by the component (see below). Everything
+// and logs.yank are handled here rather than by the component (see below), and the
+// palette family passes through to the shell (the first switch below, D258). Everything
 // else is handed to the component, which scrolls, opens/narrows the live grep, toggles
 // follow (pausing it on any upward scroll), and closes itself on nav.back via its own
 // ClosedMsg. Actions the view does not honour are swallowed, so nothing underneath moves
@@ -276,6 +277,27 @@ func (m Model) handleLogsAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if a == keymap.ActionQuit {
 		m.closeLogs()
 		return m, nil
+	}
+	// The palette family passes through (LOGS-09/D258): the logs view is a
+	// long-lived surface, not a transient modal, so the app-global *switcher*
+	// gestures stay reachable from it — `:` opens the command palette over the
+	// view and `T`/`R`/`ctrl+n`/`C` open their pre-typed stages directly (D207),
+	// which is also what makes ctx.switch reachable from a log stream. The
+	// cmdPicker is the one overlay the View composites over the logs view, and
+	// while it is up Update routes keys to it (activePicker), so no trap opens.
+	// actions.menu is deliberately *not* passed through: its verbs act on the
+	// browse table's selection — invisible under the full-screen view — and can
+	// open the confirm modal, which would then capture input invisibly. With the
+	// grep open nothing passes: the field owns every key (D140 pt 1), exactly as
+	// ctrl+n types nothing there today.
+	if !m.logsView.Filtering() {
+		switch a {
+		case keymap.ActionPalette:
+			return m.openPalette()
+		case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace,
+			keymap.ActionContext:
+			return m.openPaletteArg(a)
+		}
 	}
 	// logs.previous is handled here rather than in the component: it is a *request*
 	// flag, not a display mode, so honouring it means re-opening the stream — which
