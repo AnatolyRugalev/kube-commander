@@ -96,10 +96,11 @@ type Styles struct {
 	Header lipgloss.Style
 
 	// Match highlights the span of text that matched an active query — the logs
-	// view's live grep (LOGS-03) and any future in-content search. It paints a
-	// background so a match is findable by eye in a wall of log output, using the
-	// Warn hue rather than Selection so a highlight is never confused with the
-	// cursor (the two can appear on the same line).
+	// view's live grep (LOGS-03) and any future in-content search. It marks a
+	// match by weight (bold and underline) rather than paint (THEME-05), because
+	// no single hue contrasts 4.5:1 against both the canvas and the selection bar
+	// across all thirteen palettes. Inheriting the parent's colors guarantees
+	// the match stays legible under D251 pt 1's floor.
 	Match lipgloss.Style
 
 	// Pane frames a component; PaneFocus is the same frame when the pane holds
@@ -149,8 +150,8 @@ func New(t Theme) Styles {
 			Foreground(t.Header).
 			Bold(true),
 		Match: lipgloss.NewStyle().
-			Foreground(t.StatusBarBg).
-			Background(t.Warn),
+			Bold(true).
+			Underline(true),
 		Pane:      pane,
 		PaneFocus: pane.BorderForeground(t.BorderFocus),
 		StatusBar: lipgloss.NewStyle().

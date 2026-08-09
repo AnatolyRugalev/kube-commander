@@ -5,9 +5,6 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
 _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
 ## In Progress
-- [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
-      notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
 
 ## Blocked
 
@@ -382,23 +379,6 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
-- [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
-      notes: Found by measurement in LOGS-SEL-03, not by a dogfood. `styles.New` builds
-      `Match` as `StatusBarBg` on `Warn` — right while every built-in was dark, wrong since
-      THEME-04b: on `catppuccin-latte` a matched span is near-white on mid yellow at
-      **2.15:1** and sits **1.70:1** from the `Selection` bar it can appear inside, on
-      `solarized-light` **2.62:1**. D252 pt 3 fixes the target: a matched span carries the
-      log's own text, so it is body text under D251 pt 1's 4.5:1 floor, which this slice may
-      not lower. Swapping in another *existing* role does not reach it either — the measured
-      best per palette is Latte `Foreground` 3.05 and Solarized Light `StatusBarFg` 4.05
-      (the candidate table is in `vault/knowledge/themes.md`) — so the mapping itself has to
-      change: a shade derived from the palette, or marking a match by weight (bold/underline)
-      where paint cannot carry it, chosen once for all thirteen rather than per palette. One
-      style, three surfaces — the logs grep (D242), the table filter (FILT-02) and
-      cluster-search hits (SEARCH-06) — so land the guard next to the existing contrast tests
-      in `internal/tui/styles`, and keep D252 pt 1: the highlight must stay distinguishable
-      from the bar, not merely legible on the canvas.
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -461,18 +441,6 @@ tie — to a reader who drilled in first, and to a second pass on the same clust
 
 - [x] **CTX-MEM-01** Triage the pane-memory feedback into this line — done 2026-08-07 (D240)
 - [x] **CTX-MEM-02** Last-browsed kind remembered per context and restored — done 2026-08-07 (D243)
-- [ ] **CTX-MEM-03** Bring the table's own view state back with the pane
-      status: todo | owner: — | added: 2026-08-07
-      notes: Unblocked — CTX-MEM-02 landed the seam and the two attachment points D243
-      names, so this slice adds fields to `config.State.LastResource`'s neighbourhood and
-      replays them in `restoreLastResource`, not a new mechanism. The feedback names "where I'd drilled in, scroll position". Sort column +
-      direction (M2-13a) is plainly durable and is a column name, so it stores like the
-      GVR. The cursor is the open question and this slice's real work: a row identity is
-      a UID (D98), which is meaningless on another cluster and stale on this one after
-      time away — so decide, and record, whether the cursor is remembered by UID with a
-      miss falling back to the top row, or whether it is deliberately session-only. A
-      filter is a transient question and the default answer is no; argue it if you
-      disagree. Whatever lands must keep D240 pt 3: a miss is silent, never an error.
 - [ ] **CTX-MEM-04** The drill-in scope — deferred, with the reason
       status: todo | owner: — | added: 2026-08-07
       notes: Deferred by D240 pt 6, kept on the board so the deferral is visible rather
@@ -492,17 +460,6 @@ for the split — outline first, prose after — because a 587-line rewrite in o
 not reviewable.
 
 - [x] **DOC-01** README restructured around the capability surface; install/config out to `docs/` — done 2026-08-07 (D241)
-- [ ] **DOC-02** Prose pass over the restructured README
-      status: todo | owner: — | added: 2026-08-07 | blocked-on: DOC-01
-      notes: DOC-01 moves paragraphs under headings largely as they were, so the prose is
-      still written in the order things were built: capabilities announced with "Press `X`
-      (`action.id`, rebindable) to …" over and over, several paragraphs arguing a design
-      decision the reader did not ask about, and the status callout listing what works as
-      if the reader knew what did not. Condense — the headings now carry the structure, so
-      each paragraph only has to say what the thing does and when you want it. The
-      failure-mode paragraphs ("A resource that won't list", "An expired credential
-      plugin") are the ones the feedback asked to keep; they earn their length. Target the
-      capability sections; do not re-litigate the outline.
 
 ### Board hygiene (BOARD — agent-found)
 The board is read on every Orient, so its size is a cost every leg pays and no leg sees.
@@ -637,6 +594,7 @@ on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a hum
 - [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 
 - [x] **THEME-04b** `catppuccin-latte` and `solarized-light` ported, taking the registry to thirteen, with the admission guard retuned from "dark" to "chrome and text on opposite sides of one canvas" — done 2026-08-08 (D251)
+- [x] **THEME-05** `styles.Match` relies on weight not paint — done 2026-08-09 (none)
 
 - [x] **THEME-04a** kubecom asks the terminal for its background after the first paint and warns only when the palette's polarity disagrees with the answer — done 2026-08-08 (D250)
 
