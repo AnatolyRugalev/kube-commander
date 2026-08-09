@@ -99,7 +99,7 @@ item below, done when a clean seam appears rather than as a forced multi-line mo
       `components/*` sub-model (a full-screen surface's seams already being the
       pattern — see `searchview`/`logsview`/`viewer`), keeping the root package
       the shell and never a new full-screen surface
-      status: todo | owner: — | added: 2026-08-09
+      status: in-progress | owner: deepseek-v4-flash | added: 2026-08-09
       notes: D264 pt 4 — optional, standing, not urgent (tree green, race-clean,
       92.6%-covered). Pick when the top-unblocked board item is not preferred; a
       candidate seam is the port-forward panel or the browse filter, both of which
