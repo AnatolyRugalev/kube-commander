@@ -4,16 +4,7 @@ Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow an
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
 _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
-
 ## In Progress
-
-- [ ] **DOC-02** Prose pass over the restructured README
-      status: in-progress | owner: antigravity | added: 2026-08-07 | claimed: 2026-08-09
-      notes: DOC-01 moves paragraphs under headings largely as they were, so the prose is
-      still written in the order things were built. Condense — the headings now carry the
-      structure, so each paragraph only has to say what the thing does and when you want it.
-      The failure-mode paragraphs are kept.
-
 - [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
       status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
       notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
@@ -640,6 +631,8 @@ _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** abo
 on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **DOC-02** Prose pass over the restructured README — done 2026-08-09 (DOC-02)
 
 - [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 
