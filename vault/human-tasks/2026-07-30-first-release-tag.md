@@ -115,3 +115,14 @@ What was checked, and how:
   archives are each documented and each drift-guarded against `.goreleaser.yml`.
 - **Not verifiable before the tag**, and therefore the checks in step 1 above: the
   ghcr.io push itself, the GitHub release upload, and `go install @<version>`.
+
+## Update (2026-08-09) — deferred by the maintainer; stays open
+
+Maintainer, verbatim: "a bit too early for that."
+
+The tag is deferred, not declined, so this task stays **open** and `Blocks:
+M5-11` remains accurate — the default-branch rename still waits on a release
+existing. The `## Pre-flight result` (M5-10) above stands unchanged; re-ask at a
+later review or when the maintainer raises it. No agent work is unblocked by
+this answer: M5-11 was already the only item this task gates, and everything
+else in M5 that remains publishes (D173 pt 1).

@@ -165,3 +165,29 @@ speed, capped at one entry, with the shell's teardown explicitly untouched per
 D196 pt 1/2) — filed as `../feedback/2026-08-06-context-switch-pane-memory.md`
 since it is a product/design question (does it revise D196's "shell teardown
 never changes"?) rather than something this dogfood task itself can resolve.
+
+## Update (2026-08-09) — still open; qualitative only
+
+Maintainer, verbatim: "context switch UX is working well."
+
+That is a qualitative confirmation of the happy path, not the exit criteria as
+written, so this task stays **open** and the M4 context-switch exit criterion
+stays unticked. Still missing, each a distinct claim the criterion makes:
+
+- **pt 3 (nothing leaks)** — no report that a log stream / viewer / port-forward
+  opened *before* a switch was torn down cleanly (overlays close, forwards stop,
+  no stale rows flash in).
+- **pt 4 (same-context switch is a no-op, D157)** — not confirmed.
+- **pt 5 (unreachable context)** — not confirmed: one transient toast, stay put,
+  rows still updating.
+- **pt 6 (per-context namespace + menu memory, D163)** — not confirmed.
+- **pt 7 (timing)** — no `context switch complete` log lines pasted, so the
+  `connect=`/`discovery=`/`total=` numbers — for a first switch **and** a
+  switch-back, the second being the one CTX-WARM-01's feedback is about — are
+  still unknown. This is the number that decides CTX-WARM-02/03 (D196 pt 3).
+- **pt 8 (pane restore reading)** — no statement on whether the pane coming back
+  reads as the switch finishing (good) or as a flash + jump (bad).
+
+"Fast" and "working well" are consistent with the cheap-`connect=` hypothesis,
+but they are not the leak checks or the measured numbers. Do **not** unblock
+CTX-WARM-02/03/04 or tick the M4 criterion from this alone.

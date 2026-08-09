@@ -3,14 +3,15 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — both human-task responses folded in, neither closes its task: the context-switch dogfood answer is qualitative only (no pt 7 numbers), so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated; the release tag is deferred, so M5-11 stays blocked. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
       status: blocked | owner: — | added: 2026-07-30
-      notes: Blocked on human task `2026-07-30-first-release-tag` — renaming the branch before
+      notes: Blocked on human task `2026-07-30-first-release-tag` — the maintainer deferred the
+      tag on 2026-08-09 ("a bit too early for that"), so the block stands; renaming the branch before
       a release exists would retarget every clone and PR for a tree nobody can install yet, and
       the rename also dissolves the `@v1` collision the tag is what actually fixes. The agent
       share is preparation: what to rename, `master` kept as the permanent 2020 reference
@@ -400,7 +401,7 @@ apart: only this one retains anything live, so only this one is gated.
       — done 2026-08-02 (D196)
 - [ ] **CTX-WARM-02** Retain the previous context's client in the connector
       status: todo | owner: — | added: 2026-08-02 | blocked-on: the dogfood's pts 3-6 and
-      CTX-WARM-01's numbers
+      CTX-WARM-01's numbers (the 2026-08-09 dogfood answer is qualitative only — still blocked)
       notes: A one-entry cache inside `cmd/kubecom`'s `contextConnector`, keyed by context
       name: `ConnectCluster` returns the retained `tui.Cluster` for the context just left
       instead of rebuilding it. The shell is untouched — it still resets everything and
@@ -408,7 +409,8 @@ apart: only this one retains anything live, so only this one is gated.
       for that name. **Only worth doing if CTX-WARM-01's `connect=` is material**; note
       that `kube.Connect` does no network I/O, so it may well not be.
 - [ ] **CTX-WARM-03** Retain the discovery result per context, if discovery is the cost
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02
+      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02 (which is itself
+      blocked on the dogfood's pts 3-6 + numbers)
       notes: The other half of the log line. Discovery is already disk-cached per host with
       a 6 h TTL (`internal/kube/cache.go`), so the remaining cost is the walk + reconcile,
       not the network — measure before building. If it is worth it, retain the last

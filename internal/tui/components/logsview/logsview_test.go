@@ -1164,36 +1164,49 @@ func TestAppendBatchOfNothingIsANoOp(t *testing.T) {
 
 // TestSetStylesRepaintsPaintedHighlights is the trap this component's SetStyles exists
 // to avoid (M4-12b-1). shownLines is a *painted* cache — since LOGS-05b each kept line
-// is stored with the Match escape sequences already wrapped around its matched spans —
-// so a SetStyles that only assigned the field would leave every highlight on screen in
-// the departed theme's colors while the header moved to the new one, and only lines
-// streamed afterwards would follow. The assertion is against the theme's own rendering
-// of the span, so it states the invariant rather than an escape sequence.
+// is stored with its rendered escapes already baked in — so a SetStyles that only
+// assigned the field would leave every stamp on screen in the departed theme's Subtle
+// color while the header moved to the new one, and only lines streamed afterwards would
+// follow. The highlight can no longer demonstrate the rebuild: THEME-05 made
+// styles.Match theme-independent (weight, not paint), so its escapes are identical in
+// every theme by design. The stamp is still theme-dependent — it is painted in Subtle —
+// and it rides the same painted cache, so its change is what proves the rebuild. The
+// assertion is against the theme's own rendering, so it states the invariant rather than
+// an escape sequence.
 func TestSetStylesRepaintsPaintedHighlights(t *testing.T) {
-	m := newLogs()
-	m.Append("", "GET /healthz 200")
-	m.Append("", "POST /api/v1 500")
-	m = typeFilter(m, "500")
-	if !strings.Contains(m.View(), matchSpan("500")) {
+	m := newStampedLogs()
+	m.Append(stamp1, "GET /healthz 200")
+	m.Append(stamp2, "POST /api/v1 500")
+	m, _ = m.Update(keymap.ActionLogsTimestamps)
+	m = typeFilter(m, "0")
+	if !strings.Contains(m.View(), matchSpan("0")) {
 		t.Fatal("precondition: the matched span should be highlighted in the default theme")
+	}
+	if want := styles.Default().Subtle.Render(stamp1 + " "); !strings.Contains(m.View(), want) {
+		t.Fatalf("precondition: the first line's stamp should be painted in the default theme's Subtle; want %q in:\n%q",
+			want, m.View())
 	}
 
 	mono := styles.New(styles.MonokaiTheme())
 	m.SetStyles(mono)
 
-	if want := mono.Match.Render("500"); !strings.Contains(m.View(), want) {
-		t.Errorf("the highlight kept the old theme's colors after SetStyles; want the span rendered as %q in:\n%q",
+	if want := mono.Match.Render("0"); !strings.Contains(m.View(), want) {
+		t.Errorf("the highlight was dropped by the restyle; want the span rendered as %q in:\n%q",
 			want, m.View())
 	}
-	if strings.Contains(m.View(), matchSpan("500")) {
-		t.Error("the old theme's highlight is still on screen — the painted cache was not rebuilt")
+	if want := mono.Subtle.Render(stamp1 + " "); !strings.Contains(m.View(), want) {
+		t.Errorf("the stamp kept the old theme's color after SetStyles; want it rendered as %q in:\n%q",
+			want, m.View())
+	}
+	if want := styles.Default().Subtle.Render(stamp1 + " "); strings.Contains(m.View(), want) {
+		t.Error("the old theme's stamp is still on screen — the painted cache was not rebuilt")
 	}
 	// The repaint is a rebuild, not a reset: the buffer, the query and what it narrows to
 	// all survive.
-	if q := m.Query(); q != "500" {
+	if q := m.Query(); q != "0" {
 		t.Errorf("the grep query did not survive the restyle: %q", q)
 	}
-	if got := plain(m.View()); !strings.Contains(got, "POST /api/v1 500") || strings.Contains(got, "GET /healthz 200") {
+	if got := plain(m.View()); !strings.Contains(got, "POST /api/v1 500") || !strings.Contains(got, "GET /healthz 200") {
 		t.Errorf("the restyle changed which lines the grep keeps:\n%s", got)
 	}
 }
