@@ -1613,7 +1613,7 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 	m, _ := tableWith(t, "web-1", "web-2", "api-1")
 
 	m, _ = press(t, m, slash)
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("app.filter should open the filter field")
 	}
 	if !m.table.Focused() {
@@ -1667,7 +1667,7 @@ func TestFilterMatchesAreHighlightedInTheFrame(t *testing.T) {
 func TestFilterInertWithoutTable(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{})) // watcher wired, but no selection yet
 	m, cmd := press(t, m, slash)
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("app.filter should be inert with no current table")
 	}
 	if cmd != nil {
@@ -1683,7 +1683,7 @@ func TestFilterCommitKeepsNarrowing(t *testing.T) {
 	m = typeStr(t, m, "web")
 
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("enter should close the filter input")
 	}
 	if m.table.Filter() != "web" {
@@ -1705,7 +1705,7 @@ func TestFilterCancelRestores(t *testing.T) {
 	}
 
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("esc should close the filter input")
 	}
 	if m.table.Filter() != "" {
@@ -1804,7 +1804,7 @@ func TestFilterLetterKeysTypeNotNavigate(t *testing.T) {
 	}
 	// A no-text nav key (down arrow) is a control action routed to the table.
 	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("a nav key should not close the filter")
 	}
 }
@@ -1816,12 +1816,12 @@ func TestFilterBackspaceOnEmptyQueryCancels(t *testing.T) {
 	m, _ := tableWith(t, "web-1", "web-2", "api-1")
 	before := m.View().Content
 	m, _ = press(t, m, slash)
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("precondition: `/` should open the filter field")
 	}
 
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("backspace on an empty query should cancel the search and close the field")
 	}
 	if m.table.RowCount() != 3 {
@@ -1845,14 +1845,14 @@ func TestFilterBackspaceErasesBeforeItCancels(t *testing.T) {
 	m = typeStr(t, m, "we")
 
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("backspace with text left should edit the query, not close the field")
 	}
 	if m.table.Filter() != "w" {
 		t.Fatalf("backspace should erase one character, filter = %q", m.table.Filter())
 	}
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace}) // query now empty, field still open
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("the backspace that empties the query should not also close the field")
 	}
 	if m.table.RowCount() != 3 {
@@ -1860,7 +1860,7 @@ func TestFilterBackspaceErasesBeforeItCancels(t *testing.T) {
 	}
 
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace}) // nothing left to erase → cancel
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("backspace into an empty query should cancel the search")
 	}
 	if m.table.Filter() != "" {
@@ -1878,19 +1878,19 @@ func TestFilterBackspaceCancelsAReopenedQuery(t *testing.T) {
 	m = typeStr(t, m, "web")
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter}) // commit; `/` will reopen seeded
 	m, _ = press(t, m, slash)
-	if m.filterInput.Value() != "web" {
-		t.Fatalf("precondition: reopening `/` should seed the committed query, got %q", m.filterInput.Value())
+	if m.filter.Value() != "web" {
+		t.Fatalf("precondition: reopening `/` should seed the committed query, got %q", m.filter.Value())
 	}
 
 	for range 3 {
 		m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
-		if !m.filtering {
+		if !m.filter.Active() {
 			t.Fatal("erasing the seeded query must not close the field")
 		}
 	}
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
-	if m.filtering || m.table.Filter() != "" {
-		t.Fatalf("backspace past the start should cancel, filtering=%v filter=%q", m.filtering, m.table.Filter())
+	if m.filter.Active() || m.table.Filter() != "" {
+		t.Fatalf("backspace past the start should cancel, filtering=%v filter=%q", m.filter.Active(), m.table.Filter())
 	}
 }
 
@@ -1944,13 +1944,13 @@ func TestNewResourceClearsFilter(t *testing.T) {
 	m, _ := tableWith(t, "web-1", "web-2", "api-1")
 	m, _ = press(t, m, slash)
 	m = typeStr(t, m, "web")
-	if m.table.Filter() == "" || !m.filtering {
+	if m.table.Filter() == "" || !m.filter.Active() {
 		t.Fatal("precondition: a filter should be open and applied")
 	}
 
 	next, _ := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("nodes")})
 	m = next.(Model)
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("selecting a new resource should close the filter input")
 	}
 	if m.table.Filter() != "" {
@@ -2085,7 +2085,7 @@ func TestProgramFilterFlow(t *testing.T) {
 	if !ok {
 		t.Fatalf("final model is %T, want Model", tm.FinalModel(t))
 	}
-	if fm.filtering {
+	if fm.filter.Active() {
 		t.Fatal("enter should have committed the filter, closing the input (filtering=false)")
 	}
 	if fm.table.Filter() != "web" {

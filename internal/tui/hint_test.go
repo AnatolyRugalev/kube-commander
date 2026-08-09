@@ -211,7 +211,7 @@ func TestHintBarTracksTheBrowseFilterField(t *testing.T) {
 		keymap.ActionHelp, keymap.ActionQuit)
 
 	m, _ = press(t, m, slash)
-	if !m.filtering {
+	if !m.filter.Active() {
 		t.Fatal("`/` should open the browse filter field")
 	}
 	hint := m.hintbar.View()
@@ -229,7 +229,7 @@ func TestHintBarTracksTheBrowseFilterField(t *testing.T) {
 
 	// enter commits the narrowing and closes the field, so the table set comes back.
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
-	if m.filtering {
+	if m.filter.Active() {
 		t.Fatal("enter should commit the filter and close the field")
 	}
 	if got := m.hintbar.View(); got != table {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/filter"
 	"github.com/neuroplastio/kubecom/internal/tui/components/forwards"
 	"github.com/neuroplastio/kubecom/internal/tui/components/hintbar"
 	"github.com/neuroplastio/kubecom/internal/tui/components/logsview"
@@ -1015,15 +1015,17 @@ type Model struct {
 	searchTarget    kube.ObjectRef
 	hasSearchTarget bool
 
-	// filterInput is the table filter field (M2-09b): app.filter (`/`) opens it over
+	// filter is the table filter field (M2-09b): app.filter (`/`) opens it over
 	// the current table, typing narrows the live rows through table.SetFilter (D78),
-	// and it re-scopes to whatever is showing. filtering is whether it is open and
+	// and it re-scopes to whatever is showing. Active is whether it is open and
 	// capturing text — while true the root routes every keypress through
 	// routeFilterKey (control/text split, D73), bypassing the sequencer, exactly as
 	// the namespace picker does. The narrowing is a view over the table's
-	// authoritative full set, so clearing the filter restores every live row.
-	filterInput textinput.Model
-	filtering   bool
+	// authoritative full set, so clearing the filter restores every live row. The
+	// field's own state — open and query text — lives in the components/filter
+	// sub-model (MONO-03/D265); the shell keeps the table and performs the
+	// narrowing.
+	filter filter.Model
 
 	// discoveryCancel tears the in-flight discovery pass down on quit (the cap-1
 	// discovery channel already keeps the goroutine from leaking, D8, but cancelling
@@ -1106,13 +1108,11 @@ func New(opts ...Option) Model {
 // eleven models after the fact — that is M4-12b's live-restyle problem, and a
 // launch-time theme does not need it).
 func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
-	fi := textinput.New()
-	fi.Prompt = "/"
 	m := Model{
 		keymap:       km,
 		seq:          keymap.NewSequencer(km),
 		styles:       styles.Default(),
-		filterInput:  fi,
+		filter:       filter.New(),
 		logger:       slog.New(slog.DiscardHandler),
 		toastTimeout: errorDisplay,
 	}
@@ -1267,7 +1267,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activePicker() != nil {
 			return m.routePickerKey(msg)
 		}
-		if m.filtering {
+		if m.filter.Active() {
 			return m.routeFilterKey(msg)
 		}
 		if m.modal.Prompting() {
@@ -1593,9 +1593,7 @@ func (m Model) watchResource(r kube.Resource) (tea.Model, tea.Cmd) {
 	// A fresh resource (or re-scoped namespace) starts unfiltered: SetTable clears
 	// the table's filter (D78); mirror that in the shell's filter state so a stale
 	// prompt/indicator from the previous resource does not linger.
-	m.filtering = false
-	m.filterInput.Blur()
-	m.filterInput.Reset()
+	m.filter = m.filter.Reset()
 	m.syncFilterStatus()
 
 	// A children drill-down watches the owner's pods, not the app's namespace: the
@@ -1926,9 +1924,7 @@ func (m *Model) resetCluster() {
 	m.table = table.New(m.styles)
 	m.namespace = ""
 	m.current, m.hasCurrent = kube.Resource{}, false
-	m.filtering = false
-	m.filterInput.Blur()
-	m.filterInput.Reset()
+	m.filter = m.filter.Reset()
 
 	// The status bar describes the old cluster down to a transient toast about it,
 	// and the spinner would otherwise keep turning for a pass that was just
@@ -3595,10 +3591,8 @@ func (m Model) openFilter() (tea.Model, tea.Cmd) {
 	if !m.hasCurrent {
 		return m, nil
 	}
-	m.filtering = true
-	m.filterInput.SetValue(m.table.Filter())
-	m.filterInput.CursorEnd()
-	cmd := m.filterInput.Focus()
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Open(m.table.Filter())
 	m.menu.Blur()
 	m.table.Focus()
 	m.syncHints() // filtering acts on the table → table-context hints
@@ -3633,12 +3627,12 @@ func (m Model) routeFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
 		return m.handleFilterAction(action)
 	}
-	if isEmptyLineBackspace(key, m.filterInput.Value()) {
+	if isEmptyLineBackspace(key, m.filter.Value()) {
 		return m.handleFilterAction(keymap.ActionBack)
 	}
 	var cmd tea.Cmd
-	m.filterInput, cmd = m.filterInput.Update(msg)
-	m.table.SetFilter(m.filterInput.Value())
+	m.filter, cmd = m.filter.Update(msg)
+	m.table.SetFilter(m.filter.Value())
 	m.syncFilterStatus()
 	return m, cmd
 }
@@ -3670,8 +3664,7 @@ func (m Model) handleFilterAction(a keymap.Action) (tea.Model, tea.Cmd) {
 // routing resumes so nav (j/k) and search (n/N) step through the matching rows, and
 // the status bar keeps the "/query" indicator until the filter is cleared (esc).
 func (m Model) commitFilter() (tea.Model, tea.Cmd) {
-	m.filtering = false
-	m.filterInput.Blur()
+	m.filter = m.filter.Commit()
 	m.syncFilterStatus()
 	return m, nil
 }
@@ -3681,9 +3674,7 @@ func (m Model) commitFilter() (tea.Model, tea.Cmd) {
 // no filter set. It is esc's behaviour both while editing (clears-then-closes) and
 // on a committed filter (clears the applied narrowing).
 func (m *Model) clearFilter() {
-	m.filtering = false
-	m.filterInput.Blur()
-	m.filterInput.Reset()
+	m.filter = m.filter.Reset()
 	m.table.ClearFilter()
 	m.syncFilterStatus()
 }
@@ -3786,7 +3777,7 @@ func (m *Model) hintContext() keymap.HelpContext {
 			return keymap.HelpPickerFilter
 		}
 		return keymap.HelpPicker
-	case m.filtering:
+	case m.filter.Active():
 		// The browse filter field captures text while it is open (routeFilterKey), so
 		// the table set underneath — `/`, `n`, `s`, `a`, `?`, `q` — types instead of
 		// firing; only the no-text keys act (HINT-03). Resolved after the picker and
@@ -3832,8 +3823,8 @@ func (m *Model) hintContext() keymap.HelpContext {
 // applied but the input is closed, and nothing when no filter is set.
 func (m *Model) syncFilterStatus() {
 	switch {
-	case m.filtering:
-		m.status.SetFilter(m.filterInput.View())
+	case m.filter.Active():
+		m.status.SetFilter(m.filter.View())
 	case m.table.Filter() != "":
 		m.status.SetFilter("/" + m.table.Filter())
 	default:
@@ -3856,7 +3847,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filtering
+	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filter.Active()
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
