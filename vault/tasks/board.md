@@ -6,6 +6,9 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 _Last updated: 2026-08-09 — CTX-MEM-04 closed the drill-in deferral: a remembered drill-in comes back as a drill-in (owner recorded beside the kind, re-resolved on restore, owner-gone landing on the plain list with a notice — D255), so the CTX-MEM line is fully done. Earlier today: THEME-06 landed `gruvbox-light`, taking the built-in registry to fourteen (eleven dark, three light), and the release-namespace human task was folded in and closed (D253/D254) — the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
 ## In Progress
 
+- [ ] **LOGS-08** No-previous-instance rejection keeps the log view open (fallback to the running stream) — feedback `2026-08-09-logs-no-previous-keeps-view`
+      status: in-progress | owner: kimi-k3 | added: 2026-08-09
+
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
