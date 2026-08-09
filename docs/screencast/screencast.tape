@@ -13,10 +13,19 @@
 #   * `kubecom` on PATH — `make screencast` puts *this checkout's* binary there, so
 #     the GIF always shows the code it was recorded from.
 #
-# TUNE: the two lines marked `TUNE` below are the only cluster-specific strings in
-# the tape. `kube-system` is the default because every cluster has it. Change them
-# to whatever reads best on the cluster you record against, re-run
-# `make screencast`, and commit the GIF with the tape change.
+# TUNE: three strings in the tour are cluster-specific — the resource filter (`shop`
+# below), the log grep query (`info`) and the cluster-search query. `shop` is used
+# twice on purpose: the filter step proves there is a matching pod, and the search
+# step reuses the same string so the cluster-wide demo cannot come back empty — it
+# must show the objects the tour has already put on screen (feedback
+# 2026-08-09-screencast-tape-tuning). Change any of the three to whatever reads best
+# on the cluster you record against, re-run `make screencast`, and commit the GIF
+# with the tape change.
+#
+# Reruns are reproducible: kubecom's per-context state (remembered pane, menu pins,
+# last namespace — CTX-MEM) is pointed at a throwaway XDG dir that the setup below
+# wipes before every launch, so the second run opens on the same welcome screen as
+# the first.
 #
 # Every keypress below carries an annotation on the line above it: either
 # `# kubecom-action: <id>`, naming the keymap action the press is meant to trigger,
@@ -45,6 +54,13 @@ Type@1ms "./docs/screencast/setup.sh" Enter
 Sleep 1s
 
 Type@1ms "export PATH=$PWD/bin:$PATH" Enter
+
+# Point kubecom's state at a throwaway XDG dir and wipe it, so this run starts from
+# the welcome screen no matter what the last run left behind (the remembered pane,
+# menu pins and last namespace are per-context state, D240). Recorded once, applied
+# to every rerun — the recording is reproducible by construction.
+# kubecom-input: reset kubecom's per-run state, then redirect its state dirs
+Type@1ms "rm -rf /tmp/kubecom-screencast && export XDG_CONFIG_HOME=/tmp/kubecom-screencast && export XDG_CACHE_HOME=/tmp/kubecom-screencast/cache" Enter
 
 # kubecom-input: tmux prefix
 Ctrl+B
@@ -176,12 +192,52 @@ Show
 # kubecom-action: search.cluster
 Ctrl+S
 Sleep 1500ms
-# kubecom-input: TUNE-adjacent — a query broad enough to hit several kinds
-Type "dns"
+# kubecom-input: the same string the filter step already matched, so the search
+# cannot demo zero results — the cluster-wide pass must find the pod on screen
+Type "shop"
 Sleep 4s
 # kubecom-action: nav.back
 Escape
 Sleep 500ms
+# kubecom-action: nav.back
+Escape
+Sleep 1s
+
+# ------------------------------------------------------------- theme preview ----
+Hide
+# kubecom-input: tmux prefix
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press T to preview the themes'" Enter
+Show
+
+# `T` opens the palette on its `:theme ` stage. Moving the cursor previews each
+# palette across the whole screen live — painted background included — so you can
+# try the look before committing; `esc` keeps the theme you opened with (THEME-07).
+# kubecom-action: theme.switch
+Type "T"
+Sleep 1s
+# kubecom-action: nav.down
+Down
+Sleep 1s
+# kubecom-action: nav.down
+Down
+Sleep 1s
+# kubecom-action: nav.back
+Escape
+Sleep 1s
+
+# -------------------------------------------------------------------- help -----
+Hide
+# kubecom-input: tmux prefix
+Ctrl+B
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press ? for the full keymap'" Enter
+Show
+
+# `?` overlays the complete keymap — every action, the vim key and its classic
+# fallback side by side (M2-01d), rebindable from config.
+# kubecom-action: app.help
+Type "?"
+Sleep 2s
 # kubecom-action: nav.back
 Escape
 Sleep 1s

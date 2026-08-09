@@ -7333,3 +7333,27 @@ leg must not silently contradict:
    committed theme is marked correctly from then on.
 4. **Committing the anchor row is still a no-op** even after a preview toured other
    palettes (the marked row stays choosable, D158) — no repaint, no file write.
+
+## D261 — the screencast tape must demo a match and start from a clean state; reruns are reproducible (2026-08-09, M5-09b)
+
+Feedback `2026-08-09-screencast-tape-tuning` (maintainer, verbatim): "search across
+cluster doesn't find anything (bad example)"; "initial state gets modified when
+rerunning the tape"; "we need to show off more features and add more captions".
+Three constraints a future tape edit must not silently break:
+
+1. **A demo query must be one the tour already proved matches.** The cluster-search
+   step now types `shop` — the same string the filter step matched a pod with — so
+   the cluster-wide pass cannot come back empty: whatever the search's scope and
+   ranking do, it must show the pod that is already on screen. Any future re-query
+   must be a string the tour demonstrates a hit for, never an unverified guess.
+2. **Every rerun starts from the welcome screen.** The tape redirects kubecom's
+   `XDG_CONFIG_HOME`/`XDG_CACHE_HOME` to a throwaway `/tmp/kubecom-screencast` and
+   wipes it before each launch, so the CTX-MEM pane memory, menu pins and last
+   namespace cannot leak a previous run's screen into the next. A future leg that
+   changes where kubecom keeps state must keep this seam working (any XDG dir the
+   config package reads is covered).
+3. **The tour grows, never shrinks, and every keypress stays annotated.** The theme
+   preview step (THEME-07) and the help overlay joined the tour with their captions.
+   `TestScreencastTapeMatchesTheKeymap` still binds each annotated key to the
+   registry and `TestScreencastTapeShowsTheHeadlineActions` still requires the
+   headline actions — a future edit drops one of those only by changing the guard.

@@ -35,9 +35,14 @@ from the old kube-commander.
   against `DefaultKeymap`, the tour must press the headline actions, and the README may
   reference the GIF exactly when the file exists. The tape is validated by `vhs validate`
   (vhs is `go install`-able); **recording** needed ttyd + ffmpeg, a real cluster and a real
-  terminal (D79) — **recorded by the maintainer 2026-08-09** against the k3d dogfood
-  cluster, `docs/screencast.gif` + README embed (484e60c). Residual tuning is feedback
-  `2026-08-09-screencast-tape-tuning`.
+  terminal (D79) — **  recorded by the maintainer 2026-08-09** against the k3d dogfood
+  cluster, `docs/screencast.gif` + README embed (484e60c). The residual tuning
+  (feedback `2026-08-09-screencast-tape-tuning`) **landed 2026-08-09 (D261)**:
+  the search demo now types the same `shop` the filter step already matched, so the
+  cluster-wide pass cannot come back empty; the tape wipes a throwaway XDG dir before
+  every launch so reruns start from the same welcome screen; and the tour grew a
+  theme-preview step (THEME-07) and the help overlay, both captioned. Re-recording is
+  the maintainer's, whenever they next want to refresh the GIF.
 - Keybindings reference (generated from the `keys/` bindings where possible) — **already
   met**: `docs/keybindings.md` is generated from the keymap registry by `make keys-doc`
   and `make check` fails on drift (M2-01e/D51). Nothing to build; M5-01 ticks it.

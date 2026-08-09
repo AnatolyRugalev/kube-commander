@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — THEME-07 closed the theme-picker live-preview feedback (D260): the `:theme ` stage re-themes the whole screen to the cursor's row as it moves (`enter` commits and writes back, `esc`/rewind restores the theme you opened with), and its feedback file is deleted. One feedback item remains in `vault/feedback/` and preempts the board (`screencast-tape-tuning`). Earlier today: LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — M5-09b closed the screencast-tape-tuning feedback (D261): the search demo reuses the filter's `shop` so it cannot come back empty, the tape wipes a throwaway XDG dir before every launch so reruns start from the same welcome screen, and the tour grows a theme-preview step (THEME-07) and the help overlay; its feedback file is deleted, leaving `vault/feedback/` empty. Earlier today: THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -606,6 +606,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **M5-09b** Screencast tape tuning — the search demo reuses the filter's `shop` so it cannot come back empty, the tape wipes a throwaway XDG dir so reruns start from the same welcome screen, and the tour adds a theme-preview step and the help overlay with captions — feedback `2026-08-09-screencast-tape-tuning` — done 2026-08-09 (D261)
 
 - [x] **THEME-07** The palette's `:theme ` stage previews live — the screen re-themes to the cursor's row as it moves, `enter` commits and writes back, `esc`/rewind restores the theme you opened with — feedback `2026-08-09-theme-picker-live-preview` — done 2026-08-09 (D260)
 

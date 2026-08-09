@@ -55,6 +55,10 @@ test-envtest:
 # docs/screencast/screencast.tape for what the tour assumes, and D181 for why the recording is
 # a human's and not an agent's.
 #
+# The tape redirects kubecom's XDG config/cache dirs to a throwaway /tmp dir and
+# wipes it before every launch, so reruns start from the same welcome screen (the
+# remembered pane and menu pins never leak across recordings).
+#
 # The binary is built here and put first on PATH so the recording is always of this
 # checkout, never of a stale `kubecom` someone installed months ago.
 BIN_DIR ?= $(CURDIR)/bin
