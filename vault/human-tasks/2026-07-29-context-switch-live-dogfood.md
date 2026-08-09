@@ -9,7 +9,7 @@
 - Blocks: none (advisory — gates only the M4 "switch context without restarting; watches
   and menu rebind" exit criterion, which stays unticked until this is done; M4-05 and every
   other M4 slice may proceed)
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -191,3 +191,21 @@ stays unticked. Still missing, each a distinct claim the criterion makes:
 "Fast" and "working well" are consistent with the cheap-`connect=` hypothesis,
 but they are not the leak checks or the measured numbers. Do **not** unblock
 CTX-WARM-02/03/04 or tick the M4 criterion from this alone.
+
+## Update (2026-08-09, final) — closed by maintainer directive
+
+Maintainer, verbatim: "I think current switching functionality is overall good
+enough and I don't want to spend more time testing it. We'll ship it like this,
+stop feeding it into my tasks."
+
+Recorded as **D256**: the remaining pts 3–8 are **waived by maintainer decision**;
+the M4 context-switch exit criterion may be ticked on this waiver, and
+CTX-WARM-02/03/04 are cancelled (the warmth line existed to speed up an
+experience the maintainer has accepted as-is). Do not re-raise this dogfood.
+
+One finding did come out of attempting pt 3: `C` is not reachable while a popup,
+overlay or the logs view is open, so the leak check as scripted cannot be
+performed — filed as `../feedback/2026-08-09-context-switch-key-from-overlays.md`.
+
+Next leg: tick the M4 context-switch exit criterion, mark CTX-WARM-02/03/04
+cancelled on the board (citing D256), fold this in and delete the file.

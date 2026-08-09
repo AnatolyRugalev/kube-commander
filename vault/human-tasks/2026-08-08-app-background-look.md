@@ -13,7 +13,7 @@
   right, and whether the multiplexer you actually use passes the escape through. Nothing
   on the board waits for this; the light-palette slice should carry it forward rather
   than wait on it.)
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -95,6 +95,15 @@ well, whether an overlay leaves a seam, or what a given tmux does with the escap
 
 ## Result
 
-<!-- Fill this in, set Status: done, and the next leg will fold it into the vault and
-delete this file. If step 6 says the background does not land in your multiplexer, that
-answer is the light-palette slice's starting point. -->
+**Declined by the maintainer 2026-08-09** — verbatim: "And themes look good
+enough, no need to over-QA it. I do not care." Items 1–7 are waived, including
+the multiplexer question (items 6–7): if a multiplexer swallows the background
+escape it will surface as ordinary feedback. THEME-05 (the light-palette
+contrast fix) stays on the board but proceeds without the multiplexer data this
+task was meant to supply. Recorded in D256 pt 3; do not re-raise.
+
+One piece of actionable feedback did come out of the sitting: live-preview the
+theme as the palette selection moves — filed as
+`../feedback/2026-08-09-theme-picker-live-preview.md`.
+
+Next leg: fold in and delete this file.

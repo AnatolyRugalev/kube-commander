@@ -156,3 +156,13 @@ Do the three steps, then set `Status: done` with a `## Result` recording: whethe
 `kubecom-bin` was free, which route you took to retire `kube-commander`, whether anyone was
 using `kubectl-ui`, and — after the first tag — whether `yay -S kubecom-bin` produced a
 launchable binary.
+
+## Update (2026-08-09) — deferred by the maintainer; stays open
+
+Maintainer, verbatim: "next time."
+
+All three steps (create `kubecom-bin`, retire `kube-commander`, add
+`AUR_SSH_PRIVATE_KEY`) are deferred, so this task stays **open** but must not be
+re-surfaced at every orient (D256 pt 4). Re-ask alongside the first release tag —
+the AUR publish skips itself without the key (D173 pt 2), so deferral costs nothing
+until then.

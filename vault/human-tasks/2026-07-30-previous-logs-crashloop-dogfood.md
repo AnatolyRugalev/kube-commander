@@ -9,7 +9,7 @@
 - Blocks: none (advisory — every claim below is covered by hermetic tests against a fake
   streamer; what a sandbox cannot supply is a real kubelet serving a real terminated
   container's log. The M5 line is unaffected.)
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -95,3 +95,24 @@ Still open, and the reason this file is not closed:
 To finish: select the crash-looper, `L`, `Ctrl+P`, and **watch it for ~30 seconds** —
 does it settle, or keep reconnecting? Then the same on any healthy pod for pt 4. That is
 the whole remainder.
+
+**Completed 2026-08-09 — maintainer review (via margin on the sitting guide).**
+
+- **pt 2 — passed.** "It works." The `Follow`+`Previous` bet (D177 pt 2) is confirmed
+  against a real kubelet: the previous instance's log arrives and the stream settles.
+- **pt 3 — passed (implicitly).** The flip was exercised both ways during pts 2/5
+  without complaint.
+- **pt 4 — answered with a change request.** Current behavior: the error toast shows
+  AND the log view exits. The maintainer wants the view to stay. Filed as
+  `../feedback/2026-08-09-logs-no-previous-keeps-view.md`.
+- **pt 5 — answered: fine.** Keeping the `/` query across `Ctrl+P` is the right
+  behavior; D177 pt 3 stands.
+- **item 6 — passed with an improvement.** Selection bar vs. match highlight reads as
+  two things; the maintainer wants the match itself to carry the bright yellow
+  background (selection row stays as-is). Filed as
+  `../feedback/2026-08-09-log-match-highlight-background.md`.
+- **New feedback, not a checklist item:** `Ctrl+P` is awkward — allow the command
+  palette inside the logs view and pick a better default binding. Filed as
+  `../feedback/2026-08-09-logs-view-palette-bindings.md`.
+
+Next leg: fold in and delete this file.

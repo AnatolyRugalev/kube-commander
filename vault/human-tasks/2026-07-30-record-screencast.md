@@ -7,7 +7,7 @@
   keybindings docs current and accurate"; the tape, the `make screencast` target and their
   drift guards have landed, so M5-06…M5-11 all proceed. M5-10's pre-flight should carry this
   item forward, not wait on it.)
-- Status: open (Note: status bar narration is implemented, but sequence needs refinement later)
+- Status: done
 
 ## What's needed
 
@@ -90,3 +90,19 @@ naming the cluster shape you used and any tape tuning you had to do (so a re-rec
 change starts from what worked). If you would rather not host a GIF in the repo at all — it is
 a binary that grows every re-record — say so instead, and that is a decision to record: the
 alternative is an asset branch or a release-attached file, and the README link changes with it.
+
+## Result
+
+**Done by the maintainer 2026-08-09.** Recorded against the k3d dogfood cluster and
+committed as `484e60c` ("docs: Add screencast recording and update vhs setup") —
+`docs/screencast.gif` plus the README embed that `TestScreencastAssetAndReadmeAgree`
+keeps honest, with tmux-driven captions added in the same pass.
+
+Remaining tuning, from the maintainer, filed as
+`../feedback/2026-08-09-screencast-tape-tuning.md`: the cross-cluster search example
+finds nothing (bad example), rerunning the tape starts from modified initial state,
+and the tour should show more features with more captions.
+
+Next leg: fold in and delete this file; the screencast half of the M5 "README +
+keybindings docs current and accurate" criterion can be ticked (a GIF exists, is
+linked, and the tape/keymap guards pass), with the tuning feedback tracked separately.

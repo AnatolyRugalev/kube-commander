@@ -16,7 +16,7 @@
   the wording, the wrap and the clear-on-recovery. The single thing a sandbox cannot supply
   is a **real apiserver's** message for a conversion webhook it cannot reach, which is the
   string the named-cause predicate matches on. Nothing on the board waits for this.)
-- Status: open
+- Status: done
 
 ## What's needed
 
@@ -135,4 +135,12 @@ should start failing; that is the state kubecom needs to be opened in.
 
 ## Result
 
-_(unanswered)_
+**Declined by the maintainer 2026-08-09** — verbatim: "also, not important for
+today, mark as 'do not care'." Items 1–5 (conversion webhook) and 6–8 (the
+credential-plugin pane, offer/suspend, and paint-over checks — never runnable
+from this kubeconfig anyway: no exec-plugin contexts) are all waived. The
+hermetic coverage stands as the verification of CRD-01/AUTH-04b/05b/07. Recorded
+in D256 pt 3; do not re-raise. If a real apiserver's wording ever diverges from
+the `conversion webhook for ` predicate, it will surface as ordinary feedback.
+
+Next leg: fold in and delete this file.

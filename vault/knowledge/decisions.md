@@ -7176,3 +7176,30 @@ silently contradict:
    launch.
 
 
+## D256 — maintainer review 2026-08-09: context switching ships as-is; remaining dogfood QA declined (2026-08-09, human-tasks fold-in)
+
+The maintainer reviewed the open human tasks via margin and closed most of them
+by directive. Constraints a future leg must not silently contradict:
+
+1. **Context switching is accepted as-is.** Verbatim: "current switching
+   functionality is overall good enough and I don't want to spend more time
+   testing it. We'll ship it like this, stop feeding it into my tasks." The
+   unverified pts 3–8 of the context-switch dogfood are **waived**; the M4
+   context-switch exit criterion may be ticked on this waiver. Do not re-raise
+   the dogfood in any form.
+2. **CTX-WARM-02/03/04 are cancelled.** The warmth line existed to make
+   switching feel faster; the maintainer accepted the current speed without the
+   pt-7 numbers. This supersedes the gating in D196 pt 3 — do not start those
+   board items; mark them cancelled, citing this decision.
+3. **The remaining dogfood QA is declined, not failed.** The conversion-webhook
+   task (items 1–8) and the app-background task (items 1–7) were marked "do not
+   care" / "no need to over-QA it". Their hermetic coverage stands as the
+   verification. Do not re-raise either as a human task; if a real apiserver's
+   wording or a multiplexer's escape handling ever diverges, it will come back
+   as ordinary feedback. THEME-05 stays on the board but proceeds without the
+   multiplexer data the background task was meant to supply.
+4. **The Homebrew/AUR credential tasks are deferred to release time** ("do not
+   care, post-release" / "next time"). They stay open in `vault/human-tasks/`
+   but must not be re-surfaced at every orient; re-ask when the first release
+   tag is being cut. Both publishers skip themselves without their secrets
+   (D173 pt 2), so the deferral is cost-free until then.

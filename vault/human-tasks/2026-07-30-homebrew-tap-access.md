@@ -106,3 +106,12 @@ repository `owner/homebrew-x`, so this repo's `homebrew-tap` taps as `neuroplast
 Do the token step, then set `Status: done` with a `## Result` recording: that the token was
 created, and — after the first tag — whether `brew install --cask kubecom` produced a
 launchable binary.
+
+## Update (2026-08-09) — deferred by the maintainer; stays open
+
+Maintainer, verbatim: "do not care, post-release."
+
+The token step is deferred until around the first release, so this task stays **open**
+but must not be re-surfaced at every orient (D256 pt 4). Re-ask when the tag
+(`2026-07-30-first-release-tag`) is being cut — the cask publish skips itself without
+the secret (D173 pt 2), which remains the correct failure mode until then.
