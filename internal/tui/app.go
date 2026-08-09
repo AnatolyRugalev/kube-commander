@@ -303,6 +303,14 @@ func WithWatcher(w ResourceWatcher) Option {
 	return func(m *Model) { m.watcher = w }
 }
 
+// WithToastTimeout overrides how long a surfaced error or notice stays in the
+// status bar before it auto-clears (default errorDisplay, 5s). Tests shrink it
+// to ~0 so draining a notice/error command returns immediately instead of
+// blocking the full toast duration (audit 2026-08-09-test-suite-runtime).
+func WithToastTimeout(d time.Duration) Option {
+	return func(m *Model) { m.toastTimeout = d }
+}
+
 // WithDiscoverer wires the kube discovery client the shell uses to reconcile the
 // resource menu on startup. Without it the model never runs discovery (the menu
 // stays on its static seed).
@@ -1062,6 +1070,12 @@ type Model struct {
 	// matches clears the bar.
 	statusErrGen int
 
+	// toastTimeout is how long a surfaced error or notice stays in the status
+	// bar before it auto-clears. Defaults to errorDisplay; WithToastTimeout lets
+	// tests shrink it to ~0 so draining a surfaceNotice/surfaceError command
+	// does not sit out the full duration (audit 2026-08-09-test-suite-runtime).
+	toastTimeout time.Duration
+
 	// statusNoticeGen is statusErrGen's twin for the neutral (non-error) status
 	// notice — the transient success message the secret copy shows (M3-08b). Kept
 	// separate so an error and a notice clear on independent timers.
@@ -1100,11 +1114,12 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	fi := textinput.New()
 	fi.Prompt = "/"
 	m := Model{
-		keymap:      km,
-		seq:         keymap.NewSequencer(km),
-		styles:      styles.Default(),
-		filterInput: fi,
-		logger:      slog.New(slog.DiscardHandler),
+		keymap:       km,
+		seq:          keymap.NewSequencer(km),
+		styles:       styles.Default(),
+		filterInput:  fi,
+		logger:       slog.New(slog.DiscardHandler),
+		toastTimeout: errorDisplay,
 	}
 	for _, opt := range opts {
 		opt(&m)
@@ -1652,7 +1667,7 @@ func (m *Model) surfaceError(e ErrorMsg) tea.Cmd {
 	m.status.SetError(e.Message())
 	m.statusErrGen++
 	gen := m.statusErrGen
-	return tea.Tick(errorDisplay, func(time.Time) tea.Msg {
+	return tea.Tick(m.toastTimeout, func(time.Time) tea.Msg {
 		return errorClearMsg{gen: gen}
 	})
 }
@@ -1666,7 +1681,7 @@ func (m *Model) surfaceNotice(text string) tea.Cmd {
 	m.status.SetNotice(text)
 	m.statusNoticeGen++
 	gen := m.statusNoticeGen
-	return tea.Tick(errorDisplay, func(time.Time) tea.Msg {
+	return tea.Tick(m.toastTimeout, func(time.Time) tea.Msg {
 		return noticeClearMsg{gen: gen}
 	})
 }

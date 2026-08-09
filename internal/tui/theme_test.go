@@ -351,8 +351,11 @@ func themeLabelFor(t *testing.T, m Model, theme string) string {
 
 // themeCmdMsgs runs a theme-pick batch and returns the messages its sub-commands
 // produced *quickly*. The batch also carries the notice's auto-clear tick, which
-// blocks for errorDisplay, so each sub-command runs with a short timeout and only the
-// instant ones (the write-back) are collected — the copiedClipboard precedent.
+// resolves to a noticeClearMsg (the toast duration is shrunk to ~0 in sizedWith,
+// so the tick returns instantly rather than blocking for errorDisplay); it is
+// the auto-clear, not a write-back result, so it is filtered like the
+// copiedClipboard precedent filters the blocking tick — only the instant ones
+// (the write-back) are collected.
 func themeCmdMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
 	if cmd == nil {
@@ -372,11 +375,16 @@ func themeCmdMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
 		go func(c tea.Cmd) { ch <- c() }(c)
 		select {
 		case m := <-ch:
-			if m != nil { // a successful write-back reports nothing
-				out = append(out, m)
+			switch m.(type) {
+			case noticeClearMsg, errorClearMsg:
+				// the toast's auto-clear — not a write-back result.
+			default:
+				if m != nil { // a successful write-back reports nothing
+					out = append(out, m)
+				}
 			}
 		case <-time.After(200 * time.Millisecond):
-			// the blocking auto-clear tick — skip it and try the next sub-command.
+			// a genuinely blocking sub-command — skip it and try the next one.
 		}
 	}
 	return out

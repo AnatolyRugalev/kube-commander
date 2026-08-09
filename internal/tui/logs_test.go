@@ -691,8 +691,9 @@ func TestLogsPreviousWithNoTerminatedInstanceDegrades(t *testing.T) {
 		t.Fatal("the rejection should re-open the running stream and toast the reason")
 	}
 	// The fallback batches the resumed stream's pump with the toast's auto-clear
-	// tick. Run each sub-command with a timeout (the tick blocks for errorDisplay,
-	// the themeCmdMsgs precedent) and drain the one that is a pump.
+	// tick. The tick resolves to a noticeClearMsg (the toast duration is shrunk to
+	// ~0 in sizedWith, so it returns instantly rather than blocking for
+	// errorDisplay); it is not a logMsg, so it is skipped and the pump drained.
 	msg := fallback()
 	batch, ok := msg.(tea.BatchMsg)
 	if !ok {
@@ -713,7 +714,7 @@ func TestLogsPreviousWithNoTerminatedInstanceDegrades(t *testing.T) {
 				m = drainLogPump(t, next.(Model), pumpCmd)
 			}
 		case <-time.After(200 * time.Millisecond):
-			// the blocking auto-clear tick — skip it.
+			// a genuinely blocking sub-command — skip it.
 		}
 	}
 	if !pumped {

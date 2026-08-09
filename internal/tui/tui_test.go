@@ -53,16 +53,21 @@ func pickerMsg(t *testing.T, cmd tea.Cmd) tea.Msg {
 }
 
 // sized returns the model after a WindowSizeMsg so View renders (it draws nothing
-// until sized) and the sequencer/help are wired.
+// until sized) and the sequencer/help are wired. The toast timeout is shrunk to
+// ~0 so draining a surfaceNotice/surfaceError command returns immediately
+// instead of blocking the 5s auto-clear duration (audit
+// 2026-08-09-test-suite-runtime).
 func sized(t *testing.T) Model {
 	t.Helper()
-	m, _ := New().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ := New(WithToastTimeout(time.Nanosecond)).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return m.(Model)
 }
 
-// sizedWith is sized() with construction options (e.g. WithWatcher).
+// sizedWith is sized() with construction options (e.g. WithWatcher). An explicit
+// WithToastTimeout wins over the ~0 default (later options run last, D61).
 func sizedWith(t *testing.T, opts ...Option) Model {
 	t.Helper()
+	opts = append([]Option{WithToastTimeout(time.Nanosecond)}, opts...)
 	m, _ := New(opts...).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return m.(Model)
 }
@@ -3913,10 +3918,12 @@ func TestRevealInertOnDescribeViewer(t *testing.T) {
 var copyKey = tea.Key{Code: 'c', Text: "c"}
 
 // copiedClipboard runs a secret-copy batch and returns the string handed to
-// tea.SetClipboard. The batch also carries the notice auto-clear tick, which blocks
-// for errorDisplay, so each sub-command runs with a short timeout and only the
-// instant clipboard write is collected. setClipboardMsg is a string-kinded message,
-// so fmt.Sprint yields its content.
+// tea.SetClipboard. The batch also carries the notice auto-clear tick, which
+// resolves to a noticeClearMsg (the toast duration is shrunk to ~0 in sizedWith,
+// so the tick returns instantly rather than blocking for errorDisplay); it is the
+// auto-clear, not the clipboard write, so it is filtered out and only the instant
+// clipboard write is collected. setClipboardMsg is a string-kinded message, so
+// fmt.Sprint yields its content.
 func copiedClipboard(t *testing.T, cmd tea.Cmd) string {
 	t.Helper()
 	if cmd == nil {
@@ -3934,9 +3941,12 @@ func copiedClipboard(t *testing.T, cmd tea.Cmd) string {
 		go func(c tea.Cmd) { ch <- c() }(c)
 		select {
 		case msg := <-ch:
+			if _, isClear := msg.(noticeClearMsg); isClear {
+				continue // the toast's auto-clear — not the clipboard write.
+			}
 			return fmt.Sprint(msg)
 		case <-time.After(200 * time.Millisecond):
-			// the blocking auto-clear tick — skip it and try the next sub-command.
+			// a genuinely blocking sub-command — skip it and try the next one.
 		}
 	}
 	t.Fatal("copy batch carried no clipboard write")

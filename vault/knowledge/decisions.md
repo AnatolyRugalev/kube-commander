@@ -7357,3 +7357,29 @@ Three constraints a future tape edit must not silently break:
    `TestScreencastTapeMatchesTheKeymap` still binds each annotated key to the
    registry and `TestScreencastTapeShowsTheHeadlineActions` still requires the
    headline actions — a future edit drops one of those only by changing the guard.
+
+## D262 — the toast auto-clear duration is a per-model option, defaulting to 5s (2026-08-09, audit-test-suite-runtime)
+
+Feedback `2026-08-09-audit-test-suite-runtime`: the tui suite spent ~90s of its
+190s draining real 5s toast ticks — 17 tests slept exactly 5.01s or 10.01s
+because `surfaceError`/`surfaceNotice` returned `tea.Tick(errorDisplay)` and the
+`drain` helper executes commands synchronously. The fix makes the duration a
+`Model` field, `toastTimeout`, defaulted to `errorDisplay` at construction and
+overridable with `WithToastTimeout(d)`, the established `Option` seam. Two
+constraints a future leg must not silently break:
+
+1. **`tea.Tick` reads `m.toastTimeout`, never the `errorDisplay` const.** A leg
+   that reintroduces `tea.Tick(errorDisplay, …)` in the surface paths re-primes
+   the slow-drain bug, and a test that asserts on the tick *arrival* cannot tell
+   a shrunk-timer drain from a real 5s wait — the whole point was to make that
+   distinguishability unnecessary. New timer-backed toasts must route through the
+   same field.
+2. **The test default is `WithToastTimeout(time.Nanosecond)` via `sized`/
+   `sizedWith`, with an explicit option winning** (options run in order, D61).
+   The blocking-tick workarounds that existed to *skip* the tick
+   (`themeCmdMsgs`'s 200ms timeout, `copiedClipboard`, the auth-diag
+   first-wins walk) now filter the instantly-arriving `noticeClearMsg`/
+   `errorClearMsg` instead; a future helper that collects "the instant
+   sub-commands of a batch" must filter those messages or it will count the
+   toast's own auto-clear as a result. The search debounce (`searchDebounce`,
+   250ms) is a separate timer and was measured but not addressed by this item.
