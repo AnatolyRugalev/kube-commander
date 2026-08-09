@@ -1,69 +1,48 @@
-# Homebrew tap: confirm `homebrew-kubecom` still exists, delete the 2020 formula, add `HOMEBREW_TAP_TOKEN`
+# Homebrew tap: add `HOMEBREW_TAP_TOKEN` for the new org tap `neuroplastio/homebrew-tap`
 
 - Created: 2026-07-30
 - By: M5-06
 - Priority: normal
 - Blocks: none (advisory — gates only the Homebrew third of the M5 exit criterion
   "Homebrew/AUR/Docker install paths verified". The cask config, the workflow wiring and
-  their guards have landed and are inert without the secret, so M5-07/08 proceed and a tag
-  pushed before this is done still releases successfully — it just ships no cask. M5-10's
-  pre-flight should carry this item forward, not wait on it.)
+  their guards have landed and are inert without the secret, so a tag pushed before this
+  is done still releases successfully — it just ships no cask. M5-10's pre-flight should
+  carry this item forward, not wait on it.)
 - Status: open
 
 ## What's needed
 
-Three things, and the middle one is the one that is easy to miss.
+One thing now — and the repo half of the original task is done, because the tap moved.
 
-### 1. Confirm the tap repo
+### 1. The tap: done (D253, 2026-08-09)
 
-M5-06 chose the tap the **2020 build already published to**, so the install line from the
-old README keeps working instead of stranding returning users:
+The release-namespace fold-in settled where the tap lives: an **org-level tap,
+`neuroplastio/homebrew-tap`** (`brew tap neuroplastio/tap`), kubecom its first
+tool. The agent created that repository on 2026-08-09 (it was empty; goreleaser creates
+the `Casks/` directory itself on the first publish). `.goreleaser.yml`, the README and
+`docs/install.md` all point at it, and `TestReadmeBrewTapMatchesTheCask` keeps them
+together.
 
-```
-repository: AnatolyRugalev/homebrew-kubecom   →   brew tap AnatolyRugalev/kubecom
-```
+The move deliberately abandons the 2020 `AnatolyRugalev/homebrew-kubecom` tap with **no
+redirect** — that tap keeps serving the 2020 formula to anyone still on the old address,
+which is the acknowledged cost of moving a tap (the human chose the org tap knowing this;
+the 2020 formula does **not** need deleting, the old tap is just not where releases go
+any more). The new tap is empty, so there is no stale formula to delete there.
 
-The agent could not check whether that repo still exists (it is outside this session's
-repository scope). Please confirm. If it was deleted, recreate it as an empty public repo
-under the same name — goreleaser creates the `Casks/` directory itself. If you would rather
-consolidate on a generic `AnatolyRugalev/homebrew-tap`, that is a fine decision to make, but
-it is a **breaking change for anyone who tapped the old address**, so make it deliberately
-and say so — `.goreleaser.yml` and the README both name the tap and
-`TestReadmeBrewTapMatchesTheCask` fails `make check` if they disagree.
+### 2. Create the token and add it as a repository secret
 
-### 2. Delete `Formula/kubecom.rb` from the tap
+`GITHUB_TOKEN` cannot be used: it is scoped to `kubecom` only and cannot write to the tap
+repo.
 
-This is the step that silently breaks the install if skipped. The 2020 tap published a
-**formula**; M5-06 publishes a **cask** (see D182 pt 1 for why the formula route is closed).
-Both can coexist in one tap, and when they do, `brew install AnatolyRugalev/kubecom/kubecom`
-resolves to the **formula** — so every user would keep installing the 2020 kube-commander,
-indefinitely, with no error anywhere.
-
-Normally a cask would declare `conflicts_with formula:` to catch this. That does not work:
-Homebrew removed formula conflicts from the cask DSL, and goreleaser accepts
-`conflicts.formula` only to drop it on the floor (deprecated *and* never rendered — verified
-by reading `internal/pipe/cask/template.go`). There is no config-side remedy. The old
-formula has to go:
-
-```bash
-git clone https://github.com/AnatolyRugalev/homebrew-kubecom && cd homebrew-kubecom
-git rm Formula/kubecom.rb && git commit -m "Retire the 2020 formula; kubecom v1 ships as a cask" && git push
-```
-
-If anything else lives in that tap (the 2020 repo may also hold a `kube-commander` formula),
-decide what happens to it and note it in the Result.
-
-### 3. Create the token and add it as a repository secret
-
-`GITHUB_TOKEN` cannot be used: it is scoped to `kube-commander` only and cannot write to the
-tap repo.
-
-- Mint a fine-grained PAT scoped to **`AnatolyRugalev/homebrew-kubecom`** with
+- Mint a fine-grained PAT scoped to **`neuroplastio/homebrew-tap`** with
   **Contents: read and write** (that is the whole scope goreleaser needs).
 - Add it to `neuroplastio/kubecom` → Settings → Secrets and variables → Actions,
   named exactly **`HOMEBREW_TAP_TOKEN`**. The name is asserted by
   `TestHomebrewCaskIsInertWithoutItsToken`, so a typo fails `make check` rather than
   releasing quietly.
+- Note: the repo moved to the `neuroplastio` org on 2026-08-07, and GitHub **does not
+  carry Actions secrets across a repo move** — if a `HOMEBREW_TAP_TOKEN` was ever set on
+  the pre-move repo, re-create it here.
 
 Until this secret exists, `.goreleaser.yml`'s
 `skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'`
@@ -76,7 +55,7 @@ into a broken one.
 The exit criterion says *verified*, which means installed from. On a Mac:
 
 ```bash
-brew tap AnatolyRugalev/kubecom
+brew tap neuroplastio/tap
 brew install --cask kubecom
 kubecom version          # must report the tag, a real commit and a build date, not "none"/"unknown"
 kubecom                  # must actually launch — see the Gatekeeper note below
@@ -90,14 +69,14 @@ install paths live, and the README carries only the short block that links to it
 ### Homebrew (macOS)
 
 ```bash
-brew tap AnatolyRugalev/kubecom
+brew tap neuroplastio/tap
 brew install --cask kubecom
 ```
 ```
 
 and run `make check` — `TestReadmeBrewTapMatchesTheCask` checks the tap you write there
 against the one `.goreleaser.yml` publishes to (remembering that `brew tap owner/x` means the
-repository `owner/homebrew-x`).
+repository `owner/homebrew-x`, so this repo's `homebrew-tap` taps as `neuroplastio/tap`).
 
 ### Two things worth watching on that first install
 
@@ -114,9 +93,8 @@ repository `owner/homebrew-x`).
 
 ## Why the agent can't do it
 
-- **Creating/inspecting the tap repo and minting a token are account-level acts** outside
-  this repository, and a token is a credential an agent must not hold (D79).
-- **Deleting the stale formula writes to a different repository** the agent has no access to.
+- **Minting a token is a credential an agent must not hold (D79).** Creating the secret is
+  an account-level act in repository settings, outside what the agent can reach.
 - **"Verified" means installed from**, and that needs a macOS machine with Homebrew and a
   published tag — neither of which exists in the sandbox. What the agent *could* verify, it
   did: `goreleaser check` is clean, `goreleaser release --snapshot --clean` renders
@@ -125,8 +103,6 @@ repository `owner/homebrew-x`).
 
 ## How to resolve
 
-Do the three steps, then set `Status: done` with a `## Result` recording: whether the tap
-survived, what was in it, whether the stale formula was there, and — after the first tag —
-whether `brew install --cask kubecom` produced a launchable binary. If you decide to change
-the tap address, say so explicitly; that is a decision the closing leg must record, not
-infer.
+Do the token step, then set `Status: done` with a `## Result` recording: that the token was
+created, and — after the first tag — whether `brew install --cask kubecom` produced a
+launchable binary.

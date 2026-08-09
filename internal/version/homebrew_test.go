@@ -12,7 +12,7 @@ import (
 
 // installDocs are the user-facing documents that carry install instructions: the
 // README's short install section and the `docs/install.md` it links to, which is
-// where the per-path detail (archives, container, Homebrew, AUR) moved when the
+// where the per-path detail (archives, Homebrew, AUR) moved when the
 // README was restructured around the capability surface (DOC-01/D241).
 //
 // The three README guards below read this *set* rather than the README alone. A
@@ -166,16 +166,15 @@ var brewTap = regexp.MustCompile(`brew\s+tap\s+([\w.-]+)/([\w.-]+)`)
 // the tap goreleaser publishes to from drifting apart.
 //
 // Homebrew's shorthand drops the `homebrew-` prefix — the repository
-// `AnatolyRugalev/homebrew-kubecom` is tapped as `AnatolyRugalev/kubecom` — and
+// `neuroplastio/homebrew-tap` is tapped as `neuroplastio/tap` — and
 // that asymmetry is exactly where a plausible-looking README line goes wrong.
 // A wrong tap is a silent failure of the worst kind: the command works, it just
 // taps a repository that does not exist or is not ours.
 //
 // The docs name the tap today only to tell a returning 2020 user that its
-// address survives and that what it currently serves is the old formula, so the
-// guard is live from this leg. It stays live — and becomes load-bearing rather
-// than merely correct — when human task `2026-07-30-homebrew-tap-access` turns
-// that mention into a real install path.
+// address moved to the org (D253), so the guard is live from this leg. It stays
+// live — and becomes load-bearing rather than merely correct — when human task
+// `2026-07-30-homebrew-tap-access` turns that mention into a real install path.
 func TestReadmeBrewTapMatchesTheCask(t *testing.T) {
 	cfg := readCasks(t)
 

@@ -1,6 +1,7 @@
 # goreleaser config for kubecom — Linux + macOS only (D7); no kubectl runtime
 # dependency (D2). M0-06 is the release skeleton; distribution (Homebrew tap,
-# AUR, Docker) is wired and verified in M5.
+# AUR) is wired and verified in M5. Container builds were dropped on 2026-08-09
+# (D254).
 version: 2
 
 before:
@@ -108,12 +109,15 @@ changelog:
 # goreleaser still emits the `on_linux` stanzas below from the Linux archives.
 # Linux users get the tarball, the AUR package (M5-07) or `go install`.
 #
-# The tap is the one the 2020 build already published to
-# (`AnatolyRugalev/homebrew-kubecom` → `brew tap AnatolyRugalev/kubecom`), so the
-# 2020 install line keeps working instead of stranding existing users on a dead
-# tap. That tap still holds the 2020 **formula**, which Homebrew prefers over a
-# cask of the same name — deleting it is part of human task
-# `2026-07-30-homebrew-tap-access` and `conflicts` below is the seatbelt.
+# The tap is the org-level `neuroplastio/homebrew-tap` (`brew tap
+# neuroplastio/tap` — a repo named `homebrew-tap` taps as `owner/tap`),
+# created by the release-namespace fold-in 2026-08-09
+# (D253) as the home for every neuroplastio tool, kubecom the first. It replaces
+# the 2020 `AnatolyRugalev/homebrew-kubecom` tap deliberately: that tap keeps
+# serving the 2020 formula to anyone still on the old address, with no redirect
+# (the acknowledged cost of moving a tap). The org tap is new, so it holds no
+# 2020 formula to delete — the stale-formula seatbelt D182 pt 2 required is moot
+# here.
 homebrew_casks:
   - name: kubecom
     ids:
@@ -137,20 +141,19 @@ homebrew_casks:
     # what GitHub Actions produces for a secret that does not exist.
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
     repository:
-      owner: AnatolyRugalev
-      name: homebrew-kubecom
+      owner: neuroplastio
+      name: homebrew-tap
       # branch omitted on purpose: goreleaser then uses the tap's default branch,
       # which beats guessing master vs main for a repo created in 2020.
       token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
 
-    # NOTE: there is deliberately no `conflicts:` entry for the 2020
-    # `Formula/kubecom.rb` that may still sit in this tap. A cask can only
-    # declare conflicts with other *casks* — goreleaser drops `conflicts.formula`
-    # silently (it is deprecated *and* never rendered), because Homebrew removed
-    # `conflicts_with formula:` from the cask DSL. So the stale formula cannot be
-    # handled from here at all: it has to be deleted from the tap, which is why
-    # human task `2026-07-30-homebrew-tap-access` makes that a required step
-    # rather than a tidy-up (D182 pt 2).
+    # NOTE: there is deliberately no `conflicts:` entry. A cask can only declare
+    # conflicts with other *casks* — goreleaser drops `conflicts.formula`
+    # silently (deprecated *and* never rendered) — but the org tap (D253) is new
+    # and empty, so the 2020-formula collision that made D182 pt 2 a seatbelt
+    # cannot occur here. If a formula ever appears in `neuroplastio/homebrew-tap`,
+    # Homebrew resolves a bare name to it in preference to this cask, and it must
+    # be removed by hand — the same failure shape, guarded by nothing.
 
     # goreleaser builds unsigned, un-notarized darwin binaries, so macOS attaches
     # a quarantine attribute on download and Gatekeeper kills the binary on first
@@ -238,61 +241,3 @@ aurs:
     # `ssh -i "{{ .KeyPath }}" -o StrictHostKeyChecking=accept-new -F /dev/null`.
     # The 2020 script used `StrictHostKeyChecking=no` with `UserKnownHostsFile=
     # /dev/null`; accept-new is strictly better and needs no configuration.
-
-# Docker (M5-08/D184). `dockers_v2:`, not the classic `dockers:`+`docker_manifests:`
-# pair — `goreleaser check` reports those as "being phased out", the same class of
-# warning M5-06 heeded when `brews:` turned out to be a dead end. One entry replaces
-# both: buildx builds every platform and pushes the multi-arch index itself.
-#
-# Unlike the cask and the AUR package this needs **no human-owned secret**: the
-# release job authenticates to ghcr.io with the workflow's own GITHUB_TOKEN
-# (`packages: write`), so there is nothing to make inert and no `skip_upload`
-# analogue here. What the workflow *must* carry is a buildx builder on the
-# docker-container driver — the default `docker` driver can neither emit a
-# multi-platform index nor attach the SBOM attestation `dockers_v2` requests by
-# default. `TestReleaseWorkflowCanPublishTheDockerImage` guards that wiring.
-dockers_v2:
-  - id: kubecom
-    # Restricted to the `kubecom` build so a future build id (a second binary,
-    # a debug variant) does not silently end up inside the image.
-    ids:
-      - kubecom
-    dockerfile: Dockerfile
-    # ghcr.io, because it is the one registry this repo can publish to with no
-    # credential a human has to create and rotate. Lowercase is not a style
-    # choice: registries reject uppercase path components, and the owner is
-    # spelled `AnatolyRugalev` everywhere else in this file.
-    images:
-      - ghcr.io/anatolyrugalev/kubecom
-    # Same pair the archives ship (D7). No RUN instruction in the Dockerfile
-    # means nothing is *executed* for the foreign architecture during the build,
-    # so this needs no QEMU emulation in CI — only a base image that has both
-    # arches, which distroless does.
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    tags:
-      # `v1.2.3` and `1.2.3` — both spellings are in wide use and a user should
-      # not have to guess which one this registry chose.
-      - "{{ .Tag }}"
-      - "{{ .Version }}"
-      # `latest` **only** for a final release. M5-10 recommends cutting
-      # `v1.0.0-rc.1` first precisely because a pre-release costs nothing to get
-      # wrong — but a moving `latest` pointing at an rc costs plenty, since bare
-      # `docker run ghcr.io/anatolyrugalev/kubecom` resolves to it. An empty
-      # template entry is dropped by goreleaser, so this yields no tag at all on
-      # a pre-release rather than an empty one.
-      - '{{ if .Prerelease }}{{ else }}latest{{ end }}'
-    # OCI labels. `image.source` is load-bearing beyond documentation: it is what
-    # makes GHCR attach the package to this repository, which is what lets the
-    # workflow's GITHUB_TOKEN keep pushing to it and what gives the package the
-    # repo's visibility instead of a private default.
-    labels:
-      org.opencontainers.image.title: kubecom
-      org.opencontainers.image.description: "Fast, vim-friendly, zero-deploy Kubernetes terminal UI"
-      org.opencontainers.image.url: "https://github.com/neuroplastio/kubecom"
-      org.opencontainers.image.source: "https://github.com/neuroplastio/kubecom"
-      org.opencontainers.image.licenses: "Apache-2.0"
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .FullCommit }}"
-      org.opencontainers.image.created: "{{ .Date }}"

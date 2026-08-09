@@ -9,7 +9,7 @@ shapes the plan: **its output leaves the repo and cannot be recalled** — a pus
 cached immutably by the Go module proxy — so "green or revert" does not apply and D173
 splits every publishing act off to a human. The slices are: the DoD audit (M5-01), the
 artifact's correctness (M5-02 build metadata, M5-03 release workflow + CI dry run),
-migration (M5-04/05), distribution (M5-06 Homebrew, M5-07 AUR, M5-08 Docker), the vhs
+migration (M5-04/05), distribution (M5-06 Homebrew, M5-07 AUR), the vhs
 screencast (M5-09), and the irreversible end (M5-10 tag, M5-11 `v1`→`main`). Per-leg
 history: `vault/journal/`._
 
@@ -50,32 +50,35 @@ from the old kube-commander.
   `protojson.Marshal(pb.Config)` → `yaml.JSONToYAML`, the two calls `master:config/config.go`
   made — with the fixture pinned key-for-field to a verbatim copy of `master:pb/config.proto`.
   A genuinely *real* file is the human task `2026-07-30-real-legacy-config-migration`.
-- **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh,
-  Docker image (Linux/macOS binaries only). **M5-06 ✅ 2026-07-30** (D182) wired the first:
+- **Distribution** (**#28**): goreleaser release, Homebrew tap, AUR refresh.
+  **M5-06 ✅ 2026-07-30** (D182) wired the first:
   a `homebrew_casks:` cask (the formula route is closed — `brews:` is deprecated and
   `goreleaser check` fails on it, which also makes Homebrew macOS-only here) publishing to
   the tap the 2020 build already used, inert without `HOMEBREW_TAP_TOKEN` and carrying the
   Gatekeeper quarantine hook. It also added `goreleaser check` to the CI dry run, which
   caught `conflicts.formula` being accepted and then silently dropped — so the stale 2020
   formula must be deleted from the tap by hand (human task
-  `2026-07-30-homebrew-tap-access`). **M5-07 ✅ 2026-07-30** (D183) wired the second: an
+  `2026-07-30-homebrew-tap-access`). **The tap moved on 2026-08-09 (D253)**: the
+  maintainer chose an org-level tap (`neuroplastio/homebrew-tap` → `brew tap
+  neuroplastio/tap`), created by the release-namespace fold-in, replacing the 2020
+  personal tap with no redirect, and the human task now narrows to the token alone.
+  **M5-07 ✅ 2026-07-30** (D183) wired the second: an
   `aurs:` `-bin` package built from the released linux archives, with no kubectl dependency
   (D2, which the 2020 PKGBUILD declared) and a real `conflicts` with the 2020 package. The
   "refresh an existing package" framing turned out to be impossible — goreleaser forces the
   `-bin` suffix and the AUR ties `pkgbase` to the repo name, so `kube-commander` is
   unreachable from any config and `kubecom-bin` is a *new* package with no upgrade path
-  (human task `2026-07-30-aur-package-access`). **M5-08 ✅ 2026-07-30** (D184) wired the third
-  and needed **no human task at all**: a `dockers_v2:` multi-arch image at
-  `ghcr.io/anatolyrugalev/kubecom`, published with the workflow's own `GITHUB_TOKEN` under
-  `packages: write`, over a `Dockerfile` that is a base plus one `COPY` of the *released*
-  binary — no build stage, unlike the 2020 image, and no kubectl (D2). It is also the only
-  distribution slice the sandbox can verify end to end: `dockerd` is installed here, so the
-  image was built, run, and the TUI itself rendered inside it. The goreleaser skeleton exists (M0-06/D27) but
+  (human task `2026-07-30-aur-package-access`). AUR is otherwise unaffected by the org move
+  (D253 pt 3); only repo secrets may need re-creating. **M5-08 (Docker) ✅ 2026-07-30 then
+  reverted 2026-08-09 (D254)**: the maintainer decided to *drop container builds for now*,
+  so the `dockers_v2:` image at `ghcr.io/anatolyrugalev/kubecom` that M5-08 built and ran
+  in the sandbox is removed — no Dockerfile, no image pipeline, no container install path.
+  The goreleaser skeleton exists (M0-06/D27) but
   carries **no publishers** and has **no workflow to run it** — `.github/workflows/` holds
-  only `ci.yml`. The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded) and
+  only `ci.yml` (and the release workflow it gains below). The `Commit`/`Date` ldflags are done (M5-02/D175, drift-guarded) and
   M5-03 added `release.yml`, the workflow that runs them (D176). Each publisher is
   then its own slice because each needs a human-owned external resource (a tap repo, an AUR
-  key), except Docker, which authenticates to `ghcr.io` with the workflow's own token.
+  key) — Docker would have been the exception (its own workflow token), but D254 dropped it.
 - **Restore remote `go install`**: tag a real `v1.x.x` release so
   `go install github.com/neuroplastio/kubecom/cmd/kubecom@latest` works
   again (today `@v1` is semver-parsed as a version query, not the branch — see
@@ -120,16 +123,16 @@ raise come back done, not when the config that would produce them compiles.
       claims (now 151, grouped, guarded). Ticked when a real
       tag has produced real artifacts, i.e. after the human tag push
       (`2026-07-30-first-release-tag`).)
-- [ ] Homebrew/AUR/Docker install paths verified.
-      (M5-06/07/08, one each. "Verified" means installed from, so each needs its human task
-      back — except possibly Docker, which the agent can build and run locally.
+- [ ] Homebrew/AUR install paths verified.
+      (M5-06/07, one each. "Verified" means installed from, so each needs its human task
+      back.
       **M5-06 ✅ 2026-07-30** (D182) closed the agent-side Homebrew third: `goreleaser check`
       is clean, `goreleaser release --snapshot --clean` renders
       `dist/homebrew/Casks/kubecom.rb` with the quarantine postflight, and the
       token→`skip_upload` template was proved to flip both ways. The *installed-from* half
-      needs a macOS box, a published tag, and three account-level acts the agent cannot
-      perform — confirming the tap, deleting the 2020 formula still in it, and creating
-      `HOMEBREW_TAP_TOKEN` — so it waits on human task
+      needs a macOS box and a published tag, and the account-level act the agent cannot
+      perform is creating `HOMEBREW_TAP_TOKEN` — the tap itself was created by the agent
+      (D253, `neuroplastio/homebrew-tap`), so it waits on human task
       `2026-07-30-homebrew-tap-access`.
       **M5-07 ✅ 2026-07-30** (D183) closed the agent-side AUR third: `aurs:` renders
       `dist/aur/kubecom-bin.pkgbuild`/`.srcinfo` for both arches with no kubectl dependency,
@@ -137,14 +140,9 @@ raise come back done, not when the config that would produce them compiles.
       **renamed** — goreleaser forces the `-bin` suffix, so `kube-commander` is unreachable
       and there is no upgrade path — which makes retiring the 2020 package, alongside the
       AUR account/SSH key, human task `2026-07-30-aur-package-access`.
-      **M5-08 ✅ 2026-07-30** (D184) closed the Docker third as far as anything can be closed
-      before a tag exists, and unlike the other two that is *most* of the way: the sandbox has
-      a docker daemon, so the image was built for both arches, its labels and
-      `kubecom version` checked, and the TUI driven inside it against a bind-mounted
-      kubeconfig. What no leg can verify before M5-10 is the ghcr.io push itself — in
-      particular whether `GITHUB_TOKEN` may create the package on its first push; if GHCR
-      refuses, the fallback is to name the package after the repository. M5-10's pre-flight
-      carries that, not a human task.)
+      **The Docker third is gone**: M5-08 built and ran the image (D184), then the maintainer
+      dropped container builds entirely (D254, 2026-08-09) — no image to verify, no criterion
+      to hold. M5-10's pre-flight carries the tap/AUR push checks, not a container one.)
 - [x] Migration verified from a real legacy config file. **— ticked on the generated fixture,
       not on a real file (D231).**
       (M5-04 ✅ 2026-07-30 fixed the stale theme report and made the selection actually

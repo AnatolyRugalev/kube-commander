@@ -16,8 +16,8 @@ in-cluster deployment and **no `kubectl` binary required**.
 > **Current status:** feature-complete and dogfooded against real clusters —
 > everything documented below is in the binary, not planned. What is left is the
 > release itself: **no version has been tagged yet**, so you install from a `v1`
-> checkout ([Install](#install)), and the Homebrew, AUR and container paths start
-> working with that first tag.
+> checkout ([Install](#install)), and the Homebrew and AUR paths start working
+> with that first tag.
 >
 > The rewrite is driven autonomously and documents itself in **[`vault/`](vault/)**
 > (goals, plan, live task board, decision log, per-leg journal); see
@@ -168,10 +168,10 @@ cd kube-commander
 go install ./cmd/kubecom      # installs kubecom to $(go env GOPATH)/bin
 ```
 
-Release archives, the container image, Homebrew and the AUR package are all wired
-and start working with that first tag. [`docs/install.md`](docs/install.md) has
-every path, including why `go install …@v1` cannot work and what changes for a
-returning 2020 kube-commander user.
+Release archives, Homebrew and the AUR package are all wired and start working
+with that first tag. [`docs/install.md`](docs/install.md) has every path,
+including why `go install …@v1` cannot work and what changes for a returning
+2020 kube-commander user.
 
 ## Configuration
 

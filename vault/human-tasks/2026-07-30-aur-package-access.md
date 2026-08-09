@@ -87,6 +87,11 @@ named `kubecom` and there is no kubectl-plugin story in v1. If you actually use
   **`AUR_SSH_PRIVATE_KEY`**. The name is asserted by `TestAURIsInertWithoutItsKey`, so a typo
   fails `make check` rather than releasing quietly.
 
+> **Org-move note (2026-08-09).** The repo moved to the `neuroplastio` org on 2026-08-07,
+> and GitHub does **not** carry Actions secrets across a repo move. If the pre-move repo ever
+> held an `AUR_SSH_PRIVATE_KEY`, it is gone — re-add it here. Until it exists the AUR step
+> skips (below) and a release still succeeds, so this is a note, not a blocker (D173 pt 2).
+
 Until the secret exists, `.goreleaser.yml`'s
 `skip_upload: '{{ if index .Env "AUR_SSH_PRIVATE_KEY" }}false{{ else }}true{{ end }}'`
 evaluates to `true` and the AUR step is skipped — the release still succeeds (D173 pt 2).

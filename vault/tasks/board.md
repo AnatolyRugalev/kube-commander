@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — both human-task responses folded in, neither closes its task: the context-switch dogfood answer is qualitative only (no pt 7 numbers), so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated; the release tag is deferred, so M5-11 stays blocked. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — the release-namespace human task was folded in and closed (D253/D254): the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -13,8 +13,9 @@ _Last updated: 2026-08-09 — both human-task responses folded in, neither close
       notes: Blocked on human task `2026-07-30-first-release-tag` — the maintainer deferred the
       tag on 2026-08-09 ("a bit too early for that"), so the block stands; renaming the branch before
       a release exists would retarget every clone and PR for a tree nobody can install yet, and
-      the rename also dissolves the `@v1` collision the tag is what actually fixes. The agent
-      share is preparation: what to rename, `master` kept as the permanent 2020 reference
+      the rename also dissolves the `@v1` collision the tag is what actually fixes. (The release-
+      namespaces blocker that also gated M5-11 was resolved 2026-08-09 — D253/D254 folded in.)
+      The agent share is preparation: what to rename, `master` kept as the permanent 2020 reference
       (D14, do *not* delete), the workflow `branches:` lists (both already name `main`) and the
       README/vault links that say `v1`. The act itself is a GitHub admin setting — a human's.
 
@@ -587,7 +588,11 @@ so a leg can likely obtain it, and if it cannot, the gate for a config-only slic
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
 _(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** above, waiting
-on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a human's.)_
+on the tag. The release-namespace fold-in **HT-relns-0809** closed 2026-08-09 (D253/D254):
+Homebrew publishes to the new org tap `neuroplastio/homebrew-tap` (created this leg;
+kubecom its first tool) and container builds are dropped, so the distribution surface is
+the cask + the AUR package, both inert until their secrets exist. Every remaining M5 act
+publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
 
@@ -740,11 +745,11 @@ on the tag. Every remaining M5 act publishes, and D173 pt 1 makes each one a hum
 
 - [x] **M5-10** Release pre-flight — every M5 slice confirmed, the notes rendered against a throwaway local tag, the README install paths audited — done 2026-07-30 (D185)
 
-- [x] **M5-08** Docker — a multi-arch `dockers_v2:` image at `ghcr.io/anatolyrugalev/kubecom`, built and run in the sandbox — done 2026-07-30 (D184)
+- [x] **M5-08** Docker — built and run in the sandbox, then reverted 2026-08-09: container builds dropped (D254) — done 2026-07-30 (D184)
 
 - [x] **M5-07** AUR — an `aurs:` `kubecom-bin` package from the released archives, inert without its key — done 2026-07-30 (D183)
 
-- [x] **M5-06** Homebrew — a `homebrew_casks:` cask publishing to the 2020 tap, inert without its token — done 2026-07-30 (D182)
+- [x] **M5-06** Homebrew — a `homebrew_casks:` cask, inert without its token; tap moved to the org `neuroplastio/homebrew-tap` (D253) — done 2026-07-30 (D182)
 
 - [x] **M5-09** Screencast — `docs/screencast.tape` + `make screencast`, pinned to the keymap by three guards — done 2026-07-30 (D181)
 - [x] **M5-05** Migration verified against a `~/.kubecom.yaml` the 2020 writer itself generated — done 2026-07-30 (D180)

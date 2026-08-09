@@ -59,15 +59,18 @@ are unsigned: downloaded by hand rather than through Homebrew, they need
 
 ## Package managers
 
-Homebrew, the AUR package and the container image are all wired and waiting on
-the first tagged release (M5). Two notes if you are coming from the 2020
-kube-commander, since both of its addresses survive with different contents:
+Homebrew and the AUR package are wired and waiting on the first tagged release
+(M5). Two notes if you are coming from the 2020 kube-commander, since both of
+its addresses survive with different contents:
 
-- **Homebrew.** The tap keeps its address (`brew tap AnatolyRugalev/kubecom`) and
-  kubecom ships as a **cask**, which Homebrew supports on macOS only — on Linux,
-  use the release tarball, the AUR package or `go install` above. Until the first
-  tagged release that tap still serves the 2020 formula, so do not install from it
-  expecting kubecom.
+- **Homebrew.** The tap moved to the org (`brew tap neuroplastio/tap` —
+  the repository is `neuroplastio/homebrew-tap`, D253), where kubecom is the
+  first tool, and ships as a **cask**, which
+  Homebrew supports on macOS only — on Linux, use the release tarball, the AUR
+  package or `go install` above. Until the first tagged release the org tap is
+  empty, and the 2020 `AnatolyRugalev/kubecom` tap (a *different* repository,
+  abandoned by the move) still serves the 2020 formula — so do not install from
+  either expecting kubecom.
 - **Arch Linux.** The AUR package will be **`kubecom-bin`** — *not* the 2020
   `kube-commander`, whose name this project can no longer publish to (`goreleaser`
   requires the `-bin` suffix on a prebuilt-binary package, and the AUR requires the
@@ -77,32 +80,5 @@ kube-commander, since both of its addresses survive with different contents:
   `/usr/bin/kubecom`, so `pacman` will refuse to install `kubecom-bin` until
   `kube-commander` is removed.
 
-## In a container
-
-A convenience path, not the recommended one — kubecom is a local, zero-deploy
-tool, and the native binary is always the better install. The image exists to try
-kubecom without putting anything on your `PATH`. It is published from the first
-tagged release onward:
-
-```bash
-docker run --rm -it \
-  -v "$HOME/.kube:/root/.kube:ro" \
-  ghcr.io/anatolyrugalev/kubecom
-```
-
-`-it` is required, not optional: without a TTY the TUI has no terminal to draw
-on. The kubeconfig is mounted read-only because kubecom never writes to it —
-though note that it also cannot then remember your last-used namespace across
-runs, since that state lives beside the config in the (throwaway) container.
-
-Two limits worth knowing before you reach them. The image is distroless — the
-binary, a CA bundle and nothing else — so a kubeconfig using an **exec credential
-plugin** (`aws`, `gcloud`, `kubelogin`, …) will not authenticate inside it, and
-the **Edit** action has no editor to suspend into (there is no `vi` in the image
-for kubecom's startup detection to find). Both work fine with the native binary.
-Exec-into-a-pod and port-forwarding do work, the latter with the usual `-p`
-mapping since the forward binds inside the container.
-
-Tags follow the releases: `ghcr.io/anatolyrugalev/kubecom:v1.2.3` (or `:1.2.3`),
-with `:latest` tracking the newest **final** release — never a pre-release.
-Images are multi-arch (`linux/amd64`, `linux/arm64`).
+The container image was **dropped** on 2026-08-09 (D254) — no image is built or
+published, so there is no container install path to document.

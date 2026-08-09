@@ -8,7 +8,7 @@
 
 ## What's needed
 
-The pre-flight is done: the pipeline, the three publishers, the ldflags, the migration
+The pre-flight is done: the pipeline, the two publishers, the ldflags, the migration
 and the docs are all landed and dry-run clean (see `## Pre-flight result` below). What
 is left is the one act an agent must not perform (D173 pt 1) — pushing the tag that
 publishes.
@@ -16,8 +16,9 @@ publishes.
 **Do it in two steps, and cut the release candidate first.** A pre-release costs
 nothing to get wrong: `proxy.golang.org` caches every version permanently, so a bad
 `v1.0.0` can never be replaced (only superseded by `v1.0.1`), while `v1.0.0-rc.1` is
-excluded from `@latest` by Go, from `latest` by the Docker config, and is something
-Homebrew/the AUR make you ask for by name.
+excluded from `@latest` by Go, and is something Homebrew/the AUR make you ask for by
+name. (The container image is gone — builds were dropped on 2026-08-09, D254 — so there
+is no image-side pre-release handling to reason about.)
 
 ### 1. The release candidate
 
@@ -40,12 +41,7 @@ Then watch `.github/workflows/release.yml` (it runs `make check` first, then
    long (~150 lines) and include the whole rewrite. That is expected for the first
    release only; edit the body freely if you want a shorter story, the release body is
    the one part of a release that *is* editable.
-4. **`ghcr.io/anatolyrugalev/kubecom:v1.0.0-rc.1` pulls and runs**, and no `:latest`
-   tag was created. If the push failed with a permissions error, the cause is that
-   `GITHUB_TOKEN` may not create a *new* package under a user account in some org/user
-   settings — fix it at Settings → Packages, or fall back to naming the package after
-   the repository (`ghcr.io/anatolyrugalev/kube-commander`) in `.goreleaser.yml`.
-5. **`go install github.com/neuroplastio/kubecom/cmd/kubecom@v1.0.0-rc.1`**
+4. **`go install github.com/neuroplastio/kubecom/cmd/kubecom@v1.0.0-rc.1`**
    works from a clean `GOPATH` — this is what finally proves the module path is
    installable remotely (FB-go-install).
 
@@ -64,12 +60,10 @@ git tag -a v1.0.0 -m 'kubecom v1.0.0'
 git push origin v1.0.0
 ```
 
-This one also creates `ghcr.io/anatolyrugalev/kubecom:latest` and — with the secrets
-in place — the Homebrew cask and the AUR package. Verify at least one install path end
-to end (`brew install --cask AnatolyRugalev/kubecom/kubecom`, `yay -S kubecom-bin`,
-`docker run --rm -it -v "$HOME/.kube:/root/.kube:ro" ghcr.io/anatolyrugalev/kubecom`)
-and say which in the `## Result` below — those are the three thirds of an M5 exit
-criterion.
+This one creates — with the secrets in place — the Homebrew cask (on the org tap
+`neuroplastio/homebrew-tap`, D253) and the AUR package. Verify at least one install path
+end to end (`brew install --cask neuroplastio/tap/kubecom` or `yay -S kubecom-bin`)
+and say which in the `## Result` below — those are two thirds of an M5 exit criterion.
 
 ### 3. After the tag (agent work, listed here so it is not lost)
 
@@ -110,11 +104,12 @@ What was checked, and how:
   unscoped subjects only, so the first notes would have been 373 lines opening with
   ~180 `chore(board): claim …` entries. Now 151, grouped, guarded by
   `TestChangelogFiltersDropTheNoise`.
-- **The README's install paths match what ships**: the cask (macOS-only), the
-  `kubecom-bin` AUR rename, `ghcr.io/anatolyrugalev/kubecom` and now the release
-  archives are each documented and each drift-guarded against `.goreleaser.yml`.
+- **The README's install paths match what ships**: the cask (macOS-only, on the org tap),
+  the `kubecom-bin` AUR rename, and the release archives are each documented and each
+  drift-guarded against `.goreleaser.yml`. The container image was dropped on 2026-08-09
+  (D254) and no longer appears in any of them.
 - **Not verifiable before the tag**, and therefore the checks in step 1 above: the
-  ghcr.io push itself, the GitHub release upload, and `go install @<version>`.
+  GitHub release upload, the tap/AUR pushes, and `go install @<version>`.
 
 ## Update (2026-08-09) — deferred by the maintainer; stays open
 

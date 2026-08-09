@@ -7091,3 +7091,57 @@ so a later leg stops re-deriving them.
    fixed, and it may not lower the floor to fit. The same style paints the table filter
    (FILT-02) and cluster-search hits (SEARCH-06), so the fix is one place for three
    surfaces.
+
+## D253 — the Homebrew tap is the org-level `neuroplastio/homebrew-tap`, kubecom its first tool (2026-08-09, release-namespace fold-in)
+
+The maintainer's answer to `2026-08-07-release-namespaces-after-org-move` moved the tap
+from the 2020 personal one to an org-level tap, and authorized the agent to set it up.
+This supersedes **D182 pt 2**, whose "the tap is `AnatolyRugalev/homebrew-kubecom`"
+premise is now deliberately abandoned.
+
+1. **`brew tap neuroplastio/tap` is the install line, from the repository
+   `neuroplastio/homebrew-tap`.** The agent created that repo (2026-08-09) and
+   initialized it with a README; kubecom is its first tool. `.goreleaser.yml`'s
+   `homebrew_casks.repository` is `owner: neuroplastio, name: homebrew-tap`, and
+   `TestReadmeBrewTapMatchesTheCask` keeps the docs and the config in agreement.
+   The cask **file** is still written by goreleaser at the first tagged release (D182
+   pt 1 unchanged — a cask needs a real version/url/sha256), so the tap intentionally
+   holds no cask yet; `brew install --cask kubecom` correctly says "no cask found"
+   until then. A future leg must not hand-write a placeholder formula/cask into the tap:
+   goreleaser owns that file.
+2. **The 2020 `AnatolyRugalev/homebrew-kubecom` tap is abandoned with no redirect.**
+   The maintainer chose the org tap knowing a moved tap leaves people on a dead address;
+   the old tap keeps serving the 2020 formula to anyone still on it. This is the
+   deliberate cost of the move, **not** a bug to fix by resurrecting the old address —
+   and the old formula does **not** need deleting (the stale-formula seatbelt D182 pt 2
+   existed *because* the old tap would keep publishing; it has nothing new to collide
+   with on the empty org tap).
+3. **The org move invalidates repository secrets.** GitHub does not carry Actions
+   secrets across a repo transfer, so `HOMEBREW_TAP_TOKEN` and `AUR_SSH_PRIVATE_KEY`
+   (if either was set before the move) must be re-created on `neuroplastio/kubecom`.
+   The AUR is otherwise unaffected (D183 pt 1-4 stand); the AUR package is namespaced
+   by the AUR account, not the GitHub owner. The `skip_upload` inertness (D182 pt 3)
+   means a missing secret never fails a release — it is a note in the human tasks, not
+   a blocker.
+
+## D254 — container builds are dropped for now (2026-08-09, release-namespace fold-in)
+
+The maintainer's decision, verbatim: *"containers: drop container builds for now."* This
+**supersedes D184 entirely** — no `Dockerfile`, no `dockers_v2:` block, no docker steps
+in the release workflow (`setup-buildx-action`, `login-action`, `packages: write`), no
+container section in `docs/install.md`, and `internal/version/docker_test.go` is deleted.
+The M5-08 board entry and the D184 text remain in history as the record of what was
+built and verified.
+
+1. **The release pipeline publishes two things now: the Homebrew cask and the AUR
+   package.** `.goreleaser.yml`'s `dockers_v2:` block is gone and the workflow's
+   `packages: write` permission with it; `go install`, the release tarball and the
+   archives are untouched. The DoD's "Linux + macOS release artifacts via
+   goreleaser + GitHub Actions" box is unaffected — Docker was never one of its
+   bullets.
+2. **This is reversible, deliberately.** The human said "for now"; the D184 knowledge
+   (distroless-static root base, released-binary-not-rebuilt, docker-container driver,
+   the `latest`-vs-prerelease rule) is preserved in `vault/knowledge/stack.md` and in
+   git history so a leg that restores containers does not re-derive it from scratch.
+   A future leg must not silently re-add a Dockerfile or image config as "cleanup".
+
