@@ -24,6 +24,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
 	"github.com/neuroplastio/kubecom/internal/tui/components/searchview"
+	"github.com/neuroplastio/kubecom/internal/tui/components/secretviewer"
 	"github.com/neuroplastio/kubecom/internal/tui/components/statusbar"
 	"github.com/neuroplastio/kubecom/internal/tui/components/table"
 	"github.com/neuroplastio/kubecom/internal/tui/components/viewer"
@@ -855,22 +856,16 @@ type Model struct {
 	// (LOGS-06). Cleared with the picker.
 	ctrByLabel map[string]string
 
-	// secretData holds the fetched entries of the Secret in the shared viewer (M3-08a)
-	// so the reveal toggle can re-render them without re-fetching, and secretRevealed
-	// is whether values are currently unmasked (false on open — the deliberate-reveal
-	// contract, #89). Both are consulted only while the secret viewer is up
-	// (viewerKindSecret), so a stale value left from a closed one is harmless. Touched
-	// only from the single-threaded update loop.
-	secretData     kube.SecretData
-	secretRevealed bool
-	// secretSel is the entry cursor into secretData.Entries (M3-08b): the entry
-	// secret.copy copies and the one renderSecret marks with the cursor gutter.
-	// nav.up/nav.down move it while the secret viewer is up (secrets are small, so
-	// the cursor is more useful than a line scroll there). secretEntryLines maps
-	// each entry index to its 0-based output line so the selected entry can be kept
-	// on screen (EnsureLineVisible). Reset on every open/load.
-	secretSel        int
-	secretEntryLines []int
+	// secretData is the fetched, authoritative Secret behind the open secret viewer
+	// (M3-08a), and secretviewer owns the reveal/mask toggle, the entry cursor and
+	// the body render (components/secretviewer, MONO-02/D265): the shell keeps the
+	// data so the copy gesture (secret.copy) reads the selected entry's value
+	// against it, and hands it to the sub-model at render time. Both are consulted
+	// only while the secret viewer is up (viewerKindSecret), so a stale value left
+	// from a closed one is harmless. Touched only from the single-threaded update
+	// loop.
+	secretData   kube.SecretData
+	secretviewer secretviewer.Model
 
 	// resByLabel maps each row of the palette's `:resource ` (and `:pin `) stage back
 	// to its kube.Resource. The picker is generic over strings (D65), so the stage
@@ -1912,7 +1907,8 @@ func (m *Model) resetCluster() {
 	m.ctrStreamRes, m.ctrStreamRef, m.ctrByLabel = kube.Resource{}, kube.ObjectRef{}, nil
 	m.drainRes, m.drainRef, m.drainLabel = kube.Resource{}, kube.ObjectRef{}, ""
 	m.pfPorts, m.pfPort = nil, kube.Port{}
-	m.secretData, m.secretRevealed, m.secretSel, m.secretEntryLines = kube.SecretData{}, false, 0, nil
+	m.secretData = kube.SecretData{}
+	m.secretviewer.Reset()
 	m.searchTarget, m.hasSearchTarget = kube.ObjectRef{}, false
 	m.clearReauth() // an armed remediation names the departing context's credentials.
 	m.resByLabel = nil
@@ -3161,10 +3157,8 @@ func (m Model) openSecretViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
 	m.viewerGen++
 	gen := m.viewerGen
-	m.secretRevealed = false // every open starts masked (the deliberate-reveal contract).
 	m.secretData = kube.SecretData{}
-	m.secretSel = 0
-	m.secretEntryLines = nil
+	m.secretviewer.Reset() // every open starts masked (the deliberate-reveal contract).
 	m.viewer.SetKind(viewerKindSecret)
 	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object))
 	m.viewer.SetContent("") // clear any prior object's content before the fetch lands.
@@ -3191,87 +3185,23 @@ func (m Model) handleSecretLoaded(msg secretLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, m.surfaceError(NewErrorMsg("get secret", msg.err))
 	}
 	m.secretData = msg.data
-	m.secretRevealed = false
-	m.secretSel = 0
-	m = m.renderSecretViewer()
+	m.secretviewer.Reset()
+	m, _ = m.renderSecretViewer()
 	return m, nil
 }
 
-// secretMask is the fixed-width placeholder shown for a hidden secret value, so the
-// value's length is not leaked while it is masked.
-const secretMask = "••••••••"
-
-// secretCursor / secretGutter are the 2-cell prefix each entry line carries so the
-// selected entry (secretCursor) stands out from the rest (secretGutter). Both are
-// the same width so keys stay column-aligned as the cursor moves (M3-08b).
-const (
-	secretCursor = "> "
-	secretGutter = "  "
-)
-
-// renderSecret formats a secret's data for the viewer: a type header, then one line
-// per key with a cursor gutter marking the selected entry (sel, M3-08b). While masked
-// (revealed == false) each value is a fixed mask followed by its byte length, so the
-// user sees the keys and can decide what to reveal without the value ever leaking;
-// revealed, the decoded value is shown verbatim (a multi-line value is indented under
-// its key so the block stays readable). Keys arrive sorted from the kube layer. It
-// also returns each entry's 0-based output line (its key line) so the caller can keep
-// the selected entry on screen (nil when there are no entries).
-func renderSecret(data kube.SecretData, revealed bool, sel int) (string, []int) {
-	var b strings.Builder
-	typ := data.Type
-	if typ == "" {
-		typ = "(none)"
-	}
-	b.WriteString("Type: " + typ + "\n")
-	state := "hidden — press r to reveal, c to copy"
-	if revealed {
-		state = "revealed — press r to hide, c to copy"
-	}
-	b.WriteString("Data: " + state + "\n\n")
-	if len(data.Entries) == 0 {
-		b.WriteString("(no data)\n")
-		return b.String(), nil
-	}
-	line := 3 // Type, Data, blank already emitted.
-	entryLines := make([]int, len(data.Entries))
-	for i, e := range data.Entries {
-		entryLines[i] = line
-		gutter := secretGutter
-		if i == sel {
-			gutter = secretCursor
-		}
-		if !revealed {
-			fmt.Fprintf(&b, "%s%s: %s (%d bytes)\n", gutter, e.Key, secretMask, len(e.Value))
-			line++
-			continue
-		}
-		if strings.Contains(e.Value, "\n") {
-			// A multi-line value (a cert, a kubeconfig) reads best under its key,
-			// each line indented so it is visually part of the entry.
-			b.WriteString(gutter + e.Key + ":\n")
-			line++
-			for _, l := range strings.Split(e.Value, "\n") {
-				b.WriteString(secretGutter + "  " + l + "\n")
-				line++
-			}
-			continue
-		}
-		b.WriteString(gutter + e.Key + ": " + e.Value + "\n")
-		line++
-	}
-	return b.String(), entryLines
-}
-
 // renderSecretViewer re-renders the open secret viewer from the current
-// data/reveal/cursor state and records the entry line offsets. It resets the scroll
-// to the top (SetContent), so callers that move the cursor follow it with
-// EnsureLineVisible to pull the selection back on screen.
-func (m Model) renderSecretViewer() Model {
-	content, lines := renderSecret(m.secretData, m.secretRevealed, m.secretSel)
-	m.secretEntryLines = lines
+// data/reveal/cursor state: the reveal/mask toggle, the cursor and the body
+// render live in the components/secretviewer sub-model (MONO-02/D265), and the
+// shell hands it its authoritative SecretData. It returns each entry's 0-based
+// output line so a caller that moved the cursor can follow it with
+// EnsureLineVisible to pull the selection back on screen (SetContent resets the
+// scroll to the top, which is also what a reveal/hide toggle wants — the reader
+// re-reads from the top).
+func (m Model) renderSecretViewer() (Model, []int) {
+	content, lines := m.secretviewer.Render(m.secretData)
 	m.viewer.SetContent(content)
-	return m
+	return m, lines
 }
 
 // logMsg wraps one message from the log pump with the viewerGen of the viewer open
@@ -4313,8 +4243,8 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// top, which is what a reveal/hide toggle wants (the reader re-reads from the top).
 	if a == keymap.ActionRevealSecret {
 		if m.viewer.Kind() == viewerKindSecret {
-			m.secretRevealed = !m.secretRevealed
-			m = m.renderSecretViewer()
+			m.secretviewer.ToggleReveal()
+			m, _ = m.renderSecretViewer()
 		}
 		return m, nil
 	}
@@ -4325,8 +4255,8 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// only the key + byte length are echoed (a neutral status notice), never the
 	// value.
 	if a == keymap.ActionCopySecret {
-		if m.viewer.Kind() == viewerKindSecret && m.secretSel < len(m.secretData.Entries) {
-			e := m.secretData.Entries[m.secretSel]
+		if m.viewer.Kind() == viewerKindSecret && m.secretviewer.Sel() < len(m.secretData.Entries) {
+			e := m.secretData.Entries[m.secretviewer.Sel()]
 			notice := m.surfaceNotice(fmt.Sprintf("copied %q (%d bytes)", e.Key, len(e.Value)))
 			return m, tea.Batch(tea.SetClipboard(e.Value), notice)
 		}
@@ -4338,14 +4268,15 @@ func (m Model) handleViewerAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// many-key Secret (half/full-page keys still scroll for a large revealed value).
 	if m.viewer.Kind() == viewerKindSecret && (a == keymap.ActionUp || a == keymap.ActionDown) {
 		if n := len(m.secretData.Entries); n > 0 {
-			if a == keymap.ActionUp && m.secretSel > 0 {
-				m.secretSel--
-			} else if a == keymap.ActionDown && m.secretSel < n-1 {
-				m.secretSel++
+			if a == keymap.ActionUp {
+				m.secretviewer.Move(-1, n)
+			} else {
+				m.secretviewer.Move(+1, n)
 			}
-			m = m.renderSecretViewer()
-			if m.secretSel < len(m.secretEntryLines) {
-				m.viewer.EnsureLineVisible(m.secretEntryLines[m.secretSel])
+			var lines []int
+			m, lines = m.renderSecretViewer()
+			if sel := m.secretviewer.Sel(); sel < len(lines) {
+				m.viewer.EnsureLineVisible(lines[sel])
 			}
 		}
 		return m, nil

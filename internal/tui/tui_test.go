@@ -23,6 +23,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
 	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/components/secretviewer"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
@@ -3778,7 +3779,7 @@ func TestSecretViewerOpensMaskedThenReveals(t *testing.T) {
 
 	// Masked: the key and its byte count show, the value does not.
 	view := m.View().Content
-	if !strings.Contains(view, "password") || !strings.Contains(view, secretMask) {
+	if !strings.Contains(view, "password") || !strings.Contains(view, secretviewer.Mask) {
 		t.Fatalf("masked view should show the key + mask: %q", view)
 	}
 	if strings.Contains(view, "s3cr3t") {
@@ -3790,8 +3791,8 @@ func TestSecretViewerOpensMaskedThenReveals(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("secret.reveal should not emit a command (in-place re-render)")
 	}
-	if !m.secretRevealed {
-		t.Fatal("reveal key should flip secretRevealed on")
+	if !m.secretviewer.Revealed() {
+		t.Fatal("reveal key should flip the reveal toggle on")
 	}
 	if !strings.Contains(m.View().Content, "s3cr3t") {
 		t.Fatalf("revealed view should show the value: %q", m.View().Content)
@@ -3799,7 +3800,7 @@ func TestSecretViewerOpensMaskedThenReveals(t *testing.T) {
 
 	// Re-mask: a second `r` hides it again.
 	m, _ = press(t, m, revealKey)
-	if m.secretRevealed {
+	if m.secretviewer.Revealed() {
 		t.Fatal("a second reveal press should hide the values again")
 	}
 	if strings.Contains(m.View().Content, "s3cr3t") {
@@ -3907,7 +3908,7 @@ func TestRevealInertOnDescribeViewer(t *testing.T) {
 	if revealCmd != nil {
 		t.Fatal("secret.reveal on the describe viewer should be inert (no command)")
 	}
-	if m.secretRevealed {
+	if m.secretviewer.Revealed() {
 		t.Fatal("secret.reveal should not toggle reveal on a non-secret viewer")
 	}
 	if !m.viewer.Active() {
@@ -3964,50 +3965,6 @@ func loadedSecret(t *testing.T, g SecretGetter) Model {
 	return next.(Model)
 }
 
-// TestRenderSecretCursorAndLines unit-tests the render: the cursor gutter marks the
-// selected entry, the returned line offsets point at each entry's key line, the
-// masked render never contains a value, and a revealed multi-line value is indented
-// under its key with the offsets tracking it (M3-08b).
-func TestRenderSecretCursorAndLines(t *testing.T) {
-	data := kube.SecretData{
-		Type: "Opaque",
-		Entries: []kube.SecretEntry{
-			{Key: "password", Value: "s3cr3t"},
-			{Key: "token", Value: "line1\nline2"},
-		},
-	}
-
-	content, lines := renderSecret(data, false, 1)
-	if len(lines) != 2 {
-		t.Fatalf("want a line offset per entry, got %d", len(lines))
-	}
-	ls := strings.Split(content, "\n")
-	if !strings.HasPrefix(ls[lines[1]], secretCursor+"token") {
-		t.Fatalf("the cursor gutter should mark the selected entry: %q", ls[lines[1]])
-	}
-	if !strings.HasPrefix(ls[lines[0]], secretGutter+"password") {
-		t.Fatalf("an unselected entry should carry the plain gutter: %q", ls[lines[0]])
-	}
-	if strings.Contains(content, "s3cr3t") || strings.Contains(content, "line1") {
-		t.Fatalf("a masked render must not contain any value: %q", content)
-	}
-
-	content, lines = renderSecret(data, true, 0)
-	ls = strings.Split(content, "\n")
-	if !strings.HasPrefix(ls[lines[0]], secretCursor+"password") {
-		t.Fatalf("revealed cursor gutter wrong: %q", ls[lines[0]])
-	}
-	if !strings.Contains(content, "s3cr3t") {
-		t.Fatal("a revealed render should contain the single-line value")
-	}
-	if !strings.HasPrefix(ls[lines[1]], secretGutter+"token:") {
-		t.Fatalf("a multi-line entry's key line wrong: %q", ls[lines[1]])
-	}
-	if ls[lines[1]+1] != secretGutter+"  line1" {
-		t.Fatalf("a multi-line value should be indented under its key: %q", ls[lines[1]+1])
-	}
-}
-
 // TestSecretCopyCopiesSelectedValueMasked proves secret.copy puts the selected
 // entry's decoded value on the clipboard while the value stays masked on screen — a
 // copy is a deliberate gesture that need not reveal first — and surfaces a neutral
@@ -4055,8 +4012,8 @@ func TestSecretCopyFollowsCursor(t *testing.T) {
 
 	// down moves the entry cursor to the second entry.
 	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
-	if m.secretSel != 1 {
-		t.Fatalf("nav.down should move the entry cursor to 1, got %d", m.secretSel)
+	if m.secretviewer.Sel() != 1 {
+		t.Fatalf("nav.down should move the entry cursor to 1, got %d", m.secretviewer.Sel())
 	}
 	m, copyCmd := press(t, m, copyKey)
 	if got := copiedClipboard(t, copyCmd); got != "abc123" {
@@ -4065,14 +4022,14 @@ func TestSecretCopyFollowsCursor(t *testing.T) {
 
 	// down clamps at the last entry.
 	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
-	if m.secretSel != 1 {
-		t.Fatalf("nav.down should clamp at the last entry, got %d", m.secretSel)
+	if m.secretviewer.Sel() != 1 {
+		t.Fatalf("nav.down should clamp at the last entry, got %d", m.secretviewer.Sel())
 	}
 	// up walks back and clamps at the first entry.
 	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
 	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
-	if m.secretSel != 0 {
-		t.Fatalf("nav.up should clamp at the first entry, got %d", m.secretSel)
+	if m.secretviewer.Sel() != 0 {
+		t.Fatalf("nav.up should clamp at the first entry, got %d", m.secretviewer.Sel())
 	}
 }
 
