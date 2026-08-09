@@ -6,6 +6,15 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 _Last updated: 2026-08-09 — LOGS-09 reclosed the LOGS line (D258): the palette family passes through the logs view (`:` lists the logs verbs over the stream, `C` reaches ctx.switch from it) and `logs.previous` defaults to `o`; both feedback files it addressed are deleted. Three feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
+- [ ] **LOGS-SEL-04** Match highlight takes the bright (Warn) background on dark canvases
+      status: in-progress | owner: kimi-k3 | added: 2026-08-09
+      notes: Feedback `2026-08-09-log-match-highlight-background` (maintainer: "Highlighted
+      text (matches) should have bright (yellow) background"). THEME-05's weight-only Match
+      regains paint where paint can carry it: canvas-on-Warn on dark palettes (measured
+      4.68–12.91:1 for the matched text; the 4.05–9.89:1 bar separation of D252 pt 1 is
+      untouched), weight-only on the three light palettes where no native shade clears the
+      floor (D252 pt 3).
+
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
