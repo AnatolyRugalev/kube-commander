@@ -4585,8 +4585,10 @@ contradict:
    two cannot drift apart.
 4. **Nothing pre-checks for a previous instance.** Only the apiserver knows whether one
    exists; a container-status guess would either hide a readable log or promise one that is
-   not there. The request goes out and its rejection lands on the emptied view as any open
-   failure does — status-bar toast naming the server's reason, view closes (D74).
+   not there. The request goes out and its rejection lands on the emptied view —
+   **the close half of this point is superseded by D257 (2026-08-09): a rejected flip
+   keeps the view and falls back to the running instance's stream under the toast**;
+   the no-pre-check half stands.
 5. **The `[previous]` header marker is not optional, and sits ahead of the follow state.**
    Two runs of one container produce output that looks alike, so this is state the reader
    can lose sight of and D146 says name it. The header is clipped from the right: losing
@@ -7203,3 +7205,29 @@ by directive. Constraints a future leg must not silently contradict:
    but must not be re-surfaced at every orient; re-ask when the first release
    tag is being cut. Both publishers skip themselves without their secrets
    (D173 pt 2), so the deferral is cost-free until then.
+
+## D257 — a rejected previous-instance flip keeps the log view; the running instance's stream resumes under the toast (2026-08-09, LOGS-08)
+
+Feedback `2026-08-09-logs-no-previous-keeps-view` (maintainer, verbatim: "Show error
+and exists log view. It shouldn't exit log view.") observed that `ctrl+p` on a pod
+with no previous instance showed the apiserver's rejection **and closed the log
+view**, dumping the reader back to the table. This **partially supersedes D177
+pt 4**: the no-pre-check half stands; the "view closes" half is replaced.
+Constraints a future leg must not silently contradict:
+
+1. **A rejected `Previous` flip never closes the view.** The reader was watching
+   logs; an error about an optional toggle must not take the view away. The
+   fallback lives in `handleLogMsg`'s `ErrorMsg` branch, recognised as *empty view
+   + the stashed request asked for `Previous`* — the emptiness is the toggle's own
+   `Restream`, which is how a rejected flip is told apart from a fresh open
+   failure, whose D74 close is unchanged.
+2. **The fallback re-issues the stashed request with only `Previous` cleared** —
+   the same one-bit rule as the flip itself (D177 pt 2), applied in reverse. The
+   running instance's stream resumes (replaying the tail bound, so "keeps showing"
+   is a restream, not a frozen buffer), the `[previous]` header marker goes with
+   it, and the server's wording rides the D74 toast. Do not string-match "not
+   found" to gate the fallback: any rejection of the optional toggle gets it.
+3. **Nothing pre-checks for a previous instance, still.** Only the apiserver
+   knows; a client-side guess would either hide a readable log or promise one that
+   is not there. The request goes out, and a repeated `ctrl+p` asks again — the
+   fallback leaves the toggle fully re-armable.

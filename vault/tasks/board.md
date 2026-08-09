@@ -3,11 +3,8 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — CTX-MEM-04 closed the drill-in deferral: a remembered drill-in comes back as a drill-in (owner recorded beside the kind, re-resolved on restore, owner-gone landing on the plain list with a notice — D255), so the CTX-MEM line is fully done. Earlier today: THEME-06 landed `gruvbox-light`, taking the built-in registry to fourteen (eleven dark, three light), and the release-namespace human task was folded in and closed (D253/D254) — the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — LOGS-08 reclosed the LOGS line on feedback `2026-08-09-logs-no-previous-keeps-view`: a rejected previous-instance flip no longer closes the log view, the running instance's stream resumes under a toast naming the server's reason (D257, partially superseding D177 pt 4). Five feedback items from the 2026-08-09 maintainer review remain in `vault/feedback/` and preempt the board. Earlier today: CTX-MEM-04 closed the drill-in deferral (D255), THEME-06 landed `gruvbox-light` (registry at fourteen), and the release-namespace human task was folded in (D253/D254); M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
-
-- [ ] **LOGS-08** No-previous-instance rejection keeps the log view open (fallback to the running stream) — feedback `2026-08-09-logs-no-previous-keeps-view`
-      status: in-progress | owner: kimi-k3 | added: 2026-08-09
 
 ## Blocked
 
@@ -146,7 +143,7 @@ cluster-search half. Constraints a later leg must not walk into (**D239**): the 
 filter's scope exactly, a match cuts a status-colored cell rather than replacing it, and the
 **cursor row keeps its marks** — the one exception to M4-06's "selection wins outright".
 
-### Logs dedicated view (LOGS — feedback-driven, D134) — closed again at LOGS-07
+### Logs dedicated view (LOGS — feedback-driven, D134) — closed again at LOGS-08
 Feedback `2026-07-24-logs-dedicated-view-live-grep`, then `2026-07-29-logs-tail-and-perf`
 and `2026-07-29-logs-init-containers`: a **dedicated full-screen logs mini-app** with a
 `/`-filter that narrows the stream live while following. **Closed twice.** On *features* at
@@ -170,6 +167,13 @@ never measured, is D191 pt 3, and neither D160 nor D162 was ever evidence that t
 bounded (D230) — D245 pt 1 is, and it is the constraint the two constants now live under.
 
 - [x] **LOGS-07** Logs buffer bounded at 10 000 lines, trimmed from the top — done 2026-08-07 (D245)
+
+Reopened a fourth time by feedback `2026-08-09-logs-no-previous-keeps-view` and
+**reclosed at LOGS-08 (D257)**: a rejected previous-instance flip no longer closes the
+log view — the running instance's stream resumes under the toast naming the server's
+reason (partially superseding D177 pt 4; the no-pre-check half stands).
+
+- [x] **LOGS-08** A rejected previous-instance flip keeps the log view; the running stream resumes under the toast — done 2026-08-09 (D257)
 
 ### Logs selection and yank (LOGS-SEL — feedback-driven) — closed at LOGS-SEL-03
 Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
@@ -599,6 +603,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-08** A rejected previous-instance flip keeps the log view open — the running instance's stream resumes under a toast naming the server's reason — feedback `2026-08-09-logs-no-previous-keeps-view` — done 2026-08-09 (D257)
 
 - [x] **CTX-MEM-04** The drill-in scope comes back as a drill-in — owner recorded beside the kind, re-resolved through the ChildResolver on restore, and the owner-gone case lands on the plain list with a notice saying so — done 2026-08-09 (D255)
 

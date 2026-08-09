@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -659,9 +660,11 @@ func TestLogsPreviousKeepsTheGrepAndReplacesTheBuffer(t *testing.T) {
 
 // TestLogsPreviousWithNoTerminatedInstanceDegrades is the answer to "what happens when
 // there is no previous instance": nothing pre-checks for one (only the apiserver knows),
-// so the request goes out, its rejection lands on the emptied view as any open failure
-// does, and the existing degrade applies — the reason reaches the status bar and the
-// view closes rather than sitting there empty (D74). No crash, no blank pager.
+// so the request goes out and its rejection lands on the emptied view — but a rejected
+// *flip* must not dismiss the view the reader was in (feedback
+// 2026-08-09-logs-no-previous-keeps-view, D257). The request is re-issued with Previous
+// cleared, so the running instance's stream resumes, and the status bar names the
+// server's reason. No crash, no blank pager, no lost view.
 func TestLogsPreviousWithNoTerminatedInstanceDegrades(t *testing.T) {
 	s := &crashLoopLogStreamer{}
 	m := logsViewerModel(t, s)
@@ -669,23 +672,78 @@ func TestLogsPreviousWithNoTerminatedInstanceDegrades(t *testing.T) {
 	if !m.logsView.Active() {
 		t.Fatal("precondition: the running instance's logs should open")
 	}
+	opens := s.calls
 
 	m, cmd := press(t, m, previousKey)
 	lm, ok := cmd().(logMsg)
 	if !ok {
 		t.Fatalf("logs.previous should start a stream (a pump cmd), got %T", cmd())
 	}
-	next, toast := m.Update(lm)
+	next, fallback := m.Update(lm)
 	m = next.(Model)
 
-	if m.logsView.Active() {
-		t.Fatal("a rejected previous-instance request should close the emptied view")
+	if !m.logsView.Active() {
+		t.Fatal("a rejected previous-instance flip must not close the view (D257)")
 	}
-	if toast == nil {
-		t.Error("the rejection should surface (a toast cmd), not be swallowed")
+	if fallback == nil {
+		t.Fatal("the rejection should re-open the running stream and toast the reason")
+	}
+	// The fallback batches the resumed stream's pump with the toast's auto-clear
+	// tick. Run each sub-command with a timeout (the tick blocks for errorDisplay,
+	// the themeCmdMsgs precedent) and drain the one that is a pump.
+	msg := fallback()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("the fallback should batch the pump with the toast, got %T", msg)
+	}
+	var pumped bool
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func(c tea.Cmd) { ch <- c() }(c)
+		select {
+		case pm := <-ch:
+			if _, isPump := pm.(logMsg); isPump {
+				pumped = true
+				next, pumpCmd := m.Update(pm)
+				m = drainLogPump(t, next.(Model), pumpCmd)
+			}
+		case <-time.After(200 * time.Millisecond):
+			// the blocking auto-clear tick — skip it.
+		}
+	}
+	if !pumped {
+		t.Fatal("the fallback should re-open the running instance's stream")
+	}
+	if s.calls != opens+2 {
+		t.Fatalf("the rejection should re-issue the open once: %d opens, want %d", s.calls, opens+2)
+	}
+	if s.gotOpts.Previous {
+		t.Fatal("the fallback open should ask for the running instance")
+	}
+	if m.logsView.Previous() {
+		t.Fatal("the [previous] marker should go with the rejected flip")
+	}
+	if f := frame(m); !strings.Contains(f, "still serving") {
+		t.Fatalf("the running instance's stream should resume: %q", f)
 	}
 	if f := frame(m); !strings.Contains(f, "previous terminated container") {
 		t.Fatalf("the status bar should name the reason: %q", f)
+	}
+
+	// The toggle itself still works: pressing it again asks again, rejects again,
+	// and the view still stays.
+	m, cmd = press(t, m, previousKey)
+	lm, ok = cmd().(logMsg)
+	if !ok {
+		t.Fatalf("a second logs.previous should start a stream, got %T", cmd())
+	}
+	next, _ = m.Update(lm)
+	m = next.(Model)
+	if !m.logsView.Active() {
+		t.Fatal("a second rejected flip should still keep the view open")
 	}
 }
 

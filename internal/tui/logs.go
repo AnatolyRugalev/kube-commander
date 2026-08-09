@@ -73,10 +73,12 @@ func (m Model) openLogs(res kube.Resource, ref kube.ObjectRef, container string,
 // replaced are dropped rather than interleaved into the new instance's output.
 //
 // With no previous instance the server rejects the request and the stream's terminal
-// error lands on an empty view, which the existing open-failure path (handleLogMsg)
-// degrades exactly as it degrades any other: a status-bar toast naming the reason, and
-// the view closes (D74). Nothing here pre-checks for one — only the apiserver knows,
-// and a wrong guess would either hide a readable log or promise one that is not there.
+// error lands on the emptied view, where handleLogMsg recognises a rejected *flip*
+// (the empty view was asking for Previous) and falls back to the running instance's
+// stream — the view stays open under a status-bar toast naming the server's reason
+// (D257), because an error about an optional toggle must not take the reader's view
+// away. Nothing here pre-checks for one — only the apiserver knows, and a wrong guess
+// would either hide a readable log or promise one that is not there.
 func (m Model) toggleLogsPrevious() (tea.Model, tea.Cmd) {
 	if m.logStreamer == nil || m.logReq.ref.Name == "" {
 		return m, nil // logs-viewer-inert, or nothing has streamed yet.
@@ -174,7 +176,10 @@ func (m Model) pumpLogs(gen int) tea.Cmd {
 // channel ends the chain (the normal EOF of a non-following stream); a bridged stream
 // error degrades — it surfaces a transient status-bar toast (D74) and closes the view
 // only if nothing was shown yet (an open failure), leaving any partial lines on screen
-// for a mid-stream drop.
+// for a mid-stream drop. The one exception to the close is a rejected previous-instance
+// flip: the emptied view was the toggle's own restream, not a fresh open, so the reader
+// had a log they were watching — the request is re-issued with Previous cleared and the
+// running instance's stream resumes under the toast (D257).
 func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 	if l.gen != m.viewerGen || !m.logsView.Active() {
 		return m, nil // superseded stream or closed view; drop and stop this chain.
@@ -207,6 +212,19 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 	case ErrorMsg:
 		empty := m.logsView.Empty()
 		m.stopLogStream()
+		if empty && m.logReq.previous {
+			// A rejected previous-instance flip (D257): the emptiness is the
+			// toggle's own Restream, so the reader was watching the running
+			// instance a moment ago. Re-issue the stashed request with Previous
+			// cleared — the running stream resumes, the toast names the server's
+			// reason, and the view the reader was in stays open.
+			req := m.logReq
+			req.previous = false
+			m.viewerGen++
+			next, pump := m.startLogStream(req, m.viewerGen)
+			m = next.(Model)
+			return m, tea.Batch(pump, m.surfaceError(inner))
+		}
 		if empty {
 			m.closeLogs() // nothing shown yet (an open failure) → close the empty view.
 		}
