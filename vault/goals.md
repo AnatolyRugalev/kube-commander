@@ -18,14 +18,18 @@ high-value capabilities the original lacked.
 ## Definition of Done (v1)
 
 _Audited item by item against named evidence by **M5-01** (2026-07-30, D174): 6 of 13 ticked
-then, **9 of 13 as of HT-dogfood-0806** (2026-08-06), and every unticked box names the one
-thing that closes it. A box is ticked only when its claim is decidable from the code and its
-tests, or has been confirmed by a human against a real cluster — never to make the list read
-as finished (D79/D174). The three that closed on 2026-08-06 are the two `$EDITOR` boxes, on
-the maintainer's live-cluster confirmation, and the migration box, which closes on the
-generated fixture **and says so** because no real legacy file survives to run it against
-(D231). The four still open: two wait on an open dogfood (the context switch, the CRD
-degraded pane) and two on release acts that have not happened. **M5-01b** (2026-07-30, D178)
+then, **9 of 13 as of HT-dogfood-0806** (2026-08-06), **11 of 13 as of the 2026-08-09 review
+fold-in (D256)**, and every unticked box names the one thing that closes it. A box is ticked
+only when its claim is decidable from the code and its tests, or has been confirmed by a human
+against a real cluster — never to make the list read as finished (D79/D174). The three that
+closed on 2026-08-06 are the two `$EDITOR` boxes, on the maintainer's live-cluster
+confirmation, and the migration box, which closes on the generated fixture **and says so**
+because no real legacy file survives to run it against (D231). The two that closed on
+2026-08-09 are the context switch and the CRD/generic-listing box, both on maintainer waiver
+(D256 pts 1/3: the remaining live QA was declined, "we'll ship it like this") — each box says
+so. The two still open are release acts that have not happened: the goreleaser tag artifacts
+and the issue-tracker sweep, both waiting on the first release tag (a human act, D173).
+**M5-01b** (2026-07-30, D178)
 amended the wording of the logs/describe/YAML bullet — the one amendment made to a claim in
 this list, made on the maintainer's own recorded feedback and not on the agent's reading of
 the code; the original text is preserved in that bullet's annotation._
@@ -38,7 +42,7 @@ the code; the original text is preserved in that bullet's annotation._
       decisions, not gaps: menu customization is the per-context `menus/<context>.yaml` file
       instead of in-TUI add/hide/reorder (D83/D89), and the menu pane is optional with a
       `:` resource palette beside it (D96/D100).)
-- [ ] Resource listing works generically for **any** resource incl. CRDs (discovery-driven, kubectl-identical columns).
+- [x] Resource listing works generically for **any** resource incl. CRDs (discovery-driven, kubectl-identical columns).
       (Mechanism complete: server-side Table printing for any GVR, CRD
       `additionalPrinterColumns` included (`internal/kube/table.go`, D33); discovery folds
       CRDs into the menu (`TestDiscoveryReadyReconcilesMenu`, with a CRD); CRD group
@@ -47,10 +51,14 @@ the code; the original text is preserved in that bullet's annotation._
       erroring instead of listing — and **that bug is gone**: its human task came back *not
       reproducible* on 2026-08-01, and the difference between the two clusters is a
       conversion webhook, which fails the LIST in the apiserver and kills `kubectl` with it
-      (D191 pt 1). So no CRD is reported broken any more. Still unticked, on the narrower
-      claim now: nothing here has been driven against a CRD-heavy cluster by a human beyond
-      that one listing check, and the re-scoped CRD-01 — say *why* a group's LIST failed,
-      on screen — is what makes the degraded case legible rather than a vanishing toast.)
+      (D191 pt 1). So no CRD is reported broken any more. The two later holdouts are both
+      closed: the re-scoped CRD-01 — say *why* a group's LIST failed, on screen — landed
+      2026-08-02 (D200), and the remaining one, a human driving a CRD-heavy cluster beyond
+      that one confirmed listing, was **declined by the maintainer 2026-08-09** ("not
+      important … do not care") with the hermetic coverage named as the standing
+      verification (D256 pt 3). **Ticked 2026-08-09** on that coverage plus the one
+      human-confirmed real-cluster CRD listing, in the D231 shape — the live evidence was
+      waived by its reviewer, not produced.)
 - [x] In-TUI logs and describe viewers; an object's YAML round-trips through your `$EDITOR`
       (no external pager required).
       (**Wording amended by M5-01b, 2026-07-30, D178.** It read "In-TUI logs, describe, and
@@ -96,15 +104,18 @@ the code; the original text is preserved in that bullet's annotation._
       confirmation is as wide as those words: the flow works. The reject paths — invalid YAML,
       renamed `metadata.name`, concurrent change — remain covered hermetically (D129), not by
       this check.)
-- [ ] Context/cluster switcher; namespace switcher; filter; sort by column.
-      (Three of four met: namespace picker (M2-08c) that remembers per-context scope
-      (D163), table filter with `n`/`N` search (D80), and any column sortable, stable under
-      live watch deltas, selection following its object by UID (M2-13a/13b, D94/D98, #85).
-      The context switcher is complete as a mechanism — connect-then-teardown, watch and
-      menu rebind, per-context namespace/menu/state (M4-03…05, D156/D157/D163) — but the
-      claim is a *live* rebind against a second real cluster, which no fake can show, so
-      the M4 criterion and this box both wait on
-      `2026-07-29-context-switch-live-dogfood`.)
+- [x] Context/cluster switcher; namespace switcher; filter; sort by column.
+      (All four met: namespace picker (M2-08c) that remembers per-context scope
+      (D163), table filter with `n`/`N` search (D80), any column sortable, stable under
+      live watch deltas, selection following its object by UID (M2-13a/13b, D94/D98, #85) —
+      and the context switcher, complete as a mechanism (connect-then-teardown, watch and
+      menu rebind, per-context namespace/menu/state, M4-03…05, D156/D157/D163) and confirmed
+      live on its happy path (picker + switch + rebind against a second real cluster,
+      2026-08-01). The dogfood's remaining checks (pts 3–8: leak teardown, same-context
+      no-op, unreachable context, per-context memory, timing, pane-restore reading) were
+      **waived by the maintainer 2026-08-09**: "current switching functionality is overall
+      good enough … We'll ship it like this" — so this box ticks on that directive (D256
+      pt 1), the waived checks named here rather than verified.)
 - [x] **Vim-first navigation** (`hjkl`, `gg`/`G`, `/`, `n`/`N`) with arrows/classic keys as an equivalent fallback.
       (M2 exit criterion 5: `defaultBindings` pairs every nav action with a non-vim
       fallback — `k`/`up`, `j`/`down`, `h`/`left`, `l`/`right`, `gg`/`home`, `G`/`end`,

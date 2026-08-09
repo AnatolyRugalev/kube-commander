@@ -4577,7 +4577,10 @@ contradict:
    terminated instance's log cannot grow, the kubelet serves it and closes, and a clean end
    is already how `followLogStream` stops following — the same path a followed pod takes
    when its container dies. A leg that special-cases follow, tail or timestamps for the
-   previous instance is changing more than the reader asked for.
+   previous instance is changing more than the reader asked for. **Confirmed against a real
+   kubelet 2026-08-09** (crash-loop dogfood on `broken/crashloop`, 2,305 restarts): the
+   previous instance's log arrives and the followed stream settles — the bet this point made
+   is observed behavior now, not inference.
 3. **A restream is not a reset.** Two instances are two logs, so the buffer is replaced
    (`logsview.Restream`), but the grep query and mode, wrap and timestamps survive, because
    the point of flipping is to ask the same question of the other log. `Reset` — the

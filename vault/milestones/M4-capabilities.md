@@ -1,6 +1,6 @@
 # M4 — New Capabilities
 
-**Status:** `feature-complete` (2026-07-30) — every M4 slice is landed and every exit criterion is ticked except the context switch, which awaits its two-cluster dogfood (D79).
+**Status:** `done` (2026-08-09) — every exit criterion is ticked; the context-switch criterion closed on the maintainer's ship-as-is waiver (D256 pt 1), the last one standing.
 **Phase:** REWRITE_PLAN Phase 4
 
 _Scope expanded into ordered, leg-sized Backlog slices **M4-01 … M4-12** on the
@@ -13,8 +13,9 @@ column-aware coloring (M4-06), owner→children drill-down (M4-07/08), metrics
 are done, and so is the themes line: M4-11 landed the built-in palettes, M4-12a made
 `theme:` in `config.yaml` take effect, M4-12b-1 the live restyle a runtime pick needs
 and M4-12b-2 the picker and the write-back — every slice is landed and every exit
-criterion but the context-switch one (which waits on a two-cluster dogfood, D79) is
-ticked. Per-leg history: `vault/journal/`._
+criterion is ticked, the context-switch one on the maintainer's 2026-08-09 waiver
+(D256 pt 1) after the dogfood confirmed the happy path live. Per-leg history:
+`vault/journal/`._
 
 ## Goal
 
@@ -45,15 +46,19 @@ The capabilities the original lacked, now natural on the new architecture.
 
 ## Exit criteria
 
-- [ ] Switch context without restarting; watches and menu rebind to the new cluster.
-      (Mechanism complete and reachable since M4-04b/D158 — `C` (`ctx.switch`) opens the
-      picker, the pick connects then resets → swaps → rediscovers (M4-03/04a, D156/D157) —
-      and complete on *state* too since M4-05/D163: the switch lands on the new context's
-      remembered namespace, its menu file and its state file, not the previous one's.
-      Left **unticked** on purpose: the claim is about a live rebind against a second real
-      cluster, which no fake can show, so it waits on the dogfood human-task
-      `2026-07-29-context-switch-live-dogfood.md` rather than being ticked against
-      hermetic tests (D79) — the M3 Edit precedent.)
+- [x] Switch context without restarting; watches and menu rebind to the new cluster.
+      (**Ticked 2026-08-09 on the maintainer's waiver (D256 pt 1).** Mechanism complete
+      and reachable since M4-04b/D158 — `C` (`ctx.switch`) opens the picker, the pick
+      connects then resets → swaps → rediscovers (M4-03/04a, D156/D157) — and complete on
+      *state* too since M4-05/D163: the switch lands on the new context's remembered
+      namespace, its menu file and its state file, not the previous one's. Held unticked
+      under D79 for a live two-cluster run no fake can show; that dogfood confirmed the
+      happy path on 2026-08-01 (picker, switch, rebind against a second real cluster) and
+      the maintainer closed the rest by directive on 2026-08-09 — "current switching
+      functionality is overall good enough and I don't want to spend more time testing it.
+      We'll ship it like this" — waiving pts 3–8 (leak teardown, same-context no-op,
+      unreachable context, per-context memory, timing, pane-restore reading). The waiver,
+      not hermetic evidence, is what ticks this box; the waived checks stay named here.)
 - [x] Any column sortable; sort indicator visible; stable under live updates. (met since M2-13a/13b/D94/D98 — `table.SortBy`/`ClearSort` sort the *displayed* view over the authoritative watch-ordered set, so deltas keep flowing and re-sort in place: `TestSortSurvivesWatchDelta`, `TestSortPreservesSelectionByUID` (selection follows its object by UID, not its row), `TestClearSortRestoresWatchOrder`, `TestSetTableResetsSort`; the header arrow and its column alignment are `TestHeaderShowsSortIndicator`/`TestSortIndicatorKeepsColumnsAligned`; the `sort.column`/`sort.clear` cycle through the real key path is `TestSortCycleAdvancesColumnsAndClears`/`TestClearSortKeyRestoresOrder`. Ticked here rather than reopening M2: #85 was scheduled in M4 but implemented early, in the milestone that owns the table. Column-aware coloring, the other half of that scope bullet, landed separately as M4-06/D164 — a pure classifier keyed off the server-side column name, `TestClassifyCell` + the render tests in `internal/tui/components/table/color_test.go` — which closes the bullet, though it was never what this criterion asked for.)
 - [x] Drill-down navigates from an owner to its pods and back. (met since M4-08/D166 —
       `P` (`res.children`, also "Show pods" in the actions menu, gated on

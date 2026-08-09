@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — LOGS-08 reclosed the LOGS line on feedback `2026-08-09-logs-no-previous-keeps-view`: a rejected previous-instance flip no longer closes the log view, the running instance's stream resumes under a toast naming the server's reason (D257, partially superseding D177 pt 4). Five feedback items from the 2026-08-09 maintainer review remain in `vault/feedback/` and preempt the board. Earlier today: CTX-MEM-04 closed the drill-in deferral (D255), THEME-06 landed `gruvbox-light` (registry at fourteen), and the release-namespace human task was folded in (D253/D254); M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — HT-fold-0809 closed the five done human tasks from the maintainer's review: M4 is **done** (context-switch criterion ticked on the D256 pt 1 waiver), CTX-WARM-02/03/04 are cancelled (D256 pt 2), the goals DoD reads 11 of 13 (CRD box ticked on D256 pt 3), and the screencast half of the M5 docs criterion is closed (484e60c). Five feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: LOGS-08 reclosed the LOGS line (D257), CTX-MEM-04 closed the drill-in deferral (D255), THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -208,8 +208,10 @@ backgrounds — and measuring it is what answered it. (1) The bar and the `/` hi
 is forbidden rather than merely unnecessary. (2) **No yank-all binding** — `y` already
 copies the cursor's line, `gg v G y` the buffer, and "everything visible" is ambiguous once
 `w` wraps or `/` narrows. The third question the feedback raised (the top of the buffer
-while lines stream in above) was already answered by LOGS-07's cap. What is left for a
-human is only the eye: item 6 of `human-tasks/2026-07-30-previous-logs-crashloop-dogfood`.
+while lines stream in above) was already answered by LOGS-07's cap. The human-eye check
+(item 6 of the crash-loop dogfood) came back 2026-08-09: the bar and the highlight do read
+as two things; what the maintainer wants brighter is the match itself — tracked as
+feedback `2026-08-09-log-match-highlight-background`.
 
 The same measurement found a **defect it did not cause**: `styles.Match` is `StatusBarBg`
 on `Warn`, mapped when every palette was dark, and on the two light ones admitted at
@@ -235,8 +237,10 @@ is not reproducible, the clean install differs only in serving `strategy: None`,
 conversion webhook that is down fails the LIST *in the apiserver*, killing `kubectl` with it
 — so no leg may write a fix to kubecom's CRD handling on the strength of CRD-01's original
 title, which would be inventing a bug (D191 pt 1, D79). And the wording CRD-01 landed is
-still unverified against a real broken-webhook cluster, parked in
-`vault/human-tasks/2026-08-02-conversion-webhook-reason-dogfood.md` (advisory, blocks nothing).
+unverified against a real broken-webhook cluster **by maintainer choice**: the dogfood that
+would have read it was declined 2026-08-09 ("do not care"), the hermetic coverage standing as
+the verification (D256 pt 3). If a real apiserver's wording ever diverges, it comes back as
+ordinary feedback — do not re-raise the task.
 
 ### Custom resources (CRD-PIN — feedback-driven) — closed
 Feedback `2026-08-01-custom-resources-pinning`: on a CRD-heavy cluster, a kind you reach for
@@ -390,48 +394,27 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
 - [x] **THEME-06** `gruvbox-light` ported; registry at fourteen — done 2026-08-09 (none)
 
-### Context switch warmth (CTX-WARM — feedback-driven, D196)
+### Context switch warmth (CTX-WARM — feedback-driven, D196) — cancelled (D256 pt 2)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
 and back pays the full cost again (reconnect, rediscover, re-watch), and the submitter
-wants `C` → other → `C` → back to feel like flipping a tab. It **pushes against** M4-04a's
-unconditional teardown, so D196 fixes the shape before any code retains anything: the
-shell's teardown never changes, retention (if it is built at all) lives inside the
-launcher's `contextConnector`, it caps at the previous context, and it is **gated on
-measurement** rather than on the assumption that reconnecting is slow.
+wants `C` → other → `C` → back to feel like flipping a tab. D196 fixed the shape before
+any code retained anything, and gated the retention items on the dogfood's leak checks and
+on CTX-WARM-01's measured numbers.
 
-CTX-WARM-02/03 additionally wait on `2026-07-29-context-switch-live-dogfood` pts 3-6 — the
-leak checks — so the teardown baseline is known-good before it is optimised (D196 pt 5).
+**The line is cancelled, 2026-08-09 (D256 pt 2).** The maintainer accepted the current
+switch speed as-is — "current switching functionality is overall good enough and I don't
+want to spend more time testing it. We'll ship it like this" — which both waived the
+dogfood pts the gating waited on and removed the reason to optimise: **CTX-WARM-02,
+CTX-WARM-03 and CTX-WARM-04 must not be started**, and the dogfood must not be re-raised
+in any form. CTX-WARM-01's switch timing in the diagnostic log stays landed and is
+unaffected.
 
-This line is the **speed** half of "switching should feel like tabs". The other half — the
-pane you were on coming back with you — is **CTX-MEM** below, and D240 pt 1 keeps the two
-apart: only this one retains anything live, so only this one is gated.
+This line was the **speed** half of "switching should feel like tabs". The other half —
+the pane you were on coming back with you — is **CTX-MEM** below, which D240 pt 1 kept
+apart from this one and which closed at CTX-MEM-04 (D255).
 
 - [x] **CTX-WARM-01** Triage the warmth feedback; time the switch into the diagnostic log
       — done 2026-08-02 (D196)
-- [ ] **CTX-WARM-02** Retain the previous context's client in the connector
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: the dogfood's pts 3-6 and
-      CTX-WARM-01's numbers (the 2026-08-09 dogfood answer is qualitative only — still blocked)
-      notes: A one-entry cache inside `cmd/kubecom`'s `contextConnector`, keyed by context
-      name: `ConnectCluster` returns the retained `tui.Cluster` for the context just left
-      instead of rebuilding it. The shell is untouched — it still resets everything and
-      still holds exactly one cluster (D196 pt 1/2). Drop the entry on any connect error
-      for that name. **Only worth doing if CTX-WARM-01's `connect=` is material**; note
-      that `kube.Connect` does no network I/O, so it may well not be.
-- [ ] **CTX-WARM-03** Retain the discovery result per context, if discovery is the cost
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02 (which is itself
-      blocked on the dogfood's pts 3-6 + numbers)
-      notes: The other half of the log line. Discovery is already disk-cached per host with
-      a 6 h TTL (`internal/kube/cache.go`), so the remaining cost is the walk + reconcile,
-      not the network — measure before building. If it is worth it, retain the last
-      `DiscoveryResult` beside the client so a switch-back reconciles the menu immediately
-      and re-runs the pass in the background, never showing a stale menu as final.
-- [ ] **CTX-WARM-04** Prove the retention cannot leak, and bound it
-      status: todo | owner: — | added: 2026-08-02 | blocked-on: CTX-WARM-02
-      notes: The guard rail for the two above: a test that a retained cluster holds no
-      watch, no stream and no overlay (the shell cancelled them all), that the cache never
-      exceeds one entry however many contexts are visited, and that a forced refresh
-      invalidates rather than trusts it (D196 pt 4). Then a line on the dogfood task asking
-      for the switch-back timing again, to confirm the win is real on a real cluster.
 
 ### Context pane memory (CTX-MEM — feedback-driven, D240)
 Raised by feedback `2026-08-06-context-switch-pane-memory`: every switch resets the pane,

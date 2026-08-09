@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-08-06) — every agent-performable M5 slice has landed (D185) and the legacy-config criterion is closed on the generated fixture (D231, no real file survives), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access, the recording, and the branch rename (M5-11, blocked on the tag).
+**Status:** `in-progress` (2026-08-09) — every agent-performable M5 slice has landed (D185), the legacy-config criterion is closed on the generated fixture (D231, no real file survives), and the screencast is recorded (484e60c), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access (both deferred to tag time, D256 pt 4), and the branch rename (M5-11, blocked on the tag).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -34,8 +34,10 @@ from the old kube-commander.
   to the registry — every keypress is annotated with the action it triggers and checked
   against `DefaultKeymap`, the tour must press the headline actions, and the README may
   reference the GIF exactly when the file exists. The tape is validated by `vhs validate`
-  (vhs is `go install`-able); **recording** needs ttyd + ffmpeg, a real cluster and a real
-  terminal, so it is human task `2026-07-30-record-screencast` (D79).
+  (vhs is `go install`-able); **recording** needed ttyd + ffmpeg, a real cluster and a real
+  terminal (D79) — **recorded by the maintainer 2026-08-09** against the k3d dogfood
+  cluster, `docs/screencast.gif` + README embed (484e60c). Residual tuning is feedback
+  `2026-08-09-screencast-tape-tuning`.
 - Keybindings reference (generated from the `keys/` bindings where possible) — **already
   met**: `docs/keybindings.md` is generated from the keymap registry by `make keys-doc`
   and `make check` fails on drift (M2-01e/D51). Nothing to build; M5-01 ticks it.
@@ -104,10 +106,13 @@ raise come back done, not when the config that would produce them compiles.
       remaining README edits are the ones only a tag can make true (drop the `@v1` explainer,
       restore `go install …@latest`), listed as step 3 of the tag human task — and since
       **DOC-01 ✅ 2026-08-07** (D241) those live in `docs/install.md`, the README keeping only
-      a short install block that links to it. The **screencast** half is now half-closed too: M5-09 ✅ 2026-07-30
-      landed the tape, the `make` target and the guards (D181), and the README stays
-      deliberately image-free — and is test-forced to — until human task
-      `2026-07-30-record-screencast` brings back a real recording.)
+      a short install block that links to it. The **screencast** half is **closed**: M5-09 ✅
+      2026-07-30 landed the tape, the `make` target and the guards (D181), and the maintainer
+      recorded it against the k3d dogfood cluster on 2026-08-09 — `docs/screencast.gif` plus
+      the README embed (484e60c), `TestScreencastAssetAndReadmeAgree` holding the pair honest.
+      The residual tuning the maintainer asked for (a search example that matches, idempotent
+      reruns, more of the tour) is feedback `2026-08-09-screencast-tape-tuning`, tracked
+      separately from this criterion. The box itself stays unticked on the README half only.)
 - [ ] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
       (M5-02 ✅ 2026-07-30: the artifact reports its own commit and build date, guarded by
       `TestGoreleaserSetsAllVersionVars` (D175). M5-03 ✅ 2026-07-30: `release.yml` exists —
@@ -164,10 +169,11 @@ raise come back done, not when the config that would produce them compiles.
       decisions / milestone criteria, and each unticked box now names the one thing that
       closes it. **9 of 13 as of HT-dogfood-0806** (2026-08-06): the two `$EDITOR` boxes
       closed on the maintainer's *"editor is working"* and the migration box on D231's
-      recorded fixture-not-real-file tick. The remaining four are the **context switcher**
-      (human task `2026-07-29-context-switch-live-dogfood`), **CRD//generic listing** (CRD-01
-      landed 2026-08-02/D200; the box now waits on `2026-08-02-conversion-webhook-reason-dogfood`
-      reading the degraded pane on a real cluster), and the **two release boxes**, which are
+      recorded fixture-not-real-file tick. **11 of 13 as of the 2026-08-09 review fold-in**
+      (D256): the **context switcher** and **CRD/generic listing** boxes closed on the
+      maintainer's own waivers — the switcher on "we'll ship it like this" (D256 pt 1), the
+      CRD box on the declined live QA with the hermetic coverage named as the standing
+      verification (D256 pt 3, the D231 shape). The remaining two are the **release boxes** —
       M5-10's tag and the issues it closes — both human acts (D173 pt 1). Nothing waits on
       agent work any more. Also
       found M5-01a: no surface reached previous-container logs, a 2020 parity gap — **closed
