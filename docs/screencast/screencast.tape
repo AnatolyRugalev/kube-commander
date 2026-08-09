@@ -46,6 +46,7 @@ Sleep 1s
 
 Type@1ms "export PATH=$PWD/bin:$PATH" Enter
 
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Welcome to kubecom!'" Enter
 
@@ -66,6 +67,7 @@ Sleep 1s
 
 # ------------------------------------------------------- browse: open Pods ---
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]The command palette is your central hub for navigation'" Enter
 Show
@@ -91,6 +93,7 @@ Sleep 3s
 
 # ---------------------------------------------------------------- filter -----
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Filter live resources as you type'" Enter
 Show
@@ -98,19 +101,23 @@ Show
 # The table is a live watch, not a snapshot. `/` narrows it as you type; Enter
 # keeps the narrowing and hands the keys back to navigation.
 # kubecom-action: app.filter
-Type ":ns"
+Type "/"
 Sleep 500ms
-Type " shop"
+# kubecom-input: filter text
+Type "shop"
 Sleep 500ms
+# kubecom-input: enter
 Enter
 Sleep 1s
 # kubecom-action: nav.down
-Type "/storefront"
+Down
+# kubecom-input: enter
 Enter
 Sleep 1s
 
 # ------------------------------------------------------------------ logs -----
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press L to tail logs for the selected pod'" Enter
 Show
@@ -120,6 +127,7 @@ Show
 Type "L"
 Sleep 5s
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Grep logs instantly without interrupting the stream'" Enter
 Show
@@ -139,6 +147,7 @@ Sleep 1500ms
 
 # -------------------------------------------------------------- describe -----
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press D to describe the selected resource'" Enter
 Show
@@ -157,6 +166,7 @@ Sleep 1s
 
 # -------------------------------------------------- cluster-wide search -------
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Ctrl+S searches across all resources in the cluster'" Enter
 Show
@@ -178,6 +188,7 @@ Sleep 1s
 
 # ------------------------------------------------------------------ quit -----
 Hide
+# kubecom-input: tmux prefix
 Ctrl+B
 Type@1ms ":set -g status-left '   #[fg=cyan,bold]Thanks for watching'" Enter
 Show

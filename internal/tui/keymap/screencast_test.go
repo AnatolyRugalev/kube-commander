@@ -21,7 +21,7 @@ import (
 // happening at all. `make check` cannot record a GIF, but it can hold the script
 // the GIF is made from to the registry (D181).
 var (
-	tapePath   = filepath.Join("..", "..", "..", "docs", "screencast.tape")
+	tapePath   = filepath.Join("..", "..", "..", "docs", "screencast", "screencast.tape")
 	readmePath = filepath.Join("..", "..", "..", "README.md")
 )
 

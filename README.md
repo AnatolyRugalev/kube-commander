@@ -101,7 +101,7 @@ Open the **actions menu** to see what you can do to the selected row. It lists o
 ### Making it yours
 
 - **Keys.** Every action is rebindable in `config.yaml` — there are no hard-coded keys. Run `kubecom keys` to print your effective map.
-- **Themes.** Pick from thirteen built-in themes (including Catppuccin, Nord, and Solarized). Kubecom sets your terminal's background to match.
+- **Themes.** Thirteen are built in (including Catppuccin, Nord, and Solarized). Kubecom sets your terminal's background to match.
 - **The resource menu.** Each context can add its own custom resource types (CRDs) via a per-context YAML file.
 - **Pinned kinds.** Pin any resource kind you work with frequently so it stays in the menu regardless of discovery.
 - **Where you left off.** Kubecom reopens on the last namespace and resource you used per context, remembering your place across sessions.
