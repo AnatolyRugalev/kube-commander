@@ -251,6 +251,36 @@ func GruvboxDarkTheme() Theme {
 	}
 }
 
+// GruvboxLightTheme is the light half of the same scheme, transcribed from the
+// same palette block of `colors/gruvbox.vim` in the community fork
+// (https://github.com/gruvbox-community/gruvbox, MIT, © 2018 Pavel Pertsev) —
+// the fork is the licence source on purpose, as with the dark port. The role
+// mapping is GruvboxDarkTheme's mirror, and the values are the fork's own
+// light-mode reading of the scheme, not kubecom's invention: where the dark
+// branch sets bg0=dark0, fg1=light1 and the `bright_*` accents, the light
+// branch sets bg0=light0 (`#fbf1c7`), fg1=dark1 and the `faded_*` accents —
+// the darker hues the scheme reserves for a light background. The one shared
+// value is `gray_244`/`gray_245`, which are the same `#928374`.
+func GruvboxLightTheme() Theme {
+	return Theme{
+		Name:        "gruvbox-light",
+		Background:  lipgloss.Color("#fbf1c7"), // light0 (bg0)
+		Foreground:  lipgloss.Color("#3c3836"), // dark1 (fg1)
+		Subtle:      lipgloss.Color("#928374"), // gray_244
+		Primary:     lipgloss.Color("#076678"), // faded_blue
+		Selection:   lipgloss.Color("#d5c4a1"), // light2 (bg2)
+		SelectionFg: lipgloss.Color("#3c3836"), // dark1
+		Border:      lipgloss.Color("#bdae93"), // light3 (bg3)
+		BorderFocus: lipgloss.Color("#076678"), // faded_blue
+		Header:      lipgloss.Color("#8f3f71"), // faded_purple
+		StatusBarFg: lipgloss.Color("#3c3836"), // dark1
+		StatusBarBg: lipgloss.Color("#ebdbb2"), // light1 (bg1)
+		Error:       lipgloss.Color("#9d0006"), // faded_red
+		Warn:        lipgloss.Color("#b57614"), // faded_yellow
+		Success:     lipgloss.Color("#79740e"), // faded_green
+	}
+}
+
 // NordTheme is a port of Nord (https://github.com/nordtheme/nord, MIT,
 // © 2016-present Sven Greb), transcribed from `src/nord.css` on the `develop`
 // branch — `main` 404s, which is worth knowing before re-checking a value.
@@ -345,6 +375,7 @@ var builtins = []func() Theme{
 	CatppuccinMochaTheme,
 	DraculaTheme,
 	GruvboxDarkTheme,
+	GruvboxLightTheme,
 	MonokaiTheme,
 	NordTheme,
 	RosePineTheme,

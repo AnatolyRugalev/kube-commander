@@ -73,8 +73,17 @@ D248 pt 2: `rose-pine` is Rosé Pine's `main` and `tokyo-night` is Tokyo Night's
 **Shipped after THEME-04b (13)**: `catppuccin-latte` and `solarized-light`, the
 registry's first light palettes. `solarized-light` is the name D169 pt 1 reserved
 when `solarized-dark` was named for its variant, and it landed beside it exactly as
-planned — no rename. `gruvbox-light` is the obvious next one and nothing needs
-deciding for it; the values slice is all that is missing.
+planned — no rename.
+
+**Shipped after THEME-06 (14)**: `gruvbox-light`, the values slice the line above
+said was all that was missing. It is the dark port's role mapping mirrored, and the
+values are the fork's own light-mode reading of the scheme (see the constructor's
+doc comment): bg0=light0, fg1=dark1, chrome on light2/light1, and — the thing a
+mirror wouldn't tell you — the **`faded_*`** accent set (`#076678` blue,
+`#9d0006` red, …), because in `colors/gruvbox.vim` the dark branch assigns
+`bright_*` accents and the light branch assigns `faded_*`. A future leg must not
+"fix" the light accents to `bright_*`; that would read as pale text on a light
+canvas. It measures body 10.22, selected row 6.76, status bar 8.45.
 
 ## The app background: how it is painted, and what that leaves for a light theme
 
@@ -136,7 +145,8 @@ Two things worth knowing before touching that code:
 **THEME-04b then landed the values** (`catppuccin-latte`, `solarized-light`),
 taking the registry to thirteen — eleven dark, two light — and retuned the guard as
 D248 pt 1 required. See "What 'dark' means now" (renamed below) for what replaced
-it.
+it. THEME-06 then landed `gruvbox-light` (`#fbf1c7` canvas), taking it to fourteen
+— eleven dark, three light — with no change to the guard.
 
 ## Where the values came from
 
@@ -181,7 +191,8 @@ The single threshold is `darkLuminance` in `luminance.go`, shared with the runti
 polarity check (D250), so a palette cannot pass admission and then be described to
 the user as the other polarity.
 
-The registry's measured spread at thirteen, so a new port knows where it lands:
+The registry's measured spread at fourteen, so a new port knows where it lands
+(`gruvbox-light` sits at 10.22 / 6.76 / 8.45 — the mid-range, not a new edge):
 
 | | lowest | highest |
 |---|---|---|

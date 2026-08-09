@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — the release-namespace human task was folded in and closed (D253/D254): the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — THEME-06 landed `gruvbox-light`, taking the built-in registry to fourteen (eleven dark, three light). Earlier today: the release-namespace human task was folded in and closed (D253/D254) — the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -360,9 +360,9 @@ from 3 to 6. **THEME-02 closed the count** at eleven (D248), **THEME-03 landed t
 (D249), **THEME-04a made kubecom report a canvas that did not arrive** (D250) and
 **THEME-04b landed the two light palettes** (D251), taking the registry to thirteen. The
 feedback that opened this line is met in full, and the line **reopened at THEME-05**: the
-first light palettes exposed a role still mapped for a dark canvas. A further
-palette (`gruvbox-light` is the obvious one) is a values-only leg against the criterion D251
-pt 1 now states; it needs no new decision and should be raised as its own item.
+first light palettes exposed a role still mapped for a dark canvas. **THEME-06 then
+landed `gruvbox-light`** — the values-only leg that follow-up named — taking the registry
+to fourteen (eleven dark, three light) against the criterion D251 pt 1 now states.
 
 Two constraints any later palette inherits (**D236** pt 2, **D249**): **`default` and
 `catppuccin-frappe` are one palette under two names** (kubecom's default has always been
@@ -381,11 +381,7 @@ dark palettes on a *light* terminal that filters the escape are dark-on-dark rig
 
 - [x] **THEME-04a** kubecom asks the terminal for its background, warns on a polarity mismatch — done 2026-08-08 (D250)
 - [x] **THEME-04b** The light palettes; the guard is coherence, not darkness — done 2026-08-08 (D251)
-- [ ] **THEME-06** `gruvbox-light` ported; registry at fourteen
-      status: in-progress | owner: deepseek-v4 | added: 2026-08-09
-      notes: Values-only leg (the board note at line 364 names it) — the fork's own light-mode
-      palette: bg0=light0, fg1=dark1, chrome on light2/light1, and the `faded_*` accent set
-      (`internal/tui/styles/themes.go`).
+- [x] **THEME-06** `gruvbox-light` ported; registry at fourteen — done 2026-08-09 (none)
 
 ### Context switch warmth (CTX-WARM — feedback-driven, D196)
 Raised by feedback `2026-08-01-context-switch-keep-state`: switching away from a context
@@ -607,6 +603,7 @@ publishes, and D173 pt 1 makes each one a human's.)_
 
 - [x] **THEME-04b** `catppuccin-latte` and `solarized-light` ported, taking the registry to thirteen, with the admission guard retuned from "dark" to "chrome and text on opposite sides of one canvas" — done 2026-08-08 (D251)
 - [x] **THEME-05** `styles.Match` relies on weight not paint — done 2026-08-09 (none)
+- [x] **THEME-06** `gruvbox-light` ported from the fork's own light-mode palette (faded accents, bg0=light0), taking the registry to fourteen — done 2026-08-09 (none)
 
 - [x] **THEME-04a** kubecom asks the terminal for its background after the first paint and warns only when the palette's polarity disagrees with the answer — done 2026-08-08 (D250)
 

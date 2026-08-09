@@ -29,8 +29,8 @@ keys:
 
 ## Themes
 
-`theme:` picks the palette kubecom renders with. Thirteen are built in — eleven
-dark and two light:
+`theme:` picks the palette kubecom renders with. Fourteen are built in — eleven
+dark and three light:
 
 | Name | |
 |------|--|
@@ -41,6 +41,7 @@ dark and two light:
 | `catppuccin-mocha` | Catppuccin's darkest flavor |
 | `dracula` | Dracula: high-contrast, purple accent and a pink header |
 | `gruvbox-dark` | gruvbox's dark variant at medium contrast — warm, retro, low-glare |
+| `gruvbox-light` | **light** — gruvbox's light variant |
 | `monokai` | the classic warm dark palette, cyan accent |
 | `nord` | Nord's arctic blue-greys, muted throughout |
 | `rose-pine` | Rosé Pine's `main` variant: muted plum with a rose header |
@@ -75,14 +76,14 @@ otherwise pick a palette that matches your terminal, or set your terminal's
 background to the palette's. A terminal that answers no such question at all is left
 alone — silence is not evidence.
 
-**The two light palettes are worth one extra thought.** `catppuccin-latte` and
-`solarized-light` paint a light canvas, so on a dark terminal they depend on the
-background actually reaching the screen — and that is precisely the case the check
-above exists for. If you run inside tmux without passthrough, expect the line
-`catppuccin-latte is light but the terminal stayed dark`; turn passthrough on, or
-set your terminal's background to the palette's (`#eff1f5` for Latte, `#fdf6e3` for
-Solarized Light), and it goes quiet. On a terminal that honours the request they
-need nothing.
+**The three light palettes are worth one extra thought.** `catppuccin-latte`,
+`solarized-light` and `gruvbox-light` paint a light canvas, so on a dark terminal
+they depend on the background actually reaching the screen — and that is precisely
+the case the check above exists for. If you run inside tmux without passthrough,
+expect the line `catppuccin-latte is light but the terminal stayed dark`; turn
+passthrough on, or set your terminal's background to the palette's (`#eff1f5` for
+Latte, `#fdf6e3` for Solarized Light, `#fbf1c7` for Gruvbox Light), and it goes
+quiet. On a terminal that honours the request they need nothing.
 
 Ported palettes keep their upstream names and attribution: Catppuccin
 (MIT, © 2021 Catppuccin), Dracula (MIT, © 2023 Dracula Theme), gruvbox

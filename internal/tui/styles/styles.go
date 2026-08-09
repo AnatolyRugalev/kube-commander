@@ -99,7 +99,7 @@ type Styles struct {
 	// view's live grep (LOGS-03) and any future in-content search. It marks a
 	// match by weight (bold and underline) rather than paint (THEME-05), because
 	// no single hue contrasts 4.5:1 against both the canvas and the selection bar
-	// across all thirteen palettes. Inheriting the parent's colors guarantees
+	// across all fourteen palettes. Inheriting the parent's colors guarantees
 	// the match stays legible under D251 pt 1's floor.
 	Match lipgloss.Style
 

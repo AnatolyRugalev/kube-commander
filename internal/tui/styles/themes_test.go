@@ -200,7 +200,7 @@ func TestCatppuccinShipsAllFourFlavorsNamedForTheFlavor(t *testing.T) {
 }
 
 // wantBuiltins is the registry as the docs describe it. Listing the names once,
-// here, is what makes "thirteen built-in palettes" a checked claim: the generic
+// here, is what makes "fourteen built-in palettes" a checked claim: the generic
 // tests above hold the registry's *shape* (complete, unique, sorted) and would
 // pass just as happily with a palette silently dropped.
 var wantBuiltins = []string{
@@ -211,6 +211,7 @@ var wantBuiltins = []string{
 	"catppuccin-mocha",
 	"dracula",
 	"gruvbox-dark",
+	"gruvbox-light",
 	"monokai",
 	"nord",
 	"rose-pine",
@@ -363,6 +364,7 @@ func TestPortedPalettesCarryTheirAttribution(t *testing.T) {
 		{"catppuccin", []string{"catppuccin/palette", "MIT", "© 2021 Catppuccin"}},
 		{"dracula", []string{"dracula/dracula-theme", "MIT", "© 2023 Dracula Theme"}},
 		{"gruvbox-dark", []string{"gruvbox-community/gruvbox", "MIT", "© 2018 Pavel Pertsev"}},
+		{"gruvbox-light", []string{"gruvbox-community/gruvbox", "MIT", "© 2018 Pavel Pertsev"}},
 		{"nord", []string{"nordtheme/nord", "MIT", "© 2016-present Sven Greb"}},
 		{"rose-pine", []string{"rose-pine/rose-pine-theme", "MIT", "© 2023 Rosé Pine"}},
 		// Solarized was verified in `vault/knowledge/themes.md` at THEME-01 but
@@ -430,7 +432,7 @@ func TestThemeDocsListEveryBuiltinAndCountThemRight(t *testing.T) {
 func TestMatchHighlightIsDistinguishable(t *testing.T) {
 	// D252 pt 1: the highlight must stay distinguishable from the bar, not merely
 	// legible on the canvas. Since paint cannot carry a 4.5:1 contrast against both
-	// the canvas and the selection bar across all 13 themes, we rely on weight
+	// the canvas and the selection bar across all 14 themes, we rely on weight
 	// (bold and underline) instead of color (THEME-05).
 	// Because lipgloss.Style does not export a way to read whether a color was set,
 	// we assert it has no Foreground/Background colors, which proves it relies on weight.
