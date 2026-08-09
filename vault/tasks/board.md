@@ -446,7 +446,7 @@ tie — to a reader who drilled in first, and to a second pass on the same clust
 - [x] **CTX-MEM-01** Triage the pane-memory feedback into this line — done 2026-08-07 (D240)
 - [x] **CTX-MEM-02** Last-browsed kind remembered per context and restored — done 2026-08-07 (D243)
 - [ ] **CTX-MEM-04** The drill-in scope — deferred, with the reason
-      status: todo | owner: — | added: 2026-08-07
+      status: in-progress | owner: deepseek-v4 | added: 2026-08-07 | claimed: 2026-08-09
       notes: Deferred by D240 pt 6, kept on the board so the deferral is visible rather
       than lost. A children scope names an owner object (D165), so restoring it is an
       object re-resolve that can fail — and landing in a *different* scope silently is
