@@ -5,6 +5,18 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
 _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions answered by measurement (D252), closing the LOGS-SEL line and opening THEME-05 for the match highlight the measurement found illegible on a light canvas. Per-leg history: `vault/journal/`._
 ## In Progress
+- [ ] **CTX-MEM-03** Bring the table's own view state back with the pane
+      status: in-progress | owner: antigravity | added: 2026-08-07 | claimed: 2026-08-09
+      notes: Unblocked — CTX-MEM-02 landed the seam and the two attachment points D243
+      names, so this slice adds fields to config.State.LastResource's neighbourhood and
+      replays them in restoreLastResource, not a new mechanism. The feedback names "where I'd drilled in, scroll position". Sort column +
+      direction (M2-13a) is plainly durable and is a column name, so it stores like the
+      GVR. The cursor is the open question and this slice's real work: a row identity is
+      a UID (D98), which is meaningless on another cluster and stale on this one after
+      time away — so decide, and record, whether the cursor is remembered by UID with a
+      miss falling back to the top row, or whether it is deliberately session-only. A
+      filter is a transient question and the default answer is no; argue it if you
+      disagree. Whatever lands must keep D240 pt 3: a miss is silent, never an error.
 - [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
       status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
       notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
