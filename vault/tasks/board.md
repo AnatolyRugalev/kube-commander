@@ -7,6 +7,13 @@ _Last updated: 2026-08-08 — LOGS-SEL-03 done: both open selection questions an
 
 ## In Progress
 
+- [ ] **DOC-02** Prose pass over the restructured README
+      status: in-progress | owner: antigravity | added: 2026-08-07 | claimed: 2026-08-09
+      notes: DOC-01 moves paragraphs under headings largely as they were, so the prose is
+      still written in the order things were built. Condense — the headings now carry the
+      structure, so each paragraph only has to say what the thing does and when you want it.
+      The failure-mode paragraphs are kept.
+
 - [ ] **THEME-05** `styles.Match` is legible on a light canvas, and guarded like body text
       status: in-progress | owner: claude-opus-5 | added: 2026-08-08 | claimed: 2026-08-08
       notes: See the THEME section below for the measurement and the constraints (D252 pt 3).
