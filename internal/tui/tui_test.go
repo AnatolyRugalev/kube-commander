@@ -19,6 +19,7 @@ import (
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/forwards"
 	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
 	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
@@ -5675,12 +5676,12 @@ func startForwardOnPod(t *testing.T, pf *fakePortForwarder, value string) Model 
 // overlay) and forwards.panel/nav.back both close it.
 func TestForwardsPanelToggle(t *testing.T) {
 	m := openPodTable(t, "Pod")
-	if m.forwardsPanel {
+	if m.pfPanel.Active() {
 		t.Fatal("the port-forward panel should start closed")
 	}
 	next, _ := m.handleAction(keymap.ActionForwards)
 	m = next.(Model)
-	if !m.forwardsPanel {
+	if !m.pfPanel.Active() {
 		t.Fatal("forwards.panel should open the panel")
 	}
 	if !m.overlayActive() {
@@ -5689,7 +5690,7 @@ func TestForwardsPanelToggle(t *testing.T) {
 	// forwards.panel again toggles it closed.
 	next, _ = m.handleAction(keymap.ActionForwards)
 	m = next.(Model)
-	if m.forwardsPanel {
+	if m.pfPanel.Active() {
 		t.Fatal("forwards.panel should toggle the panel closed")
 	}
 	// nav.back also closes it.
@@ -5697,7 +5698,7 @@ func TestForwardsPanelToggle(t *testing.T) {
 	m = next.(Model)
 	next, _ = m.handleAction(keymap.ActionBack)
 	m = next.(Model)
-	if m.forwardsPanel {
+	if m.pfPanel.Active() {
 		t.Fatal("nav.back should close the panel")
 	}
 }
@@ -5743,7 +5744,7 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 	km := keymap.DefaultKeymap()
 	// The defaults render exactly the line the literal used to spell — the point of the
 	// leg is where the keys come from, not what they say today.
-	if got, want := forwardsPanelFooter(km), "enter: stop · X: stop all · esc: close"; got != want {
+	if got, want := forwards.Footer(km), "enter: stop · X: stop all · esc: close"; got != want {
 		t.Fatalf("the default footer = %q, want %q", got, want)
 	}
 
@@ -5751,7 +5752,7 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	next, _ := m.handleAction(keymap.ActionForwards)
 	m = next.(Model)
-	if view := m.View().Content; !strings.Contains(view, forwardsPanelFooter(m.keymap)) {
+	if view := m.View().Content; !strings.Contains(view, forwards.Footer(m.keymap)) {
 		t.Fatalf("the open panel should render its footer: %q", view)
 	}
 
@@ -5779,7 +5780,7 @@ func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("disabling forwards.stopAll: %v", err)
 	}
-	if got, want := forwardsPanelFooter(km), "enter: stop · esc: close"; got != want {
+	if got, want := forwards.Footer(km), "enter: stop · esc: close"; got != want {
 		t.Fatalf("a disabled stop-all should drop out: got %q, want %q", got, want)
 	}
 
@@ -5791,7 +5792,7 @@ func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("disabling all three panel actions: %v", err)
 	}
-	if got := forwardsPanelFooter(km); got != "" {
+	if got := forwards.Footer(km); got != "" {
 		t.Fatalf("with nothing bound the footer should be empty, got %q", got)
 	}
 
@@ -5821,9 +5822,8 @@ func panelWithForwards(t *testing.T, w, h, n, sel int) Model {
 			specs: []string{fmt.Sprintf("%d:80", 8000+i)},
 		})
 	}
-	m.forwardsPanel = true
-	m.forwardsSel = sel
-	m.clampForwardsSel()
+	m.pfPanel.Open()
+	m.pfPanel.SetSel(sel)
 	return m
 }
 
@@ -5844,7 +5844,7 @@ func TestForwardsPanelFitsTheCanvas(t *testing.T) {
 		{4, 3}, // bodyHeight 2: border only, so the panel renders nothing at all
 	} {
 		m := panelWithForwards(t, 80, tc.h, tc.forwards, 0)
-		box := m.forwardsPanelView()
+		box := m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.keymap)
 		if got, want := lipgloss.Height(box), m.bodyHeight(); box != "" && got > want {
 			t.Errorf("%d forwards on a %d-row screen: panel is %d rows, the canvas is %d",
 				tc.forwards, tc.h, got, want)
@@ -5859,7 +5859,7 @@ func TestForwardsPanelFitsTheCanvas(t *testing.T) {
 func TestForwardsPanelKeepsItsFooterAndBorder(t *testing.T) {
 	m := panelWithForwards(t, 80, 12, 20, 0)
 	view := frame(m)
-	if !strings.Contains(view, forwardsPanelFooter(m.keymap)) {
+	if !strings.Contains(view, forwards.Footer(m.keymap)) {
 		t.Fatalf("the clipped panel lost its footer:\n%s", view)
 	}
 	// The box's bottom border is the last thing a bottom-first clip takes, so its
@@ -5932,13 +5932,13 @@ func TestForwardsWindow(t *testing.T) {
 		{total: 20, sel: 3, n: 0, wantStart: 0, wantEnd: 0},    // no room for any row
 		{total: 20, sel: 3, n: -1, wantStart: 0, wantEnd: 0},   // and a negative budget is not a panic
 	} {
-		start, end := forwardsWindow(tc.total, tc.sel, tc.n)
+		start, end := forwards.Window(tc.total, tc.sel, tc.n)
 		if start != tc.wantStart || end != tc.wantEnd {
-			t.Errorf("forwardsWindow(%d, %d, %d) = (%d, %d), want (%d, %d)",
+			t.Errorf("forwards.Window(%d, %d, %d) = (%d, %d), want (%d, %d)",
 				tc.total, tc.sel, tc.n, start, end, tc.wantStart, tc.wantEnd)
 		}
 		if tc.wantEnd > tc.wantStart && (tc.sel < start || tc.sel >= end) {
-			t.Errorf("forwardsWindow(%d, %d, %d) = (%d, %d) does not contain the cursor",
+			t.Errorf("forwards.Window(%d, %d, %d) = (%d, %d) does not contain the cursor",
 				tc.total, tc.sel, tc.n, start, end)
 		}
 	}
@@ -6005,25 +6005,25 @@ func TestForwardsPanelCursorMoves(t *testing.T) {
 	}
 	next, _ := m.handleAction(keymap.ActionForwards)
 	m = next.(Model)
-	if m.forwardsSel != 0 {
-		t.Fatalf("the cursor should start at 0, got %d", m.forwardsSel)
+	if m.pfPanel.Sel() != 0 {
+		t.Fatalf("the cursor should start at 0, got %d", m.pfPanel.Sel())
 	}
 	next, _ = m.handleAction(keymap.ActionDown)
 	m = next.(Model)
-	if m.forwardsSel != 1 {
-		t.Fatalf("nav.down should move the cursor to 1, got %d", m.forwardsSel)
+	if m.pfPanel.Sel() != 1 {
+		t.Fatalf("nav.down should move the cursor to 1, got %d", m.pfPanel.Sel())
 	}
 	next, _ = m.handleAction(keymap.ActionDown) // clamps at the last entry
 	m = next.(Model)
-	if m.forwardsSel != 1 {
-		t.Fatalf("nav.down should clamp at the last entry, got %d", m.forwardsSel)
+	if m.pfPanel.Sel() != 1 {
+		t.Fatalf("nav.down should clamp at the last entry, got %d", m.pfPanel.Sel())
 	}
 	next, _ = m.handleAction(keymap.ActionUp)
 	m = next.(Model)
 	next, _ = m.handleAction(keymap.ActionUp) // clamps at 0
 	m = next.(Model)
-	if m.forwardsSel != 0 {
-		t.Fatalf("nav.up should clamp at 0, got %d", m.forwardsSel)
+	if m.pfPanel.Sel() != 0 {
+		t.Fatalf("nav.up should clamp at 0, got %d", m.pfPanel.Sel())
 	}
 }
 

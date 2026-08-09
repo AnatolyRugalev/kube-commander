@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE closed feedback `2026-08-09-audit-format-gate` (D263): the golangci-lint v2 `formatters:` block now runs `gofmt`, so format drift fails `make check`, and the one styles.go misalignment is fixed. Earlier today: TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Today also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE closed feedback `2026-08-09-audit-format-gate` (D263): the golangci-lint v2 `formatters:` block now runs `gofmt`, so format drift fails `make check`, and the one styles.go misalignment is fixed. Earlier today: TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Today also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -92,19 +92,15 @@ editor for reading and writing (D135/D178). Per-slice history: `vault/journal/`.
 Feedback `2026-08-09-audit-app-monolith` (Priority: medium): `app.go` is a 4.6k-line
 god object and the plan's `views/` split was never built. **Closed as a decision
 (D264)** — the `views/` directory is revoked (full-screen views are `components/*`
-sub-models; browse is the shell), and reducing `app.go` is the standing, pickable
-item below, done when a clean seam appears rather than as a forced multi-line move.
+sub-models; browse is the shell), and reducing `app.go` is a standing, pickable
+effort, done when a clean seam appears rather than as a forced multi-line move.
+**The first cut landed 2026-08-09 (MONO-01/D265)**: the port-forward panel is
+`components/forwards`, and the shape a seam follows is settled — a shell-owned
+listing is handed to the component as read-only `Entry`s while the shell keeps the
+authoritative set and performs the mutations. Next candidates in the same shape:
+the secret viewer's entry list, or the browse filter.
 
-- [ ] **MONO-01** Extract a cohesive chunk out of the `app.go` shell into a
-      `components/*` sub-model (a full-screen surface's seams already being the
-      pattern — see `searchview`/`logsview`/`viewer`), keeping the root package
-      the shell and never a new full-screen surface
-      status: in-progress | owner: deepseek-v4-flash | added: 2026-08-09
-      notes: D264 pt 4 — optional, standing, not urgent (tree green, race-clean,
-      92.6%-covered). Pick when the top-unblocked board item is not preferred; a
-      candidate seam is the port-forward panel or the browse filter, both of which
-      already route through the keymap without touching `Model`'s shared state.
-      Never move the seam interfaces or the `Model` itself (cohesive where they are).
+- [x] **MONO-01** The port-forward panel is `components/forwards` — a sub-model owning open/cursor and the BOX-02/HINT-04 geometry, fed read-only `Entry`s while the shell keeps the handles and performs the stops — the first cut out of `app.go` (~220 lines) — done 2026-08-09 (D265)
 
 ### Cluster search (SEARCH — feedback-driven, D131) — closed, reclosed at SEARCH-06
 Feedback `2026-07-24-cluster-search-multi-resource`: `ctrl+s`, type a query, get matching
@@ -626,6 +622,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **MONO-01** The port-forward panel is `components/forwards` — a sub-model owning open/cursor and the BOX-02/HINT-04 geometry, fed read-only `Entry`s while the shell keeps the handles and performs the stops — the first cut out of `app.go` (~220 lines) — done 2026-08-09 (D265)
 
 - [x] **APP-MONOLITH** The plan's `views/` directory is revoked by D264 — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell, and `app.go`'s reduction is the standing MONO-01 item — feedback `2026-08-09-audit-app-monolith` — done 2026-08-09 (D264)
 

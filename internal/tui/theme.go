@@ -58,6 +58,7 @@ func (m *Model) applyStyles(s styles.Styles) {
 	m.welcome.SetStyles(s)
 	m.searchView.SetStyles(s)
 	m.logsView.SetStyles(s)
+	m.pfPanel.SetStyles(s)
 }
 
 // ThemePersister records the chosen theme name in the user's config so the next

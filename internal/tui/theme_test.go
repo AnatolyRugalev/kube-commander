@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
@@ -130,6 +131,18 @@ var themeSurfaces = []struct {
 	{"confirm modal", func(t *testing.T, opts ...Option) Model {
 		m := sizedWith(t, opts...)
 		m.modal.ShowConfirm(deleteModalKind, "Delete", "delete api-1?")
+		return m
+	}},
+	{"port-forward panel", func(t *testing.T, opts ...Option) Model {
+		m := sizedWith(t, opts...)
+		m.forwards = append(m.forwards, &forward{
+			id:    1,
+			label: "pod/api-1",
+			specs: []string{"8080:80"},
+			bound: []kube.ForwardedPort{{Local: 8080, Remote: 80}},
+			ready: true,
+		})
+		m.pfPanel.Open()
 		return m
 	}},
 	{"cluster search view", func(t *testing.T, opts ...Option) Model {

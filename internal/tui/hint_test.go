@@ -245,7 +245,7 @@ func TestHintBarTracksTheForwardsPanel(t *testing.T) {
 	table := m.hintbar.View()
 
 	m, _ = press(t, m, tea.Key{Code: 'F', Text: "F"})
-	if !m.forwardsPanel {
+	if !m.pfPanel.Active() {
 		t.Fatal("`F` should open the port-forward panel")
 	}
 	hint := m.hintbar.View()
@@ -258,7 +258,7 @@ func TestHintBarTracksTheForwardsPanel(t *testing.T) {
 
 	// Closing it the way a reader does restores the table hint byte for byte.
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
-	if m.forwardsPanel {
+	if m.pfPanel.Active() {
 		t.Fatal("esc should close the port-forward panel")
 	}
 	if got := m.hintbar.View(); got != table {

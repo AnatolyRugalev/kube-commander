@@ -227,7 +227,7 @@ func TestResetClusterDismissesSurfacesAndStashes(t *testing.T) {
 	m.ctrPicker.Show()
 	m.portPicker.Show()
 	m.cmdPicker.Show()
-	m.forwardsPanel = true
+	m.pfPanel.Open()
 	m.deleteRef = kube.ObjectRef{Namespace: "web", Name: "api-1", UID: "uid-1"}
 	m.mutateRef = m.deleteRef
 	m.hasSearchTarget = true
@@ -235,7 +235,7 @@ func TestResetClusterDismissesSurfacesAndStashes(t *testing.T) {
 	m.resetCluster()
 
 	if m.searchView.Active() || m.logsView.Active() || m.viewer.Active() || m.modal.Active() ||
-		m.ctrPicker.Active() || m.portPicker.Active() || m.cmdPicker.Active() || m.forwardsPanel {
+		m.ctrPicker.Active() || m.portPicker.Active() || m.cmdPicker.Active() || m.pfPanel.Active() {
 		t.Error("reset should dismiss every surface showing the departing cluster's data")
 	}
 	if m.deleteRef != (kube.ObjectRef{}) || m.mutateRef != (kube.ObjectRef{}) || m.hasSearchTarget {

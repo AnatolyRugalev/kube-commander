@@ -7446,3 +7446,33 @@ drift one way or the other:
    multi-thousand-line move with no behavioral payoff). Reduction when a clean seam
    appears is filed as **MONO-01** on the board; the seam interfaces and the `Model`
    stay where they are.
+
+## D265 — a shell-owned listing is handed to a `components/*` panel as read-only entries; the shell keeps the authoritative set and performs the mutations (2026-08-09, MONO-01)
+
+The first MONO-01 extraction (D264 pt 4) moved the M3-13b port-forward panel out
+of `app.go` into `components/forwards`. The panel's seam turned out to be a shape
+the board note did not quite predict: the panel could not take its data with it,
+because the forwards are *live, shared, shell-owned state* — they are started and
+stopped from many places in `app.go` (`runPortForward`, `handleForwardDone`,
+`stopForwards`, a context switch) and each carries a handle/cancel only the shell
+can act on. The shape that worked is the load-bearing part, and a later leg
+extracting a similar seam (the secret viewer's entry list, the next panel) should
+follow it rather than re-derive it:
+
+1. **The shell keeps the authoritative set; the component receives a read-only
+   `Entry` per member** (`panelEntries`). The `Entry` carries only what the view
+   renders (label, ports, readiness) — never a handle, a cancel, or the store
+   itself. That is what lets the shell both mutate the set and stop a member while
+   the component stays a pure tea sub-model (D56: the component never imports the
+   root package).
+2. **The component owns its interaction state** (open, cursor) and exposes small
+   verbs — `Open`/`Close`/`Reset`, `Clamp(n)`, `Move(delta, n)`, `Sel()` — so the
+   shell's `handle…Action` switch is a thin delegation and the geometry/cursor
+   rules (BOX-02, HINT-04) live and are tested inside the component.
+3. **A side-effecting gesture is an intent, not a method**: the panel cannot stop a
+   forward itself; `nav.drillIn` makes the shell cancel the selected forward's
+   context (`m.forwards[sel].cancel()`). Mutations stay in the shell, which is
+   where the lifecycle messages (`forwardReadyMsg`/`forwardDoneMsg`) already land.
+4. **Every component with a `SetStyles` must be in `applyStyles` and in
+   `themeSurfaces`** (M4-12b-1/D170 pt 2): the panel is both, so the live-restyle
+   and the launch-time-theme equivalence tests cover it.

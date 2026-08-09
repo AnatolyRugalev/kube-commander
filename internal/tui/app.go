@@ -17,6 +17,7 @@ import (
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/forwards"
 	"github.com/neuroplastio/kubecom/internal/tui/components/hintbar"
 	"github.com/neuroplastio/kubecom/internal/tui/components/logsview"
 	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
@@ -969,15 +970,14 @@ type Model struct {
 	// finds its entry after the slice shifts. On quit stopForwards cancels them all
 	// (cancel-on-exit). All fields are touched only from the single-threaded update loop.
 	//
-	// forwardsPanel/forwardsSel are the M3-13b listing overlay: forwards.panel (`F`)
-	// toggles a global panel listing the active forwards, forwardsSel is the cursor
-	// into m.forwards (nav.up/down move it), nav.drillIn stops the selected forward and
-	// forwards.stopAll (`X`) stops every one. The panel reads m.forwards directly; like
-	// the secret viewer's entry cursor it is inline state, not a separate component.
-	forwards      []*forward
-	forwardSeq    int
-	forwardsPanel bool
-	forwardsSel   int
+	// pfPanel is the M3-13b listing overlay (components/forwards): forwards.panel
+	// (`F`) toggles a global panel listing the active forwards, the panel owns the
+	// cursor (nav.up/down move it), nav.drillIn stops the selected forward and
+	// forwards.stopAll (`X`) stops every one. It renders a read-only Entry per
+	// forward (panelEntries); the shell keeps the handles and performs the stops.
+	forwards   []*forward
+	forwardSeq int
+	pfPanel    forwards.Model
 
 	// pfResolveGen stamps the two async hops a port-forward can take before its prompt
 	// opens — resolving a Service to a backing endpoint pod (M3-13c) and listing the
@@ -1144,6 +1144,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.welcome = welcome.New(s)
 	m.searchView = searchview.New(s)
 	m.logsView = logsview.New(s)
+	m.pfPanel = forwards.New(s)
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
 	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
@@ -1900,8 +1901,7 @@ func (m *Model) resetCluster() {
 	// practice the stage is already closed — the pick that started the switch closed
 	// it — so this is about the state, not the surface.)
 	m.ctxByLabel = nil
-	m.forwardsPanel = false
-	m.forwardsSel = 0
+	m.pfPanel.Reset()
 
 	// Drop every stash holding an object from the departing cluster. Each is only
 	// read while the surface that set it is up, and all of those are now down, but a
@@ -2896,7 +2896,7 @@ func (m Model) handleForwardDone(msg forwardDoneMsg) (tea.Model, tea.Cmd) {
 	specs := f.specs
 	f.cancel() // release the context bridged to Stop; idempotent.
 	m.removeForward(msg.id)
-	m.clampForwardsSel() // a removed entry may have left the panel cursor past the end.
+	m.pfPanel.Clamp(len(m.forwards)) // a removed entry may have left the panel cursor past the end.
 	if msg.err != nil {
 		// A local-listener bind failure (almost always: the local port is already
 		// taken — e.g. forwarding Redis 6379 while Redis runs locally) surfaces from
@@ -3002,38 +3002,21 @@ func splitPortSpec(spec string) (local, remote string) {
 
 // forwardPortsLabel renders a forward's ports for the status notice: the bound
 // local:remote pairs once Ready has filled them (e.g. "localhost:8080 → 80"), else the
-// requested specs as typed.
+// requested specs as typed. The string is the component's, shared with the panel row.
 func forwardPortsLabel(f *forward) string {
-	if len(f.bound) == 0 {
-		return strings.Join(f.specs, " ")
-	}
-	parts := make([]string, len(f.bound))
-	for i, p := range f.bound {
-		parts[i] = fmt.Sprintf("localhost:%d → %d", p.Local, p.Remote)
-	}
-	return strings.Join(parts, ", ")
+	return forwards.PortsLabel(forwards.Entry{Specs: f.specs, Bound: f.bound})
 }
 
 // openForwardsPanel shows the port-forward panel (M3-13b), a global overlay listing
 // the active background forwards. It is not row-scoped — forwards outlive the row they
 // started on — so it opens from anywhere in the browse view. The cursor is clamped to
-// the current set (a forward may have ended since it was last open).
+// the current set (a forward may have ended since it was last open). The panel itself
+// (open state, cursor, rendering) is the components/forwards sub-model; the shell
+// supplies the forwards it lists.
 func (m Model) openForwardsPanel() (tea.Model, tea.Cmd) {
-	m.forwardsPanel = true
-	m.clampForwardsSel()
+	m.pfPanel.Open()
+	m.pfPanel.Clamp(len(m.forwards))
 	return m, nil
-}
-
-// clampForwardsSel keeps forwardsSel a valid index into m.forwards: 0 when empty,
-// otherwise within [0, len-1]. Called whenever the set or the panel opens changes.
-func (m *Model) clampForwardsSel() {
-	if m.forwardsSel < 0 || len(m.forwards) == 0 {
-		m.forwardsSel = 0
-		return
-	}
-	if m.forwardsSel >= len(m.forwards) {
-		m.forwardsSel = len(m.forwards) - 1
-	}
 }
 
 // handleForwardsPanelAction routes a resolved action to the open port-forward panel
@@ -3045,24 +3028,20 @@ func (m *Model) clampForwardsSel() {
 func (m Model) handleForwardsPanelAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionForwards, keymap.ActionBack, keymap.ActionQuit:
-		m.forwardsPanel = false
+		m.pfPanel.Close()
 		return m, nil
 	case keymap.ActionUp:
-		if m.forwardsSel > 0 {
-			m.forwardsSel--
-		}
+		m.pfPanel.Move(-1, len(m.forwards))
 		return m, nil
 	case keymap.ActionDown:
-		if m.forwardsSel < len(m.forwards)-1 {
-			m.forwardsSel++
-		}
+		m.pfPanel.Move(1, len(m.forwards))
 		return m, nil
 	case keymap.ActionDrillIn:
 		// Stop the selected forward: cancelling its context ends it, and the
 		// forwardDoneMsg that follows removes the entry + flashes "stopped …" and
 		// re-clamps the cursor (handleForwardDone). Inert when the set is empty.
-		if m.forwardsSel < len(m.forwards) {
-			m.forwards[m.forwardsSel].cancel()
+		if sel := m.pfPanel.Sel(); sel < len(m.forwards) {
+			m.forwards[sel].cancel()
 		}
 		return m, nil
 	case keymap.ActionStopForwards:
@@ -3074,149 +3053,20 @@ func (m Model) handleForwardsPanelAction(a keymap.Action) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.stopForwards()
-		m.clampForwardsSel()
+		m.pfPanel.Clamp(0)
 		return m, m.surfaceNotice("stopped all port-forwards")
 	}
 	return m, nil
 }
 
-// forwardsPanelView renders the port-forward panel (M3-13b): a bordered box listing
-// each active forward — its label and bound (or requested) ports and whether it is
-// ready — with the cursor row highlighted, plus a footer of the panel's keys. With no
-// active forwards it shows an empty-state line. Composited centered over the browse
-// view by View (overlayCenter, D95), like the modal.
-//
-// The box bounds its own height (D220 pt 1): overlayCenter flattens onto a fixed
-// width×bodyHeight canvas and clips bottom-first, so an unbounded list used to cost
-// the panel its footer and its bottom border, and — because this is the one overlay
-// with a *cursor* — could hide the selected row with nothing on screen saying so
-// (BOX-02). The rows therefore scroll rather than truncate: a window of what fits
-// that follows m.forwardsSel, derived from the cursor alone so the panel keeps no
-// scroll state of its own to resize, clamp, or forget. The title and the footer are
-// rendered first-class like the modal's title and input; only the list is elided,
-// and the title says so by counting (see forwardsPanelTitle).
-func (m Model) forwardsPanelView() string {
-	iw := m.width - 6 // leave a margin; the box border adds 2 back.
-	if iw > 64 {
-		iw = 64
+// panelEntries is the panel's read-only view of the tracked forwards (one Entry per
+// forward). The handle and cancel stay on the shell's forward so only it can stop one.
+func panelEntries(fwds []*forward) []forwards.Entry {
+	out := make([]forwards.Entry, len(fwds))
+	for i, f := range fwds {
+		out[i] = forwards.Entry{ID: f.id, Label: f.label, Specs: f.specs, Bound: f.bound, Ready: f.ready}
 	}
-	if iw < 20 {
-		iw = 20
-	}
-	ih := m.bodyHeight() - 2 // the border takes one row at the top and one at the bottom
-	if ih <= 0 {
-		return "" // nothing the compositor would not clip away entirely
-	}
-	// The title always takes a row; the footer only when a content row survives it —
-	// a box listing nothing but its keys is worse than one with no footer.
-	rows := ih - 1
-	footer := forwardsPanelFooter(m.keymap)
-	if footer != "" && rows >= 2 {
-		rows--
-	} else {
-		footer = ""
-	}
-
-	start, end := forwardsWindow(len(m.forwards), m.forwardsSel, rows)
-	lines := []string{m.styles.Header.Width(iw).MaxWidth(iw).Render(forwardsPanelTitle(len(m.forwards), start, end))}
-	switch {
-	case rows <= 0: // title-only box: the screen has room for nothing else
-	case len(m.forwards) == 0:
-		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render("No active port-forwards."))
-	default:
-		for i := start; i < end; i++ {
-			f := m.forwards[i]
-			status := "starting…"
-			if f.ready {
-				status = "ready"
-			}
-			row := fmt.Sprintf("%s  %s  [%s]", f.label, forwardPortsLabel(f), status)
-			gutter := "  "
-			style := m.styles.App
-			if i == m.forwardsSel {
-				gutter = "> "
-				style = m.styles.Selection
-			}
-			lines = append(lines, style.Width(iw).MaxWidth(iw).Render(gutter+row))
-		}
-	}
-	if footer != "" {
-		lines = append(lines, m.styles.Subtle.Width(iw).MaxWidth(iw).Render(footer))
-	}
-	return m.styles.PaneFocus.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
-}
-
-// forwardsWindow is the half-open range of forward indices the panel shows when it
-// has room for n rows: everything when it fits, otherwise the least-scrolled window
-// that still contains sel. It is a pure function of the cursor rather than a stored
-// offset, which is what keeps the panel free of scroll state that resize, a stopped
-// forward, or clampForwardsSel would each have to maintain — the list is short enough
-// that the sticky-offset feel a table needs is not worth that.
-func forwardsWindow(total, sel, n int) (int, int) {
-	if n <= 0 || total <= 0 {
-		return 0, 0
-	}
-	if n >= total {
-		return 0, total
-	}
-	start := 0
-	if sel >= n {
-		start = sel - n + 1
-	}
-	if start > total-n {
-		start = total - n
-	}
-	if start < 0 {
-		start = 0
-	}
-	return start, start + n
-}
-
-// forwardsPanelTitle names the panel and, when the window hides rows, which slice of
-// the list is on screen. The count rides the title because that is the one row the
-// panel is guaranteed to have: a marker row (the modal's answer, D220 pt 3) would
-// have to be taken from the list it is describing, and unlike a truncated message
-// this list is scrollable — the reader can reach what is hidden, they just need to
-// be told it is there. A panel showing everything says nothing, so the counter is
-// evidence of elision rather than furniture.
-func forwardsPanelTitle(total, start, end int) string {
-	switch {
-	case total == 0 || end-start >= total:
-		return "Port-forwards"
-	case end <= start:
-		// The box is so short that the title is all of it: no row is on screen to
-		// number, so the title carries the bare count rather than an empty range.
-		return fmt.Sprintf("Port-forwards (%d)", total)
-	default:
-		return fmt.Sprintf("Port-forwards (%d–%d of %d)", start+1, end, total)
-	}
-}
-
-// forwardsPanelFooter builds the panel's key footer from the resolved keymap instead
-// of spelling literal keys, so a rebind moves it (D11) — this was the last view in
-// kubecom that wrote a key into its own body (HINT-04). Only the *keys* are generated:
-// the verbs stay here because the registry's descriptions are global (D218 pt 2) and
-// nav.drillIn's is "Open / drill into selection", while in the panel it stops the
-// selected forward — this footer is the one place the panel's verbs are stated, which
-// is why HINT-03 declined to delete it in favour of the hint line. An action the user
-// disabled drops out entirely rather than rendering a bare verb, the same trade
-// portPickerTitle makes; disable all three and the footer line itself disappears.
-func forwardsPanelFooter(km *keymap.Keymap) string {
-	entries := []struct {
-		action keymap.Action
-		verb   string
-	}{
-		{keymap.ActionDrillIn, "stop"},
-		{keymap.ActionStopForwards, "stop all"},
-		{keymap.ActionBack, "close"},
-	}
-	var parts []string
-	for _, e := range entries {
-		if k := firstKey(km, e.action); k != "" {
-			parts = append(parts, k+": "+e.verb)
-		}
-	}
-	return strings.Join(parts, " · ")
+	return out
 }
 
 // viewerKind* are the kinds stamped on the shared read-only viewer for the content it
@@ -4031,7 +3881,7 @@ func (m *Model) hintContext() keymap.HelpContext {
 		// closes on back/quit, swallowing the rest (handleViewerAction). Below the logs
 		// view for the same reason handleAction orders them so.
 		return keymap.HelpViewer
-	case m.forwardsPanel:
+	case m.pfPanel.Active():
 		// The port-forward panel swallows everything but its own cursor/stop/close keys
 		// (handleForwardsPanelAction), so the browse set underneath is unreachable
 		// (HINT-03). Below the viewer and above the overlay, as handleAction orders them.
@@ -4076,7 +3926,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.forwardsPanel || m.filtering
+	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filtering
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -4326,7 +4176,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// forward, forwards.stopAll stops every one, forwards.panel/nav.back/app.quit close
 	// it — swallowing the rest so the browse panes underneath never move (the help /
 	// viewer capture pattern).
-	if m.forwardsPanel {
+	if m.pfPanel.Active() {
 		return m.handleForwardsPanelAction(a)
 	}
 	switch a {
@@ -4642,8 +4492,8 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
-	case m.forwardsPanel:
-		body = overlayCenter(body, m.forwardsPanelView(), m.width, m.bodyHeight())
+	case m.pfPanel.Active():
+		body = overlayCenter(body, m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.keymap), m.width, m.bodyHeight())
 	}
 
 	return m.screen(tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View())))
