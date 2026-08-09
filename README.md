@@ -53,7 +53,7 @@ Switch namespaces (`:namespace`) or contexts (`:context`) on the fly. Kubecom re
 
 Tables can be sorted by any visible column in either direction, or cleared to restore the server's native order. If your cluster runs metrics-server, Pods and Nodes automatically display live CPU and memory usage, which are also sortable.
 
-To see the pods belonging to a workload (like a Deployment, StatefulSet, or Node), drill into it to open a live, filtered watch of its pods. This child table supports all the usual actions and updates live.
+To see the pods belonging to a workload (like a Deployment, StatefulSet, or Node), drill into it to open a live, filtered watch of its pods. This child table supports all the usual actions and updates live. If you leave and come back to a context while a drill-in was open, the drill-in comes back with it — the owner is re-resolved and the scope re-entered, or you land on the plain list with a note if the owner is gone.
 
 Mouse capture is off by default to preserve native text selection. Toggle it on to click menus, select rows, and scroll.
 
@@ -104,7 +104,7 @@ Open the **actions menu** to see what you can do to the selected row. It lists o
 - **Themes.** Fourteen are built in (including Catppuccin, Nord, Solarized, and gruvbox). Kubecom sets your terminal's background to match.
 - **The resource menu.** Each context can add its own custom resource types (CRDs) via a per-context YAML file.
 - **Pinned kinds.** Pin any resource kind you work with frequently so it stays in the menu regardless of discovery.
-- **Where you left off.** Kubecom reopens on the last namespace and resource you used per context, remembering your place across sessions.
+- **Where you left off.** Kubecom reopens on the last namespace and resource you used per context, remembering your place across sessions — and if that pane was a drill-in to an owner's pods, the scope comes back too.
 
 ### When something doesn't work
 

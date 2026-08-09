@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — THEME-06 landed `gruvbox-light`, taking the built-in registry to fourteen (eleven dark, three light). Earlier today: the release-namespace human task was folded in and closed (D253/D254) — the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — CTX-MEM-04 closed the drill-in deferral: a remembered drill-in comes back as a drill-in (owner recorded beside the kind, re-resolved on restore, owner-gone landing on the plain list with a notice — D255), so the CTX-MEM line is fully done. Earlier today: THEME-06 landed `gruvbox-light`, taking the built-in registry to fourteen (eleven dark, three light), and the release-namespace human task was folded in and closed (D253/D254) — the Homebrew tap moved to the org `neuroplastio/homebrew-tap` (created, kubecom its first tool), container builds were dropped, AUR is unaffected (repo secrets may need re-adding after the org move), and M5-11 stays blocked on the deferred tag. The context-switch dogfood answer remains qualitative only, so CTX-WARM-02/03/04 and the M4 context-switch exit criterion stay gated. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -443,15 +443,15 @@ through one point and a refused LIST records nothing; the replay is in `handleDi
 after `Reconcile`, so a remembered CRD resolves; and the attempt is single and loses every
 tie — to a reader who drilled in first, and to a second pass on the same cluster.
 
+**CTX-MEM-04 then closed the drill-in deferral (D240 pt 6, D255):** a remembered
+drill-in now records the *owner* beside the child kind, and the restore re-enters the
+scope by re-resolving the owner through the ChildResolver — never replaying the
+selector. The owner-gone case is the legibility D240 pt 6 waited for: it lands on the
+plain child list and says the owner is gone on screen.
+
 - [x] **CTX-MEM-01** Triage the pane-memory feedback into this line — done 2026-08-07 (D240)
 - [x] **CTX-MEM-02** Last-browsed kind remembered per context and restored — done 2026-08-07 (D243)
-- [ ] **CTX-MEM-04** The drill-in scope — deferred, with the reason
-      status: in-progress | owner: deepseek-v4 | added: 2026-08-07 | claimed: 2026-08-09
-      notes: Deferred by D240 pt 6, kept on the board so the deferral is visible rather
-      than lost. A children scope names an owner object (D165), so restoring it is an
-      object re-resolve that can fail — and landing in a *different* scope silently is
-      worse than landing on the plain list. Take this only with a way to say on screen
-      that the owner is gone; until then CTX-MEM-02's restore stops at the plain table.
+- [x] **CTX-MEM-04** The drill-in scope comes back as a drill-in — re-resolved through the ChildResolver, never replayed, and the owner-gone case lands on the plain list with a notice saying so — done 2026-08-09 (D255)
 
 ### User-facing docs (DOC — feedback-driven)
 Raised by feedback `2026-08-07-readme-structural-rewrite`: the README grew by accretion —
@@ -596,6 +596,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **CTX-MEM-04** The drill-in scope comes back as a drill-in — owner recorded beside the kind, re-resolved through the ChildResolver on restore, and the owner-gone case lands on the plain list with a notice saying so — done 2026-08-09 (D255)
 
 - [x] **DOC-02** Prose pass over the restructured README — done 2026-08-09 (DOC-02)
 

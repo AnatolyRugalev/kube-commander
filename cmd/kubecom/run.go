@@ -202,6 +202,7 @@ func runTUI(opts runOptions) error {
 		// same silent degrade as the namespace above. Unlike the namespace there is no
 		// flag to override it: -n names a scope for the run, and nothing names a kind.
 		tui.WithLastResource(state.LastResource, state.LastSortColumn, state.LastSortAscending),
+		tui.WithLastDrillOwner(state.LastDrillOwner),
 		tui.WithResourcePersister(resourcer),
 		tui.WithContext(ctxName),
 		tui.WithKubeconfig(opts.kubeconfig),
@@ -344,12 +345,13 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 	// the new context's pins, not the departing context's, and both lists carried in
 	// ContextState are what the post-switch menu rebuild folds in (D163).
 	st := tui.ContextState{
-		MenuExtras:   extras,
-		Pinned:       state.PinnedResources,
-		Namespace:    state.LastNamespace,
-		LastResource: state.LastResource,
-		LastSortCol:  state.LastSortColumn,
-		LastSortAsc:  state.LastSortAscending,
+		MenuExtras:     extras,
+		Pinned:         state.PinnedResources,
+		Namespace:      state.LastNamespace,
+		LastResource:   state.LastResource,
+		LastDrillOwner: state.LastDrillOwner,
+		LastSortCol:    state.LastSortColumn,
+		LastSortAsc:    state.LastSortAscending,
 	}
 	if statePath != "" {
 		// Guarded so the interface fields stay true nils when the state path is
@@ -535,18 +537,24 @@ func (p *statePersister) PersistPin(r config.MenuResource) error {
 }
 
 // PersistResource records the kind the UI last opened a table for (tui.ResourcePersister,
-// CTX-MEM-02) in the same context's state file, so the next launch and every switch back
-// reopen on it. It stores an address only — the GVR plus its display hints, exactly the
+// CTX-MEM-02), plus the drill-in owner if that pane was a children scope (CTX-MEM-04), in
+// the same context's state file, so the next launch and every switch back reopen on it. It
+// stores addresses only — the GVR plus its display hints and the owner's ref, exactly the
 // shape a pin stores — and never rows, which is what lets the restore be a fresh watch
 // rather than a replay of data from a cluster kubecom has left (D240 pt 2).
+//
+// drill is nil for a plain table and records/clears the remembered drill-in owner in the
+// same write, so the two halves of "where I was" cannot disagree (a pane is a kind, its
+// scope names the owner it was narrowed to).
 //
 // It mutates the retained *config.State in place like the two writers above, so a
 // namespace change, a pin and a drill-in each carry the others rather than reverting
 // them. Unlike PersistPin it does not dedupe: the shell already declines to call it when
-// the recorded GVR is unchanged (recordResource), so reaching here means the file is
-// genuinely out of date.
-func (p *statePersister) PersistResource(r config.MenuResource) error {
+// the recorded GVR and drill owner are unchanged (recordResource), so reaching here means
+// the file is genuinely out of date.
+func (p *statePersister) PersistResource(r config.MenuResource, drill *config.DrillOwner) error {
 	p.state.LastResource = &r
+	p.state.LastDrillOwner = drill
 	return p.state.SaveFile(p.path)
 }
 

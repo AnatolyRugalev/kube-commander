@@ -83,6 +83,11 @@ type ContextState struct {
 	// untouched), and a kind the new cluster does not serve restores nothing, silently
 	// (D240 pt 3).
 	LastResource *config.MenuResource
+	// LastDrillOwner is the owner object the remembered pane's drill-in scope was
+	// opened from (State.LastDrillOwner, CTX-MEM-04/D240 pt 6), or nil when the pane
+	// was a plain table. It rides beside LastResource: both come from the same state
+	// file and both are needed to re-enter the scope a switch back returns to.
+	LastDrillOwner *config.DrillOwner
 	// LastSortCol is the name of the column the table was last sorted on.
 	LastSortCol string
 	// LastSortAsc is true if the last sort was ascending.
@@ -253,6 +258,7 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		// rebinding the writer alongside keeps the two halves naming one context.
 		m.resPersister = msg.state.Resourcer
 		m.lastResource = msg.state.LastResource
+		m.lastDrillOwner = msg.state.LastDrillOwner
 		m.lastSortCol = msg.state.LastSortCol
 		m.lastSortAsc = msg.state.LastSortAsc
 		m.restorePending = msg.state.LastResource != nil

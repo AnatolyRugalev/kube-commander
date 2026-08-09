@@ -163,6 +163,14 @@ address, not a snapshot: kubecom starts a fresh watch on it, so what you see is 
 cluster as it is now, never rows left over from last time. Switching context (`C`)
 restores that context's kind the same way.
 
+A remembered **drill-in** comes back as the drill-in, not as its plain list: if the
+pane you left was scoped to an owner's pods (`P`, see the main README), kubecom
+re-resolves that owner and re-enters the scope, so the children table — and the
+`↳ Deployment/web` scope in the status bar — return with the pane. If the owner is
+gone by the time you come back, kubecom lands on the plain list instead and says so
+in the status bar; it never silently shows you a different scope than the one you
+left.
+
 If the kind isn't there — you pinned a CRD on the cluster that runs the operator and
 opened one that doesn't, or the API group it lives in is unavailable — nothing is
 said and nothing fails: you land on the resource menu and the welcome pane, exactly

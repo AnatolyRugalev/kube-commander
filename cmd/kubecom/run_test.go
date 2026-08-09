@@ -480,7 +480,7 @@ func TestPersistResourceRoundTripsAndKeepsTheRestOfTheState(t *testing.T) {
 		Group: "external-secrets.io", Version: "v1", Resource: "externalsecrets",
 		Kind: "ExternalSecret", Namespaced: true,
 	}
-	if err := p.PersistResource(last); err != nil {
+	if err := p.PersistResource(last, nil); err != nil {
 		t.Fatalf("PersistResource: %v", err)
 	}
 
@@ -497,12 +497,47 @@ func TestPersistResourceRoundTripsAndKeepsTheRestOfTheState(t *testing.T) {
 
 	// Moving on overwrites rather than accumulates: the file remembers one place.
 	next := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true}
-	if err := p.PersistResource(next); err != nil {
+	if err := p.PersistResource(next, nil); err != nil {
 		t.Fatalf("PersistResource (second): %v", err)
 	}
 	reloaded, _ = loadState("prod")
 	if reloaded.LastResource == nil || *reloaded.LastResource != next {
 		t.Fatalf("reloaded LastResource = %+v, want %+v", reloaded.LastResource, next)
+	}
+}
+
+// TestPersistResourceCarriesTheDrillOwner covers the CTX-MEM-04 half of the same write:
+// a drill-in's pane is a child kind *and* an owner, and PersistResource stores both in
+// one file state so the restore can re-enter the scope. A plain table clears the owner.
+func TestPersistResourceCarriesTheDrillOwner(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	state, path := loadState("prod")
+	p := &statePersister{path: path, state: state}
+
+	child := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true}
+	drill := &config.DrillOwner{
+		Resource:  config.MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment"},
+		Namespace: "apps",
+		Name:      "web",
+	}
+	if err := p.PersistResource(child, drill); err != nil {
+		t.Fatalf("PersistResource: %v", err)
+	}
+	reloaded, _ := loadState("prod")
+	if reloaded.LastDrillOwner == nil || *reloaded.LastDrillOwner != *drill {
+		t.Fatalf("reloaded LastDrillOwner = %+v, want %+v", reloaded.LastDrillOwner, drill)
+	}
+	if reloaded.LastResource == nil || *reloaded.LastResource != child {
+		t.Fatalf("reloaded LastResource = %+v, want the child kind %+v", reloaded.LastResource, child)
+	}
+
+	// A plain table overwrites the owner away: the file remembers one place.
+	if err := p.PersistResource(child, nil); err != nil {
+		t.Fatalf("PersistResource (plain): %v", err)
+	}
+	reloaded, _ = loadState("prod")
+	if reloaded.LastDrillOwner != nil {
+		t.Errorf("LastDrillOwner after a plain table = %+v, want nil", reloaded.LastDrillOwner)
 	}
 }
 
@@ -526,6 +561,26 @@ func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
 	st = contextStateLoader{}.LoadContextState("staging")
 	if st.LastResource != nil {
 		t.Errorf("LastResource for an unrecorded context = %+v, want nil", st.LastResource)
+	}
+}
+
+// TestLoadContextStateCarriesTheRememberedDrillOwner proves the switch path carries the
+// drill-in owner too (CTX-MEM-04): a remembered drill-in is a kind *plus* an owner, so a
+// switch back must arm both halves or it would land on the plain child list of a pane
+// that was actually scoped to an owner.
+func TestLoadContextStateCarriesTheRememberedDrillOwner(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	writeStateFile(t, "prod", "lastNamespace: apps\nlastResource:\n  version: v1\n  resource: pods\n  kind: Pod\nlastDrillOwner:\n  resource:\n    group: apps\n    version: v1\n    resource: deployments\n    kind: Deployment\n  namespace: apps\n  name: web\n")
+
+	st := contextStateLoader{}.LoadContextState("prod")
+	if st.LastDrillOwner == nil || st.LastDrillOwner.Name != "web" {
+		t.Fatalf("LastDrillOwner = %+v, want the apps/web owner", st.LastDrillOwner)
+	}
+	if st.LastDrillOwner.Resource.Group != "apps" || st.LastDrillOwner.Resource.Resource != "deployments" {
+		t.Errorf("LastDrillOwner.Resource = %+v, want apps/deployments", st.LastDrillOwner.Resource)
+	}
+	if st.LastResource == nil || st.LastResource.Resource != "pods" {
+		t.Errorf("the drill-in's child kind must ride alongside its owner, got %+v", st.LastResource)
 	}
 }
 

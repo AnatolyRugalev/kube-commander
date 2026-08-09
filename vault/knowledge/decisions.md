@@ -7145,3 +7145,34 @@ built and verified.
    git history so a leg that restores containers does not re-derive it from scratch.
    A future leg must not silently re-add a Dockerfile or image config as "cleanup".
 
+## D255 — a remembered drill-in comes back as a drill-in; the re-resolve degrades legibly (2026-08-09, CTX-MEM-04)
+
+D240 pt 6 deferred the drill-in scope (CTX-MEM-04) until a leg could make its
+owner-gone failure legible on screen; this is that leg. Pane memory now records the
+**owner** of a drill-in beside the remembered kind, so a restore re-enters the scope
+instead of landing on the plain child list. Constraints a future leg must not
+silently contradict:
+
+1. **The drill-in address rides the same seam and shape as the remembered kind.**
+   `config.State.LastDrillOwner` is an *address* — the owner's kind plus
+   namespace/name, exactly D240 pt 2's rule for `LastResource` — never rows, never
+   the selector. It is written by the same `watchResource`→`recordResource` point as
+   the kind, so a drill-in records child kind + owner in one file state, and a plain
+   re-select (nav.back, another kind) clears the owner in the same write. A context
+   switch rebinds it alongside `LastResource` (D163), and `resetCluster` leaves it
+   alone.
+2. **The restore re-resolves the scope; it never replays it.** `restoreLastResource`
+   sees a drill owner and re-enters through the ordinary `ChildResolver.Children`
+   path off the loop, so the selector is re-derived from the *current* owner object —
+   the same "address, not data" rule that makes every restore a fresh watch (D240
+   pt 3). The result is generation-guarded like a live drill-in (`childGen`), so a
+   reader who drilled in themselves while the re-resolve was in flight wins.
+3. **The owner-gone failure is legible, and it lands on the plain list.** A failed
+   re-resolve (owner deleted, selector no longer derivable) opens the plain child
+   list **and** says on screen that the owner is gone (`surfaceNotice` naming the
+   owner). Silently landing in a different scope is forbidden — it is worse than
+   landing on the plain list, which is D240 pt 6's own wording. The corrected state
+   is recorded as the plain list, so a dead drill-in is not re-attempted on the next
+   launch.
+
+

@@ -328,3 +328,60 @@ func TestStateLastResourceIsValidated(t *testing.T) {
 		t.Fatal("a lastResource with no version/resource should be rejected")
 	}
 }
+
+// TestStateLastDrillOwnerRoundTrips proves the drill-in address survives Save → Load
+// with every field intact (CTX-MEM-04/D240 pt 6) — the owner kind, its namespace and
+// its name — so a restore can re-resolve the scope rather than land on the plain list.
+func TestStateLastDrillOwnerRoundTrips(t *testing.T) {
+	in := &State{
+		LastResource: &MenuResource{Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true},
+		LastDrillOwner: &DrillOwner{
+			Resource:  MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment"},
+			Namespace: "default",
+			Name:      "web",
+		},
+	}
+	var buf bytes.Buffer
+	if err := in.Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out, err := LoadState(&buf)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if out.LastDrillOwner == nil || *out.LastDrillOwner != *in.LastDrillOwner {
+		t.Fatalf("LastDrillOwner = %+v, want %+v", out.LastDrillOwner, in.LastDrillOwner)
+	}
+	if out.LastResource == nil || *out.LastResource != *in.LastResource {
+		t.Fatalf("LastResource = %+v, want %+v", out.LastResource, in.LastResource)
+	}
+}
+
+// TestStateNoLastDrillOwnerStaysEmpty is the pointer-field reason applied to the drill
+// owner: a context that never left a drill-in must not emit a `lastDrillOwner: {}` stanza
+// that would fail its own validation on the next read.
+func TestStateNoLastDrillOwnerStaysEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := (&State{}).Save(&buf); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if strings.Contains(buf.String(), "lastDrillOwner") {
+		t.Errorf("empty state emitted %q, want no lastDrillOwner key", buf.String())
+	}
+	got, err := LoadState(&buf)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if got.LastDrillOwner != nil {
+		t.Errorf("LastDrillOwner = %+v, want nil", got.LastDrillOwner)
+	}
+}
+
+// TestStateLastDrillOwnerIsValidated: the drill-in owner's kind is addressed by the kube
+// layer exactly as the remembered kind is, so a broken address is rejected at the same
+// gate rather than failing a re-resolve later.
+func TestStateLastDrillOwnerIsValidated(t *testing.T) {
+	if _, err := LoadState(strings.NewReader("lastDrillOwner:\n  name: web\n  resource:\n    kind: Deployment\n")); err == nil {
+		t.Fatal("a lastDrillOwner with no version/resource should be rejected")
+	}
+}

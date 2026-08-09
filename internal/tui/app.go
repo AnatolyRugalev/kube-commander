@@ -782,6 +782,13 @@ type Model struct {
 	lastSortCol    string
 	lastSortAsc    bool
 	restorePending bool
+	// lastDrillOwner is the owner object the remembered pane's children scope was
+	// opened from (nil → the remembered pane was a plain table, or none remembered).
+	// It rides beside lastResource because a drill-in's pane is still a kind — its
+	// scope just names the owner it was narrowed to — and the restore re-enters that
+	// scope when the owner still resolves (CTX-MEM-04/D240 pt 6). Per-context, so the
+	// switch rebinds it alongside lastResource and resetCluster leaves it alone.
+	lastDrillOwner *config.DrillOwner
 	// resPersister writes lastResource back to the per-context state file (nil →
 	// memory-inert). Bound to one context's state path, so the switch rebinds it for
 	// the same reason it rebinds the other two: a kind opened on the new context must
@@ -1388,6 +1395,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case childScopeMsg:
 		return m.handleChildScope(msg)
+
+	case restoreDrillMsg:
+		return m.handleRestoreDrill(msg)
 
 	case metricsMsg:
 		return m.handleMetricsMsg(msg)

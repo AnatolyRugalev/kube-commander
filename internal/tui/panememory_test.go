@@ -24,12 +24,14 @@ var errPaneMemory = errors.New("boom")
 // fakeResourcer is a hermetic ResourcePersister recording every kind it was asked to
 // remember, so a test can assert both what was written and that nothing was.
 type fakeResourcer struct {
-	got []config.MenuResource
-	err error
+	got    []config.MenuResource
+	drills []*config.DrillOwner
+	err    error
 }
 
-func (f *fakeResourcer) PersistResource(r config.MenuResource) error {
+func (f *fakeResourcer) PersistResource(r config.MenuResource, drill *config.DrillOwner) error {
 	f.got = append(f.got, r)
+	f.drills = append(f.drills, drill)
 	return f.err
 }
 
@@ -339,5 +341,179 @@ func TestSwitchRebindsThePaneMemory(t *testing.T) {
 	}
 	if len(oldFR.got) != 0 {
 		t.Errorf("the departed context's state file must not be written, got %v", oldFR.got)
+	}
+}
+
+// drillOwnerEntry is the address of the Deployment whose children the test drill-in
+// opens — the owner half of the address a drill-in pane remembers (CTX-MEM-04).
+func drillOwnerEntry() *config.DrillOwner {
+	return &config.DrillOwner{
+		Resource:  config.MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment"},
+		Namespace: "default",
+		Name:      "web",
+	}
+}
+
+// TestDrillInRecordsTheOwnerAddress is the CTX-MEM-04 write half: a drill-in remembers
+// the *owner* the child scope was opened from, beside the child kind, so a restore can
+// re-enter the scope instead of landing on the plain child list. This test drives the
+// scope-open seam directly (selectChildScope), which is the one point every drill-in
+// funnels through.
+func TestDrillInRecordsTheOwnerAddress(t *testing.T) {
+	fr := &fakeResourcer{}
+	m := sizedWith(t, WithWatcher(preloadedWatcher()), WithChildResolver(&fakeChildResolver{scope: podScope()}), WithResourcePersister(fr))
+
+	next, cmd := m.selectChildScope(drillOwnerResource(*drillOwnerEntry()),
+		kube.ObjectRef{Namespace: "default", Name: "web"}, podScope())
+	_ = next
+	if cmd == nil {
+		t.Fatal("a drill-in should issue a persist command")
+	}
+	runCmd(cmd)
+
+	if len(fr.got) != 1 || fr.got[0].Resource != "pods" {
+		t.Fatalf("recorded %v, want the child kind pods", fr.got)
+	}
+	if len(fr.drills) != 1 || fr.drills[0] == nil {
+		t.Fatalf("the drill owner should be recorded beside the kind, got %v", fr.drills)
+	}
+	d := *fr.drills[0]
+	if d.Namespace != "default" || d.Name != "web" {
+		t.Errorf("recorded drill owner = %+v, want default/web", d)
+	}
+	if d.Resource.Group != "apps" || d.Resource.Resource != "deployments" || d.Resource.Kind != "Deployment" {
+		t.Errorf("recorded drill owner kind = %+v, want apps/Deployment", d.Resource)
+	}
+}
+
+// TestAPlainTableClearsTheRememberedDrillOwner: a drill-in owner is only true while the
+// scope is open. Leaving the drill-in back to a plain table (nav.back's selectResource)
+// records the owner kind with no drill-in, so the next launch does not try to re-enter a
+// scope the reader had already left.
+func TestAPlainTableClearsTheRememberedDrillOwner(t *testing.T) {
+	fr := &fakeResourcer{}
+	m := sizedWith(t, WithWatcher(preloadedWatcher()), WithChildResolver(&fakeChildResolver{scope: podScope()}), WithResourcePersister(fr))
+
+	next, cmd := m.selectChildScope(drillOwnerResource(*drillOwnerEntry()),
+		kube.ObjectRef{Namespace: "default", Name: "web"}, podScope())
+	m = next.(Model)
+	runCmd(cmd)
+	if len(fr.drills) != 1 || fr.drills[0] == nil {
+		t.Fatalf("the drill-in should record the owner first, got %v", fr.drills)
+	}
+
+	next, cmd = m.selectResource(drillOwnerResource(*drillOwnerEntry()))
+	_ = next
+	runCmd(cmd)
+	if len(fr.drills) != 2 || fr.drills[1] != nil {
+		t.Errorf("leaving the drill-in should record no owner, got %v", fr.drills)
+	}
+	if len(fr.got) != 2 || fr.got[1].Resource != "deployments" {
+		t.Errorf("leaving the drill-in should record the owner kind, got %v", fr.got)
+	}
+}
+
+// TestRestoreReEntersTheRememberedDrillInScope is the CTX-MEM-04 read half's headline: a
+// remembered drill-in comes back *in the scope*, not as the plain child list. The restore
+// re-resolves the owner through the ChildResolver and opens the child table under the
+// fresh scope — the re-derived selector, never a replayed one (D240 pt 6).
+func TestRestoreReEntersTheRememberedDrillInScope(t *testing.T) {
+	fr := &fakeResourcer{}
+	r := &fakeChildResolver{scope: podScope()}
+	fw := preloadedWatcher()
+	entry := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod"}
+	m := sizedWith(t, WithWatcher(fw), WithChildResolver(r), WithResourcePersister(fr),
+		WithLastResource(&entry, "", false), WithLastDrillOwner(drillOwnerEntry()))
+
+	// The restore runs off the update loop: discovery issues the re-resolve, and the
+	// resolver's answer comes back as a message, exactly as a live drill-in does.
+	next, cmd := m.Update(DiscoveryReadyMsg{gen: m.discoveryGen, Result: kube.DiscoveryResult{
+		Resources: []kube.Resource{kindResource("pods", "Pod")},
+	}})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("a remembered drill-in should issue a scope re-resolve command")
+	}
+	msg, ok := cmd().(restoreDrillMsg)
+	if !ok {
+		t.Fatalf("the re-resolve delivered %T, want restoreDrillMsg", cmd())
+	}
+	next, _ = m.Update(msg)
+	m = next.(Model)
+
+	if !m.hasChildScope {
+		t.Fatal("the restore should re-enter the drill-in scope")
+	}
+	if !m.hasCurrent || m.current.GVR.Resource != "pods" {
+		t.Fatalf("the restored table should be the child kind, got %v", m.current.GVR)
+	}
+	if r.calls != 1 {
+		t.Fatalf("the owner should be re-resolved once, got %d calls", r.calls)
+	}
+	if r.gotOwner.GVK.Kind != "Deployment" || r.gotRef.Name != "web" {
+		t.Errorf("the resolver should be asked about the remembered owner, got %+v / %+v", r.gotOwner, r.gotRef)
+	}
+	// The watch runs under the re-resolved scope, not the app's namespace.
+	last := fw.opts[len(fw.opts)-1]
+	if last.LabelSelector != "app=web" {
+		t.Errorf("the restored watch selector = %q, want the scope's %q", last.LabelSelector, "app=web")
+	}
+	// A restore is not a write-back: the address came out of the state file.
+	if len(fr.got) != 0 {
+		t.Errorf("a successful restore must not rewrite the file it read from, got %v", fr.got)
+	}
+}
+
+// TestRestoreDrillOwnerGoneLandsOnThePlainListAndSaysSo is the degrade the whole
+// deferral was gated on (D240 pt 6): the remembered drill-in's owner can be gone, and
+// silently landing in a *different* scope is worse than landing on the plain list. A
+// re-resolve that fails lands on the plain child list **and says the owner is gone on
+// screen** — never a silent, possibly-wrong scope.
+func TestRestoreDrillOwnerGoneLandsOnThePlainListAndSaysSo(t *testing.T) {
+	fr := &fakeResourcer{}
+	r := &fakeChildResolver{err: errPaneMemory}
+	fw := preloadedWatcher()
+	entry := config.MenuResource{Version: "v1", Resource: "pods", Kind: "Pod"}
+	m := sizedWith(t, WithWatcher(fw), WithChildResolver(r), WithResourcePersister(fr),
+		WithLastResource(&entry, "", false), WithLastDrillOwner(drillOwnerEntry()))
+
+	next, cmd := m.Update(DiscoveryReadyMsg{gen: m.discoveryGen, Result: kube.DiscoveryResult{
+		Resources: []kube.Resource{kindResource("pods", "Pod")},
+	}})
+	m = next.(Model)
+	msg, ok := cmd().(restoreDrillMsg)
+	if !ok {
+		t.Fatalf("the re-resolve delivered %T, want restoreDrillMsg", cmd())
+	}
+	next, cmd = m.Update(msg)
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("the degrade should issue the plain-list watch's commands (incl. its persist)")
+	}
+
+	// Landed on the plain child list: a table on pods, no scope, one plain watch.
+	if !m.hasCurrent || m.current.GVR.Resource != "pods" {
+		t.Fatalf("the degrade should open the plain child list, got %v", m.current.GVR)
+	}
+	if m.hasChildScope {
+		t.Error("a failed re-resolve must not leave a scope installed")
+	}
+	if got := fw.opts[len(fw.opts)-1]; got.LabelSelector != "" || got.FieldSelector != "" {
+		t.Errorf("the plain fallback must be unscoped, got %+v", got)
+	}
+	// And the failure is said on screen, not silent: a notice naming the owner.
+	if !m.status.HasNotice() {
+		t.Fatal("a failed drill-in restore should say so on screen")
+	}
+	if view := m.status.View(); !strings.Contains(view, "Deployment") || !strings.Contains(view, "web") {
+		t.Errorf("the notice should name the gone owner, got %q", view)
+	}
+	// The corrected state is recorded in memory — the next write is the plain list
+	// with no drill owner, not a drill-in whose owner does not exist.
+	if m.lastResource == nil || m.lastResource.Resource != "pods" {
+		t.Errorf("the degrade should remember the plain list, got %+v", m.lastResource)
+	}
+	if m.lastDrillOwner != nil {
+		t.Errorf("the degrade should clear the dead drill owner from memory, got %+v", m.lastDrillOwner)
 	}
 }

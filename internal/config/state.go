@@ -49,6 +49,30 @@ type State struct {
 
 	// LastSortAscending is true if the last sort was ascending.
 	LastSortAscending bool `json:"lastSortAscending,omitempty"`
+
+	// LastDrillOwner is the owner object a remembered drill-in scope was opened
+	// from (CTX-MEM-04/D240 pt 6): the address of the *owner* the last pane's
+	// children table was narrowed to. It is an address and nothing more — the
+	// owner's kind plus namespace/name, exactly like LastResource — so a restore
+	// can re-resolve the owner's child scope instead of landing on the plain
+	// child table. Nil when the last pane was a plain table.
+	LastDrillOwner *DrillOwner `json:"lastDrillOwner,omitempty"`
+}
+
+// DrillOwner names the object a children drill-in scope was opened from (D165's
+// ChildScope owner). It is the address a restore re-resolves the scope with: the
+// owner's kind (as a MenuResource, so it addresses the kube layer like a pin) and
+// the object ref that identifies it. Never rows, never the selector — the selector
+// is re-derived by re-resolving the owner, which is the whole point (D240 pt 2/6).
+type DrillOwner struct {
+	// Resource is the owner's kind — group/version/resource plus the Kind display
+	// hint, exactly the shape a pin or the remembered kind records.
+	Resource MenuResource `json:"resource"`
+	// Namespace is the owner's namespace ("" for a cluster-scoped owner like a
+	// Node).
+	Namespace string `json:"namespace,omitempty"`
+	// Name is the owner object's name.
+	Name string `json:"name"`
 }
 
 // Pin adds r to the context's pinned kinds, returning false when the GVR is already
@@ -160,6 +184,14 @@ func parseState(data []byte) (*State, error) {
 	// line, which costs the restore and the namespace but never the launch.
 	if s.LastResource != nil {
 		if err := validateMenuResources("state lastResource", []MenuResource{*s.LastResource}); err != nil {
+			return nil, err
+		}
+	}
+	// The drill-in owner's kind is validated the same way: it is addressed by the
+	// kube layer when the restore re-resolves the owner, so a broken address is
+	// rejected at the same gate as every other MenuResource in this file.
+	if s.LastDrillOwner != nil {
+		if err := validateMenuResources("state lastDrillOwner", []MenuResource{s.LastDrillOwner.Resource}); err != nil {
 			return nil, err
 		}
 	}
