@@ -50,8 +50,12 @@ kubecom/
       keys/bindings.go           # bubbles/key maps (+ help integration)
       styles/theme.go            # lipgloss styles; named-color themes
       components/                # table, menu sidebar, viewport, pickers,
-                                 #   statusbar, help, confirm/prompt modal
-      views/                     # browse (2-pane), logs, describe, yaml
+                                 #   statusbar, help, confirm/prompt modal,
+                                 #   and the full-screen views as sub-models:
+                                 #   searchview, logsview, viewer (D264)
+      # views/ (browse, logs, describe, yaml) is superseded by D264 — browse is
+      #   the root Model (the shell) itself, and full-screen surfaces are
+      #   components/* sub-models, not a separate views/ tree.
     config/                      # yaml struct + load/save + migrate.go
     version/
 ```

@@ -7402,3 +7402,47 @@ silently break:
    separate, deliberate decision (a wider ruleset is bigger than this item asked
    for). `make lint` needs no `gofmt -l` step because the formatter path reports
    the same drift.
+
+## D264 — the plan's `views/` directory is superseded; full-screen surfaces are `components/*` sub-models, and the root package is the shell (2026-08-09, APP-MONOLITH)
+
+Feedback `2026-08-09-audit-app-monolith` (Priority: medium): `internal/tui/app.go`
+has grown to 4,635 lines / 149 functions while the package layout REWRITE_PLAN's
+target architecture and D52 committed to — `internal/tui/views/` holding browse,
+logs, describe, yaml — was never created, and no decision ever revoked or
+re-scoped it. The audit deliberately filed this medium ("about the next N legs'
+cost, not the current binary") and explicitly sanctions resolving the drift either
+by starting a mechanical split or by recording a decision. **This is that decision,
+and it takes the route the audit offers as acceptable**: the mechanical split is
+not the next legs' work, because a `views/browse` package would have to move most
+of the 60+-field `Model` with it — exactly the parts the audit calls "cohesive
+where they are". What the audit measured is real (root-package accumulation,
+the plan's `views/` line long dead), and this decision resolves the plan-vs-tree
+drift one way or the other:
+
+1. **The `views/` directory as literally planned is revoked.** REWRITE_PLAN's
+   `views/ # browse (2-pane), logs, describe, yaml` line and D52's `views/*`
+   wording are superseded. The intent behind them — self-contained full-screen
+   surfaces — is already met by the established `components/*` sub-model pattern,
+   which is where the plan's "views" actually live: `components/logsview` (the
+   logs view), `components/searchview` (the cluster-search view),
+   `components/viewer` (describe/secrets). No future leg must create a `views/`
+   directory to "complete the plan".
+2. **The browse 2-pane is not a separable view — it is the shell.** The root
+   `internal/tui` package is the root `tea.Model`: `app.go` owns the `Model` (the
+   per-cluster state, the seams, the panes) and the `update()` router with its ~30
+   browse cases. Extracting "the browse view" would mean extracting most of the
+   `Model`, which is why the audit's own example stops short of it. The root
+   package is therefore defined as *the shell*: Model + seams + routing + global
+   keys + browse composition.
+3. **Load-bearing constraint a future leg must not silently break: a new
+   full-screen, self-contained surface is a `components/*` sub-model** — the
+   logsview/searchview/viewer pattern — never another root-package file. The root
+   package's file list must not grow new full-screen surfaces; that is what keeps
+   the next 4.6k-line god object from forming.
+4. **app.go's current size is accepted for now, and reducing it is a standing,
+   pickable item, not an obligation.** The audit is medium because the tree is
+   green, race-clean, well-commented and 92.6%-covered. The split of its 149
+   functions is deliberately not performed as one leg (it would be a
+   multi-thousand-line move with no behavioral payoff). Reduction when a clean seam
+   appears is filed as **MONO-01** on the board; the seam interfaces and the `Model`
+   stay where they are.
