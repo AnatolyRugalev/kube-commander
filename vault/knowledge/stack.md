@@ -5,6 +5,11 @@ The intended libraries and versions for kubecom. Confirm exact versions at M0
 
 ## Language / toolchain
 - **Go 1.23+**
+- **golangci-lint v2 (D263):** format checkers live under **`formatters:`**, not
+  `linters:` — `gofmt`/`gofumpt`/`goimports` are formatters in v2 and never appear in
+  `golangci-lint linters`. `.golangci.yml` enables `gofmt` as the format floor, so
+  `gofmt -l` drift fails `make check`. `golangci-lint run` alone reports it; there is
+  no separate `gofmt -l` step in the Makefile.
 - cobra (CLI), stdlib **slog** for logging (replaces klog-as-primary).
 - **Logging rule:** while the TUI owns the terminal, *nothing* may write to
   stdout/stderr — a stray print corrupts the alt-screen. slog writes to a log

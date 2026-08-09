@@ -41,5 +41,5 @@ old code isolated for staged removal and a single `kubecom` binary.
   Linux+macOS × amd64+arm64, no Windows; `goreleaser check` + `--snapshot` verified;
   publishers (Homebrew/AUR/Docker) deferred to M5. README→vault pointer done (M0-09).
   Full README rewrite for kubecom stays M5; the M0 pointer banner is enough here.
-- Confirm golangci-lint ruleset (start lenient, tighten later).
+- ~~Confirm golangci-lint ruleset (start lenient, tighten later).~~ **Resolved 2026-08-09 (FORMAT-GATE):** the lint gate now also runs the `gofmt` formatter, so `gofmt -l` drift fails `make check`; the wider "tighten later" call stays a separate, bigger decision. The other M0 criterion lines are ticked above.
 - Decide logging library (slog stdlib is the default choice).

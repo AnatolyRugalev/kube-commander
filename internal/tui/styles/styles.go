@@ -154,7 +154,7 @@ func New(t Theme) Styles {
 		Header: lipgloss.NewStyle().
 			Foreground(t.Header).
 			Bold(true),
-		Match: matchStyle(t),
+		Match:     matchStyle(t),
 		Pane:      pane,
 		PaneFocus: pane.BorderForeground(t.BorderFocus),
 		StatusBar: lipgloss.NewStyle().

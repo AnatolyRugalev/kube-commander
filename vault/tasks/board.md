@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Earlier today: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — FORMAT-GATE closed feedback `2026-08-09-audit-format-gate` (D263): the golangci-lint v2 `formatters:` block now runs `gofmt`, so format drift fails `make check`, and the one styles.go misalignment is fixed. Earlier today: TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Today also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -606,6 +606,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **FORMAT-GATE** `make check` enforces `gofmt` via the golangci-lint v2 `formatters:` block; the one styles.go drift is fixed — feedback `2026-08-09-audit-format-gate` — done 2026-08-09 (D263)
 
 - [x] **TEST-RUNTIME** Toast auto-clear duration is a `Model` option (`WithToastTimeout`, default 5s); `sized`/`sizedWith` build tests with ~0 so the 17 drain-the-tick tests drop from 5–10s to ms and the tui package from ~190s to ~90s — feedback `2026-08-09-audit-test-suite-runtime` — done 2026-08-09 (D262)
 

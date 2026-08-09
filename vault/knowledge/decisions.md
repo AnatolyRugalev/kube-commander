@@ -7383,3 +7383,22 @@ constraints a future leg must not silently break:
    sub-commands of a batch" must filter those messages or it will count the
    toast's own auto-clear as a result. The search debounce (`searchDebounce`,
    250ms) is a separate timer and was measured but not addressed by this item.
+
+## D263 — `make check` enforces `gofmt` via the golangci-lint formatter floor (2026-08-09, FORMAT-GATE)
+
+Feedback `2026-08-09-audit-format-gate`: the lint step ran only the standard
+linters and so could not see formatting drift, which had already slipped in once
+(`styles.go`'s `Match` field, LOGS-SEL-04). The gate now enables the `gofmt`
+formatter in `.golangci.yml` (`formatters.enable: [gofmt]`) — in golangci-lint v2
+gofmt is a **formatter**, configured under `formatters:` and enabled alongside
+`linters`, not inside the linter list — and that formatter, not a `gofmt -l` step
+in the Makefile, is the enforcement point. One constraint a future leg must not
+silently break:
+
+1. **The format floor is `gofmt` only, and the gate is the golangci-lint run.**
+   Any pushed `go` file must be `gofmt`-clean or `make check` fails; do not work
+   around it with a `//nolint` or a repo-level skip. Enabling stricter formatters
+   (`gofumpt`, `goimports`) is the M0 note's "tighten later" call and stays a
+   separate, deliberate decision (a wider ruleset is bigger than this item asked
+   for). `make lint` needs no `gofmt -l` step because the formatter path reports
+   the same drift.
