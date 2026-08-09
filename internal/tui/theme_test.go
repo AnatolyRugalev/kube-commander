@@ -637,10 +637,242 @@ func TestThemeStageBackspaceRewinds(t *testing.T) {
 	}
 }
 
-// TestThemeSwitchSurvivesAContextSwitch pins the one interaction between this leg and
-// the switcher line: a theme is a property of the reader's terminal, not of the
-// cluster, so the cluster teardown (M4-03/D156) must not repaint the shell back to the
-// launch palette — nor drop the persister that would record the next pick.
+// moveThemeCursor moves the palette's cursor to the row for the named theme and
+// returns the shell. Arrows are the only way to move the cursor in the palette: the
+// filter is always open, so a bound letter like `j` types into it rather than
+// navigating (D73/D194 pt 2). The walk goes to the top first (the first registry row)
+// and then down, so a target above the current cursor is reachable without depending
+// on list wrap behaviour.
+func moveThemeCursor(t *testing.T, m Model, theme string) Model {
+	t.Helper()
+	want := themeLabelFor(t, m, theme)
+	for i := 0; i < len(styles.Themes()) && m.cmdPicker.Len() > 0; i++ {
+		if v, _ := m.cmdPicker.Selected(); v == want {
+			return m
+		}
+		m, _ = press(t, m, tea.Key{Code: tea.KeyUp})
+	}
+	for i := 0; i < len(styles.Themes()); i++ {
+		if v, _ := m.cmdPicker.Selected(); v == want {
+			return m
+		}
+		m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
+	}
+	t.Fatalf("the cursor never reached theme %q", theme)
+	return m
+}
+
+// TestThemePreviewRepaintsAsTheCursorMoves is the headline invariant of the live
+// preview: the shell renders the theme under the palette's cursor *before* enter —
+// feedback `2026-08-09-theme-picker-live-preview` — so comparing palettes is move,
+// look, move again instead of open, enter, look, reopen. The preview repaints (the
+// theme the shell reports changes) but neither persists nor announces, and the
+// picker stays open. Moving back onto the anchor row previews the anchor again, so
+// esc after a tour lands exactly where the reader started.
+func TestThemePreviewRepaintsAsTheCursorMoves(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	m = openThemeStage(t, m)
+	first := styles.Themes()[1].Name // the row below default, whatever it is
+
+	m = moveThemeCursor(t, m, first)
+	if got := m.styles.Theme.Name; got != first {
+		t.Fatalf("the shell should render the theme under the cursor, got %q want %q", got, first)
+	}
+	if m.cmdPicker.Active() != true {
+		t.Error("a preview must not close the picker")
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("a preview wrote the config: %v", fp.names)
+	}
+	if m.status.HasNotice() {
+		t.Error("a preview should not announce a switch")
+	}
+
+	m = moveThemeCursor(t, m, styles.DefaultTheme().Name)
+	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
+		t.Errorf("the cursor on the anchor row should render the anchor, got %q", got)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("a preview wrote the config: %v", fp.names)
+	}
+}
+
+// TestThemePreviewIssuesNoWork pins that a preview is pure repaint: a navigation key
+// on the theme stage produces no command at all — nothing ticks, nothing persists,
+// nothing probes. The picker's own cursor update is the only effect.
+func TestThemePreviewIssuesNoWork(t *testing.T) {
+	m := sizedWith(t)
+	m = openThemeStage(t, m)
+
+	if _, cmd := press(t, m, tea.Key{Code: tea.KeyDown}); cmd != nil {
+		t.Errorf("a preview move should issue no command, got %v", cmd)
+	}
+}
+
+// TestThemePreviewFollowsTypingNarrowing covers the other way the selection can move:
+// typing in the palette's filter re-narrows the list and drops the cursor on the top
+// match, so the preview follows keystrokes as well as arrows — a reader who types a
+// theme's name sees it applied before pressing enter.
+func TestThemePreviewFollowsTypingNarrowing(t *testing.T) {
+	m := sizedWith(t)
+	m = openThemeStage(t, m)
+	target := styles.Themes()[1].Name
+
+	m = typeInto(t, m, target)
+	if got := m.styles.Theme.Name; got != target {
+		t.Errorf("narrowing to %q should preview it, shell renders %q", target, got)
+	}
+	if !m.cmdPicker.Active() {
+		t.Error("a narrowing preview must not close the picker")
+	}
+}
+
+// TestThemePreviewCommitPersists is the other half of the pair: the repaint a preview
+// already did is not a switch until enter, and enter is the switch — notice, config
+// write-back and all. A theme the preview rendered is persisted on commit exactly
+// like one picked without a preview (M4-12b-2), because the preview's repaint must
+// not be silently lost on restart.
+func TestThemePreviewCommitPersists(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	m = openThemeStage(t, m)
+	theme := styles.Themes()[1].Name
+	m = moveThemeCursor(t, m, theme)
+	if got := m.styles.Theme.Name; got != theme {
+		t.Fatalf("precondition: the shell should already render %q, got %q", theme, got)
+	}
+
+	m, cmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	sel, ok := pickerMsg(t, cmd).(picker.SelectedMsg)
+	if !ok {
+		t.Fatalf("enter emitted %T, want picker.SelectedMsg", cmd)
+	}
+	upd, cmd := m.Update(sel)
+	m = upd.(Model)
+	if m.cmdPicker.Active() {
+		t.Error("enter should commit and close the palette")
+	}
+	if got := m.styles.Theme.Name; got != theme {
+		t.Fatalf("committed theme = %q, want %q", got, theme)
+	}
+	if !m.status.HasNotice() {
+		t.Error("a commit should announce the switch")
+	}
+	if cmd == nil {
+		t.Fatal("the commit should issue the write-back (and its notice) as a Cmd")
+	}
+	if msgs := themeCmdMsgs(t, cmd); len(msgs) != 0 {
+		t.Errorf("a successful write-back should produce no message, got %v", msgs)
+	}
+	if len(fp.names) != 1 || fp.names[0] != theme {
+		t.Errorf("PersistTheme calls = %v, want [%s]", fp.names, theme)
+	}
+}
+
+// TestThemePreviewCommitOfTheAnchorIsANoOp is the no-op rule under the preview: a
+// reader who browsed away and came back to the anchor row must be able to enter on
+// it — the marked row is choosable (D158) — and the entry costs nothing because the
+// shell already renders it. Nothing is written even though a preview happened in
+// between.
+func TestThemePreviewCommitOfTheAnchorIsANoOp(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	m = openThemeStage(t, m)
+	m = moveThemeCursor(t, m, styles.Themes()[1].Name)
+	m = moveThemeCursor(t, m, styles.DefaultTheme().Name)
+
+	m, cmd := press(t, m, tea.Key{Code: tea.KeyEnter})
+	upd, cmd := m.Update(pickerMsg(t, cmd).(picker.SelectedMsg))
+	m = upd.(Model)
+	if m.cmdPicker.Active() {
+		t.Error("the pick should close the palette")
+	}
+	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
+		t.Errorf("committing the anchor changed the theme: %q", got)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("committing the anchor wrote the config: %v", fp.names)
+	}
+	if cmd != nil {
+		t.Errorf("committing the anchor should issue no work, got %v", cmd)
+	}
+}
+
+// TestThemePreviewCancelRestoresAnchor: esc out of a key-opened stage is the cancel
+// half of the preview — the shell returns to the theme that was rendering when the
+// stage opened, silently, because the reader only looked (feedback
+// 2026-08-09-theme-picker-live-preview). No config write, no notice: a cancel is not
+// a switch.
+func TestThemePreviewCancelRestoresAnchor(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	m = openThemeStage(t, m)
+	theme := styles.Themes()[1].Name
+	m = moveThemeCursor(t, m, theme)
+	if got := m.styles.Theme.Name; got != theme {
+		t.Fatalf("precondition: the shell should render %q, got %q", theme, got)
+	}
+
+	next, _ := m.Update(picker.CancelledMsg{Kind: commandPickerKind})
+	m = next.(Model)
+	if m.cmdPicker.Active() {
+		t.Error("esc should close the palette")
+	}
+	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
+		t.Errorf("esc should restore the theme active when the stage opened, got %q", got)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("cancelling wrote the config: %v", fp.names)
+	}
+	if m.status.HasNotice() {
+		t.Error("a cancel should not announce a switch")
+	}
+}
+
+// TestThemePreviewRewindRestoresAnchor covers the other way out of a *typed* stage:
+// esc there rewinds to the verb list (D233) rather than closing, and backspace on the
+// empty argument rewinds too (D207 pt 2) — both leave the theme stage, so both must
+// restore the anchor just like a close does. A reader who browsed palettes and
+// rewound is back on the theme they had.
+func TestThemePreviewRewindRestoresAnchor(t *testing.T) {
+	fp := &fakeThemePersister{}
+	m := sizedWith(t, WithThemePersister(fp))
+	m, _ = press(t, m, tea.Key{Code: ':', Text: ":"})
+	m = typeInto(t, m, "theme")
+	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	if m.palArg != keymap.ActionTheme {
+		t.Fatalf("precondition: the typed line should land on the theme stage, stage = %q", m.palArg)
+	}
+	theme := styles.Themes()[1].Name
+	m = moveThemeCursor(t, m, theme)
+	if got := m.styles.Theme.Name; got != theme {
+		t.Fatalf("precondition: the shell should render %q, got %q", theme, got)
+	}
+
+	// esc from a typed stage rewinds to the verb list instead of closing (D233).
+	// The picker emits the rewind as a CancelledMsg cmd, exactly as in the running
+	// program; feed it back in.
+	m, cmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	if !m.cmdPicker.Active() {
+		t.Fatal("esc from a typed stage should rewind, not close")
+	}
+	if m.palArg != "" {
+		t.Errorf("the rewind should leave the theme stage, stage = %q", m.palArg)
+	}
+	if got := m.styles.Theme.Name; got != styles.DefaultTheme().Name {
+		t.Errorf("the rewind should restore the anchor theme, got %q", got)
+	}
+	if len(fp.names) != 0 {
+		t.Errorf("the rewind wrote the config: %v", fp.names)
+	}
+	if m.status.HasNotice() {
+		t.Error("a rewind should not announce a switch")
+	}
+}
+
 func TestThemeSwitchSurvivesAContextSwitch(t *testing.T) {
 	fp := &fakeThemePersister{}
 	m := sizedWith(t, WithThemePersister(fp))

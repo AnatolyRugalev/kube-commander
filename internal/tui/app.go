@@ -635,8 +635,15 @@ type Model struct {
 	// picked theme back to config.yaml so the next launch opens on it (nil → the
 	// choice applies for the session only, M4-12b-2). Neither is cluster- or
 	// context-scoped: a theme is a property of the reader's terminal.
+	//
+	// themeAnchor is the name of the theme that was rendering when the `:theme `
+	// stage opened — the palette's "return to" point while the live preview
+	// (previewTheme) repaints the shell under the moving cursor. A cancel restores
+	// it; a commit replaces it via applyThemeNamed, whose no-op check runs after
+	// closePalette has restored it. Empty while no theme stage is open.
 	themeByLabel   map[string]string
 	themePersister ThemePersister
+	themeAnchor    string
 
 	// ctxState re-resolves the per-context state (menu extras, last namespace, the
 	// state-file persister) for the context a switch lands on (M4-05). Like the two
@@ -3707,7 +3714,7 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if p.Filtering() {
 		if mapped && key.Text == "" {
 			*p, cmd = p.Update(action)
-			return m, cmd
+			return m.previewTheme(), cmd
 		}
 		// The palette's line has two editing gestures of its own — space commits a verb
 		// into its argument stage, backspace at the start of an argument leaves it
@@ -3715,11 +3722,11 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// does not consume types, exactly as in every other picker.
 		if p.Kind() == commandPickerKind {
 			if next, load, consumed := m.handlePaletteFilterKey(msg); consumed {
-				return next, load
+				return next.previewTheme(), load
 			}
 		}
 		*p, cmd = p.UpdateFilter(msg)
-		return m, cmd
+		return m.previewTheme(), cmd
 	}
 	// The port picker carries two gestures of its own (FB-pf-local-port): they act on
 	// the *highlighted* port rather than moving the cursor, so the root handles them
@@ -3739,7 +3746,11 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if mapped {
 		*p, cmd = p.Update(action)
 	}
-	return m, cmd
+	// A control key that moved the palette's cursor re-themes the shell to the row
+	// it now highlights (the live theme preview), so the reader sees each palette
+	// before committing to it. No-op on every stage but `:theme ` and on every key
+	// that leaves the selection where it was.
+	return m.previewTheme(), cmd
 }
 
 // routeModalPromptKey resolves one keypress while the modal is open in prompt mode

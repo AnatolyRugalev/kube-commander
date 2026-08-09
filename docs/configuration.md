@@ -98,11 +98,14 @@ at: an unknown name launches on the default theme and shows a brief startup noti
 listing the ones that exist.
 
 `T` switches theme from inside kubecom (it opens the command palette on its
-`:theme ` line). The pick repaints immediately, and the name is written back to
-`config.yaml` so the next launch opens on it. The write-back keeps the rest of the
-file's settings, but it rewrites the file — **YAML comments and hand-crafted
-formatting are lost** — so if you keep comments in your config, set `theme:` by
-hand instead.
+`:theme ` line). The palette **previews live**: moving the selection re-themes the
+whole screen — painted background included — before you commit, so comparing
+palettes is move-and-look, not open-and-reopen. `enter` commits the highlighted
+theme: the name is written back to `config.yaml` so the next launch opens on it,
+and `esc` closes the palette returning you to the theme you had when it opened. The
+write-back keeps the rest of the file's settings, but it rewrites the file —
+**YAML comments and hand-crafted formatting are lost** — so if you keep comments
+in your config, set `theme:` by hand instead.
 
 ## Per-context menu
 

@@ -7304,3 +7304,32 @@ can carry it.
    honest answer is a *different mapping for light canvases*, argued as its own
    decision, never a quiet per-palette patch. The one style still paints all
    three surfaces (logs grep, table filter, cluster search).
+
+## D260 — the theme picker previews live; a preview is repaint only, and cancel restores (2026-08-09, THEME-07)
+
+Feedback `2026-08-09-theme-picker-live-preview` (maintainer, verbatim: "theme
+switching should happen as I change selection in the pallette, so I can test the
+look without pressing enter"). `routePickerKey` now runs `previewTheme` after every
+key that can move the palette's cursor while the `:theme ` stage is open (nav
+actions and filter narrowing both), so the whole screen — painted background
+included, since `View` reads `Theme.Background` each frame — re-themes to the row
+under the cursor. `enter` commits (the existing `applyThemeNamed`), `esc`/rewind
+restores the theme that was rendering when the stage opened. `applyThemeNamed` is
+unchanged: `applyPaletteArg`'s `closePalette` restores the anchor first, so the
+commit's no-op check reads the anchor correctly. Load-bearing constraints a later
+leg must not silently contradict:
+
+1. **A preview is repaint only.** No notice, no canvas probe and above all no
+   config write-back on cursor move — `enter` is the one place `persistTheme` runs,
+   so a reader who browsed the fourteen palettes never rewrote `config.yaml`.
+2. **A cancel is a restore, not a switch.** Esc (both key-opened and typed stages)
+   and the backspace rewind return the shell to `themeAnchor`, silently: no notice,
+   no write, no probe. `closePalette` and `showPaletteVerbs` both restore, which
+   covers every way out of the theme stage except the commit itself.
+3. **The anchor marker does not follow the preview.** Rebuilding the stage's rows
+   (`themeItems`) to move the `*` would reset the picker's cursor to the top and
+   fight the very navigation the preview rides on. During a preview the marker names
+   where `esc` will return. The stage re-seeds the marker on its next open, so a
+   committed theme is marked correctly from then on.
+4. **Committing the anchor row is still a no-op** even after a preview toured other
+   palettes (the marked row stays choosable, D158) — no repaint, no file write.

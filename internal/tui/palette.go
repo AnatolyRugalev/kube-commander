@@ -288,7 +288,13 @@ func (m Model) paletteRowVerbs(taken map[string]keymap.Action) ([]picker.Item, m
 // (the View draws one body; the modal would still capture input). That is D197's
 // rule, not an exception: over the logs view the row verbs' keys are swallowed, so
 // the verbs are inert exactly as their keys are.
+// showPaletteVerbs returns the palette to its verb stage: the list the reader lands
+// on at `:` and the list backspace returns to. Leaving the theme stage this way is a
+// cancel, not a commit, so the live preview's anchor is restored first — a reader who
+// browsed palettes and rewound is back on the theme they had, silently (feedback
+// 2026-08-09-theme-picker-live-preview).
 func (m Model) showPaletteVerbs() Model {
+	m.restoreThemeAnchor()
 	items, byLabel := paletteVerbItems()
 	m.cmdByLabel = byLabel
 	m.palArg = ""
@@ -394,8 +400,15 @@ func (m Model) openPaletteArg(a keymap.Action) (tea.Model, tea.Cmd) {
 }
 
 // closePalette dismisses the palette and returns it to the verb stage, so the next `:`
-// opens on verbs with a clean prompt rather than on wherever the last line ended.
+// opens on verbs with a clean prompt rather than on wherever the last line ended. It
+// also restores the live preview's anchor (restoreThemeAnchor): every way out of the
+// theme stage except the commit itself is a cancel, and the shell must not be left
+// rendering a palette the reader only looked at. The commit path (applyPaletteArg)
+// calls this first and then applyThemeNamed, which re-applies the picked theme after
+// the restore — same final state, and the no-op check that follows reads the anchor
+// correctly.
 func (m *Model) closePalette() {
+	m.restoreThemeAnchor()
 	m.cmdPicker.Hide()
 	m.cmdPicker.SetTitle(paletteTitle)
 	m.cmdPicker.SetPrompt(palettePrompt)
@@ -453,6 +466,9 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		var labels []string
 		labels, m.themeByLabel = themeItems(styles.Themes(), m.styles.Theme.Name)
 		items = picker.Labels(labels)
+		// The anchor is the theme the live preview returns to: the palette opens on
+		// the theme the shell renders now, and a cancel restores it (restoreThemeAnchor).
+		m.themeAnchor = m.styles.Theme.Name
 	case keymap.ActionNamespace:
 		// Namespace-switch-inert. Since PAL-05c-1 this one check is also what makes
 		// `ctrl+n` and the menu's namespace-seam row inert, rather than each of the

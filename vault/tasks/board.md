@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — LOGS-SEL-04 reclosed the LOGS-SEL line (D259): the match highlight paints the bright canvas-on-Warn yellow on dark palettes (4.68–12.91:1 measured; bar separation unchanged, D252 pt 1 stands) and stays weight-only on the three light ones; its feedback file is deleted. Two feedback items from the review remain in `vault/feedback/` and preempt the board (`theme-picker-live-preview`, `screencast-tape-tuning`). Earlier today: LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — THEME-07 closed the theme-picker live-preview feedback (D260): the `:theme ` stage re-themes the whole screen to the cursor's row as it moves (`enter` commits and writes back, `esc`/rewind restores the theme you opened with), and its feedback file is deleted. One feedback item remains in `vault/feedback/` and preempts the board (`screencast-tape-tuning`). Earlier today: LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -606,6 +606,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **THEME-07** The palette's `:theme ` stage previews live — the screen re-themes to the cursor's row as it moves, `enter` commits and writes back, `esc`/rewind restores the theme you opened with — feedback `2026-08-09-theme-picker-live-preview` — done 2026-08-09 (D260)
 
 - [x] **LOGS-SEL-04** Match highlight paints canvas-on-Warn on dark palettes (bright yellow background, 4.68–12.91:1 measured), weight-only on the three light ones — feedback `2026-08-09-log-match-highlight-background` — done 2026-08-09 (D259)
 

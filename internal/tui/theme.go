@@ -3,6 +3,7 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
@@ -118,10 +119,16 @@ func themeItems(themes []styles.Theme, current string) ([]string, map[string]str
 
 // applyThemeNamed repaints and persists the named theme: it is where the palette's
 // `:theme ` stage lands, whether that stage was reached by typing the line or by
-// pressing `T` (PAL-05a/D207 — one surface, so one apply).
+// pressing `T` (PAL-05a/D207 — one surface, so one apply). It is the **commit** half
+// of the live preview: the palette's previewTheme has already repainted the shell as
+// the cursor moved, and this adds what a preview must not — the notice, the canvas
+// probe and the config write-back.
 //
 // Picking the theme already rendering is a no-op — the marked row is choosable, so it
-// must cost neither a repaint nor a file write. A name the registry no longer knows
+// must cost neither a repaint nor a file write. Under the preview that check reads
+// correctly because applyPaletteArg's closePalette has just restored themeAnchor, so
+// "already rendering" is the theme the stage opened on, and committing it without
+// having previewed anything still costs nothing. A name the registry no longer knows
 // changes nothing (the stage only offers names it produced, so it is defensive;
 // principle 3).
 func (m Model) applyThemeNamed(name string) (tea.Model, tea.Cmd) {
@@ -138,6 +145,56 @@ func (m Model) applyThemeNamed(name string) (tea.Model, tea.Cmd) {
 	m.canvasGen++
 	m.awaitingCanvas = false
 	return m, tea.Batch(notice, m.persistTheme(theme.Name), m.scheduleCanvasProbe())
+}
+
+// previewTheme repaints the shell to the theme under the palette's cursor — the live
+// preview the theme picker feedback asked for ("theme switching should happen as I
+// change selection in the palette"). It runs after every key that can move the
+// palette's selection while the `:theme ` stage is open (routePickerKey), and is a
+// no-op unless the cursor actually names a different theme: navigation, and a query
+// that re-narrows the list and drops the cursor on a new row, both re-theme the whole
+// UI immediately, painted background included (View reads m.styles.Theme.Background
+// each frame).
+//
+// Repaint only, on purpose: no notice, no canvas probe and no config write. Those
+// belong to the commit (applyThemeNamed), so a reader browsing the fourteen palettes
+// pays them once, on enter, rather than once per row. The marker on the anchor row
+// is deliberately not moved as the preview sweeps — rebuilding the stage's rows
+// (themeItems) would reset the picker's cursor and fight the very navigation the
+// preview rides on — so during a preview it names where esc will return.
+func (m Model) previewTheme() Model {
+	if m.palArg != keymap.ActionTheme || !m.cmdPicker.Active() {
+		return m
+	}
+	label, ok := m.cmdPicker.Selected()
+	if !ok {
+		return m
+	}
+	name, ok := m.themeByLabel[label]
+	if !ok || name == m.styles.Theme.Name {
+		return m
+	}
+	theme, found := styles.ByName(name)
+	if !found {
+		return m
+	}
+	m.applyStyles(styles.New(theme))
+	return m
+}
+
+// restoreThemeAnchor undoes an uncommitted preview when the reader leaves the theme
+// stage without committing (esc, or backspace back to the verbs): the shell returns
+// to the theme that was rendering when the stage opened, silently — a cancel is not
+// a switch and gets no notice, no config write and no canvas probe. It clears the
+// anchor either way, so a later palette close on any other stage never restores.
+// It is a no-op when no theme stage is open, or when nothing was previewed.
+func (m *Model) restoreThemeAnchor() {
+	if m.themeAnchor != "" && m.themeAnchor != m.styles.Theme.Name {
+		if theme, found := styles.ByName(m.themeAnchor); found {
+			m.applyStyles(styles.New(theme))
+		}
+	}
+	m.themeAnchor = ""
 }
 
 // persistTheme records the picked theme in the user's config so the next launch opens
