@@ -277,3 +277,14 @@ a match by weight rather than paint where paint cannot carry it), not pick a dif
 role — and per D252 pt 3 it may not lower the floor instead. Whatever it does lands in
 one place and fixes three surfaces: the logs grep, the table filter (FILT-02) and
 cluster-search hits (SEARCH-06) all render through `styles.Match`.
+
+**Resolved 2026-08-09 (LOGS-SEL-04, D259).** THEME-05 took the weight route and dropped
+the paint everywhere; the maintainer's dogfood then asked for the bright yellow
+background back. The mapping now paints **canvas (`Background`) on `Warn` on a dark
+canvas** — measured 4.68–12.91:1 for the matched text across the eleven dark built-ins,
+which clears the 4.5 floor everywhere dark *including* `solarized-dark` (4.68, up from
+the 4.05 the `StatusBarBg` mapping shipped) — and keeps bold + underline with no colors
+on the three light palettes, where the measurement above still forbids paint. The
+middle column is unchanged (the highlight background is `Warn` either way), so D252
+pt 1's two-background rule rides on the same numbers. The gate is `IsDark` on the
+palette's own canvas, not a per-palette list.

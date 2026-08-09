@@ -1167,12 +1167,13 @@ func TestAppendBatchOfNothingIsANoOp(t *testing.T) {
 // is stored with its rendered escapes already baked in — so a SetStyles that only
 // assigned the field would leave every stamp on screen in the departed theme's Subtle
 // color while the header moved to the new one, and only lines streamed afterwards would
-// follow. The highlight can no longer demonstrate the rebuild: THEME-05 made
-// styles.Match theme-independent (weight, not paint), so its escapes are identical in
-// every theme by design. The stamp is still theme-dependent — it is painted in Subtle —
-// and it rides the same painted cache, so its change is what proves the rebuild. The
-// assertion is against the theme's own rendering, so it states the invariant rather than
-// an escape sequence.
+// follow. Both moving parts are theme-dependent: the stamp is painted in Subtle, and on
+// a dark pair of themes the highlight is too — LOGS-SEL-04 re-painted styles.Match
+// (canvas-on-Warn, weight underneath), ending THEME-05's theme-independent interlude —
+// so the highlight's escapes differ between default and monokai again. Both ride the
+// same painted cache, so their change is what proves the rebuild. Each assertion is
+// against the theme's own rendering, so it states the invariant rather than an escape
+// sequence.
 func TestSetStylesRepaintsPaintedHighlights(t *testing.T) {
 	m := newStampedLogs()
 	m.Append(stamp1, "GET /healthz 200")

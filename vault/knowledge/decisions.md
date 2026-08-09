@@ -7267,3 +7267,40 @@ popup or logs are open"). Constraints a future leg must not silently contradict:
    plain letter sits with the other logs toggles (`f`/`w`/`t`/`v`/`y`); the chord
    stays because, carrying no text, it is the one form of the toggle that fires
    mid-grep. `p`/`P` remain spent (D139/D165).
+
+## D259 — the match highlight paints canvas-on-Warn on dark palettes; weight-only on light ones (2026-08-09, LOGS-SEL-04)
+
+Feedback `2026-08-09-log-match-highlight-background` (maintainer, verbatim:
+"Highlighted text (matches) should have bright (yellow) background. Selection row
+looks good.") walked back THEME-05's weight-only `styles.Match` — but not its
+reason: on a light canvas no palette-native shade on `Warn` clears the 4.5:1
+body floor (D252 pt 3's measurement stands). This partially supersedes THEME-05's
+treatment (which carried no Dn): the weight stays, the paint returns where paint
+can carry it.
+
+1. **`Match` is bold + underline on every palette, and on a dark canvas also
+   paints the canvas color on `Warn`.** "Dark ink on a highlighter pen." The
+   foreground is `Background`, not the old mapping's `StatusBarBg`: measured
+   across the eleven dark built-ins, canvas-on-Warn is **4.68–12.91:1** for the
+   matched text — clearing D251 pt 1's floor everywhere dark, including
+   `solarized-dark` (4.68), which the StatusBarBg mapping shipped at 4.05. The
+   gate is the palette's own polarity (`IsDark(t.Background)`, the shared
+   luminance.go threshold D250 pt 5 / D251 pt 1 already use), so the rule is one
+   mapping keyed on a measured property — **not a per-palette exemption**, and
+   not a new invented value (D251 pt 2): both colors are roles the palette
+   already carries.
+2. **The two-background rule is untouched (D252 pt 1 stands).** The highlight
+   background is `Warn` again, so the bar/highlight separation is the same
+   4.05–9.89:1 D252 pt 1 measured and blessed; a later leg must still not blank
+   either background on the cursor's line. The guard test now pins both floors:
+   4.5:1 for the matched text on its highlight, 3:1 for the highlight against
+   the bar.
+3. **The three light palettes keep weight-only, and that is scope, not a
+   leftover.** `catppuccin-latte`, `solarized-light` and `gruvbox-light` render
+   the match with bold + underline and no colors, exactly as THEME-05 left every
+   palette — the feedback itself named the light pair out of scope. If a future
+   dogfood wants paint there too, it needs a value upstream never published
+   (forbidden by D251 pt 2) or a lowered floor (forbidden by D252 pt 3) — so the
+   honest answer is a *different mapping for light canvases*, argued as its own
+   decision, never a quiet per-palette patch. The one style still paints all
+   three surfaces (logs grep, table filter, cluster search).

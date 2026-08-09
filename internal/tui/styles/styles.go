@@ -96,11 +96,16 @@ type Styles struct {
 	Header lipgloss.Style
 
 	// Match highlights the span of text that matched an active query — the logs
-	// view's live grep (LOGS-03) and any future in-content search. It marks a
-	// match by weight (bold and underline) rather than paint (THEME-05), because
-	// no single hue contrasts 4.5:1 against both the canvas and the selection bar
-	// across all fourteen palettes. Inheriting the parent's colors guarantees
-	// the match stays legible under D251 pt 1's floor.
+	// view's live grep (LOGS-03), the table filter (FILT-02) and cluster-search
+	// hits (SEARCH-06). It always carries weight (bold and underline, THEME-05),
+	// and on a dark canvas it additionally paints the palette's yellow: canvas
+	// text on Warn, "dark ink on a highlighter pen" (LOGS-SEL-04). That pair
+	// clears D251 pt 1's 4.5:1 body floor on every dark built-in (4.68–12.91:1
+	// measured) and stays 4.05–9.89:1 away from the Selection bar a match can
+	// sit inside (D252 pt 1). On a light canvas no palette-native shade on Warn
+	// clears the floor (D252 pt 3), so weight alone carries the match there —
+	// the gate is the palette's own measured polarity (IsDark), one rule rather
+	// than a per-palette exemption.
 	Match lipgloss.Style
 
 	// Pane frames a component; PaneFocus is the same frame when the pane holds
@@ -149,9 +154,7 @@ func New(t Theme) Styles {
 		Header: lipgloss.NewStyle().
 			Foreground(t.Header).
 			Bold(true),
-		Match: lipgloss.NewStyle().
-			Bold(true).
-			Underline(true),
+		Match: matchStyle(t),
 		Pane:      pane,
 		PaneFocus: pane.BorderForeground(t.BorderFocus),
 		StatusBar: lipgloss.NewStyle().
@@ -162,6 +165,21 @@ func New(t Theme) Styles {
 		Success: lipgloss.NewStyle().Foreground(t.Success),
 		Spinner: lipgloss.NewStyle().Foreground(t.Primary),
 	}
+}
+
+// matchStyle builds the Match style for a Theme (see the Match field's doc for
+// the rule): weight everywhere, paint only where the paint can carry the floor.
+// A dark canvas is itself the darkest rung of a coherent dark palette (D251
+// pt 1 admits it on the dark side), so canvas-on-Warn is the palette's own
+// "ink on highlighter" pair; on a light canvas the canvas is light, the
+// palette has nothing dark enough above its yellow (D252 pt 3's measurement),
+// and the weight THEME-05 added is what distinguishes the match there.
+func matchStyle(t Theme) lipgloss.Style {
+	s := lipgloss.NewStyle().Bold(true).Underline(true)
+	if IsDark(t.Background) {
+		s = s.Foreground(t.Background).Background(t.Warn)
+	}
+	return s
 }
 
 // Default is the Styles derived from DefaultTheme — the set the app uses until a

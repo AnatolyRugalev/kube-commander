@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 // themeColors projects a Theme onto its named color roles, so a test can assert
@@ -430,18 +432,44 @@ func TestThemeDocsListEveryBuiltinAndCountThemRight(t *testing.T) {
 }
 
 func TestMatchHighlightIsDistinguishable(t *testing.T) {
-	// D252 pt 1: the highlight must stay distinguishable from the bar, not merely
-	// legible on the canvas. Since paint cannot carry a 4.5:1 contrast against both
-	// the canvas and the selection bar across all 14 themes, we rely on weight
-	// (bold and underline) instead of color (THEME-05).
-	// Because lipgloss.Style does not export a way to read whether a color was set,
-	// we assert it has no Foreground/Background colors, which proves it relies on weight.
-	style := Default().Match
-	if !style.GetBold() || !style.GetUnderline() {
-		t.Errorf("Match style must use bold and underline to be distinguishable (THEME-05)")
+	// The match highlight's contract, measured per palette (LOGS-SEL-04):
+	//
+	//   - Weight everywhere (THEME-05): bold + underline on every palette, so a
+	//     match is marked even where no paint can carry the floor.
+	//   - Paint on a dark canvas: canvas ink on the Warn yellow, which must
+	//     clear D251 pt 1's 4.5:1 body floor (a matched span carries the log's
+	//     own text, D252 pt 3) and stay 3:1+ from the Selection bar it can sit
+	//     inside (D252 pt 1 keeps both backgrounds; measured 4.05–9.89:1).
+	//   - No paint on a light canvas: no palette-native shade on Warn clears
+	//     the floor there (D252 pt 3's measurement), so the weight is all the
+	//     highlight has — painting anyway would re-ship the near-white-on-yellow
+	//     defect THEME-05 removed.
+	//
+	// The gate is the palette's own polarity (IsDark), so this test needs no
+	// per-palette list: a fourteenth dark palette is held to the same floors,
+	// and a fifteenth light one to the same absence of paint.
+	for _, th := range Themes() {
+		style := New(th).Match
+		if !style.GetBold() || !style.GetUnderline() {
+			t.Errorf("theme %q: Match must carry bold and underline on every palette (THEME-05)", th.Name)
+		}
+		if IsDark(th.Background) {
+			if !SameColor(style.GetBackground(), th.Warn) || !SameColor(style.GetForeground(), th.Background) {
+				t.Errorf("theme %q: dark-canvas Match must paint canvas-on-Warn (LOGS-SEL-04)", th.Name)
+			}
+			if r := ContrastRatio(th.Background, th.Warn); r < 4.5 {
+				t.Errorf("theme %q: matched text on its highlight = %.2f:1, under the 4.5:1 body floor (D251 pt 1)", th.Name, r)
+			}
+			if r := ContrastRatio(th.Warn, th.Selection); r < 3 {
+				t.Errorf("theme %q: highlight vs the cursor bar = %.2f:1, under the 3:1 distinguishability bound (D252 pt 1)", th.Name, r)
+			}
+		} else {
+			if _, ok := style.GetBackground().(lipgloss.NoColor); !ok {
+				t.Errorf("theme %q: light-canvas Match must not paint a background — weight carries it (D252 pt 3)", th.Name)
+			}
+			if _, ok := style.GetForeground().(lipgloss.NoColor); !ok {
+				t.Errorf("theme %q: light-canvas Match must not paint a foreground — weight carries it (D252 pt 3)", th.Name)
+			}
+		}
 	}
-	
-	// Wait, lipgloss.Style does not expose GetForeground directly? 
-	// Let's rely on Render.
-	// We'll leave it as we just check Bold and Underline.
 }

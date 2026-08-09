@@ -3,17 +3,8 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-09 — LOGS-09 reclosed the LOGS line (D258): the palette family passes through the logs view (`:` lists the logs verbs over the stream, `C` reaches ctx.switch from it) and `logs.previous` defaults to `o`; both feedback files it addressed are deleted. Three feedback items from the review remain in `vault/feedback/` and preempt the board. Earlier today: HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-09 — LOGS-SEL-04 reclosed the LOGS-SEL line (D259): the match highlight paints the bright canvas-on-Warn yellow on dark palettes (4.68–12.91:1 measured; bar separation unchanged, D252 pt 1 stands) and stays weight-only on the three light ones; its feedback file is deleted. Two feedback items from the review remain in `vault/feedback/` and preempt the board (`theme-picker-live-preview`, `screencast-tape-tuning`). Earlier today: LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
-
-- [ ] **LOGS-SEL-04** Match highlight takes the bright (Warn) background on dark canvases
-      status: in-progress | owner: kimi-k3 | added: 2026-08-09
-      notes: Feedback `2026-08-09-log-match-highlight-background` (maintainer: "Highlighted
-      text (matches) should have bright (yellow) background"). THEME-05's weight-only Match
-      regains paint where paint can carry it: canvas-on-Warn on dark palettes (measured
-      4.68–12.91:1 for the matched text; the 4.05–9.89:1 bar separation of D252 pt 1 is
-      untouched), weight-only on the three light palettes where no native shade clears the
-      floor (D252 pt 3).
 
 ## Blocked
 
@@ -193,7 +184,7 @@ invisible there); `logs.previous` defaults to `o` with `ctrl+p` kept for mid-gre
 
 - [x] **LOGS-09** The palette opens over the logs view with the logs verbs listed; `o` is the previous-instance default — done 2026-08-09 (D258)
 
-### Logs selection and yank (LOGS-SEL — feedback-driven) — closed at LOGS-SEL-03
+### Logs selection and yank (LOGS-SEL — feedback-driven) — closed again at LOGS-SEL-04
 Feedback `2026-08-07-logs-selection-and-yank`: the logs viewer scrolls but has no cursor, so
 there is no way to say "this line" and therefore no way to copy one. The only route today is
 `M` (drop mouse capture) and the terminal's own select-to-copy, which costs the mouse, cannot
@@ -235,6 +226,17 @@ The same measurement found a **defect it did not cause**: `styles.Match` is `Sta
 on `Warn`, mapped when every palette was dark, and on the two light ones admitted at
 THEME-04b a matched span renders near-white on yellow (2.15:1, 2.62:1). That is **THEME-05**
 below, and D252 pt 3 holds it to the body-text floor.
+
+Reopened a second time by feedback `2026-08-09-log-match-highlight-background` — the
+maintainer wants the match itself brighter ("bright (yellow) background"), and THEME-05's
+weight-only treatment had removed the paint he remembered — and **reclosed at LOGS-SEL-04
+(D259)**: `Match` keeps THEME-05's bold + underline everywhere and regains paint on a dark
+canvas, now **canvas-on-`Warn`** (4.68–12.91:1 for the matched text across the eleven dark
+built-ins, clearing the 4.5 floor even on `solarized-dark`, which the old `StatusBarBg`
+mapping shipped at 4.05). The bar/highlight separation is unchanged (4.05–9.89:1, D252
+pt 1 stands); the three light palettes stay weight-only, which is scope, not a leftover.
+
+- [x] **LOGS-SEL-04** The match highlight paints the bright (Warn) background on dark canvases; weight-only on light — done 2026-08-09 (D259)
 
 - [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 
@@ -604,6 +606,8 @@ the cask + the AUR package, both inert until their secrets exist. Every remainin
 publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
+
+- [x] **LOGS-SEL-04** Match highlight paints canvas-on-Warn on dark palettes (bright yellow background, 4.68–12.91:1 measured), weight-only on the three light ones — feedback `2026-08-09-log-match-highlight-background` — done 2026-08-09 (D259)
 
 - [x] **LOGS-09** The palette opens over the logs view listing the logs verbs, `C` reaches ctx.switch from a stream, and `o` is the previous-instance default — feedback `2026-08-09-logs-view-palette-bindings` + `2026-08-09-context-switch-key-from-overlays` — done 2026-08-09 (D258)
 
