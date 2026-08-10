@@ -121,3 +121,24 @@ existing. The `## Pre-flight result` (M5-10) above stands unchanged; re-ask at a
 later review or when the maintainer raises it. No agent work is unblocked by
 this answer: M5-11 was already the only item this task gates, and everything
 else in M5 that remains publishes (D173 pt 1).
+
+## Update (2026-08-10) — rc cut; step 2 (v1.0.0) still pending
+
+Step 1 was performed on the maintainer's go-ahead: **`v1.0.0-rc.1` is tagged
+and pushed** (at commit 8bd3760). The release workflow ran clean — `make check`
+on both platforms then `goreleaser release` — and every check in step 1 passed:
+four archives + four bare binaries + `checksums.txt` present; the downloaded
+binary reports `kubecom 1.0.0-rc.1 (commit 8bd3760…, built …)`; the notes span
+0.7.6→rc, 211 lines, grouped, no claim lines; and `go install
+github.com/neuroplastio/kubecom/cmd/kubecom@v1.0.0-rc.1` works from a clean
+GOPATH (FB-go-install — the binary from a module build reports `dev`, which is
+by-design: only goreleaser's ldflags stamp the real values, version.go). One gap
+was found and fixed: the rc shipped with `isPrerelease: false` because
+`.goreleaser.yml` left `release.prerelease` at its `false` default — the live
+release was re-marked pre-release and the config now sets `prerelease: auto`
+(journal 2026-08-10.1). The Homebrew/AUR steps skipped themselves for lack of
+secrets, by design (D173 pt 2); if you want the rc to exercise them too, do
+`2026-07-30-homebrew-tap-access` and `2026-07-30-aur-package-access` first.
+**Step 2 (`v1.0.0`) is the remaining human act** — once the rc looks right,
+`git tag -a v1.0.0 -m 'kubecom v1.0.0'` and push, then tick the exit criteria
+and proceed to M5-11 per step 3.

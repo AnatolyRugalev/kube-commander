@@ -48,6 +48,13 @@ release:
   ids:
     - release
     - binaries
+  # A pre-release tag (v1.0.0-rc.1) must publish as a *pre-release*: it is
+  # excluded from @latest by Go, and Homebrew/the AUR make you ask for it by
+  # name (D173, human task 2026-07-30-first-release-tag). The default is
+  # `false`, which shipped the rc as a full release once (2026-08-10) before
+  # the flag was edited by hand. `auto` reads the tag: an `-rc`/`-beta`/etc.
+  # marks prerelease, a stable `v1.0.0` does not.
+  prerelease: auto
 
 checksum:
   name_template: 'checksums.txt'

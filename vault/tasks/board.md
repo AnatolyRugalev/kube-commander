@@ -635,6 +635,8 @@ publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
 
+- [x] **RC-PRERELEASE** `.goreleaser.yml` now sets `release.prerelease: auto`, so a pre-release tag (`-rc`/`-beta`) publishes as a GitHub *pre-release* and a stable tag does not; the first `v1.0.0-rc.1` shipped with the default `false` and was re-marked by hand — done 2026-08-10 (journal 2026-08-10.1)
+
 - [x] **MONO-03** The browse filter seam is `components/filter` — a sub-model owning the `/` field's open/query state, the shell keeping the table (the authoritative rows) and performing the narrowing (`table.SetFilter`) — the third cut out of `app.go`, closing the MONO line — done 2026-08-09 (D265)
 
 - [x] **MONO-02** The secret viewer's entry list is `components/secretviewer` — a sub-model owning reveal/mask and the entry cursor, rendering the body from the shell's authoritative `SecretData` at render time, the clipboard copy staying a shell gesture — the second cut out of `app.go` — done 2026-08-09 (D265)
