@@ -6,6 +6,18 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 _Last updated: 2026-08-09 — MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE closed feedback `2026-08-09-audit-format-gate` (D263): the golangci-lint v2 `formatters:` block now runs `gofmt`, so format drift fails `make check`, and the one styles.go misalignment is fixed. Earlier today: TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Today also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
+- [ ] **DOC-02** The install docs still say no version has been tagged — `v1.0.0-rc.1` is out
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-12
+      notes: Agent-found, a documentation-truth bug (never blocked by a human task). The rc
+      was tagged and published on 2026-08-10 (journal `2026-08-10.1`), but `README.md`'s
+      status note still reads "**no version has been tagged yet**" and `docs/install.md`
+      still frames every packaged path as "waiting on the first tagged release". Both are
+      now false for the rc and true only for the *stable* release, so the docs must
+      distinguish the two. Also fixes the `cd kube-commander` typo in the checkout recipe
+      (the clone directory is `kubecom`) — the one line in that recipe a user cannot work
+      around. Guards `TestReadmeBrewTapMatchesTheCask` / `TestReadmeAURPackageMatchesTheConfig`
+      read both files as one set, so the tap and package names must stay as configured.
+
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
