@@ -142,3 +142,18 @@ secrets, by design (D173 pt 2); if you want the rc to exercise them too, do
 **Step 2 (`v1.0.0`) is the remaining human act** — once the rc looks right,
 `git tag -a v1.0.0 -m 'kubecom v1.0.0'` and push, then tick the exit criteria
 and proceed to M5-11 per step 3.
+
+## Update (2026-08-12) — the rc's share of step 3 is folded in; step 2 unchanged
+
+DOC-02 did the part of step 3 the *rc* already made true, so a later leg does not
+redo it (D266). Landed: the README no longer says "no version has been tagged yet"
+— it and `docs/install.md` now name `v1.0.0-rc.1` and document installing it by
+name; the M5 exit criterion "`goreleaser release` produces Linux+macOS artifacts
+from a tag via CI" is **ticked** on the rc run.
+
+Everything else in step 3 still belongs to stable `v1.0.0` and is untouched:
+restoring `go install …@latest` as the primary line and dropping the `@v1`
+explainer (both queries resolve only to stable versions, so the rc does not
+close FB-go-install), the remaining exit criteria, the resolved GitHub issues
+(#8, #28, #68, #76, #80, #83, #84, #85, #86, #87, #89, #90), and M5-11. This
+task stays **open** on step 2 alone.

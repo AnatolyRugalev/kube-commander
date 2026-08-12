@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-08-09) — every agent-performable M5 slice has landed (D185), the legacy-config criterion is closed on the generated fixture (D231, no real file survives), and the screencast is recorded (484e60c), so what remains is only the human-performed ends: the tag (`2026-07-30-first-release-tag`), the tap and AUR access (both deferred to tag time, D256 pt 4), and the branch rename (M5-11, blocked on the tag).
+**Status:** `in-progress` (2026-08-12) — the `v1.0.0-rc.1` tag fired the pipeline for real and closed the CI-artifacts criterion (2 of 5 now ticked), leaving the stable `v1.0.0` tag, the tap/AUR access deferred to it, and the branch rename (M5-11).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -118,7 +118,15 @@ raise come back done, not when the config that would produce them compiles.
       The residual tuning the maintainer asked for (a search example that matches, idempotent
       reruns, more of the tour) is feedback `2026-08-09-screencast-tape-tuning`, tracked
       separately from this criterion. The box itself stays unticked on the README half only.)
-- [ ] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
+- [x] `goreleaser release` produces Linux+macOS artifacts from a tag via CI.
+      **— ticked 2026-08-12 (DOC-02) on the `v1.0.0-rc.1` run**: the tag was pushed
+      2026-08-10, `release.yml` ran `make check` on both platforms and then `goreleaser
+      release`, and the published release carries four `.tar.gz` archives and four bare
+      binaries for `linux`/`darwin` × `amd64`/`arm64` plus `checksums.txt`, with a
+      downloaded binary reporting its real version/commit/date (journal `2026-08-10.1`).
+      This criterion asks for artifacts from a tag via CI, which a pre-release tag
+      satisfies as fully as a stable one; the human tag task stays open for `v1.0.0`,
+      which the *other* criteria need. The pre-DOC-02 history:
       (M5-02 ✅ 2026-07-30: the artifact reports its own commit and build date, guarded by
       `TestGoreleaserSetsAllVersionVars` (D175). M5-03 ✅ 2026-07-30: `release.yml` exists —
       `goreleaser release` on a `v*` tag, gated on `make check` via ci.yml, plus a
@@ -130,9 +138,7 @@ raise come back done, not when the config that would produce them compiles.
       and succeeded — the tag was then deleted, never pushed. It also found and fixed the one
       thing only a real rendering could show: the changelog filters matched unscoped subjects
       and every commit here is scoped, so the notes were 373 lines opening with ~180 board
-      claims (now 151, grouped, guarded). Ticked when a real
-      tag has produced real artifacts, i.e. after the human tag push
-      (`2026-07-30-first-release-tag`).)
+      claims (now 151, grouped, guarded).)
 - [ ] Homebrew/AUR install paths verified.
       (M5-06/07, one each. "Verified" means installed from, so each needs its human task
       back.

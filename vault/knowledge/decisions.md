@@ -7476,3 +7476,40 @@ follow it rather than re-derive it:
 4. **Every component with a `SetStyles` must be in `applyStyles` and in
    `themeSurfaces`** (M4-12b-1/D170 pt 2): the panel is both, so the live-restyle
    and the launch-time-theme equivalence tests cover it.
+
+## D266 — publishing a release is a leg that changes the install docs; the docs name the exact version that exists (2026-08-12, DOC-02)
+
+D68 requires a leg to update `README.md` when it "changes how a user installs,
+launches, configures, or uses `kubecom`". Cutting a tag does not change a line of
+install code, so it reads as outside that trigger — and on 2026-08-10 it fell
+outside it in practice: `v1.0.0-rc.1` was tagged, published and verified, and the
+README went on saying **"no version has been tagged yet"** for two days while
+`docs/install.md` framed every path as "waiting on the first tagged release". A
+publishing act changes what the install instructions *mean* without touching what
+they *say*, which is the one shape D68's trigger misses. So:
+
+1. **Publishing a release is an install-docs change.** A leg that pushes a tag, or
+   that folds in the human task for one, updates `README.md` and
+   `docs/install.md` in the **same** leg — the same rule D68 states for install
+   code, with "publishes an artifact" added to the trigger. A release the docs do
+   not know about is the same defect as an install command that does not work.
+2. **Name the version that exists, not the state of the tag list.** The docs say
+   `v1.0.0-rc.1` rather than "a release has been tagged" / "none has". A concrete
+   version is checkable against the Releases page by a reader and by the next
+   leg; a status sentence is only checkable by whoever wrote it, which is how the
+   stale one survived four legs of Orient.
+3. **A pre-release is documented as one, and asked for by name.** `@latest` and
+   `@v1` both resolve to the newest *stable* version, so neither reaches an rc:
+   the documented `go install` line carries the full version until stable
+   `v1.0.0` lands. Restoring `@latest` as the primary line is step 3 of
+   `2026-07-30-first-release-tag` and belongs to the stable tag, not to this one.
+4. **Publisher inertness is not a pre-release rule.** Homebrew and the AUR
+   skipped the rc because their secrets are absent (D173 pt 2), *not* because the
+   tag was a pre-release — nothing in `.goreleaser.yml` keys off that. Docs and
+   future legs state the credential reason; a leg that adds the secrets should
+   expect the next tag of *any* kind to publish.
+5. **A criterion asking for artifacts is closed by the rc.** M5's "`goreleaser
+   release` produces Linux+macOS artifacts from a tag via CI" is ticked on the
+   `v1.0.0-rc.1` run: it asserts the pipeline, which a pre-release tag exercises
+   in full. The criteria that assert a *distributed, installable* v1 (the README
+   half, Homebrew/AUR verified, the DoD) still wait on stable `v1.0.0`.

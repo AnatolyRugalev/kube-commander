@@ -14,10 +14,11 @@ in-cluster deployment and **no `kubectl` binary required**.
 > lives on [`master`](https://github.com/neuroplastio/kubecom/tree/master).
 >
 > **Current status:** feature-complete and dogfooded against real clusters —
-> everything documented below is in the binary, not planned. What is left is the
-> release itself: **no version has been tagged yet**, so you install from a `v1`
-> checkout ([Install](#install)), and the Homebrew and AUR paths start working
-> with that first tag.
+> everything documented below is in the binary, not planned. The first release
+> candidate, **[`v1.0.0-rc.1`](https://github.com/neuroplastio/kubecom/releases/tag/v1.0.0-rc.1)**,
+> is tagged and published with Linux and macOS binaries — install it by name
+> ([Install](#install)). Stable `v1.0.0` has not been cut yet, and the Homebrew
+> and AUR paths start working with it.
 >
 > The rewrite is driven autonomously and documents itself in **[`vault/`](vault/)**
 > (goals, plan, live task board, decision log, per-leg journal); see
@@ -159,19 +160,27 @@ stderr is yours again for as long as that program runs, so it can talk to you no
 
 ## Install
 
-Until the first release is tagged, build from a `v1` checkout — this needs
-**Go 1.24+**, and works on Linux and macOS (Windows via WSL2):
+The current release is the candidate **`v1.0.0-rc.1`**. Download the archive for
+your platform from the [Releases page](https://github.com/neuroplastio/kubecom/releases),
+or install it with Go (**1.24+**; Linux and macOS, Windows via WSL2):
+
+```bash
+go install github.com/neuroplastio/kubecom/cmd/kubecom@v1.0.0-rc.1
+```
+
+Name the version explicitly: `@latest` skips pre-releases, and picks kubecom up
+only once stable `v1.0.0` is tagged. To build the branch instead:
 
 ```bash
 git clone -b v1 https://github.com/neuroplastio/kubecom
-cd kube-commander
+cd kubecom
 go install ./cmd/kubecom      # installs kubecom to $(go env GOPATH)/bin
 ```
 
-Release archives, Homebrew and the AUR package are all wired and start working
-with that first tag. [`docs/install.md`](docs/install.md) has every path,
-including why `go install …@v1` cannot work and what changes for a returning
-2020 kube-commander user.
+Homebrew and the AUR package are wired and start working with the stable tag.
+[`docs/install.md`](docs/install.md) has every path, including why
+`go install …@v1` cannot work and what changes for a returning 2020
+kube-commander user.
 
 ## Configuration
 
