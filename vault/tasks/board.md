@@ -3,16 +3,8 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-12 — DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE closed feedback `2026-08-09-audit-format-gate` (D263): the golangci-lint v2 `formatters:` block now runs `gofmt`, so format drift fails `make check`, and the one styles.go misalignment is fixed. Earlier today: TEST-RUNTIME closed feedback `2026-08-09-audit-test-suite-runtime` (D262): the toast auto-clear duration is now a `Model` option (`WithToastTimeout`, default 5s), so `sized`/`sizedWith` build every hermetic test model with a ~0 toast and the 17 tests that drained real 5–10s ticks now run in milliseconds — the tui package drops from ~190s to ~90s; its feedback file is deleted. Today also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-12 — BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
-
-- [ ] **BOARD-03** A Done entry's **ID** is unique — resolve the `DOC-02` collision and guard it
-      status: in-progress | owner: claude-opus-5 | added: 2026-08-12
-      notes: Orient-found. Two distinct legs are indexed as `DOC-02` — the 2026-08-09 README
-      prose pass and the 2026-08-12 install-docs leg — so the id that joins board ↔ journal ↔
-      commit (D15) resolves to two pieces of work. `TestBoardDoneIndexIsComplete` cannot see
-      it: it collects ids into a `map[string]bool`, where a duplicate is indistinguishable
-      from the entry it collides with.
 
 ## Blocked
 
@@ -510,6 +502,13 @@ for the split — outline first, prose after — because a 587-line rewrite in o
 not reviewable.
 
 - [x] **DOC-01** README restructured around the capability surface; install/config out to `docs/` — done 2026-08-07 (D241)
+- [x] **DOC-01b** Prose pass over the restructured README — the prose half of DOC-01's feedback; renamed from `DOC-02` by BOARD-03, whose commits still carry the old id — done 2026-08-09 (D267)
+
+The prose half closed this feedback on 2026-08-09, and it was indexed as `DOC-02` — the id
+the agent-found install-docs leg then took three days later, which is the collision BOARD-03
+resolved. It is `DOC-01b` here because the two halves are one item under the board's own
+a/b convention, and because the alternative — renaming the newer leg — would have orphaned
+D266, an M5 exit criterion and a human-task update instead of one journal entry (D267).
 
 DOC-02 was agent-found at Orient rather than raised by feedback: the `v1.0.0-rc.1` tag
 landed on 2026-08-10 and the install docs went on saying "no version has been tagged yet"
@@ -570,6 +569,18 @@ paragraphs collapsed as written. The four sections are ~15 lines each instead of
 BOARD line is closed**: the Done list is one line per entry and guarded (D224), the index is
 canonical and guarded (D225), a deferral names its destination and is guarded (D226), and a
 line collapses its own section when it closes (D229, unguarded on purpose).
+
+**Reopened and reclosed 2026-08-12 at BOARD-03** (D267), on the one property the index guards
+had assumed rather than checked: that an **ID** names one leg. It had stopped being true —
+two legs were indexed as `DOC-02` — and `TestBoardDoneIndexIsComplete` was structurally
+unable to see it, because it collects ids into a `map[string]bool` where a duplicate is
+indistinguishable from the entry it collides with, and one entry's presence satisfies
+completeness for *both* working-area lines. The collision is resolved (the prose pass is
+`DOC-01b`) and uniqueness is now its own guard. The standing constraint is D267: the id is
+the join key, so when a collision has already been committed the fix renames the side with
+fewer references and records the id its commits carry — never a rewrite of pushed history.
+
+- [x] **BOARD-03** A Done entry's **ID** is unique — the `DOC-02` collision resolved to `DOC-01b` and guarded by `TestBoardDoneIDsAreUnique` — done 2026-08-12 (D267)
 
 ### M4 — New capabilities
 M4 adds what the original lacked, now natural on the new architecture — expanded here
@@ -652,6 +663,8 @@ publishes, and D173 pt 1 makes each one a human's.)_
 
 ## Done
 
+- [x] **BOARD-03** A Done entry's **ID** is unique — the `DOC-02` collision resolved to `DOC-01b` and guarded by `TestBoardDoneIDsAreUnique` — done 2026-08-12 (D267)
+
 - [x] **DOC-02** The install docs name the release that exists — README and `docs/install.md` document `v1.0.0-rc.1` and installing it by name instead of saying none is tagged, the archive path leads, `cd kube-commander` is fixed, and the M5 CI-artifacts criterion is ticked on the rc run — done 2026-08-12 (D266)
 
 - [x] **RC-PRERELEASE** `.goreleaser.yml` now sets `release.prerelease: auto`, so a pre-release tag (`-rc`/`-beta`) publishes as a GitHub *pre-release* and a stable tag does not; the first `v1.0.0-rc.1` shipped with the default `false` and was re-marked by hand — done 2026-08-10 (journal 2026-08-10.1)
@@ -680,7 +693,7 @@ publishes, and D173 pt 1 makes each one a human's.)_
 
 - [x] **CTX-MEM-04** The drill-in scope comes back as a drill-in — owner recorded beside the kind, re-resolved through the ChildResolver on restore, and the owner-gone case lands on the plain list with a notice saying so — done 2026-08-09 (D255)
 
-- [x] **DOC-02** Prose pass over the restructured README — done 2026-08-09 (DOC-02)
+- [x] **DOC-01b** Prose pass over the restructured README — the prose half of DOC-01's feedback; renamed from `DOC-02` by BOARD-03, whose commits still carry the old id — done 2026-08-09 (D267)
 
 - [x] **LOGS-SEL-03** Both open questions answered: the bar and the highlight coexist, and the yank gesture set closes — done 2026-08-08 (D252)
 

@@ -7513,3 +7513,35 @@ they *say*, which is the one shape D68's trigger misses. So:
    `v1.0.0-rc.1` run: it asserts the pipeline, which a pre-release tag exercises
    in full. The criteria that assert a *distributed, installable* v1 (the README
    half, Homebrew/AUR verified, the DoD) still wait on stable `v1.0.0`.
+
+## D267 — a Done entry's **ID** is unique; a committed collision is renamed on the cheaper side, never rewritten (2026-08-12, BOARD-03)
+
+D15 makes the leg id the join key: the commit subject carries it, the journal
+entry is found by it, and the board's Done index is where a reader looks it up.
+Every board guard D224/D225 added assumed that key was unique and none of them
+checked it, so it quietly stopped being true — the 2026-08-09 README prose pass
+and the 2026-08-12 install-docs leg were both indexed as `DOC-02`, and `DOC-02`
+resolved to two unrelated pieces of work across two commits and two journals.
+
+1. **An `**ID**` in the Done index names exactly one leg**, and
+   `TestBoardDoneIDsAreUnique` enforces it. Before claiming an id, check it is
+   unused — the index is the canonical list (D225), so a `grep` of it is the
+   whole check.
+2. **Completeness cannot stand in for uniqueness.**
+   `TestBoardDoneIndexIsComplete` collects ids into a `map[string]bool` and only
+   asks whether a key is present, so a duplicate is indistinguishable from the
+   entry it collides with — and one entry's presence satisfies completeness for
+   *both* working-area lines. A later leg must not fold the two tests together
+   on the grounds that they both read the index.
+3. **A collision that has already been pushed is resolved by renaming, not by
+   rewriting history.** Both commit subjects are permanent (hard rule: never
+   rewrite shared history), so one of the two legs will always be reachable
+   under an id the board no longer uses.
+4. **Rename the side with fewer references, and say what its commits carry.**
+   Here that was the older leg: it was referenced by its Done entry and its
+   journal, while the newer one was cited by D266, an M5 exit criterion, a
+   human-task update and the board's `Last updated:` line. The renamed entry and
+   its journal entry both record the old id, so the orphaned commit subject stays
+   findable. Prefer an a/b suffix when the two are halves of one item (the prose
+   pass became `DOC-01b`, the prose half of DOC-01's feedback); an unused id
+   otherwise.

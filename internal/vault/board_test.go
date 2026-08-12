@@ -129,6 +129,42 @@ func TestBoardDoneIndexIsComplete(t *testing.T) {
 	}
 }
 
+// TestBoardDoneIDsAreUnique guards the assumption every other check here makes
+// without stating it: that an **ID** names exactly one leg.
+//
+// The id is the join key (D15) — a commit subject carries it, the journal entry
+// is found by it, and the Done index is where a reader looks it up. Two entries
+// sharing one id break all three at once: the id resolves to two unrelated pieces
+// of work, and nothing on the board says which commit or which journal belongs to
+// which. That is what had happened by 2026-08-12, when the install-docs leg took
+// `DOC-02` three days after the README prose pass had already been indexed under
+// it — neither leg could see the collision, because each was looking at a board
+// where its own entry read fine.
+//
+// TestBoardDoneIndexIsComplete cannot catch this, and the reason is worth writing
+// down so a later leg does not fold the two together: it collects ids into a
+// `map[string]bool` and only ever asks whether a key is present, so a duplicate is
+// indistinguishable from the entry it collides with — and worse, one entry's
+// presence silently satisfies completeness for *both* working-area lines.
+func TestBoardDoneIDsAreUnique(t *testing.T) {
+	seen := map[string]int{}
+	for _, e := range doneEntries(t) {
+		id := entryID(e.text)
+		if id == "" {
+			continue // shape is TestBoardDoneEntriesAreOneLine's to complain about
+		}
+		if first, dup := seen[id]; dup {
+			t.Errorf("board.md:%d — %s is already indexed at board.md:%d, but an **ID** is the "+
+				"join key between the board, the journal entry and the commit subject (D15/D267)\n"+
+				"  rename the side with fewer references — a suffix (`-01a`/`-01b`) if the two are "+
+				"halves of one item, an unused id otherwise — and record the id its commits carry\n"+
+				"  %s", e.line, id, first, truncate(e.text, 120))
+			continue
+		}
+		seen[id] = e.line
+	}
+}
+
 // deferralPhrases are the ways the board has actually deferred work in prose. It
 // is a backstop and not the spec (D226 pt 2, under D224 pt 3): the reply to a
 // deferral phrased some other way is to name its destination like every other
