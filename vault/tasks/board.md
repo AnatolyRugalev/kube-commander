@@ -6,6 +6,14 @@ the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 _Last updated: 2026-08-15 — STORY-04 wrote the stories: `stories/s01…s05`, S02 marked the main story, each guard-tested to name no key, and `CONTRIBUTING.md` now makes writing a story the way to argue for a UX change, so the maintainer can start walking scenarios (STORY-05) once STORY-03's analyzer lands. Earlier: STORY-02 landed `--keylog`: one JSONL record per keypress carrying the surface and the resolved action, recorded at the single `KeyPressMsg` funnel so the trace cannot disagree with the routing, off unless asked for, and verified against the live cluster (D268). **STORY-04 is pulled ahead of STORY-03** — the maintainer wants to start walking scenarios as soon as they exist, and the first traces are short enough to read by hand. Earlier today: STORY-01 committed the story cluster: `stories/cluster/up.sh` destroys and rebuilds `shop`/`data`/`broken` so every run starts identical, the five failures in `broken` each have a different answer, and `internal/stories` guards the manifests plus the tape queries that must still match them — verified end to end on the maintainer's docker (D268). Earlier today: UX-PLAN expanded the maintainer's pre-tag scope into a UX-validation line that now gates the stable tag: STORY-01…06 (committed k3s fixture, `--keylog` + its analyzer, the stories, the maintainer's walk, the fold-in), TAPE-01 (re-cut the screencast around the main story) and DOC-03…05 (README landing page, `docs/usage.md`, `docs/troubleshooting.md`) — D268. Earlier: BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
+- [ ] **STORY-03** Analyse a trace: `kubecom keys analyze <trace.jsonl>`
+      status: in-progress | owner: claude-opus | added: 2026-08-15
+      notes: Depends on STORY-02. Turns a raw trace into the four things a UX pass asks:
+      unresolved presses ranked by frequency (the dead ends), action counts, how long each
+      story step took, and where a sequence timed out. Rides the existing `kubecom keys`
+      command (`cmd/kubecom/keys.go`) rather than a new binary or a loose script.
+      → milestone: M5 · knowledge: decisions.md D268
+
 ## Blocked
 
 - [ ] **M5-11** Make the rewrite the default branch (`v1` → `main`)
@@ -671,14 +679,6 @@ paths down as **stories**, has the maintainer walk them, and folds the findings 
 the tape and the docs are re-cut against the main story once it exists rather than before.
 Order is bottom-up as usual (D52): fixture and instrument first, then the stories, then the
 run, then everything that quotes them. Re-split any slice that proves > ~300 lines.
-
-- [ ] **STORY-03** Analyse a trace: `kubecom keys analyze <trace.jsonl>`
-      status: todo | owner: — | added: 2026-08-15
-      notes: Depends on STORY-02. Turns a raw trace into the four things a UX pass asks:
-      unresolved presses ranked by frequency (the dead ends), action counts, how long each
-      story step took, and where a sequence timed out. Rides the existing `kubecom keys`
-      command (`cmd/kubecom/keys.go`) rather than a new binary or a loose script.
-      → milestone: M5 · knowledge: decisions.md D268
 
 - [x] **STORY-04** Write the stories: `stories/*.md`, one user path each
       status: done | owner: claude-opus | added: 2026-08-15 | done: 2026-08-15
