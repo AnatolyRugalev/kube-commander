@@ -157,3 +157,26 @@ explainer (both queries resolve only to stable versions, so the rc does not
 close FB-go-install), the remaining exit criteria, the resolved GitHub issues
 (#8, #28, #68, #76, #80, #83, #84, #85, #86, #87, #89, #90), and M5-11. This
 task stays **open** on step 2 alone.
+
+## Update (2026-08-15) — step 2 is gated on the UX line; still open
+
+The maintainer named four things that must land before `v1.0.0` is tagged
+(UX-PLAN, **D268**), so this task is no longer the next act — it is the act the
+new line ends with. On the board as **STORY-01…06** (committed k3s fixture,
+`--keylog` recorder + its analyzer, the stories, the maintainer's walk of them,
+the fold-in), **TAPE-01** (re-cut the screencast around the main story) and
+**DOC-03…05** (README → landing page; `docs/usage.md`, `docs/troubleshooting.md`).
+
+Nothing in the `## Pre-flight result` above is invalidated: the pipeline, the
+publishers, the ldflags and the migration are unchanged and still dry-run clean.
+What changed is that the *product* now has a verification step in front of it,
+where before the tag was waiting only on the maintainer's go-ahead. Re-ask when
+STORY-06 and DOC-05 are done. Steps 1 (`v1.0.0-rc.1`) and 3 (the rc's share)
+remain as recorded; the rest of step 3 still belongs to stable `v1.0.0`.
+
+Two things worth doing *while* the line runs, since they are yours and they
+skip silently without you: `HOMEBREW_TAP_TOKEN` and `AUR_SSH_PRIVATE_KEY`
+(human tasks `2026-07-30-homebrew-tap-access`, `2026-07-30-aur-package-access`).
+Without them the stable tag publishes no cask and no AUR package, and the M5
+criterion "Homebrew/AUR install paths verified" cannot close on the release it
+was written for — a second tag would be needed to distribute.

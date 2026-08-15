@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-08-12) — the `v1.0.0-rc.1` tag fired the pipeline for real and closed the CI-artifacts criterion (2 of 5 now ticked), leaving the stable `v1.0.0` tag, the tap/AUR access deferred to it, and the branch rename (M5-11).
+**Status:** `in-progress` (2026-08-15) — the maintainer gated the stable tag on a UX-validation line first (UX-PLAN/D268: STORY-01…06, TAPE-01, DOC-03…05), so what remains is that line, then the `v1.0.0` tag, the tap/AUR access, and the branch rename (M5-11).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the
@@ -10,8 +10,13 @@ cached immutably by the Go module proxy — so "green or revert" does not apply 
 splits every publishing act off to a human. The slices are: the DoD audit (M5-01), the
 artifact's correctness (M5-02 build metadata, M5-03 release workflow + CI dry run),
 migration (M5-04/05), distribution (M5-06 Homebrew, M5-07 AUR), the vhs
-screencast (M5-09), and the irreversible end (M5-10 tag, M5-11 `v1`→`main`). Per-leg
-history: `vault/journal/`._
+screencast (M5-09), and the irreversible end (M5-10 tag, M5-11 `v1`→`main`).
+**A second line was added on 2026-08-15** (UX-PLAN/D268), in front of the tag rather than
+after it: the rc proved the pipeline and nothing about the product, so **STORY-01…06** build
+a committed k3s fixture and a `--keylog` recorder, write the user paths down as stories, have
+the maintainer walk them and fold the findings back in; **TAPE-01** re-cuts the screencast
+around the main story and **DOC-03…05** reorganize the README into a landing page over a
+`docs/` that gains `usage.md` and `troubleshooting.md`. Per-leg history: `vault/journal/`._
 
 ## Goal
 

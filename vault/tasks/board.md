@@ -3,17 +3,8 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-12 — BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-15 — UX-PLAN expanded the maintainer's pre-tag scope into a UX-validation line that now gates the stable tag: STORY-01…06 (committed k3s fixture, `--keylog` + its analyzer, the stories, the maintainer's walk, the fold-in), TAPE-01 (re-cut the screencast around the main story) and DOC-03…05 (README landing page, `docs/usage.md`, `docs/troubleshooting.md`) — D268. Earlier: BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
-
-- [ ] **UX-PLAN** Expand the maintainer's pre-tag UX/docs scope into leg-sized slices
-      status: in-progress | owner: claude-opus | added: 2026-08-15
-      notes: The maintainer named four things that gate `v1.0.0` (2026-08-15 session): a
-      human-run **story** to test UX and user paths against, with keystrokes logged so the
-      presses can be analysed; the tape/GIF re-cut around the main story; stories backed by
-      a **clean k3s setup committed to the repo**; and a README/docs pass. This leg turns
-      that into ordered slices and re-gates the tag on them.
-      → milestone: M5 · knowledge: decisions.md
 
 ## Blocked
 
@@ -663,15 +654,134 @@ image; goreleaser is a Go tool (`go install github.com/goreleaser/goreleaser/v2@
 so a leg can likely obtain it, and if it cannot, the gate for a config-only slice is the
 CI dry-run job M5-03 adds rather than a claimed-but-unrun command (D79).
 
-_(none unblocked — M5-10's agent share is done and M5-11 is in **Blocked** above, waiting
-on the tag. The release-namespace fold-in **HT-relns-0809** closed 2026-08-09 (D253/D254):
-Homebrew publishes to the new org tap `neuroplastio/homebrew-tap` (created this leg;
-kubecom its first tool) and container builds are dropped, so the distribution surface is
-the cask + the AUR package, both inert until their secrets exist. Every remaining M5 act
-publishes, and D173 pt 1 makes each one a human's.)_
+_The **release** half of M5 is agent-done: M5-10's share is finished and M5-11 is in
+**Blocked** above, waiting on the tag. The release-namespace fold-in **HT-relns-0809**
+closed 2026-08-09 (D253/D254): Homebrew publishes to the new org tap
+`neuroplastio/homebrew-tap` (created this leg; kubecom its first tool) and container builds
+are dropped, so the distribution surface is the cask + the AUR package, both inert until
+their secrets exist. Every remaining release act publishes, and D173 pt 1 makes each one a
+human's._
+
+**The tag is no longer the next thing.** On 2026-08-15 the maintainer named four items that
+gate `v1.0.0` (**UX-PLAN**, D268), and they add a **UX-validation line** in front of the
+release slices: the rc proved the *pipeline*, and what is unproven is the *product* — no
+user path through kubecom has ever been walked deliberately end to end and judged. The line
+below builds the instrument (a committed cluster fixture + a keystroke log), writes the
+paths down as **stories**, has the maintainer walk them, and folds the findings back in;
+the tape and the docs are re-cut against the main story once it exists rather than before.
+Order is bottom-up as usual (D52): fixture and instrument first, then the stories, then the
+run, then everything that quotes them. Re-split any slice that proves > ~300 lines.
+
+- [ ] **STORY-01** Committed k3s cluster fixture: `stories/cluster/` (up/down + manifests)
+      status: todo | owner: — | added: 2026-08-15
+      notes: The July dogfood workload (journal `2026-07-21.3`) — namespaces `shop` (nginx
+      storefront + ConfigMap volume, http-echo checkout + Secret, logspam, Services,
+      Ingress), `data` (redis StatefulSet + PVCs, DaemonSet, completed Job, CronJob) and
+      `broken` (CrashLoopBackOff, ErrImagePull, Pending/unschedulable, failing readiness,
+      Pending PVC on a missing StorageClass) — was applied **ad hoc and never committed**,
+      so every story, and the tape's `shop` filter, rests on a cluster nobody can rebuild.
+      Commit it: `up.sh` deletes and recreates the k3d cluster then applies + waits, so the
+      initial state is clean **every** run (the maintainer's requirement), `down.sh` removes
+      it. k3d is the substrate and it *is* k3s-in-docker (D268 pt 3). Agent verification is
+      `kubectl apply --dry-run=client` over the manifests plus a guard that every namespace
+      and workload a story or the tape names exists in the fixture; a real `up.sh` run needs
+      docker (available on the maintainer's box, not in the sandbox — D79).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-02** `--keylog`: record every keypress and the action it resolved to (JSONL)
+      status: todo | owner: — | added: 2026-08-15
+      notes: Ships in v1.0.0, **off by default**, documented (maintainer's call, D268 pt 2).
+      One funnel: `app.go`'s `case tea.KeyPressMsg` (app.go:1253) already routes every press
+      through the mode ladder — searchView / logs-filter / picker / filter / modal-prompt /
+      modal-confirm, else the sequencer — so a line carries `key`, `mode`, and the resolved
+      `action` (empty when the press was text or inert). **The most valuable field is the
+      absence of one**: a press that resolves to nothing is a user reaching for a key
+      kubecom does not have, which is precisely the UX signal the stories are run to find.
+      Privacy is real and belongs in the doc: text-entry keys reconstruct typed filter
+      queries, namespaces and resource names, so the log is a local artifact the user opts
+      into (exec keystrokes never pass through bubbletea — the TUI is suspended — so they
+      cannot leak here).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-03** Analyse a trace: `kubecom keys analyze <trace.jsonl>`
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-02. Turns a raw trace into the four things a UX pass asks:
+      unresolved presses ranked by frequency (the dead ends), action counts, how long each
+      story step took, and where a sequence timed out. Rides the existing `kubecom keys`
+      command (`cmd/kubecom/keys.go`) rather than a new binary or a loose script.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-04** Write the stories: `stories/*.md`, one user path each
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-01 (the state each story assumes) and STORY-02 (each opens
+      with the `--keylog` invocation). A story is a **goal a user has**, not a feature tour:
+      the fixture state it starts from, the task in the user's words, and what to observe —
+      never the keys to press, since which keys the user reaches for *is the measurement*.
+      One is marked the **main story** and it is the one the tape and `docs/usage.md` are
+      cut against (D268 pt 1). Proposed set: first run on an unknown cluster; a pod is
+      failing, find out why; read and grep a live log; change something (scale / restart /
+      edit); find an object when you only half-remember its name.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-05** Human task: walk every story against a fresh fixture, hand back the traces
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-01..04. This is the act the whole line exists for and it is a
+      human's (D79): judging a UX needs a person with intent, and the maintainer is the only
+      one who can run the binary against a real terminal. Filed as a human task when STORY-04
+      lands, carrying the traces + freeform reactions back.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06** Fold the story findings into the UX
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-05. Size unknown by construction — it is however much the
+      traces say is wrong. Expect to re-split it into per-finding slices on arrival; the
+      dead-end presses from STORY-03 are the first input.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **TAPE-01** Re-cut `docs/screencast.tape` around the main story
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-04 (the main story) and lands after STORY-06 so the GIF shows
+      the refined UX, not the one the stories found fault with. Today's tape is a **feature
+      tour** — palette, filter, logs, describe, search, theme, help — assembled before any
+      user path existed; the maintainer wants it re-cut so it walks the main story instead.
+      The three guards in `internal/tui/keymap/screencast_test.go` (annotated keypresses
+      checked against `DefaultKeymap`, headline actions pressed, README/GIF agreement) hold
+      across the re-cut and the headline list may need revising with it. The tape also stops
+      depending on an ad-hoc cluster once STORY-01 lands. **Re-recording is the maintainer's**
+      (D181): it needs ttyd + ffmpeg, a real terminal and the fixture cluster.
+      → milestone: M5 · knowledge: decisions.md D268, D181
+
+- [ ] **DOC-03** README becomes a landing page
+      status: todo | owner: — | added: 2026-08-15
+      notes: Today's README is 212 lines and carries a full feature catalogue ("What kubecom
+      can do", six subsections) that duplicates what `docs/` should own. Cut it to what a
+      landing page owes a reader: what/why, the screencast, a short install block linking
+      `docs/install.md` (DOC-01's shape, keep it), one screen of tour, and links out. The
+      install-path drift guards (`TestReadmeBrewTapMatchesTheCask`,
+      `TestReadmeAURPackageMatchesTheConfig`, `TestScreencastAssetAndReadmeAgree`) all read
+      `README.md`, so the block they check must survive the cut.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **DOC-04** `docs/usage.md` — the guided tour the README no longer carries
+      status: todo | owner: — | added: 2026-08-15
+      notes: Depends on STORY-04. The prose walks the **main story**, so the doc, the tape
+      and the story tell one story in three media (D268 pt 4). Absorbs the feature catalogue
+      DOC-03 cuts, and links `docs/keybindings.md` for the full keymap rather than restating
+      keys — a second hand-written key list is a second thing to drift (D51).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **DOC-05** `docs/troubleshooting.md`
+      status: todo | owner: — | added: 2026-08-15
+      notes: The failure surfaces exist and are documented nowhere a user looks: the auth
+      diagnosis (`internal/tui/authdiag.go`), browse failures, the log file at
+      `os.UserCacheDir()/kubecom/kubecom.log`, discovery partial-failure reporting (DISC-01),
+      Gatekeeper quarantine on macOS, and the WSL2 note. Best written after STORY-05, which
+      is the first time anyone hits these paths without knowing the code.
+      → milestone: M5 · knowledge: decisions.md D268
 
 ## Done
 
+- [x] **UX-PLAN** Expand the maintainer's pre-tag UX/docs scope into STORY-01…06, TAPE-01 and DOC-03…05; the tag now waits on them — done 2026-08-15 (D268)
 - [x] **BOARD-03** A Done entry's **ID** is unique — the `DOC-02` collision resolved to `DOC-01b` and guarded by `TestBoardDoneIDsAreUnique` — done 2026-08-12 (D267)
 
 - [x] **DOC-02** The install docs name the release that exists — README and `docs/install.md` document `v1.0.0-rc.1` and installing it by name instead of saying none is tagged, the archive path leads, `cd kube-commander` is fixed, and the M5 CI-artifacts criterion is ticked on the rc run — done 2026-08-12 (D266)

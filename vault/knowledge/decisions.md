@@ -7545,3 +7545,42 @@ resolved to two unrelated pieces of work across two commits and two journals.
    findable. Prefer an a/b suffix when the two are halves of one item (the prose
    pass became `DOC-01b`, the prose half of DOC-01's feedback); an unused id
    otherwise.
+
+## D268 — the tag waits on a walked user path; stories are the instrument, and they are versioned with the code (2026-08-15, UX-PLAN)
+
+The `v1.0.0-rc.1` run proved the *pipeline* — artifacts, ldflags, notes,
+`go install` — and nothing about the *product*. Every UX judgement kubecom has
+had is incidental: the maintainer opened the binary between legs and reported
+what annoyed them. No user path has been walked deliberately, start to finish,
+with an intent held in mind, which means the release would ship a UX nobody
+has ever measured. On 2026-08-15 the maintainer gated the tag on fixing that.
+
+1. **A story is a goal, not a script.** Each `stories/*.md` states the fixture
+   state it begins from, the task in the user's words, and what to observe — and
+   deliberately **does not say which keys to press**, because which keys the user
+   reaches for is the measurement. One story is marked the **main story**, and it
+   is the spine the screencast (TAPE-01) and `docs/usage.md` (DOC-04) are both cut
+   against, so the demo, the doc and the test path cannot drift into three
+   different products.
+2. **The keystroke log ships, off by default** (`--keylog`, JSONL, documented).
+   A build-tagged dev-only recorder was the alternative and it was rejected: the
+   binary a user reports a UX problem *from* is the release binary, and a trace
+   they can attach is worth more than one only a maintainer can produce. Its
+   highest-value output is the **unresolved press** — a key that resolved to no
+   action is a user reaching for something kubecom does not have. It is off unless
+   asked for, because text-entry keys reconstruct typed queries, namespaces and
+   resource names; that is a privacy note the doc must carry, not a reason to omit
+   the feature.
+3. **The cluster fixture is committed, and clean on every run.** The July dogfood
+   workload existed only in one agent's shell history (journal `2026-07-21.3`), so
+   the tape's `shop` filter and every future story rested on a cluster nobody could
+   rebuild. `stories/cluster/up.sh` deletes and recreates before applying, so the
+   initial state is identical every run — a story compared against a drifted cluster
+   measures the drift. **k3d is the substrate**: it *is* k3s in docker, so it
+   satisfies "k3s based" while staying disposable, and it is what the July cluster
+   already used.
+4. **The docs reorganize, they do not become a site.** README drops to a landing
+   page; `docs/` takes the feature catalogue as `usage.md` plus a
+   `troubleshooting.md`. A published docs site was considered and declined for v1 —
+   it adds a generator, a theme and a deploy job to maintain, and buys nothing that
+   `docs/*.md` on GitHub does not already give a reader.
