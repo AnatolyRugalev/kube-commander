@@ -227,7 +227,14 @@ per context, and migrating a config from the 2020 kube-commander.
 
 The rewrite is currently driven autonomously against the plan in
 [`vault/`](vault/). If you'd like to contribute, please open an issue describing
-your intent first so we can align with the milestone plan.
+your intent first so we can align with the milestone plan — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+If what you want to change is how kubecom *feels* rather than what it does, the way
+to argue for it is to **write a story**: the situation that made you want the
+change, written so somebody else can walk it. There are five in
+[`stories/`](stories/) to copy the shape from, and a disposable cluster to walk them
+against. A story that stalls two people is a finding; an opinion is an opinion.
 
 ## Special thanks
 

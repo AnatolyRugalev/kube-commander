@@ -32,17 +32,27 @@ minutes.
 The `broken` namespace never becomes ready. That is the point, and `up.sh` does not wait
 on it.
 
+## The stories
+
+| id | path | what it walks |
+|---|---|---|
+| S01 | [`s01-first-contact.md`](s01-first-contact.md) | get oriented on a cluster you have never seen |
+| S02 | [`s02-the-failing-pod.md`](s02-the-failing-pod.md) | the **main story** — five failures, five different answers |
+| S03 | [`s03-read-the-logs.md`](s03-read-the-logs.md) | find the failures in a chatty stream |
+| S04 | [`s04-change-something.md`](s04-change-something.md) | scale, restart, and edit by hand |
+| S05 | [`s05-half-a-name.md`](s05-half-a-name.md) | find an object when you only half-remember its name |
+
+S02 is the **main story** — the screencast (TAPE-01) and `docs/usage.md` (DOC-04) are
+both cut against it, so the demo, the docs and the test path stay one product.
+
 ## Running one
 
 ```bash
 ./stories/cluster/up.sh
-kubecom --keylog /tmp/story-01.jsonl
+export KUBECOM_KEYLOG=~/traces/s02.jsonl   # set once; survives relaunches
+kubecom
 ```
 
-Then read the trace back with `kubecom keys analyze` (STORY-03). The most interesting
-line in a trace is a keypress that resolved to no action — that is someone reaching for
-a key kubecom does not have.
-
-> The stories themselves land in STORY-04, one `.md` per user path. One of them is
-> marked the **main story**, and the screencast (TAPE-01) and `docs/usage.md` (DOC-04)
-> are both cut against it, so the demo, the docs and the test path stay one product.
+Then read the trace back (STORY-03 adds `kubecom keys analyze` to do it for you). The
+most interesting line in a trace is a keypress that resolved to no action — that is
+someone reaching for a key kubecom does not have.
