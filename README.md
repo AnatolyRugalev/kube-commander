@@ -163,6 +163,12 @@ awkward somewhere and you want to say so precisely, a trace attached to the issu
 says it better than a description can, and better than a screen recording, where
 "I pressed a key and nothing happened" looks like nothing happening.
 
+`kubecom keys analyze <trace.jsonl>` reads a trace back as findings: the
+unresolved presses ranked by frequency, what actions ran, the longest pauses
+(where the walker stopped to think), and any multi-key sequences that were
+started but never finished. It is the read side of the instrument the stories in
+[`stories/`](stories/) are walked against.
+
 It is off unless you pass the flag, and it is worth knowing what a trace contains
 before you send one: every keypress means everything you typed, so filter queries,
 search terms, and namespace and resource names are all reconstructable from it.

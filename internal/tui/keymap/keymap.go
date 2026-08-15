@@ -671,6 +671,25 @@ func (k *Keymap) ConfirmAction(key tea.Key) (Action, bool) {
 	return a, ok
 }
 
+// Resolve reports the action a whole run of key tokens is bound to, or ok=false
+// when the run matches no binding. Tokens are in the keybindings.md / `--keylog`
+// trace notation ("j", "ctrl+s", "gg"). It is the read side of the sequencer:
+// the trace analyser (STORY-03) asks whether a run of keys the walker actually
+// pressed forms a complete binding, which is how it tells a finished chord
+// (`g g` → nav.top) from an abandoned one (`g` then `j`). A token that cannot be
+// parsed simply matches nothing, like a key that fits no binding.
+func (k *Keymap) Resolve(tokens ...string) (Action, bool) {
+	s := make(seq, 0, len(tokens))
+	for _, tok := range tokens {
+		c, err := parseChord(tok)
+		if err != nil {
+			return "", false
+		}
+		s = append(s, c)
+	}
+	return k.exact(s)
+}
+
 // Keys returns the canonical key tokens bound to an action, for help/doc
 // generation. Order follows the action's binding list (vim key first).
 func (k *Keymap) Keys(a Action) []string {

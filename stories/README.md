@@ -53,6 +53,8 @@ export KUBECOM_KEYLOG=~/traces/s02.jsonl   # set once; survives relaunches
 kubecom
 ```
 
-Then read the trace back (STORY-03 adds `kubecom keys analyze` to do it for you). The
-most interesting line in a trace is a keypress that resolved to no action — that is
-someone reaching for a key kubecom does not have.
+Then read the trace back with `kubecom keys analyze ~/traces/s02.jsonl`: it
+reports the unresolved presses ranked by frequency, the action counts, the longest
+pauses (where the walker stopped to think), and the sequences that were started
+but never finished. The most interesting line in a raw trace is a keypress that
+resolved to no action — that is someone reaching for a key kubecom does not have.
