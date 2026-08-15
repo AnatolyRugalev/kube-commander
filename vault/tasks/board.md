@@ -691,13 +691,16 @@ run, then everything that quotes them. Re-split any slice that proves > ~300 lin
       now makes **writing a story the way to argue for a UX change**, with the trace the
       evidence and a dead-end press the finding.
 
-- [ ] **STORY-05** Human task: walk every story against a fresh fixture, hand back the traces
-      status: todo | owner: — | added: 2026-08-15
+- [x] **STORY-05** Human task: walk every story against a fresh fixture, hand back the traces
+      status: done | owner: maintainer | added: 2026-08-15 | done: 2026-08-15
       notes: Depends on STORY-01..04. This is the act the whole line exists for and it is a
       human's (D79): judging a UX needs a person with intent, and the maintainer is the only
       one who can run the binary against a real terminal. **Filed 2026-08-15 as
       `vault/human-tasks/2026-08-15-walk-the-stories.md`** (STORY-03 landed the last
       prerequisite, the analyzer), carrying the traces + freeform reactions back.
+      **Walked 2026-08-15**: all five stories against the fresh fixture (`~/traces/s01…s05.jsonl`,
+      run with the clean-user-dir `run.sh`), verdicts in the human task's `## Result`; the walk
+      returned **23 feedback files** in `vault/feedback/` — the fold-in's raw material.
       → milestone: M5 · knowledge: decisions.md D268
 
 - [ ] **STORY-06** Fold the story findings into the UX
@@ -750,6 +753,7 @@ run, then everything that quotes them. Re-split any slice that proves > ~300 lin
 
 ## Done
 
+- [x] **STORY-05** The maintainer walked all five stories against the fresh fixture and handed back the traces + verdicts — five traces at `~/traces/s01…s05.jsonl` and 23 feedback files in `vault/feedback/` as the fold-in's raw material; the fifth (non-workload) failure was the miss that matters — done 2026-08-15 (D268)
 - [x] **STORY-03** `kubecom keys analyze <trace.jsonl>` reads a trace back as the four findings — dead ends ranked, action counts, longest pauses, abandoned sequences — judged against the resolved keymap — done 2026-08-15 (D268)
 - [x] **STORY-04** The five stories are written — `stories/s01…s05`, S02 marked the main story, each guard-tested for its shape and for naming no key; `CONTRIBUTING.md` makes a story the way to argue for a UX change — done 2026-08-15 (D268)
 - [x] **STORY-02** `--keylog` traces every keypress with the surface and the resolved action — a press resolving to none is the signal, off by default — done 2026-08-15 (D268)
