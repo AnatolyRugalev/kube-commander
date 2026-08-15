@@ -1,0 +1,161 @@
+# `shop` — the healthy namespace. This is where a story starts when it needs things to
+# be working: a Deployment with a mounted ConfigMap, a Deployment with a mounted Secret
+# (the secret viewer's subject), a chatty pod (the logs viewer's subject), Services and
+# an Ingress.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storefront-html
+  namespace: shop
+data:
+  index.html: |
+    <!doctype html>
+    <h1>kubecom storefront</h1>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: storefront }
+  template:
+    metadata:
+      labels: { app: storefront }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - { name: http, containerPort: 80 }
+          volumeMounts:
+            - { name: html, mountPath: /usr/share/nginx/html }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+      volumes:
+        - name: html
+          configMap: { name: storefront-html }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+  namespace: shop
+spec:
+  selector: { app: storefront }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+# The secret viewer needs a Secret with more than one key, so masking/revealing per
+# entry is visible. These are fixture values in a throwaway cluster, not credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: checkout-credentials
+  namespace: shop
+type: Opaque
+stringData:
+  api-key: story-fixture-api-key
+  db-password: story-fixture-password
+---
+# Two containers, so opening logs or a shell has to ask *which* — the container picker
+# is on a story path and needs a subject.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: checkout }
+  template:
+    metadata:
+      labels: { app: checkout }
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=checkout ok"]
+          ports:
+            - { name: http, containerPort: 5678 }
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef: { name: checkout-credentials, key: api-key }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+        - name: sidecar
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do sleep 30; done"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: shop
+spec:
+  selector: { app: checkout }
+  ports:
+    - { name: http, port: 5678, targetPort: http }
+---
+# The logs viewer's subject: a steady stream, mixed levels, so the live grep has both
+# matches and non-matches to narrow. The tape greps `info`, and the fixture guard
+# checks that string is still emitted here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logspam
+  namespace: shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: logspam }
+  template:
+    metadata:
+      labels: { app: logspam }
+    spec:
+      containers:
+        - name: logspam
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              i=0
+              while true; do
+                i=$((i+1))
+                echo "$(date -Iseconds) info  request id=$i path=/checkout status=200"
+                sleep 1
+                echo "$(date -Iseconds) info  request id=$i path=/cart status=200"
+                sleep 1
+                if [ $((i % 5)) -eq 0 ]; then
+                  echo "$(date -Iseconds) warn  slow upstream id=$i took=1.4s"
+                fi
+                if [ $((i % 12)) -eq 0 ]; then
+                  echo "$(date -Iseconds) error payment gateway timeout id=$i"
+                fi
+              done
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  rules:
+    - host: shop.kubecom.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: storefront
+                port: { name: http }

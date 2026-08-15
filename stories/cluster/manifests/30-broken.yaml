@@ -1,0 +1,115 @@
+# `broken` — five failures, each a *different* shape, because "a pod is unhealthy, find
+# out why" is a story and the answer must live somewhere different each time: the
+# container's own logs, the pod's events, the scheduler's message, the probe's, and the
+# claim's. A fixture where every failure is a CrashLoopBackOff tests one path five times.
+#
+# Nothing here ever becomes ready. That is deliberate, and up.sh does not wait on this
+# namespace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop
+  namespace: broken
+  annotations:
+    kubecom.story/why: "the answer is in the container's logs"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: crashloop }
+  template:
+    metadata:
+      labels: { app: crashloop }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'error config key DATABASE_URL missing'; sleep 3; exit 1"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-image
+  namespace: broken
+  annotations:
+    kubecom.story/why: "the answer is in the pod's events, not its logs — there are none"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: bad-image }
+  template:
+    metadata:
+      labels: { app: bad-image }
+    spec:
+      containers:
+        - name: app
+          image: kubecom.invalid/does-not-exist:v9
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unschedulable
+  namespace: broken
+  annotations:
+    kubecom.story/why: "the answer is the scheduler's message; the pod never reaches a node"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: unschedulable }
+  template:
+    metadata:
+      labels: { app: unschedulable }
+    spec:
+      nodeSelector:
+        kubecom.story/no-such-node: "true"
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 3600"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+# Runs happily, serves nothing: the probe fails on a path nginx does not have, so the
+# pod is Running and never Ready — the failure that a status column alone hides.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: never-ready
+  namespace: broken
+  annotations:
+    kubecom.story/why: "Running but not Ready — the answer is the readiness probe"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: never-ready }
+  template:
+    metadata:
+      labels: { app: never-ready }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          readinessProbe:
+            httpGet: { path: /healthz, port: 80 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+---
+# Pending forever: no such StorageClass, so the claim never binds. Paired with the
+# bound claims the redis StatefulSet creates in `data`, this is the contrast a story
+# needs to tell "waiting" from "wrong".
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stuck-storage
+  namespace: broken
+  annotations:
+    kubecom.story/why: "the answer is the claim's own status — no such StorageClass"
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: kubecom-story-no-such-class
+  resources:
+    requests: { storage: 64Mi }

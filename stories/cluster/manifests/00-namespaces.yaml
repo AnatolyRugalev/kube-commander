@@ -1,0 +1,23 @@
+# The three namespaces every story is written against. Their names are load-bearing:
+# `shop` is the screencast tape's filter query (docs/screencast/screencast.tape) and the
+# fixture guard checks that it still matches something here.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    kubecom.story/fixture: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    kubecom.story/fixture: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: broken
+  labels:
+    kubecom.story/fixture: "true"

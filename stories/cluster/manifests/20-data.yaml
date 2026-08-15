@@ -1,0 +1,105 @@
+# `data` — the namespace that exercises kinds a Deployment-only fixture never reaches:
+# a StatefulSet with bound PVCs, a DaemonSet, a Job that has already completed, and a
+# CronJob that produces a new Job every two minutes (so a story that pauses long enough
+# sees the table change under a live watch, unprompted).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: data
+spec:
+  clusterIP: None
+  selector: { app: redis }
+  ports:
+    - { name: redis, port: 6379 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: data
+spec:
+  serviceName: redis
+  replicas: 2
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels: { app: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - { name: redis, containerPort: 6379 }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # k3s ships local-path as the default StorageClass, so this binds without any
+        # extra setup — unlike the deliberately unbindable claim in 30-broken.yaml.
+        resources:
+          requests: { storage: 64Mi }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: data
+spec:
+  selector:
+    matchLabels: { app: node-agent }
+  template:
+    metadata:
+      labels: { app: node-agent }
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do sleep 30; done"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+# Completed, not running: a story that opens Jobs should see a finished one, and its
+# pod is the case where "logs" means the logs of something already gone.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: data
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'info  migrating schema'; sleep 2; echo 'info  done'"]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  namespace: data
+spec:
+  schedule: "*/2 * * * *"
+  successfulJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: busybox:1.36
+              command: ["sh", "-c", "echo 'info  backup complete'"]
+              resources:
+                requests: { cpu: 5m, memory: 8Mi }
