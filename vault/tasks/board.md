@@ -3,7 +3,7 @@
 Live board for the kubecom rewrite. See [`README.md`](README.md) for workflow and
 the item template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-08-15 — STORY-03 landed `kubecom keys analyze <trace.jsonl>`: the read side of the instrument, reporting the four findings a UX pass asks — unresolved presses ranked by frequency, action counts, the longest pauses, and the abandoned sequences, judged against the resolved keymap so a completed `gg` is not a finding (D268). The whole STORY line's inputs now exist, and STORY-05 (the maintainer's walk) is the only unblocked item between here and the fold-in. Earlier: STORY-04 wrote the stories: `stories/s01…s05`, S02 marked the main story, each guard-tested to name no key, and `CONTRIBUTING.md` now makes writing a story the way to argue for a UX change, so the maintainer can start walking scenarios (STORY-05) once STORY-03's analyzer lands. Earlier: STORY-02 landed `--keylog`: one JSONL record per keypress carrying the surface and the resolved action, recorded at the single `KeyPressMsg` funnel so the trace cannot disagree with the routing, off unless asked for, and verified against the live cluster (D268). **STORY-04 is pulled ahead of STORY-03** — the maintainer wants to start walking scenarios as soon as they exist, and the first traces are short enough to read by hand. Earlier today: STORY-01 committed the story cluster: `stories/cluster/up.sh` destroys and rebuilds `shop`/`data`/`broken` so every run starts identical, the five failures in `broken` each have a different answer, and `internal/stories` guards the manifests plus the tape queries that must still match them — verified end to end on the maintainer's docker (D268). Earlier today: UX-PLAN expanded the maintainer's pre-tag scope into a UX-validation line that now gates the stable tag: STORY-01…06 (committed k3s fixture, `--keylog` + its analyzer, the stories, the maintainer's walk, the fold-in), TAPE-01 (re-cut the screencast around the main story) and DOC-03…05 (README landing page, `docs/usage.md`, `docs/troubleshooting.md`) — D268. Earlier: BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
+_Last updated: 2026-08-15 — STORY-06 claimed and re-split into per-finding slices 06a…06m; **STORY-06a (the letter remap)** is in progress. The redesign is the first slice because it supersedes the individual key items and resolves the most dead ends; the master `keymap-redesign.md` was triaged at the claim, its S-interaction and enter→menu halves carried by 06b/06c. Earlier: STORY-03 landed `kubecom keys analyze <trace.jsonl>`: the read side of the instrument, reporting the four findings a UX pass asks — unresolved presses ranked by frequency, action counts, the longest pauses, and the abandoned sequences, judged against the resolved keymap so a completed `gg` is not a finding (D268). The whole STORY line's inputs now exist, and STORY-05 (the maintainer's walk) is the only unblocked item between here and the fold-in. Earlier: STORY-04 wrote the stories: `stories/s01…s05`, S02 marked the main story, each guard-tested to name no key, and `CONTRIBUTING.md` now makes writing a story the way to argue for a UX change, so the maintainer can start walking scenarios (STORY-05) once STORY-03's analyzer lands. Earlier: STORY-02 landed `--keylog`: one JSONL record per keypress carrying the surface and the resolved action, recorded at the single `KeyPressMsg` funnel so the trace cannot disagree with the routing, off unless asked for, and verified against the live cluster (D268). **STORY-04 is pulled ahead of STORY-03** — the maintainer wants to start walking scenarios as soon as they exist, and the first traces are short enough to read by hand. Earlier today: STORY-01 committed the story cluster: `stories/cluster/up.sh` destroys and rebuilds `shop`/`data`/`broken` so every run starts identical, the five failures in `broken` each have a different answer, and `internal/stories` guards the manifests plus the tape queries that must still match them — verified end to end on the maintainer's docker (D268). Earlier today: UX-PLAN expanded the maintainer's pre-tag scope into a UX-validation line that now gates the stable tag: STORY-01…06 (committed k3s fixture, `--keylog` + its analyzer, the stories, the maintainer's walk, the fold-in), TAPE-01 (re-cut the screencast around the main story) and DOC-03…05 (README landing page, `docs/usage.md`, `docs/troubleshooting.md`) — D268. Earlier: BOARD-03 resolved the `DOC-02` id collision (the 2026-08-09 README prose pass is now `DOC-01b`) and guarded id uniqueness, the one index property D225's guards had assumed rather than checked (D267). Earlier today: DOC-02 caught the install docs up with the `v1.0.0-rc.1` tag they had been contradicting since 2026-08-10, and ticked the M5 exit criterion that run closed (D266). Earlier: RC-PRERELEASE set `release.prerelease: auto` after the rc shipped as a full release. Earlier: MONO-03 landed the third app.go cut: the browse filter seam is `components/filter`, owning the `/` field's open/query state while the shell keeps the table and performs the narrowing; the `filterInput`/`filtering` pair is gone and the MONO line is closed (D265). Earlier today: MONO-02 landed the second app.go cut: the secret viewer's entry list is `components/secretviewer`, a sub-model owning reveal/mask + the cursor and rendering the body from the shell's authoritative `SecretData`; the shell still fetches and performs the copy, and `secretRevealed`/`secretSel`/`secretEntryLines` are gone (D265). Earlier today: MONO-01 landed the first app.go cut: the M3-13b port-forward panel is now `components/forwards`, a sub-model fed read-only `Entry`s while the shell keeps the handles and performs the stops (D265). Earlier today: APP-MONOLITH closed feedback `2026-08-09-audit-app-monolith` (D264): the plan's `views/` directory is revoked — full-screen views are `components/*` sub-models (`searchview`, `logsview`, `viewer`), browse is the root shell itself, and `app.go`'s reduction is the standing MONO-01 item; REWRITE_PLAN and the M2 layout note now match the tree. Earlier: FORMAT-GATE (D263); TEST-RUNTIME (D262); also: M5-09b closed the screencast-tape-tuning feedback (D261); THEME-07 (D260); LOGS-SEL-04 (D259); LOGS-09 (D258); HT-fold-0809 closed the five done human tasks (M4 **done** on the D256 pt 1 waiver, CTX-WARM-02/03/04 cancelled on pt 2, the goals DoD at 11 of 13 on pt 3, the screencast criterion half closed); LOGS-08 (D257); CTX-MEM-04 (D255); THEME-06 landed `gruvbox-light`; M5-11 stays blocked on the deferred tag. Per-leg history: `vault/journal/`._
 ## In Progress
 
 ## Blocked
@@ -703,11 +703,81 @@ run, then everything that quotes them. Re-split any slice that proves > ~300 lin
       returned **23 feedback files** in `vault/feedback/` — the fold-in's raw material.
       → milestone: M5 · knowledge: decisions.md D268
 
-- [ ] **STORY-06** Fold the story findings into the UX
+### Story findings fold-in (STORY-06 — D268)
+The 23 feedback files the S05 walk returned, folded in as per-finding slices. The order is
+bottom-up as D268 pt 3 suggests: the **keymap redesign first** (it supersedes the individual
+key items and resolves the most dead ends — `2026-08-15-keymap-redesign.md` is the master
+spec and was deleted at this triage; the remaining S-interaction and enter→menu designs are
+carried by 06b/06c below), then the picker navigation mode (the walk's sharpest dead end),
+then the instrument fixes (so the next walk's analyzer sees what this one's missed), then the
+feature legs. Re-split any slice that proves > ~300 lines.
+
+- [ ] **STORY-06a** The letter remap — search `ctrl+f`, ns.switch `N`, delete `D`, describe `d`, the two displaced homes (`#` for previous-match, `space` for full-page-down), and `V` selects log lines; help + keybindings doc + tape updated — the letters half of `keymap-redesign` (D269)
+      status: in-progress | owner: opencode | added: 2026-08-15 | claimed: 2026-08-15
+      notes: The **collisions the redesign names are resolved here**: `app.searchPrev` (was `N`) takes `#` (vim's backward-occurrence gesture, out of the n-family entirely) and `nav.pageDown` (was `ctrl+f`) takes `space` (vim's `<space>`-scrolls-a-screen, pairing the kept `ctrl+b` pageUp). `logs.select` gains `V` (both `v` and `V` select — `2026-08-15-log-line-selection-shift-v.md`). Deletes the master `keymap-redesign.md` plus the items it supersedes — `context-switch-key-inconsistent` (N answers it), `s-key-family-confusion` (search leaves the s-family), `sort-column-picker` and `enter-actions-menu` (their designs live in 06b/06c now) and `namespace-switch-inconsistent` (both paths already open the one `:namespace ` stage, PAL-05c-1; the capital N is the ergonomics). The keys that are *interactions*, not letters, stay put until their slices: `s`/`S` sort until 06b, `a`/`enter` actions-menu until 06c.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06b** Sort by column-header focus — `s` freed entirely, `S` focuses the table's column-header row, `h`/`l`/`left`/`right` move across columns, `enter` toggles direction, `esc` returns focus to the rows, and `sort.clear` lives inside the mode (a "clear" pick)
       status: todo | owner: — | added: 2026-08-15
-      notes: Depends on STORY-05. Size unknown by construction — it is however much the
-      traces say is wrong. Expect to re-split it into per-finding slices on arrival; the
-      dead-end presses from STORY-03 are the first input.
+      notes: The S-mode half of `keymap-redesign.md` (deleted at 06a) and the full design of
+      `2026-08-15-sort-column-picker.md`. Supersedes the popup design that file proposed.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06c** `enter` opens the actions menu on a resource row — drill-in moves inside the menu (an entry in it), so drilling into an owner's pods is one menu pick away; `a` frees up
+      status: todo | owner: — | added: 2026-08-15
+      notes: The enter half of `keymap-redesign.md` (deleted at 06a) and the ask of
+      `2026-08-15-enter-actions-menu.md`. `enter` stays the universal accept key on modals,
+      prompts, pickers and confirms — only the resource-table context changes.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06d** Picker navigation mode — in a pre-launched pane, `j`/`k` navigate the list, `/` starts filtering, and the current choice is preselected — the walk's sharpest dead end (`2026-08-15-picker-navigation-mode.md`, 4 dead `j`s the analyzer could not see)
+      status: todo | owner: — | added: 2026-08-15
+      notes: See `2026-08-15-picker-navigation-mode.md`. Pairs with the `2026-08-15-resources-pane-filter.md` slice below in spirit (both make a pane's own list the target).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06e** The instrument sees what it missed — the recorder records a resolved confirm accept/decline (so a handled `esc` is not a dead end, `2026-08-15-confirm-key-false-deadends.md`) and the analyzer reports text-surface presses separately (so the picker `j`s are findings, `2026-08-15-analyzer-text-surface-blindspot.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: The two mirror-image instrument fixes; the walk's two dead-end classes were each invisible to the other half of `keys analyze`.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06f** A dedicated `events` action — the selected resource's events (kind, reason, message, age) as its own list, the surface for "why is this red" instead of hunting through describe (`2026-08-15-events-action.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: S02's describe was the lever only because events live nowhere else.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06g** Quick access to unhealthy workloads, spanning kinds — one keypress from anywhere to "what's broken, sorted to the top / filtered", and it must include non-pod failures (the main story's miss — `2026-08-15-unhealthy-workloads-quick-access.md` + `2026-08-15-pod-first-blinds-non-pod-failures.md`); gesture the fold-in's choice (`shift+H` suggested)
+      status: todo | owner: — | added: 2026-08-15
+      notes: The two high files fold into one slice: the quick-access action and its scope spanning kinds (pods *and* broken claims/volumes etc).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06h** Rich describe panel — the describe view fully replaces the right pane and paints the diagnosis with color: phase/status/conditions in theme-aware colours, problem states emphasized (`2026-08-15-rich-describe-panel.md` + `2026-08-15-describe-replaces-right-pane.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: Reuse the describe data, re-render it styled; pairs with STORY-06f so "why is this red" is one glance.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06i** The relations popup — on any resource, one gesture lists its parents, children and linked resources (owner, selector-matched services/pods, claims/volumes), each row navigable — the reverse of `res.children`, generalised to every kind (`2026-08-15-relations-navigation-popup.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: The owner-address bookkeeping from CTX-MEM-04 already records half of it; the fold-in decides the gesture and the relation graph's exact shape.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06j** The logs set — a painted follow indicator (`2026-08-15-logs-follow-visual-signal.md`), scrolling past the last line re-arms follow (`2026-08-15-logs-scroll-past-end-resumes-follow.md`), and the newest-first order weighed (`2026-08-15-logs-newest-first-order.md` — a consider, not a demand; lands with follow-rearm or not at all)
+      status: todo | owner: — | added: 2026-08-15
+      notes: V-select already landed with 06a; this slice is the rest of the S03 findings.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06k** The search set — single enter reaches a hit (`2026-08-15-search-single-enter.md`) and a preview of the highlighted result inside the view (`2026-08-15-search-result-preview.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: S05's two frictions; the search view already emits its SelectedMsg on one drill-in, the friction is the focus hand-off in between.
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06l** The default panel — land on the Pods table instead of the welcome page (`2026-08-15-land-on-pods-by-default.md`) and hide custom resources by default, shown only once pinned (`2026-08-15-hide-custom-resources.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: Two startup defaults; the welcome page stays reachable and the pin gesture already exists (`menu.pin`).
+      → milestone: M5 · knowledge: decisions.md D268
+
+- [ ] **STORY-06m** `/` filters the focused pane — with the resources pane focused it narrows the kinds there; with the table focused it keeps filtering the table (`2026-08-15-resources-pane-filter.md`)
+      status: todo | owner: — | added: 2026-08-15
+      notes: The menu component today handles only navigation and drill-in; `app.filter` targets the table wherever the focus is.
       → milestone: M5 · knowledge: decisions.md D268
 
 - [ ] **TAPE-01** Re-cut `docs/screencast.tape` around the main story
