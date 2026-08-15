@@ -719,7 +719,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268
 
 - [ ] **STORY-06b** Sort by column-header focus — `s` freed entirely, `S` focuses the table's column-header row, `h`/`l`/`left`/`right` move across columns, `enter` toggles direction, `esc` returns focus to the rows, and `sort.clear` lives inside the mode (a "clear" pick)
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: opencode | added: 2026-08-15 | claimed: 2026-08-15
       notes: The S-mode half of `keymap-redesign.md` (deleted at 06a) and the full design of
       `2026-08-15-sort-column-picker.md`. Supersedes the popup design that file proposed.
       → milestone: M5 · knowledge: decisions.md D268
