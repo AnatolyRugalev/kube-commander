@@ -756,7 +756,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D271
 
 - [ ] **STORY-06d** Picker navigation mode — in a pre-launched pane, `j`/`k` navigate the list, `/` starts filtering, and the current choice is preselected — the walk's sharpest dead end (`2026-08-15-picker-navigation-mode.md`, 4 dead `j`s the analyzer could not see)
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: opencode | added: 2026-08-15
       notes: See `2026-08-15-picker-navigation-mode.md`. Pairs with the `2026-08-15-resources-pane-filter.md` slice below in spirit (both make a pane's own list the target).
       → milestone: M5 · knowledge: decisions.md D268
 
