@@ -722,10 +722,11 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       status: done | owner: opencode | added: 2026-08-15 | done: 2026-08-15
       notes: The S-mode half of `keymap-redesign.md` (deleted at 06a) and the full design of
       `2026-08-15-sort-column-picker.md`. Supersedes the popup design that file proposed.
-      The mode landed as a header-focus interaction (D270): `S` focuses the header row,
+      The       mode landed as a header-focus interaction (D270): `S` focuses the header row,
       `h`/`l`/`left`/`right` move the cursor across the visible columns, `enter` toggles the
-      sort direction (SortBy toggles), `esc`/`S`/`q` return to the rows, `x` clears — the
-      mode is a capturing surface with its own `HelpSort` hint context (declared, named,
+      sort direction (SortBy toggles), `esc`/`S`/`q` return to the rows, `x` clears — and
+      the clear resolves the mode too, so `x` lands back on the rows with the sort gone —
+      the mode is a capturing surface with its own `HelpSort` hint context (declared, named,
       set, reachable), and `s` is freed entirely. `sort.clear` keeps working everywhere a
       table is showing so the palette verb and the outside-the-mode clear are preserved.
       `docs/keybindings.md` regenerated (sort.column `S`, sort.clear `x`); the table's sort
@@ -837,7 +838,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
 ## Done
 
 - [x] **STORY-06a** The letter remap — search `ctrl+f`, ns.switch `N`, delete `D`, describe `d`, `#` for previous-match, `space` for page-down, `V` selects log lines; the seven superseded key feedback items deleted and the help overlay width-clamped (`elide.Width`) — done 2026-08-15 (D269)
-- [x] **STORY-06b** Sort by column-header focus — `s` freed, `S` focuses the header row, `h`/`l` move, `enter` toggles direction, `esc` returns, `x` the clear pick; `HelpSort` hint context and the table's cursor land with it — done 2026-08-15 (D270)
+- [x] **STORY-06b** Sort by column-header focus — `s` freed, `S` focuses the header row, `h`/`l` move, `enter` toggles direction, `esc` returns, `x` clears and resolves the mode; `HelpSort` hint context and the table's cursor land with it — done 2026-08-15 (D270)
 - [x] **STORY-05** The maintainer walked all five stories against the fresh fixture and handed back the traces + verdicts — five traces at `~/traces/s01…s05.jsonl` and 23 feedback files in `vault/feedback/` as the fold-in's raw material; the fifth (non-workload) failure was the miss that matters — done 2026-08-15 (D268)
 - [x] **STORY-03** `kubecom keys analyze <trace.jsonl>` reads a trace back as the four findings — dead ends ranked, action counts, longest pauses, abandoned sequences — judged against the resolved keymap — done 2026-08-15 (D268)
 - [x] **STORY-04** The five stories are written — `stories/s01…s05`, S02 marked the main story, each guard-tested for its shape and for naming no key; `CONTRIBUTING.md` makes a story the way to argue for a UX change — done 2026-08-15 (D268)

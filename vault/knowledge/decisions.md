@@ -7633,13 +7633,17 @@ pick. `s` is freed entirely — the s-family is now `S` (enter the mode) and `x`
    view over the table's existing `SortBy`/`ClearSort` (no new sort state), and the
    cursor is the only new field. A later leg must not reintroduce a bare-letter
    sort cycle: the walk's 26-`s` burst was the finding that killed it.
-2. **`sort.clear` is `x`, and it works everywhere a table is showing.** The "lives
-   inside the mode" in the design is about *placement* (the mode is where the clear
-   is advertised and most natural), not exclusivity: the palette verb and the key
-   keep clearing a showing table's sort from anywhere, so nothing is lost. The
-   mode itself also clears through the same `ClearSort`. A later leg must not make
-   `x` a sort key in the letter sense (it is a symbol-adjacent clear gesture), but
-   it must also not break the palette verb or the outside-the-mode clear.
+2. **`sort.clear` is `x`, it works everywhere a table is showing, and inside the
+   mode it resolves the mode.** The "lives inside the mode" in the design is about
+   *placement* (the mode is where the clear is advertised and most natural), not
+   exclusivity: the palette verb and the key keep clearing a showing table's sort
+   from anywhere, so nothing is lost. Inside the mode, `x` clears **and exits the
+   mode in the same press** — the sort is gone, so the picker's reason for being up
+   is over; the reader lands back on the rows, exactly as `esc` leaves it. A later
+   leg must not make `x` a sort key in the letter sense (it is a clear gesture),
+   but it must also not break the palette verb or the outside-the-mode clear, and
+   it must not keep the mode up after a clear — the clear resolves both the sort
+   and the picker.
 3. **The mode is a capturing surface.** While it is up, `h`/`l`/`enter`/`esc`/
    `x`/`S` act and everything else is swallowed (the forwards-panel shape), and the
    hint bar shows a new `HelpSort` context (HINT-05-complete: declared, named, set,

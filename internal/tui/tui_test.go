@@ -2490,8 +2490,9 @@ func TestSortModeFocusesHeaderAndMovesAcrossColumns(t *testing.T) {
 }
 
 // TestSortModeClearProvesTheClearPick proves sort.clear lives inside the sort mode
-// (D270): with the header focused, `x` clears the sort back to the watch order, and
-// the mode stays up so the reader can pick a fresh column.
+// and resolves it (D270): with the header focused, `x` clears the sort back to the
+// watch order and exits the mode — the sort is gone, so the picker's reason for
+// being up is over.
 func TestSortModeClearProvesTheClearPick(t *testing.T) {
 	m := openSortTable(t)
 	m, _ = press(t, m, sortKey) // S: focus the column-header row
@@ -2503,8 +2504,8 @@ func TestSortModeClearProvesTheClearPick(t *testing.T) {
 	if _, ok := m.table.SortColumn(); ok {
 		t.Fatal("`x` should clear the sort back to the watch order")
 	}
-	if !m.table.SortMode() {
-		t.Fatal("the clear pick should keep the sort mode up")
+	if m.table.SortMode() {
+		t.Fatal("`x` should leave the sort mode — the clear pick resolves it")
 	}
 }
 

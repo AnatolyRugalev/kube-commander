@@ -3729,16 +3729,24 @@ func (m Model) enterSortMode() (tea.Model, tea.Cmd) {
 // column-header sort mode (STORY-06b). It is a capturing surface like the
 // port-forward panel: `h`/`l`/`left`/`right` move the cursor across the columns,
 // `enter` toggles the sort direction on the cursor column, `esc` leaves the mode
-// back to the rows, `S` toggles it off, and sort.clear (`x`) clears the sort —
-// everything else is swallowed so the rows underneath never move. The hint bar
-// advertises exactly these keys (HelpSort).
+// back to the rows, `S` toggles it off, and sort.clear (`x`) clears the sort and
+// resolves the mode in the same press — the sort is gone, so the picker's reason
+// for being up is over — everything else is swallowed so the rows underneath never
+// move. The hint bar advertises exactly these keys (HelpSort).
 func (m Model) handleSortModeAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionLeft, keymap.ActionRight:
 		m.table, _ = m.table.Update(a) // move the cursor
 		return m, nil
-	case keymap.ActionDrillIn, keymap.ActionClearSort:
-		m.table, _ = m.table.Update(a) // toggle direction / clear
+	case keymap.ActionDrillIn:
+		m.table, _ = m.table.Update(a) // toggle direction
+		return m, m.recordViewState()
+	case keymap.ActionClearSort:
+		// The clear pick resolves the mode as well as the sort: `x` clears the sort
+		// and returns focus to the rows — the sort is gone, so the picker's reason
+		// for being up is over (STORY-06b).
+		m.table, _ = m.table.Update(a)
+		m.table.ExitSortMode()
 		return m, m.recordViewState()
 	case keymap.ActionBack, keymap.ActionSort, keymap.ActionQuit:
 		// esc and `S` leave the mode back to the rows; `q` closes the mode the way it
