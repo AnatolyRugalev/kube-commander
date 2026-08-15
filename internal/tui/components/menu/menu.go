@@ -7,7 +7,7 @@
 // and the namespaced ones sits a namespace-picker seam row (ItemNamespace): a
 // selectable non-resource row that shows the scoped namespace and, on drill-in,
 // requests the namespace picker (NamespaceRequestedMsg) — the same effect as the
-// ctrl+n shortcut — so the menu itself communicates the cluster/namespaced
+// `N` shortcut — so the menu itself communicates the cluster/namespaced
 // boundary. The seed provides a static list of core resource kinds; Reconcile
 // merges the async discovery result (adding CRDs/extra groups, marking unavailable
 // ones) without disturbing the current selection or scroll, and skips the
@@ -155,7 +155,7 @@ type ResourceSelectedMsg struct {
 
 // NamespaceRequestedMsg is emitted when the user drills into the namespace-seam
 // row (the ItemNamespace item). The root model reacts by opening the namespace
-// picker — the same effect as the ns.switch (ctrl+n) shortcut. Like
+// picker — the same effect as the ns.switch (`N`) shortcut. Like
 // ResourceSelectedMsg it is owned by the menu package so the menu never imports
 // the root package (D56).
 type NamespaceRequestedMsg struct{}

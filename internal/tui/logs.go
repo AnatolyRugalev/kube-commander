@@ -281,7 +281,7 @@ func (m Model) handleLogsAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// The palette family passes through (LOGS-09/D258): the logs view is a
 	// long-lived surface, not a transient modal, so the app-global *switcher*
 	// gestures stay reachable from it — `:` opens the command palette over the
-	// view and `T`/`R`/`ctrl+n`/`C` open their pre-typed stages directly (D207),
+	// view and `T`/`R`/`N`/`C` open their pre-typed stages directly (D207),
 	// which is also what makes ctx.switch reachable from a log stream. The
 	// cmdPicker is the one overlay the View composites over the logs view, and
 	// while it is up Update routes keys to it (activePicker), so no trap opens.
@@ -289,7 +289,7 @@ func (m Model) handleLogsAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// browse table's selection — invisible under the full-screen view — and can
 	// open the confirm modal, which would then capture input invisibly. With the
 	// grep open nothing passes: the field owns every key (D140 pt 1), exactly as
-	// ctrl+n types nothing there today.
+	// the capital `N` (ns.switch) types nothing there either.
 	if !m.logsView.Filtering() {
 		switch a {
 		case keymap.ActionPalette:

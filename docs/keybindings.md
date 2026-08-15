@@ -22,7 +22,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `nav.bottom` | `G` / `end` | Jump to bottom |
 | `nav.halfPageDown` | `ctrl+d` / `pgdn` | Scroll half page down |
 | `nav.halfPageUp` | `ctrl+u` / `pgup` | Scroll half page up |
-| `nav.pageDown` | `ctrl+f` | Scroll full page down |
+| `nav.pageDown` | `space` | Scroll full page down |
 | `nav.pageUp` | `ctrl+b` | Scroll full page up |
 
 ## app
@@ -31,7 +31,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 |--------|------|-------------|
 | `app.filter` | `/` | Filter / search |
 | `app.searchNext` | `n` | Next match |
-| `app.searchPrev` | `N` | Previous match |
+| `app.searchPrev` | `#` | Previous match |
 | `app.help` | `?` | Toggle help |
 | `app.quit` | `q` / `ctrl+c` | Quit |
 | `app.palette` | `:` | Command palette |
@@ -40,7 +40,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `ns.switch` | `ctrl+n` | Switch namespace |
+| `ns.switch` | `N` | Switch namespace |
 
 ## resources
 
@@ -90,10 +90,10 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `res.describe` | `D` | Describe the selected row |
+| `res.describe` | `d` | Describe the selected row |
 | `res.logs` | `L` | View logs for the selected row |
 | `res.edit` | `e` | View / edit the selected row's YAML in $EDITOR |
-| `res.delete` | `d` | Delete the selected row |
+| `res.delete` | `D` | Delete the selected row |
 | `res.children` | `P` | Show the selected owner's pods |
 
 ## logs
@@ -105,7 +105,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `logs.wrap` | `w` | Toggle line wrapping in the logs viewer |
 | `logs.timestamps` | `t` | Toggle timestamps in the logs viewer |
 | `logs.previous` | `o` / `ctrl+p` | Toggle logs of the previous (crashed) container instance |
-| `logs.select` | `v` | Select log lines (visual mode) |
+| `logs.select` | `v` / `V` | Select log lines (visual mode) |
 | `logs.yank` | `y` | Copy the selected log lines |
 
 ## secret
@@ -128,7 +128,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `search.cluster` | `ctrl+s` | Search the cluster across kinds |
+| `search.cluster` | `ctrl+f` | Search the cluster across kinds |
 | `search.allKinds` | `ctrl+a` | Toggle searching all kinds (cluster search) |
 | `search.allNamespaces` | `ctrl+w` | Toggle searching all namespaces (cluster search) |
 

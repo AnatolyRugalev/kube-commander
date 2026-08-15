@@ -165,13 +165,13 @@ Sleep 1500ms
 Hide
 # kubecom-input: tmux prefix
 Ctrl+B
-Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press D to describe the selected resource'" Enter
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Press d to describe the selected resource'" Enter
 Show
 
-# `D` describes the selected row in the shared centered viewer; it scrolls like
+# `d` describes the selected row in the shared centered viewer; it scrolls like
 # any other view.
 # kubecom-action: res.describe
-Type "D"
+Type "d"
 Sleep 3s
 # kubecom-action: nav.halfPageDown
 Ctrl+D
@@ -184,13 +184,13 @@ Sleep 1s
 Hide
 # kubecom-input: tmux prefix
 Ctrl+B
-Type@1ms ":set -g status-left '   #[fg=cyan,bold]Ctrl+S searches across all resources in the cluster'" Enter
+Type@1ms ":set -g status-left '   #[fg=cyan,bold]Ctrl+F searches across all resources in the cluster'" Enter
 Show
 
-# Ctrl+S searches across kinds at once — Kind, namespace, name — ranked, best
+# Ctrl+F searches across kinds at once — Kind, namespace, name — ranked, best
 # match first, streaming in as each kind answers.
 # kubecom-action: search.cluster
-Ctrl+S
+Ctrl+F
 Sleep 1500ms
 # kubecom-input: the same string the filter step already matched, so the search
 # cannot demo zero results — the cluster-wide pass must find the pod on screen

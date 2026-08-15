@@ -19,7 +19,11 @@
 // docs/keybindings.md) — what is fixed is that a cut is announced, not the sentence.
 package elide
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 // Marker is the default elision marker: the wording browsefail.go uses when it
 // drops the tail of captured stderr. It is a sentence rather than a bare ellipsis
@@ -47,4 +51,32 @@ func Lines(block string, n int, marker string) string {
 		return block
 	}
 	return strings.Join(append(lines[:n-1:n-1], marker), "\n")
+}
+
+// Width clamps every line of a rendered block to at most n columns, spending the
+// last line on marker so the cut is visible — the horizontal twin of Lines, for
+// the same reason (D220 pt 1). It exists because the source of the block may not
+// honour the width it was given: bubbles/help's full layout adds a column whole
+// when its ellipsis would not fit, so cumulative column widths landing exactly on
+// the limit dump *every* remaining column instead of the few that fit (found when
+// the letter remap narrowed a binding and pushed the keymap's columns over the
+// edge). Like Lines it returns a block that already fits untouched, keeps ANSI
+// styling intact, and expects a caller-styled marker — the cut and the marker are
+// one decision, never two.
+func Width(block string, n int, marker string) string {
+	if n <= 0 {
+		return ""
+	}
+	lines := strings.Split(block, "\n")
+	cut := false
+	for i, ln := range lines {
+		if w := ansi.StringWidth(ln); w > n {
+			lines[i] = ansi.Truncate(ln, n, "")
+			cut = true
+		}
+	}
+	if !cut {
+		return block
+	}
+	return strings.Join(append(lines, marker), "\n")
 }

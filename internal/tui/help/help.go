@@ -143,7 +143,12 @@ func (m Model) View() string {
 	marker := m.styles.App.MaxWidth(innerW).Render(helpTruncated)
 
 	title := m.styles.Header.Render(helpTitle)
-	body := lipgloss.JoinVertical(lipgloss.Left, title, elide.Lines(inner.View(m.keys), ih, marker))
+	// Width-clamped then height-clamped: bubbles/help's full layout can hand back a
+	// block wider than the width it was given (it adds a whole column when its own
+	// ellipsis would not fit), so the horizontal clamp bounds the box's width first
+	// and the vertical one its height — each marking its own cut (D220 pt 1).
+	body := lipgloss.JoinVertical(lipgloss.Left, title,
+		elide.Lines(elide.Width(inner.View(m.keys), innerW, marker), ih, marker))
 	return m.styles.PaneFocus.Render(body)
 }
 

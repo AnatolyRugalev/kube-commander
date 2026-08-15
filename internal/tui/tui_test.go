@@ -913,10 +913,10 @@ func (f *fakeLister) Namespaces(context.Context) ([]string, error) {
 	return f.ns, f.err
 }
 
-// ctrlN is the ns.switch default key.
-var ctrlN = tea.Key{Code: 'n', Mod: tea.ModCtrl}
+// nsKey is the ns.switch default key (`N`).
+var nsKey = tea.Key{Code: 'n', ShiftedCode: 'N', Mod: tea.ModShift}
 
-// openNamespaceStage presses ctrl+n through the real key path (D11 — the binding is
+// openNamespaceStage presses N through the real key path (D11 — the binding is
 // registry-resolved, never matched raw) and delivers the namespace list the stage
 // asks for, returning the shell with the palette on its seeded `:namespace ` stage.
 // Since PAL-05c-1 that is the only namespace-switching surface there is, so every
@@ -924,16 +924,16 @@ var ctrlN = tea.Key{Code: 'n', Mod: tea.ModCtrl}
 // does, rather than by calling an opener.
 func openNamespaceStage(t *testing.T, m Model) Model {
 	t.Helper()
-	m, cmd := press(t, m, ctrlN)
+	m, cmd := press(t, m, nsKey)
 	if !m.cmdPicker.Active() || m.palArg != keymap.ActionNamespace {
-		t.Fatalf("ctrl+n should open the palette on its namespace stage, stage = %q", m.palArg)
+		t.Fatalf("N should open the palette on its namespace stage, stage = %q", m.palArg)
 	}
 	next, _ := m.Update(pickerMsg(t, cmd))
 	return next.(Model)
 }
 
 // TestNamespaceKeyOpensThePaletteNamespaceStage is PAL-05c-1's headline assertion:
-// ctrl+n no longer opens a modal of its own, it opens the one palette with the
+// N no longer opens a modal of its own, it opens the one palette with the
 // namespace verb already committed. Unlike `T`/`R` the values are not in hand, so the
 // stage opens empty and titled as loading (PAL-03b) and the async list seeds it — the
 // difference is invisible in the line, which is the point.
@@ -941,12 +941,12 @@ func TestNamespaceKeyOpensThePaletteNamespaceStage(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
 
-	m, cmd := press(t, m, ctrlN)
+	m, cmd := press(t, m, nsKey)
 	if !m.cmdPicker.Active() {
 		t.Fatal("ns.switch should open the command palette")
 	}
 	if m.palArg != keymap.ActionNamespace {
-		t.Fatalf("ctrl+n should commit the namespace verb, stage = %q", m.palArg)
+		t.Fatalf("N should commit the namespace verb, stage = %q", m.palArg)
 	}
 	if cmd == nil {
 		t.Fatal("opening the stage should issue a namespace list command")
@@ -978,17 +978,17 @@ func TestNamespaceKeyOpensThePaletteNamespaceStage(t *testing.T) {
 	next, _ = typed.Update(pickerMsg(t, spaceCmd))
 	typed = next.(Model)
 	if got, want := stripANSI(typed.View().Content), view; got != want {
-		t.Errorf("ctrl+n and `:namespace ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
+		t.Errorf("N and `:namespace ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
 }
 
 // TestNamespaceSwitchInertWithoutLister proves a model with no lister is
-// namespace-switch-inert: ctrl+n opens nothing and issues no command. The stage
+// namespace-switch-inert: N opens nothing and issues no command. The stage
 // decides that before it shows anything (D197), so the key does not open an empty
 // palette that would imply the verb was available.
 func TestNamespaceSwitchInertWithoutLister(t *testing.T) {
 	m := sized(t) // no WithNamespaceLister
-	m, cmd := press(t, m, ctrlN)
+	m, cmd := press(t, m, nsKey)
 	if m.cmdPicker.Active() {
 		t.Fatal("ns.switch without a lister should not open the palette")
 	}
@@ -1005,7 +1005,7 @@ func TestNamespaceSwitchInertWithoutLister(t *testing.T) {
 func TestNamespaceListErrorClosesPicker(t *testing.T) {
 	fl := &fakeLister{err: context.DeadlineExceeded}
 	m := sizedWith(t, WithNamespaceLister(fl))
-	m, cmd := press(t, m, ctrlN)
+	m, cmd := press(t, m, nsKey)
 	next, errCmd := m.Update(pickerMsg(t, cmd)) // deliver namespacesLoadedMsg{err:…}
 	m = next.(Model)
 	if m.cmdPicker.Active() {
@@ -1027,7 +1027,7 @@ func TestNamespaceListErrorClosesPicker(t *testing.T) {
 func TestNamespaceListLandingAfterRewindIsDropped(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
-	m, cmd := press(t, m, ctrlN)
+	m, cmd := press(t, m, nsKey)
 	// Backspace on the empty argument rewinds to the verb list (D207 pt 2).
 	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
 	if m.palArg != "" {
@@ -1095,7 +1095,7 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 }
 
 // TestNamespacePickerCancels proves nav.back (esc) leaves the stage without changing
-// the namespace, in **one** press: `ctrl+n` opens the stage directly, so there is no
+// the namespace, in **one** press: `N` opens the stage directly, so there is no
 // verb list behind it to rewind to and esc closes the palette outright (D233). The
 // backspace rewind that makes the key a way *into* the palette is unaffected and is
 // pinned by TestNamespaceStageBackspaceRewinds.
@@ -1123,7 +1123,7 @@ func TestNamespacePickerCancels(t *testing.T) {
 }
 
 // TestNamespaceStageBackspaceRewinds: the half of D207 pt 2 D233 kept. Backspace on the
-// empty argument uncommits the verb, so `ctrl+n` pressed by mistake is one keystroke
+// empty argument uncommits the verb, so `N` pressed by mistake is one keystroke
 // from every other verb rather than a dead end.
 func TestNamespaceStageBackspaceRewinds(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default"}}
@@ -1340,7 +1340,7 @@ func TestResourceStageBackspaceRewinds(t *testing.T) {
 }
 
 // TestMenuSeamOpensNamespacePicker proves the namespace-seam row in the left menu
-// opens the palette's `:namespace ` stage on drill-in — the same effect as ctrl+n —
+// opens the palette's `:namespace ` stage on drill-in — the same effect as N —
 // driven through the real update loop: walk the menu cursor down to the seam, press
 // enter, and the emitted menu.NamespaceRequestedMsg opens and seeds the stage.
 //
@@ -1906,7 +1906,7 @@ func TestSearchWrapsThroughMatches(t *testing.T) {
 	}
 
 	n := tea.Key{Code: 'n', Text: "n"}
-	shiftN := tea.Key{Code: 'N', Text: "N"}
+	hash := tea.Key{Code: '#', Text: "#"}
 
 	m, _ = press(t, m, n) // 0 -> 1
 	if m.table.Cursor() != 1 {
@@ -1916,7 +1916,7 @@ func TestSearchWrapsThroughMatches(t *testing.T) {
 	if m.table.Cursor() != 0 {
 		t.Fatalf("searchNext at the last match should wrap to 0, got %d", m.table.Cursor())
 	}
-	m, _ = press(t, m, shiftN) // 0 -> wrap to 1
+	m, _ = press(t, m, hash) // 0 -> wrap to 1
 	if m.table.Cursor() != 1 {
 		t.Fatalf("searchPrev at the first match should wrap to 1, got %d", m.table.Cursor())
 	}
@@ -2018,7 +2018,7 @@ func TestReconcilePreservesSelection(t *testing.T) {
 
 // TestProgramRoutesKeyToPicker drives the whole update loop through the real
 // bubbletea program (teatest/v2, the M0-05 harness) rather than a direct Update
-// call: a live ctrl+n keypress routes through the keymap to ns.switch, the async
+// call: a live N keypress routes through the keymap to ns.switch, the async
 // namespace list seeds the picker, and the seeded namespaces render — proving
 // key→action→command→msg→View round-trips end to end through the running program.
 func TestProgramRoutesKeyToPicker(t *testing.T) {
@@ -2030,11 +2030,11 @@ func TestProgramRoutesKeyToPicker(t *testing.T) {
 		return bytes.Contains(b, []byte("Node"))
 	}, teatest.WithDuration(3*time.Second))
 
-	// A live ctrl+n opens the namespace picker; its async list then seeds it and the
+	// A live N opens the namespace picker; its async list then seeds it and the
 	// namespaces render through the program's View. "kube-system" is an unselected
 	// picker row, so a plain byte scan sees it (the selected row's background-filled
 	// cells a scan misses — same reason TestModelSmoke keys on an unselected row).
-	tm.Send(tea.KeyPressMsg(ctrlN))
+	tm.Send(tea.KeyPressMsg(nsKey))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte("kube-system"))
 	}, teatest.WithDuration(3*time.Second))
@@ -2688,8 +2688,8 @@ func describeViewerModel(t *testing.T, describer Describer) Model {
 	return next.(Model)
 }
 
-// describeKey is the default res.describe direct key (`D`).
-var describeKey = tea.Key{Code: 'D', Text: "D"}
+// describeKey is the default res.describe direct key (`d`).
+var describeKey = tea.Key{Code: 'd', Text: "d"}
 
 // TestDescribeViewerOpensAndShowsContent drives the whole M3-04 path: the `d` key
 // dispatches the describe intent, handling it opens the viewer and issues the Describe
@@ -4097,8 +4097,8 @@ func deleteTableModel(t *testing.T, d Deleter) Model {
 	return next.(Model)
 }
 
-// deleteKey is the default res.delete key (`d`).
-var deleteKey = tea.Key{Code: 'd', Text: "d"}
+// deleteKey is the default res.delete key (`D`).
+var deleteKey = tea.Key{Code: 'D', Text: "D"}
 
 // openDeleteModal presses the delete key over the selected row and delivers the
 // resulting rowActionMsg, returning the model with the confirm modal open.

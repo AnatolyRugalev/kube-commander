@@ -14,7 +14,7 @@ import (
 
 // These cover LOGS-09 (D258): the palette family passes through the logs view's
 // capture, so `:` opens the command palette over a log stream — listing the view's
-// own verbs beside the app-globals — and `C`/`T`/`R`/`ctrl+n` open their pre-typed
+// own verbs beside the app-globals — and `C`/`T`/`R`/`N` open their pre-typed
 // stages, which is what makes ctx.switch reachable without leaving the log.
 
 // logsPaletteModel opens the logs view on a shell that also has the context-switch

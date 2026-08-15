@@ -46,7 +46,7 @@ verb and every action available on the selected row.
 
 ### Browsing and navigating
 
-Run bare `kubecom` to open your current kubeconfig context. Lists are **server-side watched** — rows appear, change, and vanish live with no refresh key needed. `hjkl` (or arrows) move within a pane and switch focus between them, `gg`/`G` jump to the ends, and `Ctrl+d`/`Ctrl+u` or `Ctrl+f`/`Ctrl+b` page.
+Run bare `kubecom` to open your current kubeconfig context. Lists are **server-side watched** — rows appear, change, and vanish live with no refresh key needed. `hjkl` (or arrows) move within a pane and switch focus between them, `gg`/`G` jump to the ends, and `Ctrl+d`/`Ctrl+u` (half page) or `Space`/`Ctrl+b` (full page) scroll.
 
 Switch resources via the command palette (`:resource`). You can type whatever you call the kind at the kubectl prompt: its plural, short name, or API group. When multiple groups define the same Kind, they are disambiguated by their group. You can hide the left menu to give the table full width.
 

@@ -42,3 +42,34 @@ func TestLinesIsRepeatable(t *testing.T) {
 		t.Fatalf("Lines mutated its input: %q", block)
 	}
 }
+
+// TestWidth pins the horizontal twin: an over-wide line is cut to exactly n
+// columns and the marker is appended as its own last line, a block that already
+// fits comes back untouched (no marker furniture), a non-positive budget renders
+// nothing, and ANSI styling survives the cut intact (the box that renders the
+// block never sees the width the caller clamped it to, so the clamp must not
+// corrupt the escapes it passes through).
+func TestWidth(t *testing.T) {
+	block := "aaaaa\nbb\ncccccc"
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{
+		{n: -1, want: ""},
+		{n: 0, want: ""},
+		{n: 2, want: "aa\nbb\ncc\n…"},
+		{n: 5, want: "aaaaa\nbb\nccccc\n…"},
+		{n: 6, want: block},
+		{n: 20, want: block},
+	} {
+		if got := Width(block, tc.n, "…"); got != tc.want {
+			t.Fatalf("Width(%q, %d) = %q, want %q", block, tc.n, got, tc.want)
+		}
+	}
+
+	styled := "\x1b[31mhello\x1b[m\n\x1b[31mhello world\x1b[m"
+	got := Width(styled, 5, "…")
+	if got != "\x1b[31mhello\x1b[m\n\x1b[31mhello\x1b[m\n…" {
+		t.Fatalf("Width on styled input = %q, want escapes preserved", got)
+	}
+}

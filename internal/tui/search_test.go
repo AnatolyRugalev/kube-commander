@@ -14,10 +14,10 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
-// searchKey is the default search.cluster key (ctrl+s). A ctrl chord carries no text,
+// searchKey is the default search.cluster key (ctrl+f). A ctrl chord carries no text,
 // so it resolves to an action rather than typing — which is exactly why it can also be
 // pressed while the search view's always-open query field has focus.
-var searchKey = tea.Key{Code: 's', Mod: tea.ModCtrl}
+var searchKey = tea.Key{Code: 'f', Mod: tea.ModCtrl}
 
 // fakeSearcher is a hermetic Searcher: it records what each query asked for and hands
 // back a channel preloaded with the configured hits as SearchMatch events, then any

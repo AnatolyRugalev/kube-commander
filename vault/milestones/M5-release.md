@@ -1,6 +1,6 @@
 # M5 — Release & Docs
 
-**Status:** `in-progress` (2026-08-15) — the UX-validation line's instrument is complete (STORY-01…04 landed: fixture, `--keylog`, `keys analyze`, the stories) and **the walk is done (STORY-05, 2026-08-15)**: the maintainer walked all five stories against the fresh fixture and handed back five traces plus 23 feedback files — the fold-in's raw material. What remains: the fold-in (STORY-06), TAPE-01, DOC-03…05, then the `v1.0.0` tag, the tap/AUR access, and the branch rename (M5-11).
+**Status:** `in-progress` (2026-08-15) — the UX-validation line's instrument is complete (STORY-01…04 landed: fixture, `--keylog`, `keys analyze`, the stories) and **the walk is done (STORY-05, 2026-08-15)**: the maintainer walked all five stories against the fresh fixture and handed back five traces plus 23 feedback files. **The fold-in has begun (STORY-06a, 2026-08-15):** the letter remap landed — search `ctrl+f`, ns.switch `N`, delete `D`, describe `d`, `#`/`space` for the displaced keys, `V` selects logs — with the keymap doc, the tape and the README updated and seven key feedback items closed (D269); the redesign's two interaction halves and the feature legs are the remaining STORY-06 slices. What remains: the rest of STORY-06, TAPE-01, DOC-03…05, then the `v1.0.0` tag, the tap/AUR access, and the branch rename (M5-11).
 **Phase:** REWRITE_PLAN Phase 5
 
 _Scope expanded into ordered, leg-sized Backlog slices **M5-01 … M5-11** on the

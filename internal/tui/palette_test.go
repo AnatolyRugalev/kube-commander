@@ -320,7 +320,7 @@ func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 }
 
 // TestPaletteNamespaceArgumentAppliesTheScope closes the namespace line: the pick
-// re-scopes the app exactly as ctrl+n's does, because since PAL-05c-1 they are the one
+// re-scopes the app exactly as N's does, because since PAL-05c-1 they are the one
 // surface ending in applyNamespaceValue (D198 pt 2) — including the all-namespaces
 // sentinel, which must be offered here too or the palette line would be a one-way door.
 func TestPaletteNamespaceArgumentAppliesTheScope(t *testing.T) {

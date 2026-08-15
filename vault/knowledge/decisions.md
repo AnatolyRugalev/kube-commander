@@ -7584,3 +7584,36 @@ has ever measured. On 2026-08-15 the maintainer gated the tag on fixing that.
    `troubleshooting.md`. A published docs site was considered and declined for v1 —
    it adds a generator, a theme and a deploy job to maintain, and buys nothing that
    `docs/*.md` on GitHub does not already give a reader.
+
+## D269 — the letter remap: one verb, one easy key; switchers are capitals; search is the browser key (2026-08-15, STORY-06a)
+
+The S05 walk read two letter-families as kubecom's most confusing corners — the
+n-family (namespace vs next/previous match) and the s-family (search vs sort vs
+sort-clear) — and filed one master redesign
+(`2026-08-15-keymap-redesign.md`) with the whole intended map. STORY-06a landed
+the **letters** half; the two keys that are *interactions* rather than letters
+stay put until their own slices (sort column-picker `S` → STORY-06b, actions menu
+on `enter` → STORY-06c).
+
+1. **search.cluster moves to `ctrl+f`** (the browser "find" key), and
+   `nav.pageDown` — displaced from `ctrl+f` — takes **`space`** (vim's own
+   scroll-a-screen gesture, pairing the kept `ctrl+b` pageUp). `ctrl+s` is freed.
+   A later leg must not reintroduce a bare-letter search key: search.cluster is an
+   app-global that must survive its always-open query field (D140 pt 1), which is
+   exactly why it keeps the ctrl chord.
+2. **ns.switch moves to `N`**, joining the capital-letter switcher family
+   (`N`/`R`/`C`/`T`), and `app.searchPrev` — displaced from `N` — takes **`#`**
+   (vim's backward-occurrence gesture, the mirror of `*`). `ctrl+n` is freed.
+   Previous-match is deliberately *out* of the n-family: that is the entire point
+   of the remap, so a later leg must not bind it back to a plain letter near `n`.
+3. **delete takes `D`, describe takes `d`** — destructive actions sit on the
+   capital, read actions on the lowercase, exactly as the redesign's rule states.
+4. **`logs.select` gains `V`** beside `v` — the S01 walk's own muscle memory
+   (vim's linewise-visual); both select, the choice is not either/or.
+5. **The displaced-key rule generalises.** Any future remap that takes a key must
+   give its displaced action a new home *in the same change* — the design treats a
+   binding as a pair (action, key), never as two independently-moved things. The
+   tape (`docs/screencast.tape`), the generated `docs/keybindings.md`, the help
+   overlay and the default-resolution tests all ride the registry, so they follow
+   automatically; only the tape's own prose and the `navChords` warning set (which
+   tracks the navigation keys of the day) need a hand alongside.

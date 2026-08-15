@@ -340,7 +340,7 @@ func Actions() []Action {
 // defaultBindings is the vim-first default keymap (D10). Tokens are the
 // human-readable syntax of keybindings.md and may be multi-key sequences (`gg`).
 // Defaults are collision-free by construction (asserted in tests): pgdn/pgup fall
-// back to the half-page actions; the full-page actions keep the ctrl+f/ctrl+b vim
+// back to the half-page actions; the full-page actions keep the space/ctrl+b vim
 // keys only (pgdn/pgup can't fall back to both half- and full-page in one flat
 // context without colliding — D48). `gg` → top is the vim sequence (M2-01b), with
 // `home` as the single-key fallback.
@@ -355,14 +355,30 @@ var defaultBindings = map[Action][]string{
 	ActionBottom:       {"G", "end"},
 	ActionHalfPageDown: {"ctrl+d", "pgdn"},
 	ActionHalfPageUp:   {"ctrl+u", "pgup"},
-	ActionPageDown:     {"ctrl+f"},
-	ActionPageUp:       {"ctrl+b"},
-	ActionFilter:       {"/"},
-	ActionSearchNext:   {"n"},
-	ActionSearchPrev:   {"N"},
-	ActionHelp:         {"?"},
-	ActionQuit:         {"q", "ctrl+c"},
-	ActionNamespace:    {"ctrl+n"},
+	// The full-page scroll takes vim's own `<space>` — one screen forward, the same
+	// gesture `ctrl+f` used to be — because `ctrl+f` became search.cluster (D269) and
+	// the two-page key is what a reader of a long describe/log reaches for. `ctrl+b`
+	// (pageUp) keeps its vim key, so the pair reads as it always did.
+	ActionPageDown:   {"space"},
+	ActionPageUp:     {"ctrl+b"},
+	ActionFilter:     {"/"},
+	ActionSearchNext: {"n"},
+	// Previous-match leaves the n-family entirely after the walk read it as the most
+	// confusing corner of the keymap: `N` is now ns.switch, and `#` is vim's own
+	// backward-occurrence gesture (the mirror of `*`, which pin already claims).
+	// It is a symbol, not a letter, so it can never crowd the n-family again (D269).
+	ActionSearchPrev: {"#"},
+	ActionHelp:       {"?"},
+	ActionQuit:       {"q", "ctrl+c"},
+	// ns.switch takes `N` — the capital-letter switcher family (`N` namespace, `C`
+	// context, `R` resource, `T` theme) — after the S01/S02 walks read the n-family
+	// as the most confusing corner of the keymap (feedback
+	// `2026-08-15-context-switch-key-inconsistent`): `ctrl+n` never read as
+	// "namespace", and the previous-match `N` it displaced reads naturally as the
+	// switcher's letter, exactly as `C`/`R` do. The capital is also the ergonomics —
+	// the S01 trace's 5s pause and 7 opens of `ctrl+n` were a chord that was never
+	// comfortable (D269). Lowercase `n` stays the filter's next-match.
+	ActionNamespace: {"N"},
 	// `:` is the palette's key (D194 pt 2), not the resource picker's: the palette is
 	// the surface that answers "what do I want to do", and the resource switch is one
 	// verb inside it. So resources.switch hands `:` over and takes `R` — the mnemonic
@@ -374,12 +390,13 @@ var defaultBindings = map[Action][]string{
 	// shortcut keys are reconsidered (D194 pt 4).
 	ActionPalette:   {":"},
 	ActionResources: {"R"},
-	// The context switcher does *not* join the ctrl+<letter> family its sibling
-	// ns.switch belongs to, and the difference is not cosmetic: that family exists
-	// for gestures that must survive an always-open text field (search.cluster and
-	// both its widens, D140 pt 1). The context picker has no such field — like the
-	// namespace picker its filter is opt-in (`/`) — so a plain key is safe, and the
-	// free ctrl+<letter> keys are better spent on the surfaces that need them.
+	// The context switcher sits with its sibling ns.switch in the capital-letter
+	// switcher family (`N` namespace, `R` resource, `C` context, `T` theme) rather
+	// than the ctrl+<letter> family, and the difference is not cosmetic: that family
+	// exists for gestures that must survive an always-open text field (search.cluster
+	// and both its widens, D140 pt 1). The context picker has no such field — like
+	// the namespace picker its filter is opt-in (`/`) — so a plain key is safe, and
+	// the ctrl+<letter> keys are better spent on the surfaces that need them.
 	// `C` is the mnemonic **C**ontext, free in the browse context, not a reserved
 	// nav chord (D10), and sits with the other capital-letter app-global gestures
 	// (`M` mouse, `F` forwards, `X` stop-all). Lowercase `c` is secret.copy.
@@ -396,13 +413,13 @@ var defaultBindings = map[Action][]string{
 	ActionClearSort:   {"S"},
 	ActionToggleMenu:  {"m"},
 	ActionActions:     {"a"},
-	ActionDescribe:    {"D"},
+	ActionDescribe:    {"d"},
 	ActionLogs:        {"L"},
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
-	// delete=`d`/describe=`D`; `y` stays free for a future rebind or user config).
+	// delete=`D`/describe=`d`; `y` stays free for a future rebind or user config).
 	ActionEdit:   {"e"},
-	ActionDelete: {"d"},
+	ActionDelete: {"D"},
 	// The children drill-down takes `P` — the mnemonic **P**ods, since pods are the
 	// one child kind kubecom drills into (D165). Lowercase `p` is the port picker's
 	// local-port prompt, so the capital keeps it with the other capital-letter
@@ -441,8 +458,10 @@ var defaultBindings = map[Action][]string{
 	// reason the wrap and timestamps toggles are: neither is a gesture anyone reaches
 	// for mid-query — you select lines you can already see — so being swallowed by an
 	// open grep field (D140 pt 1) costs them nothing. `v` is free in the browse
-	// context and is not a reserved nav chord (D10).
-	ActionLogsSelect: {"v"},
+	// context and is not a reserved nav chord (D10); `V` (vim's linewise-visual) is
+	// the S01 walk's own muscle memory (feedback `2026-08-15-log-line-selection-shift-v`),
+	// so both select — D269.
+	ActionLogsSelect: {"v", "V"},
 	// `y` is the one binding here with a twin: it is also confirm.accept. That is
 	// legal rather than lucky — the two resolve in different key contexts (contextOf),
 	// and they are modal besides: the confirm modal captures every key while it is up,
@@ -459,12 +478,16 @@ var defaultBindings = map[Action][]string{
 	// is rejected: remote port must be > 0), which the shell builds itself (D139).
 	ActionLocalPort:     {"p"},
 	ActionFreeLocalPort: {"0"},
-	// Cluster search joins the ctrl+<letter> family of app-global switchers
-	// (ctrl+n = ns.switch): a mnemonic **s**earch key that is not a plain letter, so
-	// it cannot be swallowed by the always-open query field it opens (every
-	// text-carrying key types into that field, D140 pt 1). Raw mode clears the
-	// terminal's IXON flow control, so ctrl+s reaches the app rather than pausing it.
-	ActionSearch: {"ctrl+s"},
+	// Cluster search takes the browser convention `ctrl+f` — **f**ind — after the
+	// S05 walk reached for the wrong keys of the s-family twice (feedback
+	// `2026-08-15-s-key-family-confusion`), and because it is not a plain letter it
+	// cannot be swallowed by the always-open query field it opens (every
+	// text-carrying key types into that field, D140 pt 1). It stays in the
+	// ctrl+<letter> family the other always-open-field surfaces need (D140 pt 1);
+	// raw mode clears the terminal's IXON flow control, so ctrl+f reaches the app
+	// rather than scrolling it. `s` stays the table sort and `S` the column picker
+	// (D269).
+	ActionSearch: {"ctrl+f"},
 	// The all-kinds widen has to be a no-text chord for the same reason
 	// search.cluster is: it acts *inside* the search view, whose query field is
 	// always open and swallows every text-carrying key (D140 pt 1) — a plain `a`
@@ -474,11 +497,12 @@ var defaultBindings = map[Action][]string{
 	ActionSearchAllKinds: {"ctrl+a"},
 	// The namespace widen is a no-text chord for the same reason the kind widen beside
 	// it is: it acts inside the always-open query field. `ctrl+a` was the mnemonic
-	// ("all") and is spent, and `ctrl+n` — the obvious second choice — is ns.switch in
-	// the flat browse context, so `ctrl+w` takes the *cluster-**w**ide* reading, which
-	// is how Kubernetes itself names "not scoped to a namespace". It costs the query
-	// field readline's delete-previous-word, the same kind of price ctrl+a paid for
-	// start-of-line: a search query is one short line, and backspace still works.
+	// ("all") and is spent, and `ctrl+n` — the obvious second choice — is ns.switch's
+	// old key (now the capital `N`, D269), so `ctrl+w` takes the *cluster-**w**ide*
+	// reading, which is how Kubernetes itself names "not scoped to a namespace". It
+	// costs the query field readline's delete-previous-word, the same kind of price
+	// ctrl+a paid for start-of-line: a search query is one short line, and backspace
+	// still works.
 	ActionSearchAllNamespaces: {"ctrl+w"},
 	// Confirm-context bindings (contextOf → ctxConfirm): `y`/`n` are the yes/no
 	// muscle memory, `enter`/`esc` the modal convention. `n`/`enter`/`esc` also bind
@@ -501,11 +525,14 @@ var defaultBindings = map[Action][]string{
 }
 
 // navChords is the set of reserved navigation chords (D10): binding an app
-// action over one of these is allowed but warned about during Merge.
+// action over one of these is allowed but warned about during Merge. It tracks
+// the navigation keys of the day — `#`/`space` since the letter remap gave
+// searchPrev and pageDown those homes and moved `N` (ns.switch) and `ctrl+f`
+// (search.cluster) out of navigation (D269).
 var navChords = map[chord]struct{}{
 	"h": {}, "j": {}, "k": {}, "l": {},
-	"g": {}, "G": {}, "n": {}, "N": {}, "/": {},
-	"ctrl+u": {}, "ctrl+d": {}, "ctrl+f": {}, "ctrl+b": {},
+	"g": {}, "G": {}, "n": {}, "#": {}, "/": {},
+	"ctrl+u": {}, "ctrl+d": {}, "space": {}, "ctrl+b": {},
 }
 
 // Keymap is a resolved, validated mapping of actions to key sequences. Construct

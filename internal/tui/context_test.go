@@ -37,7 +37,7 @@ func newClusterFake() (Cluster, *fakeWatcher, *fakeDiscoverer) {
 	w := &fakeWatcher{}
 	d := &fakeDiscoverer{ch: make(chan kube.DiscoveryResult, 1)}
 	// The bundle carries a namespace lister because a switched-to cluster has one:
-	// since PAL-05c-1 it is what makes ctrl+n open the palette's `:namespace ` stage,
+	// since PAL-05c-1 it is what makes N open the palette's `:namespace ` stage,
 	// so a test that picks a namespace after a switch drives the real surface.
 	return Cluster{watcher: w, discoverer: d, nsLister: &fakeLister{ns: []string{"kube-system"}}}, w, d
 }
@@ -277,7 +277,7 @@ func pickerLabelFor(t *testing.T, m Model, context string) string {
 
 // TestContextKeyOpensThePaletteContextStage is PAL-05c-2's headline assertion: `C` no
 // longer opens a modal of its own, it opens the one palette with the context verb
-// already committed. Like ctrl+n the values are not in hand, so the stage opens empty
+// already committed. Like N the values are not in hand, so the stage opens empty
 // and titled as loading (PAL-03b) and the kubeconfig read happens off the update loop —
 // the difference from a stage whose values were compiled in is invisible in the line,
 // which is the point.

@@ -26,7 +26,7 @@ import (
 //     handler grows a precondition.
 //   - **A verb is inert here exactly as its key is.** The palette does not filter its
 //     list by what is currently possible: `:` with no cluster still lists "Switch
-//     namespace", and picking it does what ctrl+n does — nothing. Availability
+//     namespace", and picking it does what N does — nothing. Availability
 //     filtering is PAL-04's job (row verbs, where "unavailable" is a property of the
 //     selected object rather than of the whole app).
 //
@@ -58,7 +58,7 @@ import (
 // already committed (openPaletteArg). The key keeps working and keeps its meaning —
 // what changes is that there is one surface behind it instead of two (D207). It lands
 // one key per slice: `T` → `:theme ` (PAL-05a), `R` → `:resource ` (PAL-05b),
-// `ctrl+n` → `:namespace ` (PAL-05c-1), `C` → `:context ` (PAL-05c-2), `a` →
+// `N` → `:namespace ` (PAL-05c-1), `C` → `:context ` (PAL-05c-2), `a` →
 // `:action ` (PAL-05d). With PAL-05d every key whose verb takes a value opens this
 // surface and no menu of its own is left: ctrPicker/portPicker pick from a *row's* own
 // data (its containers, its declared ports), not from a verb's argument list, so they
@@ -73,7 +73,7 @@ import (
 // list, so a kind you cannot find is one keystroke from every other verb.
 //
 // PAL-05c-1 is the first conversion of a verb whose values are **fetched**, and the
-// first with a second door: besides `ctrl+n`, the menu's namespace-seam row opens the
+// first with a second door: besides `N`, the menu's namespace-seam row opens the
 // same surface, so it routes through openPaletteArg too — a converted key with an
 // unconverted second entry point would keep the retired picker alive behind a menu
 // row. Retiring nsPicker also collapses namespacesLoadedMsg's `dest` (D199): with one
@@ -471,7 +471,7 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		m.themeAnchor = m.styles.Theme.Name
 	case keymap.ActionNamespace:
 		// Namespace-switch-inert. Since PAL-05c-1 this one check is also what makes
-		// `ctrl+n` and the menu's namespace-seam row inert, rather than each of the
+		// `N` and the menu's namespace-seam row inert, rather than each of the
 		// three entry points deciding for itself.
 		if m.nsLister == nil {
 			return m, nil, false

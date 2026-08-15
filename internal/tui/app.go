@@ -1321,7 +1321,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case menu.NamespaceRequestedMsg:
 		// Drilling into the menu's namespace-seam row opens the palette's
-		// `:namespace ` stage — the same effect as the ns.switch (ctrl+n) shortcut,
+		// `:namespace ` stage — the same effect as the ns.switch (`N`) shortcut,
 		// which is the whole point of routing it through the same opener (PAL-05c-1).
 		// This is the second door D207 pt 1 does not cover on its own: a key names its
 		// verb, but so does this row, and leaving it on a picker of its own would keep
@@ -1960,7 +1960,7 @@ func (m *Model) resetCluster() {
 // network.
 //
 // It carried a `dest` from PAL-03b until PAL-05c-1: two surfaces issued this load (the
-// standalone ctrl+n picker and the stage) and a result had no other way to say which
+// standalone N picker and the stage) and a result had no other way to say which
 // one asked. Retiring the picker leaves one destination, so the field went with it —
 // *which* surface is no longer a question, though *whether* it is still open is, and
 // that is what awaitingPaletteArg answers below.
@@ -1970,7 +1970,7 @@ type namespacesLoadedMsg struct {
 }
 
 // loadNamespaces is the off-loop list itself. One caller since PAL-05c-1 — the
-// palette's `:namespace ` stage — reached from `ctrl+n`, the menu's namespace-seam row
+// palette's `:namespace ` stage — reached from `N`, the menu's namespace-seam row
 // and the typed line alike, so none of the three can drift into listing namespaces its
 // own way.
 func (m Model) loadNamespaces() tea.Cmd {
@@ -4175,7 +4175,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionTheme, keymap.ActionResources, keymap.ActionNamespace,
 		keymap.ActionContext, keymap.ActionActions:
 		// The shortcut keys converted to pre-typed palette lines (D207): `T` opens the
-		// palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b), `ctrl+n` on
+		// palette on `:theme ` (PAL-05a), `R` on `:resource ` (PAL-05b), `N` on
 		// `:namespace ` (PAL-05c-1), `C` on `:context ` (PAL-05c-2) and `a` on
 		// `:action ` (PAL-05d), none on a modal of its own. One arm rather than one per
 		// key, because the conversion is the *same* fact about every one of them — the
