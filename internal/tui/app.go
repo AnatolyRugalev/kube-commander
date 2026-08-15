@@ -706,6 +706,10 @@ type Model struct {
 	menuPinned []config.MenuResource
 	startupErr *ErrorMsg
 
+	// keyRecorder is the keystroke trace (WithKeyRecorder, `--keylog`). Nil is the
+	// normal state — nobody asked for a trace — and every press checks it (STORY-02).
+	keyRecorder KeyRecorder
+
 	// logger is the shell's diagnostic sink (WithLogger). It is never the user's
 	// screen — the TUI owns the terminal — so it is the *only* durable record of a
 	// failure whose toast has already expired (D159). Never nil: NewWithKeymap seeds
@@ -1251,41 +1255,49 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		// The search mini-app captures every keypress while it is up (its query field is
-		// always open, D140 pt 1) and nothing it does opens a picker or modal, so it is
-		// resolved before them.
-		if m.searchView.Active() {
-			return m.routeSearchKey(msg)
+		// Which surface takes this press. The ladder below is keyMode's ordering, in
+		// one place so the trace cannot disagree with the routing (STORY-02):
+		//   - the search mini-app captures every keypress while it is up (its query
+		//     field is always open, D140 pt 1) and nothing it does opens a picker or
+		//     modal, so it is resolved before them;
+		//   - the logs view's live grep captures text while it is open (LOGS-02), so
+		//     its keys are split raw here rather than resolved through the sequencer.
+		//     With the filter closed the logs view takes the ordinary action path
+		//     (handleLogsAction) so `gg` and `G` still work in a log.
+		// Every one of these surfaces handles its own keys, so the keymap resolves
+		// nothing for them and the record carries no action.
+		if mode := m.keyMode(); mode != keyModeBrowse {
+			m.recordKey(msg, mode, "", keymap.ResultNone)
+			switch mode {
+			case keyModeSearch:
+				return m.routeSearchKey(msg)
+			case keyModeLogsFilter:
+				return m.routeLogsFilterKey(msg)
+			case keyModePicker:
+				return m.routePickerKey(msg)
+			case keyModeFilter:
+				return m.routeFilterKey(msg)
+			case keyModePrompt:
+				return m.routeModalPromptKey(msg)
+			case keyModeConfirm:
+				return m.routeModalConfirmKey(msg)
+			}
 		}
-		// The logs view's live grep captures text while it is open (LOGS-02), so its keys
-		// are split raw here rather than resolved through the sequencer. With the filter
-		// closed the logs view takes the ordinary action path (handleLogsAction) so `gg`
-		// and `G` still work in a log.
-		if m.logsView.Filtering() {
-			return m.routeLogsFilterKey(msg)
-		}
-		if m.activePicker() != nil {
-			return m.routePickerKey(msg)
-		}
-		if m.filter.Active() {
-			return m.routeFilterKey(msg)
-		}
-		if m.modal.Prompting() {
-			return m.routeModalPromptKey(msg)
-		}
-		if m.modal.Active() {
-			return m.routeModalConfirmKey(msg)
-		}
+		// Recorded before it is handled, so the press that quit (or wedged) the
+		// session is in the trace that has to explain it.
 		switch r := m.seq.Input(msg.Key()); r.Kind {
 		case keymap.ResultAction:
+			m.recordKey(msg, keyModeBrowse, r.Action, r.Kind)
 			return m.handleAction(r.Action)
 		case keymap.ResultPending:
+			m.recordKey(msg, keyModeBrowse, "", r.Kind)
 			// Hold the prefix; schedule a timeout so a lone `g` still fires its
 			// short form if no second key arrives. Tag it so an earlier timer,
 			// left over from a prefix already resolved, cannot fire this one early.
 			m.seqGen++
 			return m, m.scheduleTimeout()
-		default: // ResultNone: inert.
+		default: // ResultNone: inert — and the one record a story is run to collect.
+			m.recordKey(msg, keyModeBrowse, "", r.Kind)
 			return m, nil
 		}
 

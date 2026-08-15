@@ -693,3 +693,44 @@ pinnedResources:
 		t.Error("the switched-in context should carry the writer its pins go back to")
 	}
 }
+
+// TestKeyLogPathPrecedence covers the three ways a trace destination is decided
+// (STORY-02): the flag wins, the environment stands in when the flag is absent,
+// and neither means no trace. The environment fallback exists because a story is
+// walked over several launches, and a flag re-typed by hand is a flag forgotten on
+// the third launch — which is how a trace ends up with a hole in it exactly where
+// the interesting part was.
+func TestKeyLogPathPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		flag string
+		env  string
+		want string
+	}{
+		{name: "off by default"},
+		{name: "flag alone", flag: "/tmp/flag.jsonl", want: "/tmp/flag.jsonl"},
+		{name: "env alone", env: "/tmp/env.jsonl", want: "/tmp/env.jsonl"},
+		{name: "flag beats env", flag: "/tmp/flag.jsonl", env: "/tmp/env.jsonl", want: "/tmp/flag.jsonl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(keyLogEnv, tc.env)
+			if got := (runOptions{keyLog: tc.flag}).keyLogPath(); got != tc.want {
+				t.Errorf("keyLogPath() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestKeyLogFlagIsOffByDefault holds the shipped default in place. The recorder is
+// a documented feature (D268 pt 2), which makes it exactly the kind of thing that
+// could acquire a default value in a later refactor; a trace nobody asked for is a
+// file of everything they typed.
+func TestKeyLogFlagIsOffByDefault(t *testing.T) {
+	f := newRootCmd().Flags().Lookup("keylog")
+	if f == nil {
+		t.Fatal("--keylog is not registered on the root command")
+	}
+	if f.DefValue != "" {
+		t.Errorf("--keylog defaults to %q, want it off", f.DefValue)
+	}
+}

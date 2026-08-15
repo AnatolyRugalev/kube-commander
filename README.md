@@ -143,11 +143,35 @@ kubecom --kubeconfig ~/.kube/other-config -n kube-system
 
 kubecom version                # print build information
 kubecom keys                   # print the resolved keymap (defaults + your config)
+
+kubecom --keylog ~/trace.jsonl # record what you pressed (off unless you ask)
 ```
+
+#### Recording what you pressed
+
+`--keylog <file>` (or `KUBECOM_KEYLOG=<file>`) appends one JSON object per
+keypress: the key, the surface it went to, and the action it resolved to.
+
+```json
+{"t":"2026-08-15T14:31:02.113Z","key":"j","mode":"browse","action":"nav.down"}
+{"t":"2026-08-15T14:31:03.402Z","key":"x","mode":"browse"}
+```
+
+The second line is the interesting kind — a key that resolved to **no action**,
+meaning somebody reached for something kubecom does not have. If kubecom felt
+awkward somewhere and you want to say so precisely, a trace attached to the issue
+says it better than a description can, and better than a screen recording, where
+"I pressed a key and nothing happened" looks like nothing happening.
+
+It is off unless you pass the flag, and it is worth knowing what a trace contains
+before you send one: every keypress means everything you typed, so filter queries,
+search terms, and namespace and resource names are all reconstructable from it.
+Keys pressed inside an exec shell or your `$EDITOR` never reach it — kubecom is
+suspended while those run.
 
 Flags: `--kubeconfig` (path; default `$KUBECONFIG`, else `~/.kube/config`),
 `--context` (default the file's current-context), `-n`/`--namespace` (default all
-namespaces), `--config` (kubecom config file). A missing or invalid
+namespaces), `--config` (kubecom config file), `--keylog` (see below). A missing or invalid
 kubeconfig/context fails with a clear message instead of launching. While the UI runs
 it owns the terminal, so all logs (including client-go warnings) go to a file under
 your cache dir (`~/.cache/kubecom/kubecom.log` on Linux), never the screen. That holds

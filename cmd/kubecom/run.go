@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/keylog"
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/stderrfd"
 	"github.com/neuroplastio/kubecom/internal/tui"
@@ -26,6 +27,24 @@ type runOptions struct {
 	namespace    string // -n/--namespace: initial watch scope ("" = all namespaces)
 	namespaceSet bool   // whether -n was passed explicitly (vs. its "" default)
 	configPath   string // --config: kubecom config file ("" = user config dir)
+	keyLog       string // --keylog: keystroke trace path ("" = off; $KUBECOM_KEYLOG)
+}
+
+// keyLogEnv names the trace file when --keylog is not passed. A story is walked
+// over several launches (quit, look at something, launch again), and re-typing the
+// flag every time is how a trace ends up split across three files or missing
+// entirely — an exported variable in the shell running the story survives all of
+// them (D268 pt 2).
+const keyLogEnv = "KUBECOM_KEYLOG"
+
+// keyLogPath resolves the trace destination: the flag wins, then the environment,
+// then off. Off is the default and stays the default — a keystroke trace is only
+// ever written because somebody asked for one.
+func (o runOptions) keyLogPath() string {
+	if o.keyLog != "" {
+		return o.keyLog
+	}
+	return os.Getenv(keyLogEnv)
 }
 
 // runTUI is the default action of bare `kubecom`: it resolves the keymap from the
@@ -178,6 +197,23 @@ func runTUI(opts runOptions) error {
 		defer func() { _ = guard.Close() }()
 	}
 
+	// The keystroke trace, when one was asked for (STORY-02/D268 pt 2). Opened after
+	// the stderr guard and before the program, so a trace covers the whole session.
+	// A trace that cannot be opened is reported and the launch continues: the user
+	// asked to record a session, not to make recording a precondition for having one.
+	var keyRecorder tui.KeyRecorder
+	if path := opts.keyLogPath(); path != "" {
+		w, err := keylog.Create(path, func(err error) {
+			slog.Error("key log write failed; recording stopped for this run", "error", err)
+		})
+		if err != nil {
+			slog.Error("key log could not be opened; continuing without one", "path", path, "error", err)
+		} else {
+			keyRecorder = w
+			defer func() { _ = w.Close() }()
+		}
+	}
+
 	// Construct the shell over the resolved keymap with the live client wired in for
 	// watches and discovery, scoped to the requested namespace. The model requests
 	// the alternate screen itself (via View.AltScreen — D70), so no program option
@@ -232,6 +268,9 @@ func runTUI(opts runOptions) error {
 		// terminal over on purpose — $EDITOR, exec, an approved re-login — where the
 		// reader must see what the subprocess says on stderr.
 		tui.WithTerminalStderr(stderrSeam),
+		// Nil unless --keylog/$KUBECOM_KEYLOG named a file, in which case every
+		// keypress and the action it resolved to is appended there (STORY-02).
+		tui.WithKeyRecorder(keyRecorder),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		return fmt.Errorf("kubecom exited with error: %w", err)
