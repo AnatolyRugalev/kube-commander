@@ -910,11 +910,11 @@ type Model struct {
 	// palRowByLabel maps the palette's **row-scoped** entries back to their rowAction
 	// (PAL-04). Its source is the row-action registry's own per-kind set
 	// (rowActionTitles), rebuilt whenever the palette shows its verb stage or, since
-	// PAL-05d, enters the `:action ` stage `a` opens — one map for both, so the two
-	// ways in cannot come to offer different actions for the same row. It is nil
-	// whenever there is no row to act on, which is also what makes "did the reader pick
-	// a row verb?" a lookup rather than a second piece of state. Only the update loop
-	// touches it.
+	// PAL-05d, enters the `:action ` stage (which `enter` on a row opens since
+	// STORY-06c) — one map for both, so the two ways in cannot come to offer
+	// different actions for the same row. It is nil whenever there is no row to act
+	// on, which is also what makes "did the reader pick a row verb?" a lookup rather
+	// than a second piece of state. Only the update loop touches it.
 	palRowByLabel map[string]rowAction
 
 	// deleteRes/deleteRef stash the target the open delete confirm applies to (M3-09):
@@ -1281,6 +1281,22 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.routeModalPromptKey(msg)
 			case keyModeConfirm:
 				return m.routeModalConfirmKey(msg)
+			}
+		}
+		// The resource table owns a second key context while it is the focused surface
+		// with nothing else capturing (STORY-06c): `enter` there opens the actions menu
+		// — TableAction → actions.menu, the `:action ` palette stage — instead of
+		// resolving to the browse drill-in, whose table meaning (RowSelectedMsg) was a
+		// dead end, the S01 walk's "lost gesture". The gate is the same ladder the hint
+		// uses (hintContext == HelpTable: no modal, logs view, viewer, forwards panel,
+		// help overlay or sort mode is up), the D132 pattern for a key that means
+		// different things in different surfaces; a lone `g` (pending `gg`) still owns
+		// the press, so the sequencer's buffered prefix is never orphaned. `enter`
+		// keeps its browse meaning (nav.drillIn) everywhere else.
+		if m.hintContext() == keymap.HelpTable && !m.seq.Pending() {
+			if action, ok := m.keymap.TableAction(msg.Key()); ok {
+				m.recordKey(msg, keyModeBrowse, action, keymap.ResultAction)
+				return m.handleAction(action)
 			}
 		}
 		// Recorded before it is handled, so the press that quit (or wedged) the
@@ -2197,10 +2213,13 @@ func resourceAliases(r kube.Resource) []string {
 	return aliases
 }
 
-// The M3 actions menu (D107) was a modal picker of its own until PAL-05d: `a` now
-// opens the palette's `:action ` stage over the same set (rowActionTitles, through
+// The M3 actions menu (D107) was a modal picker of its own until PAL-05d: the
+// palette's `:action ` stage now opens over the same set (rowActionTitles, through
 // paletteRowVerbs), so its opener, its Kind and its picker are gone rather than
-// dormant (D207 pt 3 / D210). What survives is everything that was not the surface:
+// dormant (D207 pt 3 / D210). Since STORY-06c the gesture that opens that stage is
+// `enter` on the selected resource row — resolved in the resource-table key context
+// (TableAction → actions.menu) so the keymap keeps `enter` = nav.drillIn everywhere
+// else (D132's context split). What survives is everything that was not the surface:
 // the registry, the applicability predicates, and dispatchRowAction — which the stage,
 // the verb-stage row entries and the direct keys all still end in.
 

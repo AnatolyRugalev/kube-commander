@@ -62,8 +62,10 @@ func TestDefaultResolution(t *testing.T) {
 	}
 	// An unbound key resolves to nothing. `s` is deliberately unbound — the letter
 	// remap freed it entirely (D270): the s-family is now `S` sort, `x` clear,
-	// `ctrl+f` search, nothing shares a letter.
-	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}} {
+	// `ctrl+f` search, nothing shares a letter. `a` is deliberately unbound too — the
+	// actions menu moved onto the resource table's `enter` (STORY-06c), freeing the
+	// letter.
+	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}, {Code: 'a', Text: "a"}} {
 		if a, ok := km.Action(k); ok {
 			t.Errorf("Action(%+v) = %q, want unbound", k, a)
 		}
@@ -171,6 +173,31 @@ func TestConfirmContextResolution(t *testing.T) {
 	}
 	if a, ok := km.ConfirmAction(tea.Key{Code: 'd', Text: "d"}); ok {
 		t.Errorf("ConfirmAction(d) = %q, want unbound in the confirm context", a)
+	}
+}
+
+// TestTableContextResolution proves actions.menu resolves in its own key context
+// (STORY-06c): `enter` → actions.menu via TableAction while `enter` keeps its browse
+// meaning (nav.drillIn) via Action — the same key, two live actions, told apart by
+// the resource-table context, exactly as the confirm context splits `enter` (D132).
+// `a` is deliberately unbound: the letter frees up entirely.
+func TestTableContextResolution(t *testing.T) {
+	km := DefaultKeymap()
+
+	if a, ok := km.TableAction(tea.Key{Code: tea.KeyEnter}); !ok || a != ActionActions {
+		t.Errorf("TableAction(enter) = %q,%v; want actions.menu", a, ok)
+	}
+	// No other key lives in the table context — only enter opens the actions menu.
+	if a, ok := km.TableAction(tea.Key{Code: 'x', Text: "x"}); ok {
+		t.Errorf("TableAction(x) = %q, want unbound in the table context", a)
+	}
+	// The same key keeps its browse meaning outside the table context.
+	if a, ok := km.Action(tea.Key{Code: tea.KeyEnter}); !ok || a != ActionDrillIn {
+		t.Errorf("Action(enter) = %q,%v; want nav.drillIn in the browse context", a, ok)
+	}
+	// `a` frees up — no action binds the letter any more.
+	if a, ok := km.Action(tea.Key{Code: 'a', Text: "a"}); ok {
+		t.Errorf("Action(a) = %q, want unbound after STORY-06c freed it", a)
 	}
 }
 

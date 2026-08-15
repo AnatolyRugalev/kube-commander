@@ -2545,18 +2545,20 @@ func openPodTable(t *testing.T, kind string, opts ...Option) Model {
 	return next.(Model)
 }
 
-// actionsKey is the default actions.menu key (`a`).
-var actionsKey = tea.Key{Code: 'a', Text: "a"}
+// actionsKey is the default actions.menu key (`enter`, STORY-06c): on a focused
+// resource table with a row selected, it resolves through the table key context
+// (TableAction) to actions.menu — the `:action ` palette stage.
+var actionsKey = tea.Key{Code: tea.KeyEnter}
 
-// openActionStage presses `a` and asserts it landed on the palette's `:action ` stage
-// — the surface PAL-05d replaced the actions menu with. Every assertion below runs
-// through the real key rather than through the stage's opener, so what is pinned is
-// what a reader gets.
+// openActionStage presses `enter` and asserts it landed on the palette's `:action `
+// stage — the surface STORY-06c moved the actions menu onto the resource table's
+// enter gesture. Every assertion below runs through the real key rather than
+// through the stage's opener, so what is pinned is what a reader gets.
 func openActionStage(t *testing.T, m Model) Model {
 	t.Helper()
 	m, _ = press(t, m, actionsKey)
 	if !m.cmdPicker.Active() || m.palArg != keymap.ActionActions {
-		t.Fatalf("`a` should open the palette on its action stage, stage = %q", m.palArg)
+		t.Fatalf("`enter` should open the palette on its action stage, stage = %q", m.palArg)
 	}
 	return m
 }
@@ -2583,7 +2585,8 @@ func TestActionStageListsApplicableActions(t *testing.T) {
 			t.Errorf("the Pod action stage should not list node/cronjob action %q", title)
 		}
 	}
-	// The stage lists the row verbs *alone* — that is what `a` is for. A reader who
+	// The stage lists the row verbs *alone* — that is what the gesture is for. A
+	// reader who
 	// wants the app-global verbs too is one backspace away (TestActionStageRewinds).
 	if got, want := m.cmdPicker.Len(), len(rowVerbTitles(t, m)); got != want {
 		t.Fatalf("action stage seeded with %d entries, want %d (the row actions alone)", got, want)
@@ -2624,13 +2627,19 @@ func TestActionStageCronJob(t *testing.T) {
 	}
 }
 
-// TestActionStageInertWithoutResource proves the actions key is a no-op before a
+// TestActionStageInertWithoutResource proves the actions gesture is a no-op before a
 // resource table is open (the welcome page is showing): there is no row to act on. The
 // inertness is the stage's, not the key's (D209 pt 2/D210 pt 2) — and it must leave the
-// palette *closed* rather than open on an empty list, which would imply `a` had
-// something to offer.
+// palette *closed* rather than open on an empty list, which would imply `enter` had
+// something to offer. Since STORY-06c the gesture is enter-on-the-table, so the test
+// focuses the table pane (nav.right) first: enter then resolves in the table context,
+// where the missing resource still refuses the stage.
 func TestActionStageInertWithoutResource(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"}) // focus the table pane
+	if !m.table.Focused() {
+		t.Fatal("setup: nav.right should focus the table pane")
+	}
 	m, _ = press(t, m, actionsKey)
 	if m.cmdPicker.Active() {
 		t.Fatal("actions.menu should be inert with no resource table open")

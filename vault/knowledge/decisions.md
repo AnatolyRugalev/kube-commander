@@ -7651,7 +7651,38 @@ pick. `s` is freed entirely — the s-family is now `S` (enter the mode) and `x`
    returns to the rows. The cursor clamps and reveals itself via the table's
    existing horizontal-scroll machinery (`revealSortCursor`), and a RESET/delta
    that shrinks the columns clamps the cursor rather than letting it dangle.
-4. **This supersedes the popup design.** The board note carried the popup design's
+ 4. **This supersedes the popup design.** The board note carried the popup design's
    "clear sort entry" intent into the header-focus interaction; a later leg must
    not build a sort-column popup/picker alongside the mode. `TestSortMode*` and the
    `docs/keybindings.md` `sort` rows are the shape's contract.
+
+## D271 — `enter` opens the actions menu on the selected row; it lives in a resource-table key context and `a` frees up (2026-08-16, STORY-06c)
+
+The walk's finding (`2026-08-15-enter-actions-menu.md`): pressing `enter` on a
+resource row should launch the actions menu (`actions.menu`, today the `:action `
+palette stage), and drill-in (`res.children`, "Show pods") is already an entry in
+it — so drilling into an owner's pods is one menu pick away. `enter` is the
+**universal accept key** on modals, prompts, pickers and confirms, and that stays;
+only the resource-table context changes.
+
+1. **`actions.menu` binds `enter` in a third key context, `ctxTable`, resolved
+   while the resource table owns the keys** — the same split D132 gave the confirm
+   modal (a key that means different things in different surfaces). `enter` keeps
+   its browse meaning (`nav.drillIn`) on the menu pane, in pickers and on modals;
+   the shell consults `TableAction` first, exactly as `routeModalConfirmKey`
+   consults `ConfirmAction`. A later leg must not rebind `actions.menu` onto a
+   plain browse key that would collide with `nav.drillIn`, and must not remove the
+   table-context gate: the gate is the hint ladder itself (`hintContext() ==
+   HelpTable`), so an open modal/logs/viewer/forwards/help/sort-mode surface keeps
+   its own `enter`, and a pending sequence (`g` of `gg`) still owns the press.
+2. **`a` frees up.** The letter is deliberately unbound (keymap test pins it);
+   the redesign's displaced-key rule (D269 pt 5) is satisfied because the actions
+   gesture got a new home in the same change. `:` and the palette's `:action `
+   verb still reach the menu, and the row-verb stage is unchanged — only the
+   gesture that opens it moved.
+3. **The table's own `enter` no longer emits the dead `RowSelectedMsg`.** It was
+   the S01 "lost gesture": the shell never handled that message. In its place the
+   table context opens the actions menu; the drill-in (Show pods) is inside it, so
+   nothing is lost. A later leg must not re-introduce a bare `enter`-drills-into-
+   row behaviour on the table.
+

@@ -8,9 +8,10 @@ import (
 // This file is the M3 row-action surface (M3-02): the curated set of operations
 // that act on the *selected resource row*, the per-kind applicability that decides
 // which of them are offered, and the direct-key shortcuts for the common ones. The
-// list itself is no longer a menu of its own — since PAL-05d `a` opens the command
-// palette's `:action ` stage over rowActionTitles' set, and `:` appends the same set
-// to its verbs (D210) — so "the actions menu" below names that list, not a surface. It is deliberately *only* the surface + routing (D107): opening the menu
+// list itself is no longer a menu of its own — since PAL-05d `enter` on a selected
+// row opens the command palette's `:action ` stage over rowActionTitles' set
+// (STORY-06c), and `:` appends the same set to its verbs (D210) — so "the actions
+// menu" below names that list, not a surface. It is deliberately *only* the surface + routing (D107): opening the menu
 // (or pressing a direct key) resolves to a rowActionMsg carrying the chosen
 // action and the row's identity; each later M3 leg (M3-03…) handles its own
 // intent (the YAML viewer, delete confirm, scale prompt, …). Applicability is by

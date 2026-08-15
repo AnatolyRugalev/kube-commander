@@ -388,8 +388,9 @@ func TestChildrenActionAppliesToOwnerKindsOnly(t *testing.T) {
 }
 
 // TestChildrenActionListedInActionStage proves the gesture is reachable without
-// knowing its key — `a`'s action stage lists it for an owner kind and omits it for a
-// Pod, matching the direct key's own applicability guard.
+// knowing its key — the actions stage (`enter` on a row, STORY-06c) lists it for an
+// owner kind and omits it for a Pod, matching the direct key's own applicability
+// guard.
 func TestChildrenActionListedInActionStage(t *testing.T) {
 	m, _ := ownerTable(t, "apps", "Deployment", &fakeChildResolver{scope: podScope()})
 	m = openActionStage(t, m)

@@ -90,7 +90,9 @@ const (
 	// PAL-05d it is an *argument* verb like ns.switch and resources.switch: it takes
 	// the action as its argument and opens the palette's `:action ` stage rather than
 	// a menu of its own (D210), so its id keeps the `.menu` suffix for compatibility
-	// with existing keymap config while the surface it names is the palette's.
+	// with existing keymap config while the surface it names is the palette's. Since
+	// STORY-06c its default key is `enter`, resolved in the resource-table context
+	// (TableAction): pressing enter on the selected row opens the menu.
 	ActionActions  Action = "actions.menu"
 	ActionDescribe Action = "res.describe"
 	ActionLogs     Action = "res.logs"
@@ -234,13 +236,15 @@ const (
 
 // keyContext scopes key resolution: a chord means different actions in different
 // contexts, and collisions are checked per-context (keybindings.md: "two actions
-// bound to the same key **in the same context**"). Today there are two: the browse
-// context (the sequencer + Action) and the confirm-modal context (ConfirmAction).
+// bound to the same key **in the same context**"). Today there are three: the
+// browse context (the sequencer + Action), the confirm-modal context
+// (ConfirmAction) and the resource-table context (TableAction).
 type keyContext int
 
 const (
 	ctxBrowse keyContext = iota
 	ctxConfirm
+	ctxTable
 )
 
 // confirmContextActions is the set of actions resolved in the confirm-modal
@@ -251,12 +255,24 @@ var confirmContextActions = map[Action]struct{}{
 	ActionConfirmDecline: {},
 }
 
+// tableContextActions is the set of actions resolved in the resource-table
+// context rather than the browse context (STORY-06c). contextOf routes every
+// other action to the browse context.
+var tableContextActions = map[Action]struct{}{
+	ActionActions: {},
+}
+
 // contextOf returns the key context an action's bindings live in. Confirm
-// accept/decline resolve only while the confirm modal is up (ConfirmAction); every
-// other action resolves in the browse context (the sequencer + Action).
+// accept/decline resolve only while the confirm modal is up (ConfirmAction);
+// actions.menu resolves only while the resource table owns the keys (TableAction,
+// STORY-06c); every other action resolves in the browse context (the sequencer +
+// Action).
 func contextOf(a Action) keyContext {
 	if _, ok := confirmContextActions[a]; ok {
 		return ctxConfirm
+	}
+	if _, ok := tableContextActions[a]; ok {
+		return ctxTable
 	}
 	return ctxBrowse
 }
@@ -425,9 +441,16 @@ var defaultBindings = map[Action][]string{
 	ActionSort:       {"S"},
 	ActionClearSort:  {"x"},
 	ActionToggleMenu: {"m"},
-	ActionActions:    {"a"},
-	ActionDescribe:   {"d"},
-	ActionLogs:       {"L"},
+	// actions.menu takes `enter` (STORY-06c) — pressing enter on the selected
+	// resource row opens the actions menu (`:action `), where the walker landing
+	// on a red thing wants to be. It lives in the **resource-table context**
+	// (ctxTable/TableAction), not the browse context, so `enter` keeps its browse
+	// meaning (nav.drillIn) on the menu pane, in pickers and on modals: same key,
+	// different surface, the confirm-context pattern (D132). `a` frees up — the
+	// letter is unbound from the browse context entirely.
+	ActionActions:  {"enter"},
+	ActionDescribe: {"d"},
+	ActionLogs:     {"L"},
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`D`/describe=`d`; `y` stays free for a future rebind or user config).
@@ -559,6 +582,7 @@ type Keymap struct {
 	bindings     map[Action][]seq
 	bySeq        map[string]Action // browse-context single/sequence resolution
 	confirmBySeq map[string]Action // confirm-modal-context resolution (ConfirmAction)
+	tableBySeq   map[string]Action // resource-table-context resolution (TableAction)
 	prefix       map[string]bool
 	extends      map[string]bool
 }
@@ -640,6 +664,7 @@ func (k *Keymap) Merge(overrides map[Action][]string) (*Keymap, []string, error)
 func build(bindings map[Action][]seq) (*Keymap, error) {
 	bySeq := make(map[string]Action)
 	confirmBySeq := make(map[string]Action)
+	tableBySeq := make(map[string]Action)
 	prefix := make(map[string]bool)
 	extends := make(map[string]bool)
 	// Deterministic order so a collision reports the same pair every run.
@@ -650,14 +675,18 @@ func build(bindings map[Action][]seq) (*Keymap, error) {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, a := range ids {
 		// Each action's chords resolve in exactly one context; a collision is only a
-		// collision within that context (keybindings.md). The confirm context has no
-		// multi-key sequences, so only the browse context feeds prefix/extends (the
-		// sequencer). Both indexes are keyed by chord, so the same key can map to a
-		// browse action and a confirm action without clashing.
+		// collision within that context (keybindings.md). The confirm and table
+		// contexts have no multi-key sequences, so only the browse context feeds
+		// prefix/extends (the sequencer). All indexes are keyed by chord, so the same
+		// key can map to a browse action, a confirm action and a table action
+		// without clashing.
 		idx := bySeq
 		browse := true
-		if contextOf(a) == ctxConfirm {
+		switch contextOf(a) {
+		case ctxConfirm:
 			idx, browse = confirmBySeq, false
+		case ctxTable:
+			idx, browse = tableBySeq, false
 		}
 		for _, s := range bindings[a] {
 			key := s.key()
@@ -680,7 +709,7 @@ func build(bindings map[Action][]seq) (*Keymap, error) {
 			}
 		}
 	}
-	return &Keymap{bindings: bindings, bySeq: bySeq, confirmBySeq: confirmBySeq, prefix: prefix, extends: extends}, nil
+	return &Keymap{bindings: bindings, bySeq: bySeq, confirmBySeq: confirmBySeq, tableBySeq: tableBySeq, prefix: prefix, extends: extends}, nil
 }
 
 // exact returns the action a whole sequence is bound to.
@@ -709,6 +738,17 @@ func (k *Keymap) Action(key tea.Key) (Action, bool) {
 // sequencer is needed.
 func (k *Keymap) ConfirmAction(key tea.Key) (Action, bool) {
 	a, ok := k.confirmBySeq[seq{chordFromKey(key)}.key()]
+	return a, ok
+}
+
+// TableAction resolves a single live keypress in the resource-table context: the
+// table-only bindings (default `enter` → actions.menu, STORY-06c). It is separate
+// from Action so `enter` can open the actions menu on the selected resource row
+// while keeping its browse meaning (nav.drillIn) on the menu pane, in pickers and
+// on modals — the same context split the confirm modal uses for `y`/`n` (D132).
+// The table context has only single-key bindings, so no sequencer is needed.
+func (k *Keymap) TableAction(key tea.Key) (Action, bool) {
+	a, ok := k.tableBySeq[seq{chordFromKey(key)}.key()]
 	return a, ok
 }
 

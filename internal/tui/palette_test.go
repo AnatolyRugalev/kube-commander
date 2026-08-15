@@ -505,7 +505,8 @@ func TestPaletteVerbsAreRegisteredAndDistinct(t *testing.T) {
 }
 
 // rowVerbTitles is the set of row-action titles applicable to the browsed kind — the
-// same source the actions menu lists — so a test asserts against what `a` would offer
+// same source the actions menu lists — so a test asserts against what the action
+// stage would offer
 // rather than against a second hand-written list that could drift from it.
 func rowVerbTitles(t *testing.T, m Model) []string {
 	t.Helper()
@@ -679,8 +680,9 @@ func TestRowVerbTitlesDoNotCollideWithPaletteVerbs(t *testing.T) {
 }
 
 // TestActionKeyOpensTheSamePaletteStageAsTheLine is PAL-05d's headline and the
-// assertion that makes `a` sugar rather than a second surface (D210 pt 1): the frame
-// the key produces is **byte-for-byte** the one `:` `act` `␣` produces. Both go
+// assertion that makes the actions gesture sugar rather than a second surface (D210
+// pt 1): the frame `enter` on a row produces is **byte-for-byte** the one `:`
+// `act` `␣` produces. Both go
 // through enterPaletteArg, so a divergence here would mean one of the two grew its own
 // idea of the stage.
 func TestActionKeyOpensTheSamePaletteStageAsTheLine(t *testing.T) {
@@ -691,12 +693,13 @@ func TestActionKeyOpensTheSamePaletteStageAsTheLine(t *testing.T) {
 		t.Fatalf("`:act␣` should commit the action verb, stage = %q", typed.palArg)
 	}
 	if frame(keyed) != frame(typed) {
-		t.Fatalf("`a` and `:act␣` render different stages:\n--- key ---\n%s\n--- line ---\n%s",
+		t.Fatalf("`enter` and `:act␣` render different stages:\n--- key ---\n%s\n--- line ---\n%s",
 			frame(keyed), frame(typed))
 	}
 }
 
-// TestActionStageNamesTheRowItWouldActOn is D205 pt 2 carried onto the stage `a` opens:
+// TestActionStageNamesTheRowItWouldActOn is D205 pt 2 carried onto the stage `enter`
+// opens:
 // its chrome names the object, because this is the one surface in kubecom where every
 // entry acts on something and one of them deletes it. The verb is *not* repeated in the
 // title — the `:action ` prompt already says which stage the line is in.
@@ -719,7 +722,8 @@ func TestActionStageNamesTheRowItWouldActOn(t *testing.T) {
 }
 
 // TestActionStageOffersTheVerbStagesOwnRowSet is the one-source guard (D205 pt 1): the
-// set `a` narrows to is the same set `:` appends to its globals, computed by the same
+// set the stage narrows to is the same set `:` appends to its globals, computed by
+// the same
 // function — so the two ways in cannot come to disagree about what applies to a kind.
 func TestActionStageOffersTheVerbStagesOwnRowSet(t *testing.T) {
 	verbStage, _ := press(t, openPodTable(t, "Pod"), colon)
@@ -739,7 +743,8 @@ func TestActionStageOffersTheVerbStagesOwnRowSet(t *testing.T) {
 	}
 }
 
-// TestActionStageRewindsToTheVerbList proves `a` is a way *into* the palette rather
+// TestActionStageRewindsToTheVerbList proves the action stage is a way *into* the
+// palette rather
 // than a faster dead end (D207 pt 2, the half D233 kept): backspace on the empty line
 // uncommits the verb and the full list — globals and row verbs — comes back, so a key
 // pressed by mistake is one keystroke from everything else. Backspace, not esc: esc
@@ -763,7 +768,7 @@ func TestActionStageRewindsToTheVerbList(t *testing.T) {
 }
 
 // TestActionStageEscClosesToTheTable is PAL-07's headline assertion and the feedback's
-// exact repro (`2026-08-06-action-menu-esc-behavior`): select a pod, press `a`, press
+// exact repro (`2026-08-06-action-menu-esc-behavior`): select a pod, press `enter`, press
 // esc — once. The palette is gone and the reader is back on the pod list, rather than
 // left on a verb list they never asked for with a second esc still owed (D233).
 func TestActionStageEscClosesToTheTable(t *testing.T) {
@@ -885,7 +890,8 @@ func TestPaletteRowNameIsTypeable(t *testing.T) {
 
 // TestActionStageRowsShowTheRowActionName carries the same claim onto the one stage
 // whose entries are not registry actions: a row verb is named by its own id — the name
-// the `:action ` line already takes (D210) — so the stage `a` opens has a name column
+// the `:action ` line already takes (D210) — so the stage `enter` opens has a name
+// column
 // too rather than reverting to bare titles.
 func TestActionStageRowsShowTheRowActionName(t *testing.T) {
 	m := openActionStage(t, openPodTable(t, "Pod"))

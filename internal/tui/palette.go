@@ -47,7 +47,7 @@ import (
 //
 // PAL-04 answers the other half of the feedback's "what can I do right now?": with a
 // table row selected the verb stage also lists the **row-scoped** actions — the exact
-// set the actions menu (`a`) computes for that row, never a second list — and the
+// set the actions menu computes for that row, never a second list — and the
 // palette's title names the object they would act on (D205). That title is the whole
 // answer to "which object": a palette entry that can delete something must say what,
 // and saying it once above the list beats repeating it on every row of a 60-column
@@ -90,8 +90,12 @@ import (
 // argument word to pre-type, so D209 pt 3 filed its picker with the two row-data ones.
 // It is not one of those — its values are the compiled-in row-action registry, nameable
 // before the list is seen (`:action delete`), and PAL-04 already listed them here — so
-// `a` converts like the other four: it opens `:action `, the palette narrowed to the
-// verbs that act on the selected row, one backspace from every other verb (D210).
+// the key converts like the other four: it opens `:action `, the palette narrowed to
+// the verbs that act on the selected row, one backspace from every other verb (D210).
+// Since STORY-06c the key that does this is **`enter`**, resolved in the resource-table
+// context (TableAction) so the keymap can keep `enter` = nav.drillIn everywhere else
+// (D132's context split); the `:action ` stage itself is unchanged, which is why `enter`
+// and the typed line render the same frame (TestActionKeyOpensTheSamePaletteStageAsTheLine).
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every
 // picker emits the same SelectedMsg/CancelledMsg types (D65), so the root branches on
@@ -219,10 +223,11 @@ func paletteVerbItems() ([]picker.Item, map[string]keymap.Action) {
 // The set is rowActionTitles' — the row-action registry's own per-kind source — so
 // PAL-04 adds a way *in* to those actions and not a second list of what they are: an
 // action the registry hides for this kind (Cordon on a Pod) is absent here for the same
-// reason, in the same code. The preconditions are the ones `a` has had since M3-02: a
-// resource table showing and a row under the cursor, with no requirement that the table
-// hold focus. Since PAL-05d `a` enters the `:action ` stage through this same function
-// too, so `:` and `a` do not merely agree about a kind's actions — they are one
+// reason, in the same code. The preconditions are the ones the actions gesture has had
+// since M3-02: a resource table showing and a row under the cursor, with no requirement
+// that the table hold focus. Since PAL-05d the `:action ` stage (entered by `enter` on a
+// row since STORY-06c) goes through this same function too, so the stage and `:` do not
+// merely agree about a kind's actions — they are one
 // computation.
 //
 // The labels are the titles marked by rowActionLabel — an action that will ask before
@@ -489,9 +494,10 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 		// The one stage whose values are scoped to the selected *row* rather than to
 		// the app: the actions applicable to the browsed kind, from rowActionTitles
 		// through paletteRowVerbs — the same source the verb stage appends (D205 pt 1),
-		// so `:action ` and `:` can never offer different sets. Inertness is `a`'s own
-		// rule and is decided here, not in the key (D209 pt 2): no resource table, no
-		// row under the cursor, or no applicable action and the stage does not open.
+		// so `:action ` and `:` can never offer different sets. Inertness is the
+		// stage's rule and is decided here, not in the key (D209 pt 2): no resource
+		// table, no row under the cursor, or no applicable action and the stage does
+		// not open.
 		// Over the logs view the stage is inert too (D258): its verbs act on a
 		// selection the full-screen view hides, and a pick like Delete would open the
 		// confirm modal invisibly while it captured input.

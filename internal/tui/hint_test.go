@@ -371,8 +371,8 @@ func TestEveryHelpContextIsReachable(t *testing.T) {
 
 // TestHintBarRefreshesWithoutAnExplicitSync is the structural half of HINT-01 (D206):
 // the hint is derived at the tail of every Update, so a state change that no
-// syncHints call sits next to still lands. `a` is such a path — it opens the palette's
-// action stage from a table row and nothing on that route touches the hint.
+// syncHints call sits next to still lands. `enter` on a row is such a path — it opens
+// the palette's action stage (STORY-06c) and nothing on that route touches the hint.
 func TestHintBarRefreshesWithoutAnExplicitSync(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 300, Height: 24})

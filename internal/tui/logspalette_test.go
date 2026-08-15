@@ -158,13 +158,16 @@ func TestLogsGrepKeepsTheColonAsText(t *testing.T) {
 }
 
 // TestLogsActionsMenuStaysInert pins the deliberate gap in the pass-through (D258):
-// `a` acts on the browse table's selection — invisible under the full-screen logs
-// view — and its picks can open the confirm modal, which would capture input
-// invisibly. So the gesture keeps doing what it did before this leg: nothing.
+// the actions menu acts on the browse table's selection — invisible under the
+// full-screen logs view — and its picks can open the confirm modal, which would
+// capture input invisibly. So the gesture keeps doing what it did before this leg:
+// nothing. The gesture is `enter` on the resource table since STORY-06c; over the
+// logs view the table context is not consulted (hintContext is HelpLogs), so enter
+// resolves to nav.drillIn and the palette stays closed.
 func TestLogsActionsMenuStaysInert(t *testing.T) {
 	m := openLogsWithLines(t, "a line")
 
-	m, _ = press(t, m, tea.Key{Code: 'a', Text: "a"})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
 	if m.cmdPicker.Active() || m.palArg != "" {
 		t.Error("actions.menu must not open over the logs view")
 	}
