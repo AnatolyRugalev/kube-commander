@@ -18,15 +18,14 @@ convention; destructive actions sit on capital keys.**
 | ctx.switch | C | C | unchanged |
 | res.delete | **D** | d | destructive → capital |
 | res.describe | **d** | D | the read action → lowercase |
-| sort.column | s | s | cycle **direction only** (see `2026-08-15-sort-column-picker.md`) |
+| sort.column | s | s | **freed** — no direct sort key; see the S header-focus below |
 | sort column picker | **S** | sort.clear | **new interaction**, below; supersedes the popup design in `2026-08-15-sort-column-picker.md` |
 | actions.menu | **enter** | a | consistent with `2026-08-15-enter-actions-menu.md`; `a` frees up |
 
-**Sort column picker (S)** — no popup: focus the table's **column-header row**.
-`h`/`l`/`left`/`right` move across the columns, `enter` on a column toggles the
-sort **direction**, `down` exits column focus back to the rows, and `up`
-re-enters it when the cursor is on the top row of the list. `sort.clear` lives
-inside this mode (a "clear" pick).
+**Sort (S)** — no popup and no `s`: **`S` focuses the table's column-header
+row** (the top bar). `h`/`l`/`left`/`right` move across the columns, `enter` on
+a column toggles the sort **direction**, and **`esc` brings focus back** to the
+rows. `sort.clear` lives inside this mode (a "clear" pick).
 
 **Collisions the fold-in must resolve (displaced bindings need homes):**
 - `app.searchPrev` is **N** today — displaced by ns.switch=N. Give it a new key
