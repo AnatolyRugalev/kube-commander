@@ -19,9 +19,12 @@ For each of the five stories in `stories/` (S02 is the main story):
 
 ```bash
 ./stories/cluster/up.sh
-export KUBECOM_KEYLOG=~/traces/s02.jsonl   # one file per story id
-kubecom
+./stories/cluster/run.sh s02    # one run per story id; trace -> ~/traces/s02.jsonl
 ```
+
+`run.sh` starts kubecom with a throwaway user dir, so every walk begins with no
+config, menus/state, cache or log history (up.sh's identical-start guarantee,
+extended to kubecom) — see `stories/README.md`.
 
 Walk it, and answer the "When you're done" questions in your own words. Then read
 the trace back with `kubecom keys analyze ~/traces/s02.jsonl`. The two things

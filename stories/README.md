@@ -49,9 +49,15 @@ both cut against it, so the demo, the docs and the test path stay one product.
 
 ```bash
 ./stories/cluster/up.sh
-export KUBECOM_KEYLOG=~/traces/s02.jsonl   # set once; survives relaunches
-kubecom
+./stories/cluster/run.sh s02               # trace -> ~/traces/s02.jsonl
 ```
+
+`run.sh` launches kubecom with a **throwaway user dir** (`XDG_CONFIG_HOME`/
+`XDG_CACHE_HOME` under `$TMPDIR`, wiped before every launch), so a walk starts with
+no config, no per-context menus/state, no discovery cache and no log history — the
+same guarantee `up.sh` gives the cluster — and never reads or writes your real
+`~/.config/kubecom`. The trace still lands in `~/traces/<id>.jsonl`, outside the
+wipe, so it survives.
 
 Then read the trace back with `kubecom keys analyze ~/traces/s02.jsonl`: it
 reports the unresolved presses ranked by frequency, the action counts, the longest

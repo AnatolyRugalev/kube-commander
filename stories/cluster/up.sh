@@ -51,9 +51,9 @@ The story cluster is up and selected (context: ${CONTEXT}).
   data    redis StatefulSet + bound PVCs, DaemonSet, a completed Job, a CronJob (2m)
   broken  crashloop, bad-image, unschedulable, never-ready, an unbindable PVC
 
-Run a story with the keystroke log on, e.g.:
+Run a story with a clean kubecom user dir and the keystroke log on:
 
-  kubecom --keylog /tmp/story-01.jsonl
+  ./stories/cluster/run.sh s01
 
 Tear it down with ./stories/cluster/down.sh
 EOF
