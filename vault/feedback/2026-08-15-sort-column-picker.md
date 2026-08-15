@@ -15,3 +15,9 @@ I want:
 
 Collision to resolve: `S` is currently `sort.clear`. The clear-sort verb should
 live inside the new shift-S popup (a "clear sort" entry), so nothing is lost.
+
+**Design superseded 2026-08-15** by `2026-08-15-keymap-redesign.md`: `shift+S`
+is no longer a popup — it **focuses the table's column-header row** instead, with
+`h`/`l`/`left`/`right` moving across columns, `enter` toggling the direction,
+`down` exiting to the rows and `up` re-entering from the top row. The `s`-cycle
+direction-only and the clear-sort-inside-S parts stand.
