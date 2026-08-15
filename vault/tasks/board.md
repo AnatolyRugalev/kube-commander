@@ -738,7 +738,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D270
 
 - [ ] **STORY-06c** `enter` opens the actions menu on a resource row — drill-in moves inside the menu (an entry in it), so drilling into an owner's pods is one menu pick away; `a` frees up
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: opencode | added: 2026-08-15
       notes: The enter half of `keymap-redesign.md` (deleted at 06a) and the ask of
       `2026-08-15-enter-actions-menu.md`. `enter` stays the universal accept key on modals,
       prompts, pickers and confirms — only the resource-table context changes.
