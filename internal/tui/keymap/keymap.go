@@ -72,9 +72,16 @@ const (
 	// not the gesture.
 	ActionTheme       Action = "theme.switch"
 	ActionToggleMouse Action = "mouse.toggle"
-	ActionSort        Action = "sort.column"
-	ActionClearSort   Action = "sort.clear"
-	ActionToggleMenu  Action = "menu.toggle"
+	// ActionSort is the column-header sort gesture (STORY-06b): `S` focuses the
+	// table's column-header row — a small mode where `h`/`l`/`left`/`right` move a
+	// cursor across the columns, `enter` toggles the sort direction on the cursor
+	// column, and `esc` returns focus to the rows. It replaced the old `s` cycle
+	// (sort.column was the cycle-column key) after the walk read the s-family as
+	// confusing: `s` is now freed entirely, `S` is the one sort gesture, and
+	// sort.clear lives inside the mode as a "clear" pick.
+	ActionSort       Action = "sort.column"
+	ActionClearSort  Action = "sort.clear"
+	ActionToggleMenu Action = "menu.toggle"
 	// M3 row actions (operate on the selected resource row). ActionActions is the
 	// way to *all* of them (D107); the rest are direct-key shortcuts for the
 	// most-used ones, all off the reserved nav keys (D10). The full curated action
@@ -284,7 +291,7 @@ var actionMeta = []struct {
 	{ActionContext, "Switch cluster context"},
 	{ActionTheme, "Switch color theme"},
 	{ActionToggleMouse, "Toggle mouse capture (off = select text to copy)"},
-	{ActionSort, "Sort table (cycle column / direction)"},
+	{ActionSort, "Sort: focus the column-header row"},
 	{ActionClearSort, "Clear sort (restore order)"},
 	{ActionToggleMenu, "Toggle left menu pane"},
 	{ActionActions, "Act on the selected row"},
@@ -409,12 +416,18 @@ var defaultBindings = map[Action][]string{
 	// `F` forwards, `X` stop-all, `P` pods). Lowercase `t` is logs.timestamps.
 	ActionTheme:       {"T"},
 	ActionToggleMouse: {"M"},
-	ActionSort:        {"s"},
-	ActionClearSort:   {"S"},
-	ActionToggleMenu:  {"m"},
-	ActionActions:     {"a"},
-	ActionDescribe:    {"d"},
-	ActionLogs:        {"L"},
+	// The sort gestures live on one key (D270): `S` enters the column-header sort
+	// mode — the "sort column picker" of the redesign, superseding both the old `s`
+	// cycle (which the walk read as the s-family's worst offender, `2026-08-15-sort-column-picker.md`)
+	// and the old `S` sort.clear. `s` is freed entirely. Inside the mode `h`/`l` move
+	// the header cursor, `enter` toggles direction, `esc` returns to the rows, and
+	// `sort.clear` (`x`) is the mode's clear pick.
+	ActionSort:       {"S"},
+	ActionClearSort:  {"x"},
+	ActionToggleMenu: {"m"},
+	ActionActions:    {"a"},
+	ActionDescribe:   {"d"},
+	ActionLogs:       {"L"},
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`D`/describe=`d`; `y` stays free for a future rebind or user config).
@@ -485,8 +498,9 @@ var defaultBindings = map[Action][]string{
 	// text-carrying key types into that field, D140 pt 1). It stays in the
 	// ctrl+<letter> family the other always-open-field surfaces need (D140 pt 1);
 	// raw mode clears the terminal's IXON flow control, so ctrl+f reaches the app
-	// rather than scrolling it. `s` stays the table sort and `S` the column picker
-	// (D269).
+	// rather than scrolling it. `s` is freed entirely — the s-family is now `S`
+	// (sort column-header mode) alone, `x` (sort.clear) inside it, and ctrl+f
+	// (search) — nothing shares a letter (D270).
 	ActionSearch: {"ctrl+f"},
 	// The all-kinds widen has to be a no-text chord for the same reason
 	// search.cluster is: it acts *inside* the search view, whose query field is

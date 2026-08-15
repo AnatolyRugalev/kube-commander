@@ -43,8 +43,8 @@ func TestDefaultResolution(t *testing.T) {
 		{tea.Key{Code: '/', Text: "/"}, ActionFilter},
 		{tea.Key{Code: 'c', Mod: tea.ModCtrl}, ActionQuit},
 		{tea.Key{Code: 'm', ShiftedCode: 'M', Mod: tea.ModShift}, ActionToggleMouse},
-		{tea.Key{Code: 's', Text: "s"}, ActionSort},
-		{tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}, ActionClearSort},
+		{tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}, ActionSort},
+		{tea.Key{Code: 'x', Text: "x"}, ActionClearSort},
 		{tea.Key{Code: 'm', Text: "m"}, ActionToggleMenu},
 		{tea.Key{Code: 'f', Mod: tea.ModCtrl}, ActionSearch},
 		{tea.Key{Code: 'n', ShiftedCode: 'N', Mod: tea.ModShift}, ActionNamespace},
@@ -60,16 +60,20 @@ func TestDefaultResolution(t *testing.T) {
 			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, got, ok, tt.want)
 		}
 	}
-	// An unbound key resolves to nothing.
-	if a, ok := km.Action(tea.Key{Code: 'z', Text: "z"}); ok {
-		t.Errorf("Action(z) = %q, want unbound", a)
+	// An unbound key resolves to nothing. `s` is deliberately unbound — the letter
+	// remap freed it entirely (D270): the s-family is now `S` sort, `x` clear,
+	// `ctrl+f` search, nothing shares a letter.
+	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}} {
+		if a, ok := km.Action(k); ok {
+			t.Errorf("Action(%+v) = %q, want unbound", k, a)
+		}
 	}
 }
 
 func TestMergeOverride(t *testing.T) {
 	km := DefaultKeymap()
 	merged, warns, err := km.Merge(map[Action][]string{
-		ActionFilter: {"x"}, // replace "/" with "x" (a free, non-nav key)
+		ActionFilter: {"b"}, // replace "/" with "b" (a free, non-nav key)
 	})
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -78,8 +82,8 @@ func TestMergeOverride(t *testing.T) {
 		t.Errorf("unexpected warnings: %v", warns)
 	}
 	// New binding wins.
-	if a, ok := merged.Action(tea.Key{Code: 'x', Text: "x"}); !ok || a != ActionFilter {
-		t.Errorf("x resolved to %q,%v; want app.filter", a, ok)
+	if a, ok := merged.Action(tea.Key{Code: 'b', Text: "b"}); !ok || a != ActionFilter {
+		t.Errorf("b resolved to %q,%v; want app.filter", a, ok)
 	}
 	// Old default no longer resolves.
 	if a, ok := merged.Action(tea.Key{Code: '/', Text: "/"}); ok {

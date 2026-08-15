@@ -82,6 +82,16 @@ type Model struct {
 	sortCol  int
 	sortDesc bool
 
+	// sortMode is the column-header sort interaction (STORY-06b): while on, the
+	// header row holds a cursor (sortCursor) that moves across the visible columns
+	// with nav.left/nav.right, toggles the sort direction with nav.drillIn, and
+	// returns to the rows with nav.back. It is the "sort column picker" of the
+	// keymap redesign — entered with `S`, no popup and no `s` cycle (D270). The
+	// mode is a view over the same sort state SortBy/ClearSort already own, so it
+	// needs no state of its own beyond the cursor.
+	sortMode   bool
+	sortCursor int
+
 	// visible holds the indices (into table.Columns) of the columns shown, and
 	// colWidths their rendered widths — both derived from the snapshot in
 	// SetTable so View stays a pure render.
@@ -141,6 +151,8 @@ func (m *Model) SetTable(t kube.Table) {
 	m.filter = ""
 	m.sortCol = -1
 	m.sortDesc = false
+	m.sortMode = false // a fresh snapshot resets the sort-mode cursor with the sort.
+	m.sortCursor = 0
 	// Samples measure the objects of the resource being left, and the overlay's
 	// availability is that kind's answer — both are wrong for the new snapshot, so
 	// the overlay is dropped here exactly as the filter and the sort are. The shell
@@ -234,6 +246,64 @@ func (m *Model) ClearSort() {
 	m.clampOffset()
 }
 
+// SortMode reports whether the table is in its column-header sort mode
+// (STORY-06b): the header row holds a cursor that nav.left/nav.right move across
+// the visible columns, nav.drillIn toggles the sort direction, and nav.back exits
+// back to the rows. Entered with `S` from the app; the app routes the mode's keys
+// to Update.
+func (m Model) SortMode() bool { return m.sortMode }
+
+// EnterSortMode puts the table into its column-header sort mode, with the cursor
+// on the currently sorted column (or the first column when unsorted). A no-op
+// when the table has no visible columns — there is nothing to move a cursor
+// across.
+func (m *Model) EnterSortMode() {
+	if len(m.visible) == 0 {
+		return
+	}
+	m.sortMode = true
+	if m.sortCol >= 0 && m.sortCol < len(m.visible) {
+		m.sortCursor = m.sortCol
+	} else {
+		m.sortCursor = 0
+	}
+	m.revealSortCursor()
+}
+
+// ExitSortMode leaves the column-header sort mode, returning focus to the rows.
+// The sort itself survives — the mode is a picker over the sort state, not the
+// sort.
+func (m *Model) ExitSortMode() {
+	m.sortMode = false
+	m.sortCursor = 0
+}
+
+// SortCursor returns the visible-column position the sort cursor is on while in
+// sort mode (0 otherwise) — for the app's routing and the tests.
+func (m Model) SortCursor() int { return m.sortCursor }
+
+// revealSortCursor scrolls the table horizontally so the cursor's column is
+// visible, mirroring how moveTo keeps the selected row visible vertically. It is
+// what makes moving the cursor with nav.right past the pane edge still land on a
+// column you can see.
+func (m *Model) revealSortCursor() {
+	if m.sortCursor < 0 || m.sortCursor >= len(m.visible) {
+		return
+	}
+	starts := m.columnStarts()
+	if m.sortCursor >= len(starts) {
+		return
+	}
+	start := starts[m.sortCursor]
+	width := m.colWidths[m.sortCursor]
+	if start < m.hoffset {
+		m.hoffset = start
+	} else if start+width+runeLen(colGap) > m.hoffset+m.innerWidth() {
+		m.hoffset = start + width + runeLen(colGap) - m.innerWidth()
+	}
+	m.clampHOffset()
+}
+
 // SortColumn returns the visible-column position currently sorted on and true,
 // or false when the table is in its unsorted (watch) order. It backs the header
 // sort indicator the app wiring (M2-13b) will render.
@@ -314,6 +384,15 @@ func (m *Model) applyFilter() {
 	}
 	m.sortRows()
 	m.measureWidths()
+	// A RESET/delta can change the visible column set while the sort mode is up;
+	// keep the cursor on a column that still exists (STORY-06b). The clamp is safe
+	// to run in every derivation — the cursor only ever holds a valid position.
+	if m.sortMode && m.sortCursor >= len(m.visible) {
+		m.sortCursor = len(m.visible) - 1
+		if m.sortCursor < 0 {
+			m.sortCursor = 0
+		}
+	}
 }
 
 // sortRows stably orders the displayed rows in place by the active sort column,
@@ -659,6 +738,35 @@ func (m *Model) measureWidths() {
 // RowSelectedMsg for the highlighted row. Any other action is ignored (the root
 // routes it elsewhere). The table consumes actions, never raw keys (D11).
 func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
+	// The column-header sort mode (STORY-06b) owns the keyboard while it is up:
+	// h/l/left/right move the cursor across the columns, enter toggles the sort
+	// direction on the cursor column, esc exits back to the rows, and everything
+	// else is swallowed so the rows underneath never move (the same capture shape
+	// as the port-forward panel). The app routes these keys here; the header row
+	// is the cursor's surface.
+	if m.sortMode {
+		switch a {
+		case keymap.ActionLeft:
+			if m.sortCursor > 0 {
+				m.sortCursor--
+				m.revealSortCursor()
+			}
+		case keymap.ActionRight:
+			if m.sortCursor < len(m.visible)-1 {
+				m.sortCursor++
+				m.revealSortCursor()
+			}
+		case keymap.ActionDrillIn:
+			if m.sortCursor < len(m.visible) {
+				m.SortBy(m.sortCursor) // toggles direction on the same column (D94)
+			}
+		case keymap.ActionBack:
+			m.sortMode = false
+		case keymap.ActionClearSort:
+			m.ClearSort()
+		}
+		return m, nil
+	}
 	// Horizontal scroll is handled first: it applies even to a header-only table
 	// (columns can be wider than the pane with no rows yet), so it precedes the
 	// empty-rows guard below.
@@ -986,7 +1094,8 @@ func (m Model) noticeBody(innerW, rows int) []string {
 // styled as the header row, windowed to innerW at the current horizontal offset.
 // The sorted column's header carries a direction arrow (M2-13b); its extra width
 // is reserved in measureWidths so the marker never overflows and misaligns the
-// data rows.
+// data rows. In the column-header sort mode (STORY-06b) the cursor's column is
+// painted with the selection style — the "you are here" of the sort picker.
 func (m Model) renderHeader(innerW int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
@@ -997,6 +1106,17 @@ func (m Model) renderHeader(innerW int) string {
 		cells[i] = padRight(name, m.colWidths[i])
 	}
 	line := m.hclip(strings.Join(cells, colGap), innerW)
+	if m.sortMode {
+		starts := m.columnStarts()
+		if m.sortCursor >= 0 && m.sortCursor < len(starts) {
+			spans := []roleSpan{{
+				start:  starts[m.sortCursor],
+				end:    starts[m.sortCursor] + m.colWidths[m.sortCursor],
+				cursor: true,
+			}}
+			return m.paintRow(line, spans, innerW, m.styles.Header)
+		}
+	}
 	return m.styles.Header.Width(innerW).Render(line)
 }
 

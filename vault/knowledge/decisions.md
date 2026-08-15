@@ -7617,3 +7617,37 @@ on `enter` → STORY-06c).
    overlay and the default-resolution tests all ride the registry, so they follow
    automatically; only the tape's own prose and the `navChords` warning set (which
    tracks the navigation keys of the day) need a hand alongside.
+
+## D270 — the sort column-picker is a header-focus mode on the table, not a popup; `s` is freed and `sort.clear` rides `x` (2026-08-15, STORY-06b)
+
+The redesign's S interaction (`2026-08-15-sort-column-picker.md`, superseded at 06a
+and carried here by the 06b board note) lands as a **column-header sort mode** on
+the table rather than a popup: `S` focuses the header row, `h`/`l`/`left`/`right`
+move a cursor across the columns, `enter` toggles the sort direction on the cursor
+column, `esc` returns focus to the rows, and `sort.clear` is the mode's "clear"
+pick. `s` is freed entirely — the s-family is now `S` (enter the mode) and `x`
+(clear) alone, with search on `ctrl+f` (D269) and nothing sharing a letter.
+
+1. **`sort.column` is `S`, not a cycle.** The old `sort.column` `s`-cycle is gone;
+   the keymap description reads "Sort: focus the column-header row". The mode is a
+   view over the table's existing `SortBy`/`ClearSort` (no new sort state), and the
+   cursor is the only new field. A later leg must not reintroduce a bare-letter
+   sort cycle: the walk's 26-`s` burst was the finding that killed it.
+2. **`sort.clear` is `x`, and it works everywhere a table is showing.** The "lives
+   inside the mode" in the design is about *placement* (the mode is where the clear
+   is advertised and most natural), not exclusivity: the palette verb and the key
+   keep clearing a showing table's sort from anywhere, so nothing is lost. The
+   mode itself also clears through the same `ClearSort`. A later leg must not make
+   `x` a sort key in the letter sense (it is a symbol-adjacent clear gesture), but
+   it must also not break the palette verb or the outside-the-mode clear.
+3. **The mode is a capturing surface.** While it is up, `h`/`l`/`enter`/`esc`/
+   `x`/`S` act and everything else is swallowed (the forwards-panel shape), and the
+   hint bar shows a new `HelpSort` context (HINT-05-complete: declared, named, set,
+   reachable). Entering the mode focuses the table; leaving it (esc, `S`, `q`)
+   returns to the rows. The cursor clamps and reveals itself via the table's
+   existing horizontal-scroll machinery (`revealSortCursor`), and a RESET/delta
+   that shrinks the columns clamps the cursor rather than letting it dangle.
+4. **This supersedes the popup design.** The board note carried the popup design's
+   "clear sort entry" intent into the header-focus interaction; a later leg must
+   not build a sort-column popup/picker alongside the mode. `TestSortMode*` and the
+   `docs/keybindings.md` `sort` rows are the shape's contract.

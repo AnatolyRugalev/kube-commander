@@ -338,6 +338,10 @@ func TestEveryHelpContextIsReachable(t *testing.T) {
 			m, _ := press(t, wide(t, openPodTable(t, "Pod")), tea.Key{Code: 'F', Text: "F"})
 			return m
 		},
+		keymap.HelpSort: func(t *testing.T) Model {
+			m, _ := press(t, wide(t, openPodTable(t, "Pod")), tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift})
+			return m
+		},
 	}
 
 	for _, ctx := range keymap.HelpContexts() {

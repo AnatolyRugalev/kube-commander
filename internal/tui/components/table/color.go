@@ -257,22 +257,30 @@ func (m Model) roleStyle(r cellRole) lipgloss.Style {
 // scroll offset is applied once, at paint time.
 //
 // match marks a run produced by the active `/` filter rather than by the cell
-// classifier (FILT-02). It is a flag rather than another cellRole because the
-// cellRole constants are ordered by severity and merged with `>` — a match is not
-// a severity and must not enter that comparison.
+// classifier (FILT-02). cursor marks the column the column-header sort mode's
+// cursor is on (STORY-06b) — the sort picker's "you are here". Both are flags
+// rather than cellRoles because the cellRole constants are ordered by severity
+// and merged with `>`: a match or a cursor is not a severity and must not enter
+// that comparison.
 type roleSpan struct {
 	start, end int
 	role       cellRole
 	match      bool
+	cursor     bool
 }
 
 // spanStyle is the style one span paints with. A match wins over the cell's
 // status role: the filter is why the row is on screen at all, so the reader must
 // be able to see what matched even in a cell that also carries a color. Match
 // paints a background of its own (styles.Match), so the two are never ambiguous.
+// The sort cursor paints with the Selection bar, the same "you are here" the
+// selected row uses.
 func (m Model) spanStyle(sp roleSpan) lipgloss.Style {
 	if sp.match {
 		return m.styles.Match
+	}
+	if sp.cursor {
+		return m.styles.Selection
 	}
 	return m.roleStyle(sp.role)
 }

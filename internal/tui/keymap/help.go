@@ -102,6 +102,11 @@ const (
 	// HelpForwards is the port-forward panel (M3-13b), a global overlay that captures
 	// input: move the cursor, stop the selected forward or all of them, close.
 	HelpForwards
+	// HelpSort is the table's column-header sort mode (STORY-06b), entered with `S`:
+	// the header row holds the cursor and the mode captures input while it is up, so
+	// only the keys that move/pick it act — h/l across the columns, enter to toggle
+	// the direction, x to clear, esc/S to leave.
+	HelpSort
 
 	// helpContextCount bounds the enum — it is always one past the last real context,
 	// which is what makes the set enumerable and therefore checkable (HINT-05, closing
@@ -130,6 +135,7 @@ var helpContextNames = [helpContextCount]string{
 	HelpViewer:       "HelpViewer",
 	HelpTableFilter:  "HelpTableFilter",
 	HelpForwards:     "HelpForwards",
+	HelpSort:         "HelpSort",
 }
 
 // String names the context, so a failure reads "HelpForwards has no hint set" rather
@@ -299,6 +305,7 @@ var contextShortHelpActions = map[HelpContext][]Action{
 	HelpViewer:       {ActionDown, ActionUp, ActionBack, ActionQuit},
 	HelpTableFilter:  {ActionDown, ActionUp, ActionDrillIn, ActionBack},
 	HelpForwards:     {ActionDown, ActionUp, ActionDrillIn, ActionStopForwards, ActionBack, ActionQuit},
+	HelpSort:         {ActionLeft, ActionRight, ActionDrillIn, ActionClearSort, ActionBack},
 }
 
 // HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a

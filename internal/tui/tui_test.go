@@ -2401,79 +2401,124 @@ func sortReset() kube.WatchEvent {
 	}
 }
 
-// sortKey is the default sort.column key (`s`).
-var sortKey = tea.Key{Code: 's', Text: "s"}
+// sortKey is the default sort.column key (`S`) — the column-header sort mode's
+// entry since the letter remap freed `s` entirely (D270).
+var sortKey = tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}
 
 // TestSortInertWithoutResource proves the sort key is a no-op before any resource
 // table is open (the welcome page is showing): there is nothing to sort.
 func TestSortInertWithoutResource(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
 	m, _ = press(t, m, sortKey)
+	if m.table.SortMode() {
+		t.Fatal("sort mode should be inert with no resource table open")
+	}
 	if _, ok := m.table.SortColumn(); ok {
 		t.Fatal("sort should be inert with no resource table open")
 	}
 }
 
-// TestSortCycleAdvancesColumnsAndClears proves the sort.column key cycles the table
-// through every visible column and both directions, then back to the unsorted watch
-// order — the single-key sort model (M2-13b): unsorted → col0 asc → col0 desc →
-// col1 asc → col1 desc → cleared → col0 asc …
-func TestSortCycleAdvancesColumnsAndClears(t *testing.T) {
+// openSortTable drills into a two-column (NAME, STATUS) resource table so a sort
+// test has columns to move a cursor across and rows to order.
+func openSortTable(t *testing.T) Model {
+	t.Helper()
 	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
 	m := sizedWith(t, WithWatcher(fw))
-
 	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
 	m = next.(Model)
-	// Drain the preloaded RESET into the table so it has 2 visible columns + 2 rows.
 	wm, ok := cmd().(watchMsg)
 	if !ok {
 		t.Fatalf("pump produced %T, want watchMsg", cmd())
 	}
 	next, _ = m.Update(wm)
-	m = next.(Model)
+	return next.(Model)
+}
+
+// TestSortModeFocusesHeaderAndMovesAcrossColumns proves the column-header sort
+// mode (STORY-06b): `S` focuses the header row (SortMode on), `l`/`h` move the
+// cursor across the visible columns, `enter` toggles the sort direction on the
+// cursor column, and `esc` returns focus to the rows.
+func TestSortModeFocusesHeaderAndMovesAcrossColumns(t *testing.T) {
+	m := openSortTable(t)
 	if m.table.VisibleColumnCount() != 2 {
 		t.Fatalf("precondition: visible columns = %d, want 2", m.table.VisibleColumnCount())
 	}
 
-	wantState := func(step string, wantCol int, wantSorted, wantDesc bool) {
-		t.Helper()
-		col, sorted := m.table.SortColumn()
-		if sorted != wantSorted || (sorted && (col != wantCol || m.table.SortDescending() != wantDesc)) {
-			t.Fatalf("%s: sort = (col %d, sorted %v, desc %v), want (col %d, sorted %v, desc %v)",
-				step, col, sorted, m.table.SortDescending(), wantCol, wantSorted, wantDesc)
-		}
+	m, _ = press(t, m, sortKey) // S: focus the column-header row
+	if !m.table.SortMode() {
+		t.Fatal("`S` should enter the column-header sort mode")
+	}
+	if got := m.table.SortCursor(); got != 0 {
+		t.Fatalf("sort cursor should start on column 0, got %d", got)
 	}
 
-	m, _ = press(t, m, sortKey)
-	wantState("1st press", 0, true, false) // col0 ascending
-	m, _ = press(t, m, sortKey)
-	wantState("2nd press", 0, true, true) // col0 descending
-	m, _ = press(t, m, sortKey)
-	wantState("3rd press", 1, true, false) // col1 ascending
-	m, _ = press(t, m, sortKey)
-	wantState("4th press", 1, true, true) // col1 descending
-	m, _ = press(t, m, sortKey)
-	wantState("5th press", 0, false, false) // past the last column → cleared
-	m, _ = press(t, m, sortKey)
-	wantState("6th press", 0, true, false) // cycle restarts at col0 ascending
+	// `l`/`right` move the cursor across columns; `h`/`left` move back.
+	m, _ = press(t, m, tea.Key{Code: 'l', Text: "l"})
+	if got := m.table.SortCursor(); got != 1 {
+		t.Fatalf("`l` should move the sort cursor to column 1, got %d", got)
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyLeft})
+	if got := m.table.SortCursor(); got != 0 {
+		t.Fatalf("`left` should move the sort cursor back to column 0, got %d", got)
+	}
+	// The cursor clamps at the first column.
+	m, _ = press(t, m, tea.Key{Code: 'h', Text: "h"})
+	if got := m.table.SortCursor(); got != 0 {
+		t.Fatalf("`h` at the first column should clamp, got %d", got)
+	}
+
+	// `enter` sorts the cursor column ascending, and a second `enter` toggles it
+	// to descending (SortBy toggles, D94).
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if col, ok := m.table.SortColumn(); !ok || col != 0 {
+		t.Fatalf("`enter` should sort column 0 ascending, got (col %d, sorted %v)", col, ok)
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if col, ok := m.table.SortColumn(); !ok || col != 0 || !m.table.SortDescending() {
+		t.Fatalf("second `enter` should toggle column 0 to descending, got (col %d, sorted %v, desc %v)",
+			col, ok, m.table.SortDescending())
+	}
+
+	// `esc` returns focus to the rows; the sort survives.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.table.SortMode() {
+		t.Fatal("`esc` should leave the column-header sort mode")
+	}
+	if _, ok := m.table.SortColumn(); !ok {
+		t.Fatal("the sort should survive leaving the mode")
+	}
 }
 
-// TestClearSortKeyRestoresOrder proves the sort.clear key (`S`) drops an active sort
-// back to the unsorted watch order in one press.
-func TestClearSortKeyRestoresOrder(t *testing.T) {
-	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
-	m := sizedWith(t, WithWatcher(fw))
-	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: gvrResource("pods")})
-	m = next.(Model)
-	wm := cmd().(watchMsg)
-	next, _ = m.Update(wm)
-	m = next.(Model)
+// TestSortModeClearProvesTheClearPick proves sort.clear lives inside the sort mode
+// (D270): with the header focused, `x` clears the sort back to the watch order, and
+// the mode stays up so the reader can pick a fresh column.
+func TestSortModeClearProvesTheClearPick(t *testing.T) {
+	m := openSortTable(t)
+	m, _ = press(t, m, sortKey) // S: focus the column-header row
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if _, ok := m.table.SortColumn(); !ok {
+		t.Fatal("precondition: sort mode enter should sort a column")
+	}
+	m, _ = press(t, m, tea.Key{Code: 'x', Text: "x"}) // sort.clear
+	if _, ok := m.table.SortColumn(); ok {
+		t.Fatal("`x` should clear the sort back to the watch order")
+	}
+	if !m.table.SortMode() {
+		t.Fatal("the clear pick should keep the sort mode up")
+	}
+}
 
-	m, _ = press(t, m, sortKey) // sort col0 ascending
+// TestClearSortKeyRestoresOrder proves sort.clear (`x`) drops an active sort back to
+// the unsorted watch order from anywhere, not just inside the mode (D270).
+func TestClearSortKeyRestoresOrder(t *testing.T) {
+	m := openSortTable(t)
+	m, _ = press(t, m, sortKey) // S: enter the mode
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
 	if _, ok := m.table.SortColumn(); !ok {
 		t.Fatal("precondition: table should be sorted")
 	}
-	m, _ = press(t, m, tea.Key{Code: 's', ShiftedCode: 'S', Mod: tea.ModShift}) // sort.clear
+	m, _ = press(t, m, tea.Key{Code: 'x', Text: "x"}) // sort.clear
 	if _, ok := m.table.SortColumn(); ok {
 		t.Fatal("sort.clear should restore the unsorted watch order")
 	}

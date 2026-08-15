@@ -3708,36 +3708,45 @@ func (m Model) searchMove(dir keymap.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// sortNext advances the table's column sort one step through a single cycle driven
-// by the sort.column key (default `s`), so every visible column and both directions
-// are reachable without a separate column-selection gesture (there is no column
-// cursor — the table sorts by a visible-column position, D94). The cycle, derived
-// entirely from the table's own SortColumn/SortDescending state (no shared mutable
-// UI state — principle 1), is: unsorted → column 0 ascending → column 0 descending
-// → column 1 ascending → … → last column descending → unsorted (ClearSort). It is a
-// no-op with no resource table open or no visible columns. Sort itself is a view
-// over the authoritative row set (SortBy re-derives through applyFilter), so it
-// never reorders full.Rows and survives watch deltas (D94).
-func (m Model) sortNext() (tea.Model, tea.Cmd) {
+// enterSortMode puts the table into its column-header sort mode (STORY-06b) and
+// focuses the table, so the header row holds the cursor. It is `S`'s meaning
+// since the letter remap: `s` is freed, and sorting is the one S gesture —
+// focus the header, `h`/`l` move across columns, `enter` toggles direction,
+// `esc` returns to the rows (D270). Inert without a resource table — the welcome
+// page has nothing to sort.
+func (m Model) enterSortMode() (tea.Model, tea.Cmd) {
 	if !m.hasCurrent {
 		return m, nil
 	}
-	n := m.table.VisibleColumnCount()
-	if n == 0 {
+	m.menu.Blur()
+	m.table.Focus()
+	m.table.EnterSortMode()
+	m.syncHints() // the header row is the surface → sort-mode hints
+	return m, nil
+}
+
+// handleSortModeAction routes a resolved action while the table is in its
+// column-header sort mode (STORY-06b). It is a capturing surface like the
+// port-forward panel: `h`/`l`/`left`/`right` move the cursor across the columns,
+// `enter` toggles the sort direction on the cursor column, `esc` leaves the mode
+// back to the rows, `S` toggles it off, and sort.clear (`x`) clears the sort —
+// everything else is swallowed so the rows underneath never move. The hint bar
+// advertises exactly these keys (HelpSort).
+func (m Model) handleSortModeAction(a keymap.Action) (tea.Model, tea.Cmd) {
+	switch a {
+	case keymap.ActionLeft, keymap.ActionRight:
+		m.table, _ = m.table.Update(a) // move the cursor
+		return m, nil
+	case keymap.ActionDrillIn, keymap.ActionClearSort:
+		m.table, _ = m.table.Update(a) // toggle direction / clear
+		return m, m.recordViewState()
+	case keymap.ActionBack, keymap.ActionSort, keymap.ActionQuit:
+		// esc and `S` leave the mode back to the rows; `q` closes the mode the way it
+		// closes a viewer — a capturing surface owns the quit key until it is done.
+		m.table.ExitSortMode()
 		return m, nil
 	}
-	cur, sorted := m.table.SortColumn()
-	switch {
-	case !sorted:
-		m.table.SortBy(0) // start at the first column, ascending
-	case !m.table.SortDescending():
-		m.table.SortBy(cur) // same column: ascending → descending (SortBy toggles)
-	case cur+1 < n:
-		m.table.SortBy(cur + 1) // advance to the next column, ascending
-	default:
-		m.table.ClearSort() // past the last column: back to the watch order
-	}
-	return m, m.recordViewState()
+	return m, nil
 }
 
 // syncHints refreshes the persistent bottom key-hint to match what currently holds
@@ -3824,6 +3833,13 @@ func (m *Model) hintContext() keymap.HelpContext {
 		// promise left to make is how to close it. Last of the capturing surfaces, as it
 		// is in handleAction — an overlay that owns input wins the hint over it.
 		return keymap.HelpKeybindings
+	case m.table.SortMode():
+		// The column-header sort mode is a capturing surface with its own hint set
+		// (HelpSort): while the header row holds the cursor, h/l move, enter toggles
+		// direction, x clears and esc/S leave — the browse set underneath is
+		// unreachable (STORY-06b). Resolved before the plain table case, exactly where
+		// handleAction routes it.
+		return keymap.HelpSort
 	case m.table.Focused():
 		return keymap.HelpTable
 	}
@@ -4112,6 +4128,15 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	if m.pfPanel.Active() {
 		return m.handleForwardsPanelAction(a)
 	}
+	// The column-header sort mode (STORY-06b) is a capturing surface of its own
+	// while it is up: the header row holds the cursor, and the mode owns the keys
+	// that act on it — h/l move, enter toggles direction, esc/S leave, x clears —
+	// swallowing everything else so the rows underneath never move (the same shape
+	// as the port-forward panel). Resolved before the browse routing below, exactly
+	// where its hint context sits in hintContext (HelpSort).
+	if m.table.SortMode() {
+		return m.handleSortModeAction(a)
+	}
 	switch a {
 	case keymap.ActionQuit:
 		// While the help modal is open, quit dismisses the modal instead of the
@@ -4197,10 +4222,16 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionSearchPrev:
 		return m.searchMove(keymap.ActionUp)
 	case keymap.ActionSort:
-		return m.sortNext()
+		// `S` enters the column-header sort mode (STORY-06b). It supersedes the old
+		// `s` cycle; `s` is freed entirely (D270).
+		return m.enterSortMode()
 	case keymap.ActionClearSort:
+		// sort.clear (`x`) clears a showing table's sort from anywhere — the mode is
+		// where it is advertised (HelpSort) and where it is most natural, but the
+		// palette verb and the key keep working globally, so nothing is lost (D270).
 		if m.hasCurrent {
 			m.table.ClearSort()
+			return m, m.recordViewState()
 		}
 		return m, nil
 	case keymap.ActionSearch:
