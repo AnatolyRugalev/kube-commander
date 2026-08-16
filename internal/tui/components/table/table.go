@@ -424,8 +424,8 @@ func (m *Model) sortRows() {
 	numeric := isNumericColumn(m.table.Columns[ci].Type)
 	sort.SliceStable(m.table.Rows, func(i, j int) bool {
 		c := compareCells(
-			formatCell(cellAt(m.table.Rows[i].Cells, ci)),
-			formatCell(cellAt(m.table.Rows[j].Cells, ci)),
+			FormatCell(cellAt(m.table.Rows[i].Cells, ci)),
+			FormatCell(cellAt(m.table.Rows[j].Cells, ci)),
 			numeric,
 		)
 		if c == 0 {
@@ -444,7 +444,7 @@ func (m *Model) sortRows() {
 // the user can actually see, not hidden -o-wide extras.
 func (m Model) rowMatches(r kube.Row, needle string) bool {
 	for _, ci := range m.visible {
-		if strings.Contains(strings.ToLower(formatCell(cellAt(r.Cells, ci))), needle) {
+		if strings.Contains(strings.ToLower(FormatCell(cellAt(r.Cells, ci))), needle) {
 			return true
 		}
 	}
@@ -719,7 +719,7 @@ func (m *Model) measureWidths() {
 	}
 	for _, row := range m.table.Rows {
 		for i, ci := range m.visible {
-			if w := runeLen(formatCell(cellAt(row.Cells, ci))); w > m.colWidths[i] {
+			if w := runeLen(FormatCell(cellAt(row.Cells, ci))); w > m.colWidths[i] {
 				m.colWidths[i] = w
 			}
 		}
@@ -1148,7 +1148,7 @@ func (m Model) sortMark() string {
 func (m Model) renderRow(r kube.Row, selected bool, innerW int, starts []int) string {
 	cells := make([]string, len(m.visible))
 	for i, ci := range m.visible {
-		cells[i] = padRight(formatCell(cellAt(r.Cells, ci)), m.colWidths[i])
+		cells[i] = padRight(FormatCell(cellAt(r.Cells, ci)), m.colWidths[i])
 	}
 	line := m.hclip(strings.Join(cells, colGap), innerW)
 	matches := m.matchSpans(r, starts)
@@ -1174,10 +1174,12 @@ func cellAt(cells []any, i int) any {
 	return cells[i]
 }
 
-// formatCell renders a server-printed table cell (string, number, bool, or null)
+// FormatCell renders a server-printed table cell (string, number, bool, or null)
 // to its display string. JSON decoding gives numbers as float64; an integral
-// value prints without a trailing ".0" to match kubectl.
-func formatCell(v any) string {
+// value prints without a trailing ".0" to match kubectl. Exported so a sibling
+// text renderer (the events viewer, STORY-06f) formats the same server cells the
+// browse table shows.
+func FormatCell(v any) string {
 	switch x := v.(type) {
 	case nil:
 		return ""

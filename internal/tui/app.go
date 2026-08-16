@@ -110,6 +110,18 @@ type Describer interface {
 	Describe(r kube.Resource, ref kube.ObjectRef) (string, error)
 }
 
+// EventLister is the narrow slice of the kube layer the shell needs to open the
+// events viewer (STORY-06f): list the events for the object a table row
+// references as a server-printed Table (the `kubectl get events` columns).
+// *kube.Clients satisfies it. As with the other viewer seams the shell depends on
+// this interface, not the concrete client, so the model is driveable in hermetic
+// tests with a fake lister. A model built without one (the default) is
+// events-viewer-inert: the res.events action is a no-op (the viewer never opens),
+// which is what the pre-wiring app and the non-viewer tests want.
+type EventLister interface {
+	Events(ctx context.Context, ref kube.ObjectRef) (*kube.Table, error)
+}
+
 // LogStreamer is the narrow slice of the kube layer the shell needs to open the
 // logs viewer (M3-05): stream a pod's logs onto a channel until the passed context
 // is cancelled or the stream ends (M1-07c's Logs). *kube.Clients satisfies it. As
@@ -354,6 +366,13 @@ func WithYAMLGetter(g YAMLGetter) Option {
 // action is inert (the viewer never opens).
 func WithDescriber(d Describer) Option {
 	return func(m *Model) { m.describer = d }
+}
+
+// WithEventLister wires the kube client the shell uses to list the selected row's
+// events into the events viewer (STORY-06f). Without it the res.events action is
+// inert (the viewer never opens).
+func WithEventLister(l EventLister) Option {
+	return func(m *Model) { m.eventLister = l }
 }
 
 // WithLogStreamer wires the kube client the shell uses to stream a pod's logs into
@@ -1522,6 +1541,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case describeLoadedMsg:
 		return m.handleDescribeLoaded(msg)
 
+	case eventsLoadedMsg:
+		return m.handleEventsLoaded(msg)
+
 	case secretLoadedMsg:
 		return m.handleSecretLoaded(msg)
 
@@ -2277,6 +2299,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 	switch msg.Action {
 	case rowActionDescribe:
 		return m.openDescribeViewer(msg)
+	case rowActionEvents:
+		return m.openEventsViewer(msg)
 	case rowActionLogs:
 		return m.openLogsViewer(msg)
 	case rowActionSecret:
@@ -3112,6 +3136,7 @@ func panelEntries(fwds []*forward) []forwards.Entry {
 const (
 	viewerKindDescribe = "describe"
 	viewerKindSecret   = "secret"
+	viewerKindEvents   = "events"
 )
 
 // describeLoadedMsg carries the outcome of the async Describe render issued when the
@@ -3164,6 +3189,64 @@ func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) 
 	if msg.err != nil {
 		m.viewer.Hide()
 		return m, m.surfaceError(NewErrorMsg("describe", msg.err))
+	}
+	m.viewer.SetContent(msg.content)
+	return m, nil
+}
+
+// eventsLoadedMsg carries the outcome of the async Events list issued when the
+// events viewer opens (STORY-06f). gen ties it to the viewer open that requested
+// it, so a fetch that lands after the user closed the viewer (or opened a newer
+// one — of any kind) is dropped rather than populating stale content (the
+// viewerGen guard, mirroring describeLoadedMsg).
+type eventsLoadedMsg struct {
+	gen     int
+	content string
+	err     error
+}
+
+// openEventsViewer opens the events viewer over the selected row's object
+// (STORY-06f): it shows the viewer immediately (empty, so the gesture feels
+// instant) and kicks off the Events list off the update loop, seeding the
+// content — the server-printed events table laid out as aligned text — when it
+// lands. With no event lister wired it is events-viewer-inert (a no-op). The
+// fetch is tagged with a fresh viewerGen so a superseded/stale result is dropped
+// (handleEventsLoaded). A list error degrades to a status-bar toast and closes
+// the viewer (D74) rather than leaving an empty box.
+func (m Model) openEventsViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
+	if m.eventLister == nil {
+		return m, nil
+	}
+	m.stopLogStream() // a new viewer supersedes any in-flight log stream.
+	m.viewerGen++
+	gen := m.viewerGen
+	m.viewer.SetKind(viewerKindEvents)
+	m.viewer.SetTitle(viewerTitle(msg.Resource, msg.Object) + " events")
+	m.viewer.SetContent("") // clear any prior object's content before the list lands.
+	m.viewer.Show()
+	lister := m.eventLister
+	ref := msg.Object
+	return m, func() tea.Msg {
+		tbl, err := lister.Events(context.Background(), ref)
+		if err != nil {
+			return eventsLoadedMsg{gen: gen, err: err}
+		}
+		return eventsLoadedMsg{gen: gen, content: renderEventsTable(tbl)}
+	}
+}
+
+// handleEventsLoaded seeds the open viewer with the rendered events list. A result
+// whose gen no longer matches (a newer open superseded it) or that arrives after
+// the viewer closed is dropped. A list error degrades: it closes the viewer and
+// surfaces a transient status-bar toast (D74), never breaking the layout or
+// leaving an empty box.
+func (m Model) handleEventsLoaded(msg eventsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.viewerGen || !m.viewer.Active() {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.viewer.Hide()
+		return m, m.surfaceError(NewErrorMsg("events", msg.err))
 	}
 	m.viewer.SetContent(msg.content)
 	return m, nil
@@ -4299,7 +4382,7 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openSearch()
 	case keymap.ActionPin:
 		return m.pinResource()
-	case keymap.ActionDescribe, keymap.ActionLogs,
+	case keymap.ActionDescribe, keymap.ActionEvents, keymap.ActionLogs,
 		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren:
 		return m.triggerRowActionKey(a)
 	}

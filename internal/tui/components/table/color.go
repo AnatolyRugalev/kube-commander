@@ -298,7 +298,7 @@ func (m Model) roleSpans(r kube.Row, starts []int) []roleSpan {
 		if i >= len(starts) {
 			break
 		}
-		text := formatCell(cellAt(r.Cells, ci))
+		text := FormatCell(cellAt(r.Cells, ci))
 		role := classifyCell(m.table.Columns[ci].Name, text)
 		if role == roleNone {
 			continue
@@ -334,7 +334,7 @@ func (m Model) matchSpans(r kube.Row, starts []int) []roleSpan {
 		if i >= len(starts) {
 			break
 		}
-		text := formatCell(cellAt(r.Cells, ci))
+		text := FormatCell(cellAt(r.Cells, ci))
 		for _, off := range matchOffsets(text, needle) {
 			spans = append(spans, roleSpan{
 				start: starts[i] + off,

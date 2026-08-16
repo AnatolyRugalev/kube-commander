@@ -95,7 +95,12 @@ const (
 	// (TableAction): pressing enter on the selected row opens the menu.
 	ActionActions  Action = "actions.menu"
 	ActionDescribe Action = "res.describe"
-	ActionLogs     Action = "res.logs"
+	// ActionEvents lists the selected row's events (STORY-06f): the object's core
+	// Events as their own list in the shared viewer — the surface for "why is this
+	// red" instead of hunting for them inside describe. It is a direct-key M3 row
+	// action like describe, gated on the kind's get verb; elsewhere it is inert.
+	ActionEvents Action = "res.events"
+	ActionLogs   Action = "res.logs"
 	// ActionEdit is the unified object-YAML action (D135/M3-15c): it opens the
 	// selected object's YAML in $EDITOR — the single way to both view and edit an
 	// object's YAML, replacing the retired standalone read-only YAML viewer. Viewing
@@ -312,6 +317,7 @@ var actionMeta = []struct {
 	{ActionToggleMenu, "Toggle left menu pane"},
 	{ActionActions, "Act on the selected row"},
 	{ActionDescribe, "Describe the selected row"},
+	{ActionEvents, "List the selected row's events"},
 	{ActionLogs, "View logs for the selected row"},
 	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
@@ -450,7 +456,11 @@ var defaultBindings = map[Action][]string{
 	// letter is unbound from the browse context entirely.
 	ActionActions:  {"enter"},
 	ActionDescribe: {"d"},
-	ActionLogs:     {"L"},
+	// Events take the capital `E` — the mnemonic **E**vents, free in the browse
+	// context, not a reserved nav chord (D10), and `d` describe's partner in the
+	// same capital-letter family (`D` delete, `L` logs). Lowercase `e` is res.edit.
+	ActionEvents: {"E"},
+	ActionLogs:   {"L"},
 	// ActionEdit keeps `e` (edit); the retired res.yaml (`y`) is left unbound in the
 	// browse context (D135/M3-15c) — one object-YAML action on one key (D133 pinned
 	// delete=`D`/describe=`d`; `y` stays free for a future rebind or user config).

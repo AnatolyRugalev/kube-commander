@@ -41,6 +41,7 @@ type rowAction string
 
 const (
 	rowActionDescribe       rowAction = "describe"
+	rowActionEvents         rowAction = "events"
 	rowActionLogs           rowAction = "logs"
 	rowActionSecret         rowAction = "secret"
 	rowActionScale          rowAction = "scale"
@@ -100,6 +101,7 @@ const (
 // handleRowAction.
 var rowActions = []rowActionMeta{
 	{rowActionDescribe, "Describe", keymap.ActionDescribe, canGet, actsAtOnce},
+	{rowActionEvents, "Events", keymap.ActionEvents, canGet, actsAtOnce},
 	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"), actsAtOnce},
 	{rowActionChildren, "Show pods", keymap.ActionChildren, kube.HasChildren, actsAtOnce},
 	{rowActionSecret, "Reveal secret", "", kindIn("Secret"), actsAtOnce},

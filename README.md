@@ -70,7 +70,7 @@ The command palette (`:`) is your single entry point for app-wide verbs and acti
 
 ### Inspecting objects
 
-View an object's **describe** output in a scrollable viewer, or open its **YAML** directly in your `$EDITOR`. Kubecom suspends the UI and restores it when you quit. Saving the file applies the changes back to the cluster with full validation and conflict checking.
+View an object's **describe** output in a scrollable viewer, or open its **YAML** directly in your `$EDITOR`. Kubecom suspends the UI and restores it when you quit. Saving the file applies the changes back to the cluster with full validation and conflict checking. When something is red, `E` lists that object's own **events** — the `kubectl get events` columns filtered to it — so "why" is one gesture instead of a hunt through describe.
 
 Open the dedicated full-screen **logs view** for any workload. It tails the last 1000 lines live. You can grep the live stream (with substring or regex matching) without pausing the tail, or pause following to explore historical lines. Logs can be wrapped, timestamped, or switched to the previous terminated container instance (`-p`). A visual selection mode lets you yank exact log lines to your system clipboard without terminal wrapping artifacts. The command palette opens over the logs view too, listing the view's own verbs next to the app-wide ones — so the context switcher, the theme picker, and every log toggle are reachable without leaving the stream.
 
@@ -83,6 +83,7 @@ Open the **actions menu** to see what you can do to the selected row. It lists o
 | Action | Applies to |
 |--------|-----------|
 | Describe | anything you can `get` |
+| Events | anything you can `get` |
 | Logs | Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, ReplicationController |
 | Show pods | Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, ReplicationController, Service, Node |
 | Reveal secret | Secret |

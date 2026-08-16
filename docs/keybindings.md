@@ -91,6 +91,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | Action | Keys | Description |
 |--------|------|-------------|
 | `res.describe` | `d` | Describe the selected row |
+| `res.events` | `E` | List the selected row's events |
 | `res.logs` | `L` | View logs for the selected row |
 | `res.edit` | `e` | View / edit the selected row's YAML in $EDITOR |
 | `res.delete` | `D` | Delete the selected row |

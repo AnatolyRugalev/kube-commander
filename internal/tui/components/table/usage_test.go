@@ -237,10 +237,10 @@ func TestUsageShortRowKeepsColumnAlignment(t *testing.T) {
 	if len(row.Cells) != base+usageColumnCount {
 		t.Fatalf("displayed row has %d cells, want %d", len(row.Cells), base+usageColumnCount)
 	}
-	if got := formatCell(row.Cells[base]); got != "20m" {
+	if got := FormatCell(row.Cells[base]); got != "20m" {
 		t.Errorf("CPU cell = %q, want it at the CPU column's index", got)
 	}
-	if got := formatCell(row.Cells[base+1]); got != "512Mi" {
+	if got := FormatCell(row.Cells[base+1]); got != "512Mi" {
 		t.Errorf("memory cell = %q, want it at the memory column's index", got)
 	}
 }

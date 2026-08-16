@@ -7747,3 +7747,32 @@ one hid real dead ends, the other fabricated them.
    two classes; the analyzer just tallies text presses into their own bucket. This
    needs no new trace field — the recorder's existing `Text` flag carries the
    distinction, which is why the two fixes are independent.
+
+## D274 — a dedicated `events` action lists an object's own core Events, filtered by involvedObject UID and rendered as the server-printed table (2026-08-16, STORY-06f)
+
+S02's describe was the diagnostic lever only because events lived nowhere else
+(`2026-08-15-events-action.md`); the fold-in gives the object's events their own
+surface, "why is this red" in one gesture.
+
+1. **The kube primitive filters by `involvedObject.uid`, falling back to the name.**
+   `kube.Clients.Events` lists core/v1 events in the ref's namespace with the field
+   selector `involvedObject.uid=<uid>` — the same precise key kubectl describe's own
+   SearchEvents uses — and a row that lost its metadata (the degraded row of
+   principle 3) degrades to `involvedObject.name`. An empty name is rejected rather
+   than listed unfiltered. A later leg must not widen this to a label/kind filter
+   that could return another object's events. The list is scoped to `ref.Namespace`,
+   which is empty for a cluster-scoped object and then lists across all namespaces
+   (where a Node's events live) — the search kubectl describe runs for those.
+2. **The list is a server-printed Table, kubectl-identical.** The events viewer
+   renders whatever the server prints (`kubectl get events` columns: LAST SEEN, TYPE,
+   REASON, OBJECT, MESSAGE on a default, the wide set on a server that defaults
+   wide), laid out as aligned text with the **last column flowing** (wraps in the
+   viewport rather than being clipped). kubecom hard-codes no event column (D33). A
+   later leg must not hand-roll an events formatter with fixed columns; a rich
+   describe (STORY-06h) that wants to *paint* events consumes the same Table.
+3. **`E` is the default direct key** — the mnemonic **E**vents, the partner to `d`
+   describe in the capital-letter family (`D` delete, `L` logs); `e` stays res.edit.
+   The action gates on the kind's get verb like describe, and a missing events
+   get-permission degrades to a toast (principle 3). This first slice renders into
+   the shared text viewer; a live/watched events list is not promised here and is a
+   separate question.

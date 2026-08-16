@@ -39,10 +39,11 @@ type Cluster struct {
 	nsLister NamespaceLister
 
 	// The read-only viewer sources: an object's YAML (the edit flow's buffer, D135),
-	// its describe output, a pod's log stream, a pod's container names, and a
-	// Secret's decoded data. Nil → the action that needs it is inert.
+	// its describe output, its events, a pod's log stream, a pod's container names,
+	// and a Secret's decoded data. Nil → the action that needs it is inert.
 	yamlGetter      YAMLGetter
 	describer       Describer
+	eventLister     EventLister
 	logStreamer     LogStreamer
 	containerLister ContainerLister
 	secretGetter    SecretGetter
@@ -100,6 +101,7 @@ type ClusterClient interface {
 	NamespaceLister
 	YAMLGetter
 	Describer
+	EventLister
 	LogStreamer
 	ContainerLister
 	SecretGetter
@@ -130,6 +132,7 @@ func NewCluster(c ClusterClient, pf PortForwarder) Cluster {
 		nsLister:        c,
 		yamlGetter:      c,
 		describer:       c,
+		eventLister:     c,
 		logStreamer:     c,
 		containerLister: c,
 		secretGetter:    c,

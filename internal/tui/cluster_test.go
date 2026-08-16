@@ -26,6 +26,9 @@ func (fakeClusterClient) GetYAML(context.Context, kube.Resource, kube.ObjectRef)
 	return "", nil
 }
 func (fakeClusterClient) Describe(kube.Resource, kube.ObjectRef) (string, error) { return "", nil }
+func (fakeClusterClient) Events(context.Context, kube.ObjectRef) (*kube.Table, error) {
+	return &kube.Table{}, nil
+}
 func (fakeClusterClient) Logs(context.Context, kube.ObjectRef, kube.LogOptions) (<-chan kube.LogEvent, error) {
 	return nil, nil
 }

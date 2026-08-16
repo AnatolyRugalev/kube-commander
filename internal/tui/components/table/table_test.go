@@ -294,8 +294,8 @@ func TestFormatCell(t *testing.T) {
 		{int64(7), "7"},       // explicit int64
 	}
 	for _, c := range cases {
-		if got := formatCell(c.in); got != c.want {
-			t.Errorf("formatCell(%v) = %q, want %q", c.in, got, c.want)
+		if got := FormatCell(c.in); got != c.want {
+			t.Errorf("FormatCell(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

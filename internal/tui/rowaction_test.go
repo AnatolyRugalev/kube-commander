@@ -19,6 +19,7 @@ import (
 // without its confirm answer being checked against its handler.
 var rowActionKinds = map[rowAction]string{
 	rowActionDescribe:       "Pod",
+	rowActionEvents:         "Pod",
 	rowActionLogs:           "Pod",
 	rowActionChildren:       "Deployment",
 	rowActionSecret:         "Secret",
@@ -42,6 +43,7 @@ var rowActionKinds = map[rowAction]string{
 func allActionSeams() []Option {
 	return []Option{
 		WithDescriber(&fakeDescriber{}),
+		WithEventLister(&fakeEventLister{}),
 		WithLogStreamer(&fakeLogStreamer{}),
 		WithChildResolver(&fakeChildResolver{scope: podScope()}),
 		WithSecretGetter(&fakeSecretGetter{}),
