@@ -779,10 +779,15 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       notes: Landed as D274: a new `kube.Clients.Events` primitive lists the object's own core Events as a server-printed Table (the `kubectl get events` columns, no hard-coded columns) filtered by involvedObject UID (name fallback, empty name rejected), and `res.events` (`E`, gated on the kind's get verb) opens it in the shared viewer — the columns padded to their widest cell except the last, which flows. `EventLister` seam on the Cluster bundle; empty list says "(no events)", error degrades to a toast (D74); README + generated keybindings doc updated. Verified live against the story cluster's crash-looping pod.
       → milestone: M5 · knowledge: decisions.md D268, D274
 
-- [ ] **STORY-06g** Quick access to unhealthy workloads, spanning kinds — one keypress from anywhere to "what's broken, sorted to the top / filtered", and it must include non-pod failures (the main story's miss — `2026-08-15-unhealthy-workloads-quick-access.md` + `2026-08-15-pod-first-blinds-non-pod-failures.md`); gesture the fold-in's choice (`shift+H` suggested)
-      status: todo | owner: — | added: 2026-08-15
-      notes: The two high files fold into one slice: the quick-access action and its scope spanning kinds (pods *and* broken claims/volumes etc).
-      → milestone: M5 · knowledge: decisions.md D268
+- [x] **STORY-06g-1** The unhealthy filter on the current table — `H` (shift+h, the feedback's own suggestion) toggles the browse table to show only rows the M4-06 classifier reads as unhealthy (CrashLoopBackOff, ImagePullBackOff, Pending/unschedulable, not-ready, a stuck claim), one keypress from anywhere to "what's broken, filtered" for the kind you're on
+      status: in-progress | owner: opencode | added: 2026-08-16
+      notes: First half of `2026-08-15-unhealthy-workloads-quick-access.md` (the gesture + the per-kind filter), split from the cross-kind surface by D275. Reuses the M4-06 column classifier as a row predicate; the filter composes with the `/` substring filter, resets on a new resource, and the status bar shows an `unhealthy` marker while on. The cross-kind sweep that makes a non-pod failure findable from anywhere (the pod-first miss) is 06g-2.
+      → milestone: M5 · knowledge: decisions.md D268, D275
+
+- [ ] **STORY-06g-2** The unhealthy surface spans kinds — from anywhere, list broken resources across kinds (pods *and* claims/volumes etc.), so a failure that is not a pod finds the operator (`2026-08-15-pod-first-blinds-non-pod-failures.md`)
+      status: todo | owner: — | added: 2026-08-16
+      notes: Second half of STORY-06g, split from 06g-1 by D275. Needs a cross-kind sweep primitive (like `kube.Search` but filtering on the M4-06 health predicate) plus a surface to present it — the S02 story's fifth failure is a PVC, invisible to a pod-first walk.
+      → milestone: M5 · knowledge: decisions.md D268, D275
 
 - [ ] **STORY-06h** Rich describe panel — the describe view fully replaces the right pane and paints the diagnosis with color: phase/status/conditions in theme-aware colours, problem states emphasized (`2026-08-15-rich-describe-panel.md` + `2026-08-15-describe-replaces-right-pane.md`)
       status: todo | owner: — | added: 2026-08-15
