@@ -54,18 +54,21 @@ warnings from that merge. Disabled actions are shown as "(disabled)".`,
 }
 
 // newKeysAnalyzeCmd builds `kubecom keys analyze <trace.jsonl>`: it reads a
-// --keylog trace and turns it into the four things a UX pass asks (STORY-03,
+// --keylog trace and turns it into the five things a UX pass asks (STORY-03,
 // D268 pt 2) — the unresolved presses ranked by frequency (the dead ends), the
-// action counts, the longest pauses, and the multi-key sequences the walker
-// started but never finished. Sequence completion is judged against the resolved
+// presses on text surfaces (reported separately since they may be ordinary
+// typing or a swallowed reach, STORY-06e), the action counts, the longest
+// pauses, and the multi-key sequences the walker started but never finished.
+// Sequence completion is judged against the resolved
 // keymap, so a chord the config rebinds is judged by the config's meaning.
 func newKeysAnalyzeCmd() *cobra.Command {
 	var configPath string
 	cmd := &cobra.Command{
 		Use:   "analyze <trace.jsonl>",
 		Short: "Summarize a keystroke trace",
-		Long: `analyze reads a --keylog trace and prints the four things a UX pass asks:
-the presses that resolved to no action (ranked by frequency), what actions ran,
+		Long: `analyze reads a --keylog trace and prints the five things a UX pass asks:
+the presses that resolved to no action (ranked by frequency), the presses on text
+surfaces (which may be ordinary typing or a swallowed reach), what actions ran,
 the longest pauses between presses, and the multi-key sequences that were started
 but never finished. Run it on a trace walked against the story cluster:
     ./stories/cluster/up.sh
@@ -119,6 +122,20 @@ func printAnalyze(out io.Writer, path string, rep keylog.Report) error {
 	}
 	for _, d := range rep.DeadEnds {
 		if _, err := fmt.Fprintf(out, "  %-8s %2d  %s\n", d.Key, d.Count, d.Mode); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintln(out, "\npresses on text surfaces — typed, or a reach the surface swallowed"); err != nil {
+		return err
+	}
+	if len(rep.TextPresses) == 0 {
+		if _, err := fmt.Fprintln(out, "  (none)"); err != nil {
+			return err
+		}
+	}
+	for _, t := range rep.TextPresses {
+		if _, err := fmt.Fprintf(out, "  %-8s %2d  %s\n", t.Key, t.Count, t.Mode); err != nil {
 			return err
 		}
 	}

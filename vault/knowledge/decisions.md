@@ -7721,3 +7721,29 @@ filter is a `/`-away overlay, not the default state.
    a per-construction filter-on-show knob for value pickers — the mode follows the
    surface's identity (verb list vs value list), not the picker's kind.
 
+## D273 — the trace instrument tells the truth about both dead-end classes: the recorder writes the confirm modal's resolved action, and the analyzer reports text-surface presses in their own section (2026-08-16, STORY-06e)
+
+The S02 walk's two mirror-image instrument failures, filed together
+(`2026-08-15-confirm-key-false-deadends.md` + `2026-08-15-analyzer-text-surface-blindspot.md`):
+one hid real dead ends, the other fabricated them.
+
+1. **The recorder writes a confirm modal's *resolved* action.** The confirm context
+   resolves keys (`ConfirmAction`: `y`/enter → `confirm.accept`, `n`/esc →
+   `confirm.decline`, D132), so a handled accept or decline is recorded with the
+   action it ran, not as a blank press the analyzer reads as a dead end. A key the
+   confirm modal does *not* resolve is still a dead end — the modal is not a text
+   surface, so an unhandled press there remains a reach. A later leg must not move
+   the recorder back to recording a blank action for the confirm mode.
+2. **A press on a text surface is not a dead end and not invisible: it is its own
+   report section.** An empty action on a surface that accepts typed text is
+   ambiguous — ordinary typing, or a navigation reach the surface swallowed (the
+   picker's 4 `j`s of the S01 walk were the latter). The analyzer reports these as
+   `TextPresses`, ranked by frequency, separate from `DeadEnds`. A later leg must
+   not merge them back into the dead-end count (every typed character would flood
+   the report) and must not skip them silently (the S01 finding was exactly what
+   the old code hid).
+3. **The analyzer's dead-end predicate stays `action == "" && !text && !pending`;
+   the text branch comes first.** The `Record.Text` flag already distinguishes the
+   two classes; the analyzer just tallies text presses into their own bucket. This
+   needs no new trace field — the recorder's existing `Text` flag carries the
+   distinction, which is why the two fixes are independent.

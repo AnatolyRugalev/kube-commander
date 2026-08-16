@@ -1265,9 +1265,20 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		//     With the filter closed the logs view takes the ordinary action path
 		//     (handleLogsAction) so `gg` and `G` still work in a log.
 		// Every one of these surfaces handles its own keys, so the keymap resolves
-		// nothing for them and the record carries no action.
+		// nothing for them and the record carries no action — except the confirm
+		// modal, which resolves its keys in a dedicated context (ConfirmAction:
+		// `y`/enter → confirm.accept, `n`/esc → confirm.decline, D132). A handled
+		// accept or decline is not a reach for a missing key, so it must be
+		// recorded with the action it ran, or the analyzer reads the walker's
+		// every `esc` decline as a dead end (STORY-06e).
 		if mode := m.keyMode(); mode != keyModeBrowse {
-			m.recordKey(msg, mode, "", keymap.ResultNone)
+			action, kind := keymap.Action(""), keymap.ResultNone
+			if mode == keyModeConfirm {
+				if a, ok := m.confirmResolved(msg.Key()); ok {
+					action, kind = a, keymap.ResultAction
+				}
+			}
+			m.recordKey(msg, mode, action, kind)
 			switch mode {
 			case keyModeSearch:
 				return m.routeSearchKey(msg)
@@ -3610,14 +3621,26 @@ func (m Model) routeModalPromptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // to the browse keymap so app.quit still dismisses the modal, and every other key
 // is swallowed so the panes underneath never move. No view matches a raw key (D11).
 func (m Model) routeModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.Key()
-	if action, ok := m.keymap.ConfirmAction(key); ok {
-		return m.handleModalAction(action)
-	}
-	if action, ok := m.keymap.Action(key); ok {
+	if action, ok := m.confirmResolved(msg.Key()); ok {
 		return m.handleModalAction(action)
 	}
 	return m, nil
+}
+
+// confirmResolved reports the action the confirm modal will take for a key, if
+// any: the confirm context first (ConfirmAction: `y`/enter → confirm.accept,
+// `n`/esc → confirm.decline), then the browse fallback so app.quit still
+// dismisses the modal. routeModalConfirmKey routes by it; the recorder uses it
+// too, so a handled accept or decline is written to the trace with the action it
+// ran rather than as a dead end (STORY-06e). No view matches a raw key (D11).
+func (m Model) confirmResolved(key tea.Key) (keymap.Action, bool) {
+	if action, ok := m.keymap.ConfirmAction(key); ok {
+		return action, true
+	}
+	if action, ok := m.keymap.Action(key); ok {
+		return action, true
+	}
+	return "", false
 }
 
 // openFilter opens the live table filter input over the current resource table

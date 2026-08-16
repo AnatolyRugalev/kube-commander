@@ -60,7 +60,9 @@ same guarantee `up.sh` gives the cluster — and never reads or writes your real
 wipe, so it survives.
 
 Then read the trace back with `kubecom keys analyze ~/traces/s02.jsonl`: it
-reports the unresolved presses ranked by frequency, the action counts, the longest
+reports the unresolved presses ranked by frequency, the presses on text surfaces
+(which may be ordinary typing or a navigation reach the surface swallowed),
+the action counts, the longest
 pauses (where the walker stopped to think), and the sequences that were started
 but never finished. The most interesting line in a raw trace is a keypress that
 resolved to no action — that is someone reaching for a key kubecom does not have.

@@ -6,6 +6,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/neuroplastio/kubecom/internal/keylog"
+	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
+	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 )
 
 // recorder collects records in memory, standing in for the JSONL writer.
@@ -132,6 +135,77 @@ func TestKeyLogIsInertWithoutARecorder(t *testing.T) {
 	_, cmd := press(t, m, tea.Key{Code: 'q', Text: "q"})
 	if cmd == nil {
 		t.Error("app.quit stopped working when no recorder was wired")
+	}
+}
+
+// TestKeyLogRecordsResolvedConfirmAction is STORY-06e on the recorder: the confirm
+// modal resolves its keys in a dedicated context (ConfirmAction, D132), so a
+// handled accept or decline must be written to the trace with the action it ran —
+// not as a blank press the analyzer would read as a dead end. The S02 trace
+// reported `esc 2 modal-confirm` as unresolved when both declines had worked.
+func TestKeyLogRecordsResolvedConfirmAction(t *testing.T) {
+	var rec recorder
+	d := &fakeDeleter{}
+	fw := &fakeWatcher{preload: []kube.WatchEvent{sortReset()}}
+	m := sizedWith(t, WithWatcher(fw), WithDeleter(d), WithKeyRecorder(&rec))
+	next, cmd := m.Update(menu.ResourceSelectedMsg{Resource: kindResource("pods", "Pod")})
+	m = next.(Model)
+	next, _ = m.Update(cmd().(watchMsg)) // drain the RESET so the table has rows
+	m = next.(Model)
+
+	// Open the delete confirm modal, then decline with esc.
+	m, delCmd := press(t, m, deleteKey)
+	if delCmd == nil {
+		t.Fatal("the delete key should dispatch a row-action intent")
+	}
+	intent, ok := delCmd().(rowActionMsg)
+	if !ok {
+		t.Fatalf("delete key produced %T, want rowActionMsg", delCmd())
+	}
+	next, _ = m.Update(intent)
+	m = next.(Model)
+	if !m.modal.Active() {
+		t.Fatal("the delete key should open the confirm modal")
+	}
+	_, cancelCmd := press(t, m, tea.Key{Code: tea.KeyEsc})
+	if cancelCmd == nil {
+		t.Fatal("esc on the confirm modal should decline")
+	}
+
+	if len(rec.got) == 0 {
+		t.Fatal("the recorder recorded nothing")
+	}
+	decline := rec.got[len(rec.got)-1]
+	if decline.Mode != string(keyModeConfirm) {
+		t.Errorf("esc on the confirm modal recorded Mode = %q, want %q", decline.Mode, keyModeConfirm)
+	}
+	if decline.Action != "confirm.decline" {
+		t.Errorf("a handled esc must record confirm.decline, got %+v", decline)
+	}
+	if decline.Text || decline.Pending {
+		t.Errorf("a handled confirm key must not read as text or pending, got %+v", decline)
+	}
+
+	// Now accept with y: the resolved action is confirm.accept.
+	m, acceptCmd := press(t, m, tea.Key{Code: 'y', Text: "y"})
+	if acceptCmd == nil {
+		t.Fatal("y on the confirm modal should accept")
+	}
+	accept := rec.got[len(rec.got)-1]
+	if accept.Action != "confirm.accept" {
+		t.Errorf("a handled `y` must record confirm.accept, got %+v", accept)
+	}
+
+	// An unbound key on the confirm modal is still a dead end: the modal is not a
+	// text surface, so an unhandled press there is a reach, and the record keeps
+	// that signal.
+	next, _ = m.Update(acceptCmd().(modal.ConfirmedMsg))
+	m = next.(Model)
+	m = openDeleteModal(t, m)
+	press(t, m, tea.Key{Code: 'z', Text: "z"})
+	dead := rec.got[len(rec.got)-1]
+	if dead.Action != "" || dead.Text || dead.Pending {
+		t.Errorf("an unhandled confirm key must read as a dead end, got %+v", dead)
 	}
 }
 

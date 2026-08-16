@@ -164,7 +164,10 @@ says it better than a description can, and better than a screen recording, where
 "I pressed a key and nothing happened" looks like nothing happening.
 
 `kubecom keys analyze <trace.jsonl>` reads a trace back as findings: the
-unresolved presses ranked by frequency, what actions ran, the longest pauses
+unresolved presses ranked by frequency, the presses on text surfaces (which may
+be ordinary typing or a navigation reach the surface swallowed — the picker's
+dead `j`s of the S01 walk were invisible to the dead-end list until this section
+existed), what actions ran, the longest pauses
 (where the walker stopped to think), and any multi-key sequences that were
 started but never finished. It is the read side of the instrument the stories in
 [`stories/`](stories/) are walked against.

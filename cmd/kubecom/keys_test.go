@@ -82,7 +82,7 @@ func runKeysAnalyze(t *testing.T, trace string) (string, error) {
 
 // TestKeysAnalyzeSummarizesATrace exercises the whole path end to end: a written
 // trace (the format the writer produces) read back by the command and reduced to
-// the four findings.
+// the five findings.
 func TestKeysAnalyzeSummarizesATrace(t *testing.T) {
 	const trace = `{"t":"2026-08-15T12:00:00.000Z","key":"g","mode":"browse","pending":true}
 {"t":"2026-08-15T12:00:00.100Z","key":"g","mode":"browse","action":"nav.top"}
@@ -107,6 +107,30 @@ func TestKeysAnalyzeSummarizesATrace(t *testing.T) {
 	// followed it.
 	if !strings.Contains(out, "res.logs") || !strings.Contains(out, "longest pauses") {
 		t.Errorf("actions and pauses must be reported:\n%s", out)
+	}
+}
+
+// TestKeysAnalyzeReportsTextSurfacePressesSeparately is STORY-06e on the command:
+// a press on a text surface that resolved to nothing — the picker `j`s of the S01
+// walk — is a finding in its own section, not a dead end and not silently skipped.
+func TestKeysAnalyzeReportsTextSurfacePressesSeparately(t *testing.T) {
+	const trace = `{"t":"2026-08-15T12:00:00.000Z","key":"j","mode":"picker","text":true}
+{"t":"2026-08-15T12:00:01.000Z","key":"j","mode":"picker","text":true}
+{"t":"2026-08-15T12:00:02.000Z","key":"x","mode":"browse"}
+`
+	out, err := runKeysAnalyze(t, trace)
+	if err != nil {
+		t.Fatalf("keys analyze: %v", err)
+	}
+	if !strings.Contains(out, "presses on text surfaces") {
+		t.Errorf("the text-surface section must be reported:\n%s", out)
+	}
+	if !strings.Contains(out, "j") || !strings.Contains(out, "picker") {
+		t.Errorf("the picker `j`s must appear in the text-surface section:\n%s", out)
+	}
+	// The browse `x` stays a dead end; the picker `j`s must not appear there.
+	if !strings.Contains(out, "unresolved presses") {
+		t.Errorf("the dead-end section must still be reported:\n%s", out)
 	}
 }
 

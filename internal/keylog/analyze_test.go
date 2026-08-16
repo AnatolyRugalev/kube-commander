@@ -63,6 +63,54 @@ func TestAnalyzeTextAndPendingAreNotDeadEnds(t *testing.T) {
 	if len(rep.DeadEnds) != 0 {
 		t.Errorf("want no dead ends, got %+v", rep.DeadEnds)
 	}
+	if len(rep.TextPresses) != 1 {
+		t.Errorf("want 1 text press, got %+v", rep.TextPresses)
+	}
+}
+
+// TestAnalyzeTextPressesReportedSeparately is STORY-06e's headline: a press on a
+// text surface that resolved to nothing — the picker `j`s of the S01 walk — must
+// be a finding, not silently skipped. It is reported in its own section (it may
+// be ordinary typing, so it is not a dead end), ranked like dead ends.
+func TestAnalyzeTextPressesReportedSeparately(t *testing.T) {
+	recs := []Record{
+		{Key: "j", Mode: "picker", Text: true, Time: at(0)},
+		{Key: "j", Mode: "picker", Text: true, Time: at(1 * time.Second)},
+		{Key: "j", Mode: "picker", Text: true, Time: at(1 * time.Second)},
+		{Key: "j", Mode: "picker", Text: true, Time: at(1 * time.Second)},
+		{Key: "s", Mode: "search", Text: true, Time: at(1 * time.Second)},
+	}
+	rep := Analyze(recs, fakeResolver{}, time.Second)
+	if len(rep.DeadEnds) != 0 {
+		t.Errorf("text presses must not read as dead ends, got %+v", rep.DeadEnds)
+	}
+	if len(rep.TextPresses) != 2 {
+		t.Fatalf("want 2 distinct text presses, got %d: %+v", len(rep.TextPresses), rep.TextPresses)
+	}
+	// The four picker `j`s rank first — the S01 finding, now visible.
+	if first := rep.TextPresses[0]; first.Key != "j" || first.Mode != "picker" || first.Count != 4 {
+		t.Errorf("top text press = %+v, want j/picker with count 4", first)
+	}
+	if second := rep.TextPresses[1]; second.Key != "s" || second.Mode != "search" || second.Count != 1 {
+		t.Errorf("second text press = %+v, want s/search with count 1", second)
+	}
+}
+
+// TestAnalyzeDeadEndsAndTextPressesAreRankedTogether keeps the two sections from
+// merging: a genuine dead end and a text-surface press coexist, each in its own
+// list.
+func TestAnalyzeDeadEndsAndTextPressesAreRankedTogether(t *testing.T) {
+	recs := []Record{
+		{Key: "x", Mode: "browse", Time: at(0)},
+		{Key: "j", Mode: "picker", Text: true, Time: at(1 * time.Second)},
+	}
+	rep := Analyze(recs, fakeResolver{}, time.Second)
+	if len(rep.DeadEnds) != 1 || rep.DeadEnds[0].Key != "x" {
+		t.Errorf("dead ends = %+v, want [x/browse]", rep.DeadEnds)
+	}
+	if len(rep.TextPresses) != 1 || rep.TextPresses[0].Key != "j" {
+		t.Errorf("text presses = %+v, want [j/picker]", rep.TextPresses)
+	}
 }
 
 // TestAnalyzeActionCounts tallies the resolved actions, most-frequent first.

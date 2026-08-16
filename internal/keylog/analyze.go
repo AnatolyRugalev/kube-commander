@@ -12,10 +12,15 @@ import (
 )
 
 // This file is STORY-03: the read side of a keystroke trace. The writer (STORY-02)
-// records one JSONL object per press; Analyze turns a trace into the four things
-// a UX pass asks — the dead ends, the actions, the pacing, the abandoned
-// sequences — so a story walked against the fixture (STORY-01) can be read back
-// as findings rather than remembered (D268 pt 2).
+// records one JSONL object per press; Analyze turns a trace into the five things
+// a UX pass asks — the dead ends, the text-surface presses, the actions, the
+// pacing, the abandoned sequences — so a story walked against the fixture
+// (STORY-01) can be read back as findings rather than remembered (D268 pt 2).
+// STORY-06e added the text-surface presses as their own finding: a press on a
+// surface that takes typed text is ambiguous (ordinary typing, or a swallowed
+// navigation reach), and counting it as a dead end would flood the report with
+// every character typed, while skipping it silently hid the picker `j`s of the
+// S01 walk.
 
 // maxPauses is how many of the longest pauses Analyze reports. Pacing is the
 // one question the trace answers implicitly — every key carries a timestamp, so
@@ -24,7 +29,7 @@ import (
 // can see in the raw trace if they want it.
 const maxPauses = 5
 
-// Report is the shape of an analysis: the four findings, in the order a UX pass
+// Report is the shape of an analysis: the five findings, in the order a UX pass
 // reads them.
 type Report struct {
 	// Records is how many keypresses the trace held.
@@ -35,6 +40,12 @@ type Report struct {
 	// carries the surface it was pressed on, because the same key means different
 	// things in different modes.
 	DeadEnds []DeadEnd
+	// TextPresses are unresolved presses on surfaces that accept typed text,
+	// ranked by frequency. Each may be ordinary typing or a navigation reach the
+	// surface swallowed; reporting them separately is what makes the picker `j`s
+	// of the S01 walk a finding rather than something the dead-end list silently
+	// skipped (STORY-06e).
+	TextPresses []TextPress
 	// Actions are the resolved actions, ranked by frequency.
 	Actions []ActionCount
 	// Pauses are the longest gaps between consecutive presses — the places the
@@ -48,6 +59,16 @@ type Report struct {
 // DeadEnd is one distinct unresolved press (a key/mode pair), and how often it
 // was hit.
 type DeadEnd struct {
+	Key   string
+	Mode  string
+	Count int
+}
+
+// TextPress is one distinct press on a text surface (a key/mode pair), and how
+// often it was hit. Unlike a DeadEnd it is ambiguous — on a surface that accepts
+// typed text an empty action is often ordinary typing — but a repeated
+// navigation-shaped key there is a reach the walk was built to find.
+type TextPress struct {
 	Key   string
 	Mode  string
 	Count int
@@ -148,14 +169,23 @@ func Analyze(records []Record, resolve Resolver, seqTimeout time.Duration) Repor
 	}
 	rep.Elapsed = records[len(records)-1].Time.Sub(records[0].Time)
 
-	// First pass: tally dead ends and actions, and find the pauses.
-	dead := map[[2]string]int{} // [key, mode] -> count
+	// First pass: tally dead ends, text-surface presses and actions, and find the
+	// pauses.
+	dead := map[[2]string]int{}      // [key, mode] -> count
+	textPress := map[[2]string]int{} // [key, mode] -> count
 	actions := map[string]int{}
 	var gaps []time.Duration
 	for i, rec := range records {
 		if rec.Action != "" {
 			actions[rec.Action]++
-		} else if !rec.Text && !rec.Pending {
+		} else if rec.Text {
+			// An unresolved press on a surface that accepts typed text: a character
+			// the walker typed, or a navigation reach the surface swallowed — the
+			// picker `j`s of the S01 walk were exactly this. Indistinguishable in
+			// the record, so reported separately rather than counted as dead ends
+			// (STORY-06e).
+			textPress[[2]string{rec.Key, rec.Mode}]++
+		} else if !rec.Pending {
 			// An unresolved press on a surface that neither takes text nor is
 			// holding a sequence open: a reach for something kubecom does not have.
 			dead[[2]string{rec.Key, rec.Mode}]++
@@ -165,7 +195,12 @@ func Analyze(records []Record, resolve Resolver, seqTimeout time.Duration) Repor
 		}
 	}
 
-	rep.DeadEnds = rankedDead(dead)
+	rep.DeadEnds = rankedKeyMode(dead, func(key, mode string, n int) DeadEnd {
+		return DeadEnd{Key: key, Mode: mode, Count: n}
+	})
+	rep.TextPresses = rankedKeyMode(textPress, func(key, mode string, n int) TextPress {
+		return TextPress{Key: key, Mode: mode, Count: n}
+	})
 	rep.Actions = rankedActions(actions)
 	rep.Pauses = topPauses(gaps, records)
 
@@ -175,22 +210,31 @@ func Analyze(records []Record, resolve Resolver, seqTimeout time.Duration) Repor
 	return rep
 }
 
-// rankedDead tallies dead ends, most-frequent first, breaking ties by key then
-// mode so the order is deterministic.
-func rankedDead(m map[[2]string]int) []DeadEnd {
-	out := make([]DeadEnd, 0, len(m))
-	for pair, n := range m {
-		out = append(out, DeadEnd{Key: pair[0], Mode: pair[1], Count: n})
+// rankedKeyMode tallies presses by key+mode, most-frequent first, breaking ties
+// by key then mode so the order is deterministic. build maps a tally row to the
+// concrete report type (DeadEnd or TextPress), which share the same shape.
+func rankedKeyMode[P any](m map[[2]string]int, build func(key, mode string, count int) P) []P {
+	type row struct {
+		key, mode string
+		count     int
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
+	rows := make([]row, 0, len(m))
+	for pair, n := range m {
+		rows = append(rows, row{key: pair[0], mode: pair[1], count: n})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].count != rows[j].count {
+			return rows[i].count > rows[j].count
 		}
-		if out[i].Key != out[j].Key {
-			return out[i].Key < out[j].Key
+		if rows[i].key != rows[j].key {
+			return rows[i].key < rows[j].key
 		}
-		return out[i].Mode < out[j].Mode
+		return rows[i].mode < rows[j].mode
 	})
+	out := make([]P, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, build(r.key, r.mode, r.count))
+	}
 	return out
 }
 

@@ -52,7 +52,9 @@ type Record struct {
 	Action string `json:"action,omitempty"`
 	// Text marks a surface that accepts typed text, where an empty Action is
 	// expected rather than a dead end. An analyser counts dead ends as
-	// `Action == "" && !Text && !Pending`.
+	// `Action == "" && !Text && !Pending` and reports text-surface presses
+	// separately (STORY-06e), since an empty Action there may be typing or a
+	// swallowed navigation reach.
 	Text bool `json:"text,omitempty"`
 	// Pending marks a press that began or extended a multi-key sequence (`g` of
 	// `gg`). It resolved to nothing *yet*, so it is not a dead end — but a run of
