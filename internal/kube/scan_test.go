@@ -310,7 +310,9 @@ func hitsOfScan(events []ScanEvent) []ScanHit {
 
 // TestScanHitCarriesTheRow pins why a scan hit differs from a search hit: the row
 // cells ride along so a surface can render the reason (the offending cell)
-// without re-listing the kind.
+// without re-listing the kind, and so do the columns the row sat under — a
+// surface classifies by column name, so the reason is renderable from the hit
+// alone (STORY-06g-2b).
 func TestScanHitCarriesTheRow(t *testing.T) {
 	lister := &fakeLister{tables: map[string]*Table{
 		"pods": statusTbl("web", [2]string{"web-2", "CrashLoopBackOff"}),
@@ -331,5 +333,8 @@ func TestScanHitCarriesTheRow(t *testing.T) {
 	}
 	if len(h.Row.Cells) != 2 || h.Row.Cells[1] != "CrashLoopBackOff" {
 		t.Errorf("hit should carry the offending cell, got %v", h.Row.Cells)
+	}
+	if len(h.Columns) != 2 || h.Columns[1].Name != "STATUS" {
+		t.Errorf("hit should carry the columns the row sat under, got %+v", h.Columns)
 	}
 }

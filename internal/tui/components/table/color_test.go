@@ -462,3 +462,70 @@ func TestMergeSpansCutsAndOrders(t *testing.T) {
 		t.Fatalf("mergeSpans with no matches should be a no-op, got %+v", got)
 	}
 }
+
+// TestUnhealthyRowAndCells pins the exported row predicate the cross-kind sweep
+// rides on (STORY-06g-2): UnhealthyRow is true exactly when some cell classifies
+// to warn/error, and UnhealthyCells returns those cells in column order, tagged
+// with the role a surface paints them with. The healthy row stays out and the
+// offending cells are exactly the row's warning and error cells.
+func TestUnhealthyRowAndCells(t *testing.T) {
+	tbl := statusTable()
+
+	rows := tbl.Rows
+	if UnhealthyRow(&tbl, rows[0]) {
+		t.Error("pod-good (Running, 1/1, 0 restarts) must read as healthy")
+	}
+	if !UnhealthyRow(&tbl, rows[1]) {
+		t.Error("pod-warn (Pending, 0/1, 2 restarts) must read as unhealthy")
+	}
+	if !UnhealthyRow(&tbl, rows[2]) {
+		t.Error("pod-bad (CrashLoopBackOff) must read as unhealthy")
+	}
+
+	cells := UnhealthyCells(&tbl, rows[1])
+	want := []UnhealthyCell{
+		{Text: "0/1", Error: false},
+		{Text: "Pending", Error: false},
+		{Text: "2", Error: false}, // RESTARTS: any restart is a warning
+	}
+	if len(cells) != len(want) {
+		t.Fatalf("pod-warn cells = %+v, want %+v", cells, want)
+	}
+	for i := range want {
+		if cells[i] != want[i] {
+			t.Fatalf("pod-warn cell %d = %+v, want %+v", i, cells[i], want[i])
+		}
+	}
+
+	bad := UnhealthyCells(&tbl, rows[2])
+	if len(bad) != 3 || bad[0].Error || !bad[1].Error || bad[2].Error {
+		t.Fatalf("pod-bad cells = %+v, want 0/1 warning, CrashLoopBackOff error, 9 warning", bad)
+	}
+	if bad[1].Text != "CrashLoopBackOff" {
+		t.Errorf("pod-bad cell 1 = %q, want CrashLoopBackOff (column order)", bad[1].Text)
+	}
+	if cells := UnhealthyCells(&tbl, rows[0]); len(cells) != 0 {
+		t.Errorf("pod-good cells = %+v, want none", cells)
+	}
+}
+
+// TestUnhealthyCellsIgnoresUnknownColumns pins that the reason is only ever the
+// cells the classifier understands: a CRD column the classifier knows nothing
+// about contributes nothing, so a scan keeps a row for the STATUS it can read
+// and the reason never claims a column it cannot classify.
+func TestUnhealthyCellsIgnoresUnknownColumns(t *testing.T) {
+	tbl := kube.Table{
+		Columns: []kube.Column{
+			{Name: "NAME"},
+			{Name: "MY-CRD-COLUMN"},
+			{Name: "STATUS"},
+		},
+		Rows: []kube.Row{
+			{Cells: []any{"thing", "whatever", "CrashLoopBackOff"}, Object: kube.ObjectRef{Name: "thing"}},
+		},
+	}
+	cells := UnhealthyCells(&tbl, tbl.Rows[0])
+	if len(cells) != 1 || cells[0].Text != "CrashLoopBackOff" || !cells[0].Error {
+		t.Fatalf("cells = %+v, want only the CrashLoopBackOff STATUS cell", cells)
+	}
+}

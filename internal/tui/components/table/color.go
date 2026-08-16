@@ -251,6 +251,49 @@ func (m Model) rowUnhealthy(r kube.Row) bool {
 	return false
 }
 
+// UnhealthyRow is the M4-06 classifier lifted to a whole table: it reports
+// whether any of a row's cells classifies to a warning or error role under its
+// column, considering every column the server printed (the scan's cross-kind
+// sweep has no "visible" subset — a hit's row is the whole row). It is the
+// predicate kube.Scan takes as a seam (D276) so the cross-kind unhealthy list
+// and the per-kind unhealthy filter agree about what is broken (D275 pt 1): the
+// same classifyCell both rely on, exported here so the TUI can feed it to a
+// sweep without importing this component into the scan's fan-out.
+func UnhealthyRow(t *kube.Table, r kube.Row) bool {
+	return len(UnhealthyCells(t, r)) > 0
+}
+
+// UnhealthyCell is one cell of a row that the M4-06 classifier reads as a
+// warning or error: the display text and whether it classifies to an error
+// rather than a warning, so a surface can paint the reason with the same hue the
+// browse table gives the cell.
+type UnhealthyCell struct {
+	Text  string
+	Error bool // roleError, not roleWarn
+}
+
+// UnhealthyCells returns the row's cells that classify to a warning or error
+// role, in column order, each tagged with its role — the "reason" a cross-kind
+// scan hit renders (kind · name · namespace · the offending cell, D276). A hit
+// carries the row *and* the columns it sat under (ScanHit.Columns), so a surface
+// can name the offender without re-listing the kind: which cell is the reason
+// needs the column names, and the columns are the one thing the hit now carries
+// that the row alone does not. The scan itself runs this to filter rows, so the
+// reason shown is exactly the reason the row was kept.
+func UnhealthyCells(t *kube.Table, r kube.Row) []UnhealthyCell {
+	var out []UnhealthyCell
+	for i, c := range t.Columns {
+		if i >= len(r.Cells) {
+			continue
+		}
+		text := FormatCell(cellAt(r.Cells, i))
+		if role := classifyCell(c.Name, text); role >= roleWarn {
+			out = append(out, UnhealthyCell{Text: text, Error: role == roleError})
+		}
+	}
+	return out
+}
+
 // roleStyle maps a role to the theme style that paints it. roleNone renders as
 // ordinary body text, so every segment of a row goes through a complete style and
 // none is ever nested inside another (see paintRow).

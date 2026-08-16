@@ -7868,3 +7868,35 @@ is replaced by "`/` targets the focused pane":
    `HelpTableFilter` — the field's no-text keys (move, commit, clear) act the same
    over both targets. A later leg must not reintroduce a hard-coded `app.filter`
    → table target, and must not make `menu.Items()` return the narrowed view.
+
+## D278 — the scan surface is a `components/unhealthyview` sub-model fed by `kube.Scan`; a hit carries the columns so the reason is renderable (2026-08-16, STORY-06g-2b-1)
+
+The surface half of STORY-06g-2 (D276) is a full-screen, cursor-navigable list of
+ScanHits — the "the broken things find the operator" view for the S02 miss (a
+failure that is not a pod). Its shape follows the decisions that already govern
+full-screen surfaces:
+
+1. **`kube.ScanHit` carries the columns the row sat under.** A scan hit already
+   carries the row (D276 pt 2); this adds `Columns []Column` so a surface can
+   classify the row's cells by column name — "which cell is the offending one"
+   is unanswerable from the row alone, and the whole point of the hit's shape is
+   to render the reason without re-listing. A later leg must not strip the
+   columns (the reason would silently become unrenderable), and a surface that
+   shows a hit's reason must classify via `table.UnhealthyCells`, never by
+   re-listing the kind.
+2. **The row predicate is the table component's exported `UnhealthyRow` /
+   `UnhealthyCells`** — the M4-06 classifier (color.go) lifted to a whole
+   server-printed table. D276 named the predicate as a seam because the
+   classifier is a TUI concern; the seam is now concrete and shared: the sweep's
+   filter, the reason a hit shows, and the per-kind `H` filter all run the same
+   `classifyCell`, so the cross-kind list and the per-kind filter cannot disagree
+   about what is broken (D275 pt 1, D164's one source).
+3. **The surface is a `components/unhealthyview` sub-model** (D264 pt 3): a
+   full-screen list of ScanHits with a header tracking the sweep (scope · count ·
+   scanning M/N kinds · cap), navigation and drill-in/back as keymap actions
+   (D11), emitting its own `SelectedMsg`/`ClosedMsg` (D56). It has **no query
+   field** — the sweep runs once on open, not per keystroke — so it is a pure
+   list, the thing that makes it unlike the search view. It runs no scan itself
+   and knows nothing about clients (SEARCH-02a's rhythm). This slice (06g-2b-1)
+   is the component + the seams in isolation; the wiring that opens it and feeds
+   it `kube.Scan` is 06g-2b-2, which deletes the feedback file (D69).

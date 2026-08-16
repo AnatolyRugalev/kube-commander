@@ -13,8 +13,14 @@ import (
 // be *shown* in a list (kind · name · namespace · the offending cell), so it
 // carries the row so a surface can render the reason without a second round-trip.
 // Row.Object is the object's identity.
+//
+// Columns are the table the row came from (D33 server columns), carried so a
+// surface can classify the row's cells by column name — "which cell is the
+// offending one" needs the columns the reason sits under. Without them a hit
+// could only be rendered as a blob of cells with no way to name the offender.
 type ScanHit struct {
 	Resource Resource
+	Columns  []Column
 	Row      Row
 }
 
@@ -187,7 +193,7 @@ func scanRows(ctx context.Context, lister rowLister, resources []Resource, names
 					sent++
 					mu.Unlock()
 
-					if !sendEvent(outer, out, ScanEvent{Type: ScanMatch, Hit: ScanHit{Resource: r, Row: row}}) {
+					if !sendEvent(outer, out, ScanEvent{Type: ScanMatch, Hit: ScanHit{Resource: r, Columns: tbl.Columns, Row: row}}) {
 						return
 					}
 				}
