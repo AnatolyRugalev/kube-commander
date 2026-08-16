@@ -1214,7 +1214,26 @@ func (m Model) header() string {
 		}
 		seg += "  " + itoa(len(m.shownLines)) + "/" + itoa(len(m.lines))
 	}
-	return m.styles.Header.Width(m.width).MaxWidth(m.width).Render(clip(seg, m.width))
+	text := clip(seg, m.width)
+	// The follow state is the one piece of the header the feedback wants to be
+	// unmistakable at a glance — "this is confusing, yeah", a word in a status line
+	// the eye skips (2026-08-15-logs-follow-visual-signal). So `[following]` renders
+	// as the Follow badge — canvas ink on the palette's Success green on a dark
+	// canvas, bold alone on a light one (styles.Follow, D252 pt 3's rule) — while
+	// `[paused]` stays plain header text. The lookup runs on the already-clipped
+	// text: clip truncates from the right, so the token is intact or gone with the
+	// tail, and a narrow header that clipped it away degrades to today's plain form
+	// rather than paint a broken span. The neighbours get their own Header render so
+	// the badge's reset does not leave them in the terminal default.
+	if m.following {
+		if i := strings.Index(text, state); i >= 0 {
+			end := i + len(state)
+			text = m.styles.Header.Render(text[:i]) +
+				m.styles.Follow.Render(state) +
+				m.styles.Header.Render(text[end:])
+		}
+	}
+	return m.styles.Header.Width(m.width).MaxWidth(m.width).Render(text)
 }
 
 // itoa is a tiny non-negative int→string (avoids importing strconv for one use).

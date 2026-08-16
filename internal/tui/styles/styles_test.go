@@ -41,6 +41,7 @@ func TestStylesRenderContent(t *testing.T) {
 		"Error":     s.Error.Render(content),
 		"Warn":      s.Warn.Render(content),
 		"Success":   s.Success.Render(content),
+		"Follow":    s.Follow.Render(content),
 		"Spinner":   s.Spinner.Render(content),
 	}
 	for name, out := range renders {

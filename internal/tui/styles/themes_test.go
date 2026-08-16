@@ -473,3 +473,43 @@ func TestMatchHighlightIsDistinguishable(t *testing.T) {
 		}
 	}
 }
+
+func TestFollowBadgeIsDistinguishable(t *testing.T) {
+	// The follow-state badge's contract, measured per palette
+	// (STORY-06j-1 / 2026-08-15-logs-follow-visual-signal):
+	//
+	//   - Bold everywhere: even where no paint can carry the floor, the marker
+	//     keeps its weight so following never reads as plain header text.
+	//   - Paint on a dark canvas: canvas ink on the palette's Success green —
+	//     the same "ink on a highlighter pen" pair Match uses with Warn — which
+	//     must clear D251 pt 1's 4.5:1 body floor (measured 4.69–11.03:1 across
+	//     the dark built-ins).
+	//   - No paint on a light canvas: no palette-native shade on Success clears
+	//     the floor there (measured 2.96–4.29:1, the same conclusion D252 pt 3
+	//     reached for Warn), so weight alone carries the badge — painting anyway
+	//     would re-ship the near-white-on-green defect that rule exists to stop.
+	//
+	// The gate is the palette's own polarity (IsDark), one rule, no per-palette
+	// list, exactly as Match's test above works.
+	for _, th := range Themes() {
+		style := New(th).Follow
+		if !style.GetBold() {
+			t.Errorf("theme %q: Follow must carry bold on every palette", th.Name)
+		}
+		if IsDark(th.Background) {
+			if !SameColor(style.GetBackground(), th.Success) || !SameColor(style.GetForeground(), th.Background) {
+				t.Errorf("theme %q: dark-canvas Follow must paint canvas-on-Success", th.Name)
+			}
+			if r := ContrastRatio(th.Background, th.Success); r < 4.5 {
+				t.Errorf("theme %q: follow text on its badge = %.2f:1, under the 4.5:1 body floor (D251 pt 1)", th.Name, r)
+			}
+		} else {
+			if _, ok := style.GetBackground().(lipgloss.NoColor); !ok {
+				t.Errorf("theme %q: light-canvas Follow must not paint a background — weight carries it (D252 pt 3)", th.Name)
+			}
+			if _, ok := style.GetForeground().(lipgloss.NoColor); !ok {
+				t.Errorf("theme %q: light-canvas Follow must not paint a foreground — weight carries it (D252 pt 3)", th.Name)
+			}
+		}
+	}
+}

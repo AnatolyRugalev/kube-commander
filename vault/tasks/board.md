@@ -809,10 +809,10 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       notes: The owner-address bookkeeping from CTX-MEM-04 already records half of it; the fold-in decides the gesture and the relation graph's exact shape.
       → milestone: M5 · knowledge: decisions.md D268
 
-- [ ] **STORY-06j-1** A painted follow indicator — the header renders `[following]` as a badge (canvas ink on the palette's Success green on a dark canvas; bold alone on a light one, D252 pt 3's rule), paused stays plain — so live vs frozen is unmistakable at a glance (`2026-08-15-logs-follow-visual-signal.md`)
-      status: in-progress | owner: opencode | added: 2026-08-16
-      notes: First slice of STORY-06j (06j's two fixes smallest first). A new `styles.Follow` role mirrors `Match`'s polarity-gated paint rule (weight everywhere, canvas-on-Success on dark, no paint on light — measured 4.69–11.03:1 dark, 2.96–4.29:1 light, so the paint can only carry the floor on dark canvases). The header splits at the token so the badge's reset does not leave the trailing text in the terminal default. The feedback file is deleted with this slice (D69).
-      → milestone: M5 · knowledge: decisions.md D268
+- [x] **STORY-06j-1** A painted follow indicator — the header renders `[following]` as a badge (canvas ink on the palette's Success green on a dark canvas; bold alone on a light one, D252 pt 3's rule), paused stays plain — so live vs frozen is unmistakable at a glance (`2026-08-15-logs-follow-visual-signal.md`)
+      status: done | owner: opencode | added: 2026-08-16 | done: 2026-08-16
+      notes: Landed as D280: the new `styles.Follow` role paints the `[following]` token (bold everywhere; canvas-on-Success on a dark canvas, 4.69–11.03:1 measured; no paint on a light canvas where no shade clears the floor — the Match/D252 pt 3 rule, gated by IsDark), while `[paused]` stays plain Header text. The header clips first, then composes the badge mid-line with the neighbours re-rendered through Header so the badge's reset does not strand them in the terminal default. `TestFollowBadgeIsDistinguishable` holds every built-in to the rule; `TestFollowStateBadgeAndPausedPlain` pins live-paints / paused-plain. README's logs paragraph names the badge. Feedback `2026-08-15-logs-follow-visual-signal.md` deleted (D69). 06j-2/06j-3 split back to Backlog.
+      → milestone: M5 · knowledge: decisions.md D268, D280
 
 - [ ] **STORY-06j-2** Scrolling past the last log line re-arms follow — the same re-arm `G` gives, so a reader who scrolled back down to the newest line is following again without a keypress (`2026-08-15-logs-scroll-past-end-resumes-follow.md`)
       status: todo | owner: — | added: 2026-08-16
@@ -881,6 +881,8 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268
 
 ## Done
+
+- [x] **STORY-06j-1** The painted follow indicator — the header renders `[following]` through the new `styles.Follow` badge (canvas ink on Success on a dark canvas, bold alone on a light one), paused stays plain, so live vs frozen is unmistakable — done 2026-08-16 (D280)
 
 - [x] **STORY-06g-2b-2** The cross-kind unhealthy wiring — `U` (`app.unhealthyScan`) opens the view and runs one `kube.Scan` over the menu's kinds with the `table.UnhealthyRow` predicate over a generation-guarded pump, each drill-in switching browse to the hit with its object pending selection, the feedback file deleted — done 2026-08-16 (D279)
 

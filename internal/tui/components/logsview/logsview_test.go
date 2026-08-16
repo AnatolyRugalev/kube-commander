@@ -22,6 +22,11 @@ func plain(v string) string { return ansi.Strip(v) }
 // without restating an escape sequence.
 func matchSpan(s string) string { return styles.Default().Match.Render(s) }
 
+// followSpan is how the follow-state token looks in the header when the stream is live:
+// the text rendered through the shared Follow badge (STORY-06j-1). Comparing against it
+// keeps the test honest about the styling without restating an escape sequence.
+func followSpan(s string) string { return styles.Default().Follow.Render(s) }
+
 func newLogs() Model {
 	m := New(styles.Default())
 	m.SetSize(40, 12)
@@ -72,6 +77,34 @@ func TestStartsFollowingAndTails(t *testing.T) {
 	}
 	if !strings.Contains(v, "line-50") {
 		t.Errorf("following view should tail to line-50; got:\n%s", v)
+	}
+}
+
+// TestFollowStateBadgeAndPausedPlain pins STORY-06j-1: the follow state must be a
+// painted, unmistakable cue, not a word in the header. Following renders `[following]`
+// through the shared Follow badge — the header, title included, sits in the Header
+// style and the badge replaces the token mid-line — and paused renders `[paused]` as
+// plain header text with no badge anywhere.
+func TestFollowStateBadgeAndPausedPlain(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+	v := m.View()
+	if !strings.Contains(v, followSpan("[following]")) {
+		t.Errorf("live header should paint [following] with the Follow badge; got:\n%s", v)
+	}
+	if strings.Contains(v, followSpan("[paused]")) {
+		t.Errorf("live header should not paint [paused]; got:\n%s", v)
+	}
+	m, _ = m.Update(keymap.ActionTop) // pause
+	if m.Following() {
+		t.Fatal("scrolling up should pause following")
+	}
+	v = m.View()
+	if !strings.Contains(v, "[paused]") {
+		t.Errorf("paused header should show [paused]; got:\n%s", v)
+	}
+	if strings.Contains(v, followSpan("[following]")) {
+		t.Errorf("paused header should not paint the follow badge; got:\n%s", v)
 	}
 }
 

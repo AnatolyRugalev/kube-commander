@@ -7937,3 +7937,32 @@ pt 3) lands the seam and the gesture:
    intercepts `unhealthyView.Active()` to feed them to the view; `q` closes the
    view like every full-screen pager. It gets its own `HelpUnhealthy` hint context
    (D143 pt 1) so the bottom line never advertises the browse set underneath.
+
+## D280 — the follow state is a painted badge, `styles.Follow`, gated by the canvas's polarity (2026-08-16, STORY-06j-1)
+
+The S03 feedback `2026-08-15-logs-follow-visual-signal.md` wanted the follow/pause
+state to be unmistakable at a glance — "this is confusing, yeah" — because a word
+(`[following]`/`[paused]`) in the header is exactly what the eye skips. The shape
+of the fix is settled so later legs stop re-deriving it:
+
+1. **The indicator is a `styles.Follow` role, not a per-view colour.** A new role
+   on `Styles` (derived in `New`, `followStyle`) paints the `[following]` token;
+   `[paused]` renders through `Header` as today. The two states differ by a
+   painted bar, not by word order. A later leg must not hand-roll a green in the
+   logs view or bolt a background onto `Header` — the badge is one role, one rule,
+   three surfaces could share it.
+2. **The paint rule is Match's, exactly (D252 pt 3): weight everywhere, paint
+   only where the paint can carry the floor.** `Follow` is bold on every palette;
+   on a dark canvas it paints canvas ink on the palette's Success green (measured
+   4.69–11.03:1 across the dark built-ins, over the 4.5:1 floor); on a light
+   canvas it paints nothing — no palette-native shade on Success clears the floor
+   there (measured 2.96–4.29:1, the same conclusion D252 pt 3 reached for Warn) —
+   so the badge degrades to bold alone. The gate is the palette's own measured
+   polarity (`IsDark`), one rule, no per-palette exemption, and
+   `TestFollowBadgeIsDistinguishable` holds every built-in to it.
+3. **The header composes the badge mid-line without breaking the neighbours.**
+   The token is looked up in the already-clipped text (clip truncates from the
+   right, so the token is intact or gone with the tail — a narrow header that
+   clipped it away degrades to today's plain form rather than paint a broken
+   span), and the prefix/suffix get their own `Header` render so the badge's
+   reset does not leave the rest of the line in the terminal default.

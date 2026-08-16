@@ -108,6 +108,19 @@ type Styles struct {
 	// than a per-palette exemption.
 	Match lipgloss.Style
 
+	// Follow is the logs view's follow-state badge: the header paints it behind
+	// `[following]` when the stream is live, and not at all when paused — the
+	// feedback (2026-08-15-logs-follow-visual-signal) wanted the state to be
+	// unmistakable at a glance, and a word in the header is exactly what the eye
+	// skips. It follows the Match rule's shape (D252 pt 3): canvas ink on the
+	// palette's Success green on a dark canvas — the same "ink on a highlighter"
+	// pair, cleared 4.5:1 on every dark built-in (4.69–11.03:1 measured) — and
+	// weight alone (bold) on a light canvas, where no palette-native shade on
+	// Success clears the floor (2.96–4.29:1 measured, D252 pt 3's disposition
+	// for the light palettes). Paused renders through Header as today, so the
+	// two states differ by a painted bar, not by word order.
+	Follow lipgloss.Style
+
 	// Pane frames a component; PaneFocus is the same frame when the pane holds
 	// focus (accented border). Both use a rounded border.
 	Pane      lipgloss.Style
@@ -155,6 +168,7 @@ func New(t Theme) Styles {
 			Foreground(t.Header).
 			Bold(true),
 		Match:     matchStyle(t),
+		Follow:    followStyle(t),
 		Pane:      pane,
 		PaneFocus: pane.BorderForeground(t.BorderFocus),
 		StatusBar: lipgloss.NewStyle().
@@ -178,6 +192,20 @@ func matchStyle(t Theme) lipgloss.Style {
 	s := lipgloss.NewStyle().Bold(true).Underline(true)
 	if IsDark(t.Background) {
 		s = s.Foreground(t.Background).Background(t.Warn)
+	}
+	return s
+}
+
+// followStyle builds the Follow badge for a Theme (see the Follow field's doc
+// for the rule): weight everywhere, paint only where the paint can carry the
+// floor. The mapping is polarity-gated exactly as matchStyle is — a dark canvas
+// gets canvas ink on the palette's Success, a light one gets bold alone because
+// no palette-native shade on Success clears 4.5:1 there (D252 pt 3 measured the
+// same conclusion for Warn). One rule, one place.
+func followStyle(t Theme) lipgloss.Style {
+	s := lipgloss.NewStyle().Bold(true)
+	if IsDark(t.Background) {
+		s = s.Foreground(t.Background).Background(t.Success)
 	}
 	return s
 }
