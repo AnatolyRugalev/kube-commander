@@ -754,7 +754,11 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 // select arms are ready and the runtime would pick one at random — a cancelled
 // search would emit events (including the terminal one) roughly half the time.
 // Checking first makes "cancelled ⇒ nothing more is emitted" hold.
-func sendEvent(ctx context.Context, out chan<- SearchEvent, ev SearchEvent) bool {
+//
+// It is generic over the event type so the shared fan-out guard serves every
+// concurrent stream in this package — Search and Scan alike — rather than each
+// duplicating the subtlety (D276).
+func sendEvent[T any](ctx context.Context, out chan<- T, ev T) bool {
 	if ctx.Err() != nil {
 		return false
 	}

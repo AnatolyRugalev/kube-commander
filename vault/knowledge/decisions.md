@@ -7809,3 +7809,34 @@ second):
    the operator. A later leg must not close 06g-2 by widening this filter to
    "remember the kind I last looked at": the miss is that the operator never thought
    to switch kinds, and a per-kind view does not fix that.
+
+## D276 — the cross-kind unhealthy sweep is a `kube.Scan` primitive over a caller-supplied `RowFilter` (2026-08-16, STORY-06g-2a)
+
+S02's miss — the fifth failure is a PVC and a pod-first walk never visits it — needs a
+cross-kind sweep, the other half of STORY-06g (D275 pt 3). The primitive lands first,
+before the surface (D52's bottom-up rhythm, the M4-07→M4-08 / SEARCH-02a→02b shape):
+
+1. **The sweep is a kube-layer primitive over a caller-supplied predicate.**
+   `kube.Clients.Scan(ctx, resources, namespace, keep RowFilter, limit)` fans out
+   one-shot Lists across the given kinds and streams `ScanEvent`s — ScanMatch per
+   kept row, exactly one ScanKindDone per kind (a failed List degrades to
+   `Failed`, never aborts — principle 3), and a terminal ScanDone reporting
+   `Capped` — under the same concurrency bound and cancellation rules Search
+   established (D131 pt 2, SEARCH-03). The predicate is a seam — `RowFilter
+   func(tbl *Table, row Row) bool` — because the M4-06 health classifier is a TUI
+   concern (it lives keyed by column name in the table component) and kube must
+   not import tui. A later leg must not move the classifier into kube, and must
+   not build a second, TUI-side fan-out instead of calling Scan: the per-kind
+   isolation and the concurrency bound are the point of the primitive.
+2. **A scan hit carries the row, cells included** (`ScanHit{Resource, Row}`),
+   unlike a SearchHit which carries no cells because drilling re-lists. The
+   unhealthy surface is meant to *show* the reason — kind · name · namespace ·
+   the offending cell — so re-listing every kind to render it would cost the sweep
+   the scan just paid. Ref is `Row.Object`. A later leg must not strip the cells
+   off the hit to "match" SearchHit's shape.
+3. **STORY-06g-2 is two slices** (this one and the surface 06g-2b). The surface
+   feeds Scan the M4-06 row predicate and presents the hits, each navigable;
+   the feedback file `2026-08-15-pod-first-blinds-non-pod-failures.md` is deleted
+   when that slice lands (D69). The predicate is the classifier lifted to a row —
+   the same one source 06g-1/H established (D275 pt 1, D164) — so the cross-kind
+   list and the per-kind filter can never disagree about what is broken.
