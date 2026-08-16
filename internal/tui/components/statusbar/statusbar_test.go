@@ -73,6 +73,25 @@ func TestSetMouseShowsMarker(t *testing.T) {
 	}
 }
 
+// TestSetUnhealthyShowsMarker proves the "what's broken" indicator (STORY-06g-1)
+// renders only while the unhealthy-only view is narrowing the table, so a
+// narrowed table never reads as an empty one.
+func TestSetUnhealthyShowsMarker(t *testing.T) {
+	m := newBar()
+	m.SetContext("prod")
+	if got := m.leftSegment(); strings.Contains(got, "unhealthy") {
+		t.Fatalf("unhealthy marker should be absent by default, got %q", got)
+	}
+	m.SetUnhealthy(true)
+	if got := m.leftSegment(); !strings.Contains(got, "unhealthy") {
+		t.Fatalf("leftSegment() = %q, want the unhealthy marker while the view is on", got)
+	}
+	m.SetUnhealthy(false)
+	if got := m.leftSegment(); strings.Contains(got, "unhealthy") {
+		t.Fatalf("unhealthy marker should disappear when the view is off, got %q", got)
+	}
+}
+
 func TestStartStopDiscovery(t *testing.T) {
 	m := newBar()
 	if m.Discovering() {

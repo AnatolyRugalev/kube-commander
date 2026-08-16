@@ -106,6 +106,9 @@ func TestShortHelpContext(t *testing.T) {
 	if !table[ActionFilter.Describe()] || !table[ActionSearchNext.Describe()] {
 		t.Error("table context should offer filter and next-match")
 	}
+	if !table[ActionUnhealthy.Describe()] {
+		t.Error("table context should offer the unhealthy quick-access")
+	}
 	if !table[ActionSort.Describe()] {
 		t.Error("table context should offer sort")
 	}

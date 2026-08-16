@@ -3746,6 +3746,22 @@ func (m Model) openFilter() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// toggleUnhealthy flips the "what's broken" narrowing on the current resource
+// table (STORY-06g-1): `H` from anywhere narrows the browse table to the rows the
+// M4-06 classifier reads as unhealthy — CrashLoopBackOff, ImagePullBackOff,
+// Pending/unschedulable, not-ready, a stuck claim. It composes with the `/`
+// substring filter (a row must survive both), the status bar shows an `unhealthy`
+// marker while it is on, and esc clears it exactly as it clears the substring
+// filter. Inert with no resource table — the welcome page has nothing to narrow.
+func (m Model) toggleUnhealthy() (tea.Model, tea.Cmd) {
+	if !m.hasCurrent {
+		return m, nil
+	}
+	m.table.SetUnhealthyOnly(!m.table.UnhealthyOnly())
+	m.syncFilterStatus()
+	return m, nil
+}
+
 // isEmptyLineBackspace reports whether a key is a backspace pressed against an empty
 // query — a delete with nothing before the cursor to delete. It is the third arm of
 // D73's control/text split (D238): an editing key with nothing to edit is not input,
@@ -3818,10 +3834,13 @@ func (m Model) commitFilter() (tea.Model, tea.Cmd) {
 // clearFilter removes any active filter and closes the input, returning the table to
 // its full row set (D78) and the status bar to its normal content. Safe to call with
 // no filter set. It is esc's behaviour both while editing (clears-then-closes) and
-// on a committed filter (clears the applied narrowing).
+// on a committed filter (clears the applied narrowing). It also clears the
+// "what's broken" unhealthy narrowing (STORY-06g-1): esc is the "show me
+// everything again" gesture, and a view that hides rows must not survive it.
 func (m *Model) clearFilter() {
 	m.filter = m.filter.Reset()
 	m.table.ClearFilter()
+	m.table.SetUnhealthyOnly(false)
 	m.syncFilterStatus()
 }
 
@@ -3990,10 +4009,14 @@ func (m *Model) hintContext() keymap.HelpContext {
 	return keymap.HelpMenu
 }
 
-// syncFilterStatus reflects the current filter state on the status bar: the live
-// input prompt while editing, the committed "/query" indicator while a filter is
-// applied but the input is closed, and nothing when no filter is set.
+// syncFilterStatus reflects the current narrowing state on the status bar: the
+// live input prompt while editing, the committed "/query" indicator while a
+// substring filter is applied but the input is closed, an `unhealthy` marker while
+// the "what's broken" narrowing is on (STORY-06g-1), and nothing when neither is
+// set. The unhealthy marker is folded into the same sync so one call covers every
+// way the displayed view can narrow.
 func (m *Model) syncFilterStatus() {
+	m.status.SetUnhealthy(m.table.UnhealthyOnly())
 	switch {
 	case m.filter.Active():
 		m.status.SetFilter(m.filter.View())
@@ -4311,16 +4334,16 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.toggleMenu()
 	case keymap.ActionBack:
 		// esc is the one-level-back key, resolved top-down, one level per press:
-		// close the help overlay if open; else clear a committed table filter
-		// (leaving the filtered view — the live-editing esc is handled in
-		// routeFilterKey); else, with the table focused, pop focus back to the left
-		// menu pane (the "back to the menu" gesture). Inert when the menu already
-		// holds focus and nothing is open.
+		// close the help overlay if open; else clear a committed table filter or the
+		// unhealthy-only view (leaving the narrowed view — the live-editing esc is
+		// handled in routeFilterKey); else, with the table focused, pop focus back to
+		// the left menu pane (the "back to the menu" gesture). Inert when the menu
+		// already holds focus and nothing is open.
 		if m.help.Visible() {
 			m.help.SetVisible(false)
 			return m, nil
 		}
-		if m.table.Filter() != "" {
+		if m.table.Filter() != "" || m.table.UnhealthyOnly() {
 			m.clearFilter()
 			return m, nil
 		}
@@ -4361,6 +4384,13 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.openForwardsPanel()
 	case keymap.ActionFilter:
 		return m.openFilter()
+	case keymap.ActionUnhealthy:
+		// `H` flips the "what's broken" narrowing on the current resource table
+		// (STORY-06g-1): the rows the M4-06 classifier reads as unhealthy —
+		// CrashLoopBackOff, ImagePullBackOff, Pending/unschedulable, not-ready, a
+		// stuck claim. It composes with the `/` substring filter and clears on esc
+		// exactly as the substring filter does. Inert with no resource table.
+		return m.toggleUnhealthy()
 	case keymap.ActionSearchNext:
 		return m.searchMove(keymap.ActionDown)
 	case keymap.ActionSearchPrev:

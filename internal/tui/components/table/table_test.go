@@ -790,6 +790,140 @@ func TestFilterSurvivesWatchDeltas(t *testing.T) {
 	}
 }
 
+// TestSetUnhealthyOnlyNarrowsRows proves the "what's broken" view (STORY-06g-1):
+// turning it on keeps exactly the rows the M4-06 classifier reads as unhealthy —
+// sampleTable's Ready cells are 1/1, 0/1, 2/2, so pod-b (0/1) is the one that
+// classifies to a warning. The full set is untouched, so turning it back off
+// brings every row back.
+func TestSetUnhealthyOnlyNarrowsRows(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetUnhealthyOnly(true)
+	if got, want := m.RowCount(), 1; got != want {
+		t.Fatalf("RowCount = %d, want %d with the unhealthy view on", got, want)
+	}
+	if m.TotalRowCount() != 3 {
+		t.Fatalf("TotalRowCount = %d, want 3 (full set unchanged)", m.TotalRowCount())
+	}
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "pod-b" {
+		t.Fatalf("selected = %q, want pod-b (the only unhealthy row)", sel.Object.Name)
+	}
+	if !m.UnhealthyOnly() {
+		t.Fatal("UnhealthyOnly() should report true while the view is on")
+	}
+	m.SetUnhealthyOnly(false)
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 after turning the view off", m.RowCount())
+	}
+	if m.UnhealthyOnly() {
+		t.Fatal("UnhealthyOnly() should report false after the view is off")
+	}
+}
+
+// TestUnhealthyOnlySkipsHealthyAndUnknown proves the unhealthy predicate's
+// threshold: a row every cell classifies to success or none (roleNone placeholders
+// are "nothing to say", not a state) is healthy and hidden; only warn/error rows
+// survive. STATUS is the classic carrier (CrashLoopBackOff, ImagePullBackOff,
+// Pending) and READY the second (0/1); a row with neither stays visible — a
+// healthy-looking set is not "what's broken".
+func TestUnhealthyOnlySkipsHealthyAndUnknown(t *testing.T) {
+	tbl := kube.Table{
+		Columns: []kube.Column{
+			{Name: "Name", Type: "string"},
+			{Name: "STATUS", Type: "string"},
+			{Name: "READY", Type: "string"},
+		},
+		Rows: []kube.Row{
+			{Cells: []any{"crash", "CrashLoopBackOff", "0/1"}, Object: kube.ObjectRef{Name: "crash", UID: "1"}},
+			{Cells: []any{"pending", "Pending", "0/1"}, Object: kube.ObjectRef{Name: "pending", UID: "2"}},
+			{Cells: []any{"running", "Running", "1/1"}, Object: kube.ObjectRef{Name: "running", UID: "3"}},
+			{Cells: []any{"blank", "<none>", "<none>"}, Object: kube.ObjectRef{Name: "blank", UID: "4"}},
+		},
+	}
+	m := newTestModel()
+	m.SetTable(tbl)
+	m.SetUnhealthyOnly(true)
+	if got, want := m.RowCount(), 2; got != want {
+		t.Fatalf("RowCount = %d, want %d (CrashLoopBackOff + Pending)", got, want)
+	}
+	// The selection lands on the first unhealthy row in watch order.
+	if sel, _ := m.SelectedRow(); sel.Object.Name != "crash" {
+		t.Fatalf("selected = %q, want crash", sel.Object.Name)
+	}
+}
+
+// TestUnhealthyOnlyComposesWithSubstringFilter proves the two narrowings AND:
+// a row must survive both. sampleTable's healthy 1/1 rows are the ones the name
+// filter keeps, so the intersection is empty — the point is the composition, not
+// a particular row.
+func TestUnhealthyOnlyComposesWithSubstringFilter(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetUnhealthyOnly(true)
+	m.SetFilter("pod-a") // matches pod-a (1/1), which is healthy — so no rows survive
+	if m.RowCount() != 0 {
+		t.Fatalf("RowCount = %d, want 0 — pod-a matches the name filter but is healthy", m.RowCount())
+	}
+	m.SetFilter("pod-b") // pod-b is unhealthy and matches → survives
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1 — pod-b matches both narrowings", m.RowCount())
+	}
+	// Clearing the substring filter keeps the unhealthy view applied.
+	m.ClearFilter()
+	if m.RowCount() != 1 {
+		t.Fatalf("RowCount = %d, want 1 — unhealthy view survives a substring clear", m.RowCount())
+	}
+}
+
+// TestUnhealthyOnlySurvivesWatchDeltas proves the unhealthy view is a view over
+// the authoritative set, exactly like the substring filter: an ADDED unhealthy row
+// appears immediately, a healthy one joins the full set without showing, and a
+// RESET keeps the view applied.
+func TestUnhealthyOnlySurvivesWatchDeltas(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetUnhealthyOnly(true)
+	// A new unhealthy pod appears in the narrowed view.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{{
+		Cells:  []any{"pod-e", "0/1"},
+		Object: kube.ObjectRef{Name: "pod-e", UID: "e"},
+	}}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2 — pod-e (0/1) is unhealthy", m.RowCount())
+	}
+	// A healthy pod joins the full set but not the view.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchAdded, Rows: []kube.Row{{
+		Cells:  []any{"pod-f", "1/1"},
+		Object: kube.ObjectRef{Name: "pod-f", UID: "f"},
+	}}})
+	if m.RowCount() != 2 {
+		t.Fatalf("RowCount = %d, want 2 — pod-f (1/1) is healthy and hidden", m.RowCount())
+	}
+	if m.TotalRowCount() != 5 {
+		t.Fatalf("TotalRowCount = %d, want 5", m.TotalRowCount())
+	}
+	// A RESET (watch reconnect re-list) keeps the view on.
+	m.ApplyEvent(kube.WatchEvent{Type: kube.WatchReset, Columns: sampleTable().Columns, Rows: sampleTable().Rows})
+	if !m.UnhealthyOnly() || m.RowCount() != 1 {
+		t.Fatalf("after RESET: UnhealthyOnly=%v RowCount=%d, want on and 1", m.UnhealthyOnly(), m.RowCount())
+	}
+}
+
+// TestSetTableClearsUnhealthyOnly proves a fresh snapshot (a new resource) drops
+// the stale unhealthy view exactly as it drops the substring filter.
+func TestSetTableClearsUnhealthyOnly(t *testing.T) {
+	m := newTestModel()
+	m.SetTable(sampleTable())
+	m.SetUnhealthyOnly(true)
+	m.SetTable(sampleTable())
+	if m.UnhealthyOnly() {
+		t.Fatal("UnhealthyOnly() should be cleared by SetTable")
+	}
+	if m.RowCount() != 3 {
+		t.Fatalf("RowCount = %d, want 3 after SetTable clears the view", m.RowCount())
+	}
+}
+
 // TestRowAtMapsContentRowToRow proves the mouse coordinate seam resolves a
 // content-area row to the data row rendered on it (dogfood-08): the column-header
 // line and blank/out-of-range lines map to no row, data lines map to their index.

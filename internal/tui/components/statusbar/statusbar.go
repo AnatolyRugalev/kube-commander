@@ -46,6 +46,7 @@ type Model struct {
 	noticeText   string
 	filter       string
 	mouse        bool
+	unhealthy    bool
 	discovering  bool
 	width        int
 }
@@ -97,6 +98,13 @@ func (m *Model) SetScope(s string) { m.scope = s }
 // nothing. The string is used verbatim (the caller supplies the styling/prompt),
 // so it is not error-flattened like SetError.
 func (m *Model) SetFilter(s string) { m.filter = s }
+
+// SetUnhealthy sets the "what's broken" narrowing indicator (STORY-06g-1): a
+// marker in the left segment shown while the unhealthy-only view is narrowing the
+// current table, nothing when it is not. Like the mouse marker it is a persistent
+// view state the operator must be able to see, so a narrowed table never reads as
+// an empty one.
+func (m *Model) SetUnhealthy(on bool) { m.unhealthy = on }
 
 // SetMouse sets the persistent mouse-capture indicator. Mouse capture is off by
 // default so the terminal's own select-to-copy works (D97); when the user turns
@@ -245,6 +253,11 @@ func (m Model) leftSegment() string {
 	}
 	if m.filter != "" {
 		parts = append(parts, m.filter)
+	}
+	// The unhealthy marker sits beside the filter it can compose with, reading
+	// like the other bare view-state markers (mouse, discovering).
+	if m.unhealthy {
+		parts = append(parts, "unhealthy")
 	}
 	if m.mouse {
 		parts = append(parts, "mouse")

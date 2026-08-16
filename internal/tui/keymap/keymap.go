@@ -46,6 +46,15 @@ const (
 	ActionSearchPrev   Action = "app.searchPrev"
 	ActionHelp         Action = "app.help"
 	ActionQuit         Action = "app.quit"
+	// ActionUnhealthy narrows the current resource table to the rows the M4-06
+	// classifier reads as unhealthy (STORY-06g-1) — CrashLoopBackOff,
+	// ImagePullBackOff, Pending/unschedulable, not-ready, a stuck claim — the
+	// "what's broken" quick-access a keypress from anywhere, for the kind you are
+	// on. It is the unhealthy-only twin of the `/` substring filter: it composes
+	// with it, and the table shows the rows that survive both. It is a browse-view
+	// action (not row-scoped), app-global like app.filter, and inert with no
+	// resource table showing.
+	ActionUnhealthy Action = "app.unhealthy"
 	// ActionPalette opens the command palette (PAL-02): one modal list of the
 	// app-global *verbs*, fuzzy-ranked like every other picker (D194 pt 1), whose
 	// pick runs the chosen verb through the same action dispatch a key press takes.
@@ -304,6 +313,7 @@ var actionMeta = []struct {
 	{ActionFilter, "Filter / search"},
 	{ActionSearchNext, "Next match"},
 	{ActionSearchPrev, "Previous match"},
+	{ActionUnhealthy, "Unhealthy only"},
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
 	{ActionPalette, "Command palette"},
@@ -392,6 +402,11 @@ var defaultBindings = map[Action][]string{
 	ActionPageUp:     {"ctrl+b"},
 	ActionFilter:     {"/"},
 	ActionSearchNext: {"n"},
+	// The unhealthy quick-access takes the capital `H` — the feedback's own
+	// suggestion ("shift+H (healthy vs h)"), and the natural capital-letter
+	// partner to the lowercase nav keys, free in the browse context, not a reserved
+	// nav chord (D10). It is the "what's broken, filtered" twin of `/` (STORY-06g-1).
+	ActionUnhealthy: {"H"},
 	// Previous-match leaves the n-family entirely after the walk read it as the most
 	// confusing corner of the keymap: `N` is now ns.switch, and `#` is vim's own
 	// backward-occurrence gesture (the mirror of `*`, which pin already claims).

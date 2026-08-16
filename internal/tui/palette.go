@@ -132,6 +132,7 @@ var paletteVerbs = []keymap.Action{
 	keymap.ActionToggleMenu,
 	keymap.ActionTheme,
 	keymap.ActionToggleMouse,
+	keymap.ActionUnhealthy,
 	keymap.ActionSort,
 	keymap.ActionClearSort,
 	keymap.ActionHelp,

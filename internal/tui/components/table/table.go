@@ -70,6 +70,15 @@ type Model struct {
 	full   kube.Table
 	table  kube.Table
 	filter string
+	// unhealthy is the "what's broken" narrowing (STORY-06g-1): when on, the
+	// displayed rows are only those the M4-06 classifier reads as unhealthy (a
+	// visible cell classifying to a warning or an error role — CrashLoopBackOff,
+	// ImagePullBackOff, Pending/unschedulable, not-ready, a stuck claim). Like the
+	// substring filter it is a view over the authoritative full set: watch deltas
+	// keep updating every row, and turning it off brings them all back. The two
+	// narrowings compose (a row must survive both); SetTable resets it exactly as
+	// it resets filter.
+	unhealthy bool
 
 	// sortCol is the visible-column position (index into visible) the displayed
 	// rows are sorted on, or -1 for the unsorted, authoritative watch order.
@@ -149,6 +158,7 @@ func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
 func (m *Model) SetTable(t kube.Table) {
 	m.full = t
 	m.filter = ""
+	m.unhealthy = false
 	m.sortCol = -1
 	m.sortDesc = false
 	m.sortMode = false // a fresh snapshot resets the sort-mode cursor with the sort.
@@ -208,6 +218,29 @@ func (m *Model) ClearFilter() { m.SetFilter("") }
 
 // Filter is the active filter query ("" when none is set).
 func (m Model) Filter() string { return m.filter }
+
+// SetUnhealthyOnly narrows the displayed rows to those the M4-06 classifier
+// reads as unhealthy — any visible cell classifying to a warning or an error role
+// (CrashLoopBackOff, ImagePullBackOff, Pending/unschedulable, not-ready, a stuck
+// claim) — the "what's broken" quick-access view (STORY-06g-1). It composes with
+// SetFilter: a row must survive both narrowings. Like the substring filter it is
+// a view over the authoritative full set, so watch deltas keep flowing and
+// passing false brings every row back. The selection is preserved by object UID
+// exactly as SetFilter preserves it.
+func (m *Model) SetUnhealthyOnly(on bool) {
+	if on == m.unhealthy {
+		return
+	}
+	selUID := m.selectedUID()
+	m.unhealthy = on
+	m.applyFilter()
+	m.restoreSelection(selUID)
+	m.clampOffset()
+	m.clampHOffset()
+}
+
+// UnhealthyOnly reports whether the "what's broken" narrowing is active.
+func (m Model) UnhealthyOnly() bool { return m.unhealthy }
 
 // SortBy sets the sort column to the visible-column position col (an index into
 // the visible columns — what the user sees and navigates) and applies a stable,
@@ -370,15 +403,19 @@ func (m *Model) applyFilter() {
 	// so everything below — the filter's match scope, the sort, the measured widths —
 	// sees the same columns the reader does.
 	candidates := m.rowsWithUsage()
-	if m.filter == "" {
+	if m.filter == "" && !m.unhealthy {
 		m.table.Rows = candidates
 	} else {
 		needle := strings.ToLower(m.filter)
 		rows := make([]kube.Row, 0, len(candidates))
 		for _, r := range candidates {
-			if m.rowMatches(r, needle) {
-				rows = append(rows, r)
+			if m.filter != "" && !m.rowMatches(r, needle) {
+				continue
 			}
+			if m.unhealthy && !m.rowUnhealthy(r) {
+				continue
+			}
+			rows = append(rows, r)
 		}
 		m.table.Rows = rows
 	}

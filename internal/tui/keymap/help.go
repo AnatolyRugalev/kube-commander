@@ -292,7 +292,7 @@ func HelpContexts() []HelpContext {
 // enter submits. The hint's promise is which keys act, not a gloss of each verb.
 var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
-	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
+	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionUnhealthy, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
 	// logs.regex is offered by HelpLogsFilter rather than here, which is where it acts
 	// on something: with the grep closed there is no query for it to re-interpret, and

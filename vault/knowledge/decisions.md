@@ -7776,3 +7776,36 @@ surface, "why is this red" in one gesture.
    get-permission degrades to a toast (principle 3). This first slice renders into
    the shared text viewer; a live/watched events list is not promised here and is a
    separate question.
+
+## D275 — the unhealthy quick-access is a per-kind filter on the current table (`H`), split from the cross-kind surface (2026-08-16, STORY-06g-1)
+
+S02's two sharpest findings — "no way to jump straight at the failing rows" and
+"a failure that is not a pod is invisible" — both came from the fold-in's STORY-06g,
+which the board had folded into one slice. That slice is too big for one leg and
+splits here (D52's bottom-up rhythm: the predicate and gesture first, the sweep
+second):
+
+1. **`app.unhealthy` (`H`, shift+h) narrows the current resource table to the rows
+   the M4-06 cell classifier reads as unhealthy.** The predicate is the classifier
+   itself, lifted from the cell level to the row: a row is unhealthy when any
+   visible cell classifies to a warning or an error role. That is exactly what the
+   table already paints as not-green — CrashLoopBackOff, ImagePullBackOff,
+   Pending/unschedulable, a not-ready READY, a stuck claim — so the "what's broken"
+   view and the color tell the same story. `H` was the feedback's own suggestion
+   ("healthy vs h"), free in the browse context, not a reserved nav chord (D10).
+   A later leg must not invent a second, private health predicate that could drift
+   from the coloring: `classifyCell` is the one source (D164).
+2. **The unhealthy view composes with the `/` substring filter and is a view over
+   the authoritative full set.** A row must survive both narrowings; watch deltas
+   keep flowing and re-derive the view; turning it off (or a new resource, `SetTable`)
+   brings every row back — the same shape `SetFilter` has had since M2-09a. `esc`
+   clears it alongside the substring filter: `esc` is "show me everything again".
+3. **The status bar shows an `unhealthy` marker while the view is on**, so a table
+   narrowed to zero rows never reads as an empty table, and the palette lists the
+   verb. This slice is deliberately per-kind: the gesture finds the broken rows of
+   the kind you are on. The other half of the finding — the fifth failure is a PVC
+   and a pod-first walk never visits it — is **STORY-06g-2**, a cross-kind sweep
+   that lists unhealthy objects across kinds so a failure that is not a pod finds
+   the operator. A later leg must not close 06g-2 by widening this filter to
+   "remember the kind I last looked at": the miss is that the operator never thought
+   to switch kinds, and a per-kind view does not fix that.

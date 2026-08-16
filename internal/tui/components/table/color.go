@@ -236,6 +236,21 @@ func restartsRole(v string) cellRole {
 	return roleWarn
 }
 
+// rowUnhealthy reports whether a row reads as unhealthy under the M4-06
+// classifier: any visible cell classifies to a warning or an error role (STORY-06g).
+// It is the predicate of the unhealthy-only view — the "what's broken, filtered"
+// a quick-access key offers — and it deliberately mirrors the coloring: the rows
+// the cell classifier paints as not-green are exactly the rows this narrows to.
+// A row whose every cell classifies to roleNone or roleSuccess is healthy.
+func (m Model) rowUnhealthy(r kube.Row) bool {
+	for _, ci := range m.visible {
+		if role := classifyCell(m.table.Columns[ci].Name, FormatCell(cellAt(r.Cells, ci))); role >= roleWarn {
+			return true
+		}
+	}
+	return false
+}
+
 // roleStyle maps a role to the theme style that paints it. roleNone renders as
 // ordinary body text, so every segment of a row goes through a complete style and
 // none is ever nested inside another (see paintRow).

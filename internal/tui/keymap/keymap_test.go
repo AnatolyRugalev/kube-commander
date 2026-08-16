@@ -49,6 +49,7 @@ func TestDefaultResolution(t *testing.T) {
 		{tea.Key{Code: 'f', Mod: tea.ModCtrl}, ActionSearch},
 		{tea.Key{Code: 'n', ShiftedCode: 'N', Mod: tea.ModShift}, ActionNamespace},
 		{tea.Key{Code: '#', Text: "#"}, ActionSearchPrev},
+		{tea.Key{Code: 'h', ShiftedCode: 'H', Mod: tea.ModShift}, ActionUnhealthy},
 		{tea.Key{Code: tea.KeySpace}, ActionPageDown},
 		{tea.Key{Code: 'D', Text: "D"}, ActionDelete},
 		{tea.Key{Code: 'd', Text: "d"}, ActionDescribe},
