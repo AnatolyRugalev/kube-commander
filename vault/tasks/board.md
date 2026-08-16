@@ -790,7 +790,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D275, D276
 
 - [ ] **STORY-06g-2b** The cross-kind unhealthy surface — from anywhere, list the broken resources `kube.Scan` finds across kinds (pods *and* claims/volumes), each row navigable, so a failure that is not a pod finds the operator (`2026-08-15-pod-first-blinds-non-pod-failures.md`)
-      status: todo | owner: — | added: 2026-08-16
+      status: in-progress | owner: opencode | added: 2026-08-16
       notes: Second half of STORY-06g-2. Needs a viewer/list surface fed by `kube.Scan` with the M4-06 row predicate plus a gesture to open it from anywhere; deletes the feedback file when it lands (D69).
       → milestone: M5 · knowledge: decisions.md D268, D275, D276
 
