@@ -82,8 +82,9 @@ func TestHelpMapShortHelp(t *testing.T) {
 }
 
 // TestShortHelpContext checks the focus-aware hint subsets differ by context —
-// the menu context offers drill-in but not filter/search, the table context the
-// reverse — and drop entries the user disabled.
+// the menu context offers drill-in and (since STORY-06m) `/` to filter the kinds
+// there, the table context the filter/search/sort set instead — and drop entries
+// the user disabled.
 func TestShortHelpContext(t *testing.T) {
 	hm := DefaultKeymap().HelpMap()
 
@@ -100,8 +101,10 @@ func TestShortHelpContext(t *testing.T) {
 	if !menu[ActionDrillIn.Describe()] {
 		t.Error("menu context should offer drill-in")
 	}
-	if menu[ActionFilter.Describe()] {
-		t.Error("menu context should not offer filter (no table to filter)")
+	// STORY-06m: `/` with the resources pane focused narrows the kinds there, so the
+	// menu context advertises it too.
+	if !menu[ActionFilter.Describe()] {
+		t.Error("menu context should offer filter (it narrows the kinds there)")
 	}
 	if !table[ActionFilter.Describe()] || !table[ActionSearchNext.Describe()] {
 		t.Error("table context should offer filter and next-match")

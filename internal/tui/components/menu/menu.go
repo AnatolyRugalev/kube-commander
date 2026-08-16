@@ -164,7 +164,9 @@ type NamespaceRequestedMsg struct{}
 // nothing here is shared across goroutines.
 type Model struct {
 	styles styles.Styles
-	items  []Item
+	full   []Item // authoritative, unfiltered item list (seed + extras + discovery)
+	items  []Item // displayed view: full when no filter, else full narrowed by filter
+	filter string // active case-insensitive substring query ("" = show everything)
 
 	namespace string // the scoped namespace shown on the seam row ("" → all)
 
@@ -187,7 +189,8 @@ type Model struct {
 // New builds a resource menu seeded with the default core-resource list, rendered
 // through the given styles. The first item is selected.
 func New(s styles.Styles) Model {
-	return Model{styles: s, items: seedItems()}
+	items := seedItems()
+	return Model{styles: s, full: items, items: items}
 }
 
 // SetStyles repaints the menu through s, replacing the palette it was built with
@@ -246,8 +249,12 @@ func (m Model) Focused() bool { return m.focused }
 // Cursor is the index of the highlighted item (for tests / the root model).
 func (m Model) Cursor() int { return m.cursor }
 
-// Items returns the menu's items in display order.
-func (m Model) Items() []Item { return m.items }
+// Items returns the menu's authoritative items in display order — the full set
+// the shell's kind inventory (availableResources, the resource picker, pane
+// memory) reads, unaffected by the pane's own `/` filter. The narrowed list the
+// menu renders stays internal (Selected / View / Filter); Items() returns the
+// whole list so a filtered menu never shrinks what a picker or search offers.
+func (m Model) Items() []Item { return m.full }
 
 // Selected returns the currently highlighted item and true, or a zero Item and
 // false when the menu is empty.
@@ -256,6 +263,106 @@ func (m Model) Selected() (Item, bool) {
 		return Item{}, false
 	}
 	return m.items[m.cursor], true
+}
+
+// SetFilter narrows the menu to the items matching q (case-insensitive substring
+// across the item's title and its resource names), preserving the selection when
+// the selected item still matches and clamping it into the narrowed range
+// otherwise. Passing "" clears the filter and every item reappears. It re-derives
+// from the authoritative items each call, so narrowing then widening never loses
+// a kind — the STORY-06m mirror of the table's SetFilter.
+func (m *Model) SetFilter(q string) {
+	if q == m.filter {
+		return
+	}
+	selGVR, selKind := m.selectionRef()
+	m.filter = q
+	m.applyFilter()
+	m.restoreSelection(selGVR, selKind)
+	m.clampOffset()
+}
+
+// Filter is the active pane filter query ("" when none is set).
+func (m Model) Filter() string { return m.filter }
+
+// ClearFilter removes any active filter (equivalent to SetFilter("")).
+func (m *Model) ClearFilter() { m.SetFilter("") }
+
+// selectionRef captures the selected item's identity — GVR for a resource row,
+// kind for the namespace seam — so a filter change or a mutation can restore it.
+func (m Model) selectionRef() (schema.GroupVersionResource, ItemKind) {
+	if len(m.items) == 0 {
+		return schema.GroupVersionResource{}, 0
+	}
+	it := m.items[m.cursor]
+	return it.Resource.GVR, it.Kind
+}
+
+// restoreSelection moves the cursor back onto the item matching the captured
+// GVR/kind, if it is still displayed; otherwise it clamps the cursor into the
+// narrowed range (moveTo clamps and scrolls, never leaving a gap). The fallback
+// is what keeps Unpin's "never at a gap" promise: removing the cursor's own row
+// leaves the selection unresolvable, and the cursor must land on a row that still
+// exists.
+func (m *Model) restoreSelection(selGVR schema.GroupVersionResource, selKind ItemKind) {
+	for i := range m.items {
+		if m.items[i].Kind != selKind {
+			continue
+		}
+		if selKind != ItemResource || m.items[i].Resource.GVR == selGVR {
+			m.cursor = i
+			return
+		}
+	}
+	// The captured selection no longer matches. Clamp into the range, or to the
+	// only valid cursor when the list is empty (moveTo handles both).
+	if len(m.items) == 0 {
+		m.moveTo(0)
+		return
+	}
+	if m.cursor >= len(m.items) {
+		m.moveTo(len(m.items) - 1)
+	}
+	if m.cursor < 0 {
+		m.moveTo(0)
+	}
+}
+
+// applyFilter re-derives the pane's displayed item list from the authoritative
+// full list under the active filter: full when none, else the matching subset.
+// Only rows that answer to the query survive — the namespace seam included, since
+// it is one more row in the list (a filter that matches its "Namespace" title
+// keeps it; any other query hides it with the kinds it narrows past). Callers
+// that narrowed the selection restore it via restoreSelection + clampOffset.
+func (m *Model) applyFilter() {
+	if m.filter == "" {
+		m.items = m.full
+		return
+	}
+	q := strings.ToLower(m.filter)
+	out := make([]Item, 0, len(m.full))
+	for _, it := range m.full {
+		if itemMatches(it, q) {
+			out = append(out, it)
+		}
+	}
+	m.items = out
+}
+
+// itemMatches reports whether an item answers to the filter query: a
+// case-insensitive substring of the item's title or any of the names the kind
+// answers to (the Kind, the plural resource, its short names, the API group) —
+// the same alias surface the resource picker matches (D203), so `deploy` finds
+// Deployments and a CRD's short name finds it.
+func itemMatches(it Item, q string) bool {
+	hay := strings.ToLower(it.Title + " " + it.Resource.GVK.Kind + " " + it.Resource.GVR.Resource)
+	for _, sn := range it.Resource.ShortNames {
+		hay += " " + strings.ToLower(sn)
+	}
+	if it.Resource.GVR.Group != "" {
+		hay += " " + strings.ToLower(it.Resource.GVR.Group)
+	}
+	return strings.Contains(hay, q)
 }
 
 // RowItemAt maps a content-area row to the item index rendered on it, or false
@@ -321,20 +428,14 @@ func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 
 	// Remember the highlighted item so the cursor can be restored to it after the
 	// item slice grows. Resource rows resolve back by GVR; the namespace seam by kind.
-	var selectedGVR schema.GroupVersionResource
-	var selectedKind ItemKind
-	haveSelection := len(m.items) > 0
-	if haveSelection {
-		selectedGVR = m.items[m.cursor].Resource.GVR
-		selectedKind = m.items[m.cursor].Kind
-	}
+	selGVR, selKind := m.selectionRef()
 
 	// Track the GVRs already present so an extra duplicating a seed row (or an
 	// earlier extra) is dropped rather than listed twice.
-	seen := make(map[schema.GroupVersionResource]bool, len(m.items)+len(extras))
-	for i := range m.items {
-		if m.items[i].Kind == ItemResource {
-			seen[m.items[i].Resource.GVR] = true
+	seen := make(map[schema.GroupVersionResource]bool, len(m.full)+len(extras))
+	for i := range m.full {
+		if m.full[i].Kind == ItemResource {
+			seen[m.full[i].Resource.GVR] = true
 		}
 	}
 
@@ -345,20 +446,14 @@ func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 		}
 		it.Pinned = pinned
 		seen[it.Resource.GVR] = true
-		m.items = insertExtra(m.items, it)
+		m.full = insertExtra(m.full, it)
 	}
 
-	if haveSelection {
-		for i := range m.items {
-			if m.items[i].Kind != selectedKind {
-				continue
-			}
-			if selectedKind != ItemResource || m.items[i].Resource.GVR == selectedGVR {
-				m.cursor = i
-				break
-			}
-		}
-	}
+	// Re-derive the displayed list from the authoritative one, then restore the
+	// selection within it (a kind filtered out of view stays filtered out; the
+	// cursor falls back onto the narrowed range).
+	m.applyFilter()
+	m.restoreSelection(selGVR, selKind)
 	m.clampOffset()
 }
 
@@ -436,8 +531,8 @@ func insertExtra(items []Item, it Item) []Item {
 // table and its watch are the root model's business and are untouched here.
 func (m *Model) Unpin(gvr schema.GroupVersionResource) bool {
 	idx := -1
-	for i := range m.items {
-		if m.items[i].Kind == ItemResource && m.items[i].Pinned && m.items[i].Resource.GVR == gvr {
+	for i := range m.full {
+		if m.full[i].Kind == ItemResource && m.full[i].Pinned && m.full[i].Resource.GVR == gvr {
 			idx = i
 			break
 		}
@@ -445,16 +540,30 @@ func (m *Model) Unpin(gvr schema.GroupVersionResource) bool {
 	if idx < 0 {
 		return false
 	}
-	if m.items[idx].Discovered {
-		m.items[idx].Pinned = false
+	selGVR, selKind := m.selectionRef()
+	// The removed row's position in the *displayed* list, so the cursor can step
+	// back onto the row that slid into its place when it was the selection.
+	removedDisplayed := -1
+	for i := range m.items {
+		if m.items[i].Kind == ItemResource && m.items[i].Resource.GVR == gvr {
+			removedDisplayed = i
+			break
+		}
+	}
+	if m.full[idx].Discovered {
+		m.full[idx].Pinned = false
 		return false
 	}
-	m.items = append(m.items[:idx], m.items[idx+1:]...)
-	cursor := m.cursor
-	if cursor >= idx {
-		cursor--
+	m.full = append(m.full[:idx], m.full[idx+1:]...)
+	m.applyFilter()
+	m.restoreSelection(selGVR, selKind)
+	// The "never at a gap" rule (kept from the pre-filter menu): a row removed at
+	// or before the cursor takes the cursor back one. restoreSelection resolves the
+	// selection by GVR, so this only fires when the removed row *was* the selection
+	// (the GVR is gone) — step back one, never past the top.
+	if selGVR == gvr && selKind == ItemResource && removedDisplayed >= 0 {
+		m.moveTo(removedDisplayed - 1)
 	}
-	m.moveTo(cursor)
 	m.clampOffset()
 	return true
 }
@@ -484,13 +593,7 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	// Remember the highlighted item so we can restore the cursor to it after the
 	// item slice changes. Resource rows are resolved back by GVR; the namespace
 	// seam has no GVR, so it is restored by kind.
-	var selectedGVR schema.GroupVersionResource
-	var selectedKind ItemKind
-	haveSelection := len(m.items) > 0
-	if haveSelection {
-		selectedGVR = m.items[m.cursor].Resource.GVR
-		selectedKind = m.items[m.cursor].Kind
-	}
+	selGVR, selKind := m.selectionRef()
 
 	// Index the discovered resources by GVR (twin lookup) and collect the groups
 	// that failed discovery (the mark-unavailable signal). A failure names a group
@@ -508,23 +611,23 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 	}
 
 	// Reconcile the seed items in place, preserving their order and title.
-	seen := make(map[schema.GroupVersionResource]bool, len(m.items))
-	for i := range m.items {
-		if m.items[i].Kind != ItemResource {
+	seen := make(map[schema.GroupVersionResource]bool, len(m.full))
+	for i := range m.full {
+		if m.full[i].Kind != ItemResource {
 			continue // non-resource seam rows (namespace picker) have no twin.
 		}
-		gvr := m.items[i].Resource.GVR
+		gvr := m.full[i].Resource.GVR
 		seen[gvr] = true
 		if d, ok := twin[gvr]; ok {
 			// A loaded twin: fill the discovery metadata and confirm availability. The
 			// row is now backed by the cluster's own list, which is what lets an unpin
 			// leave it standing (CRD-PIN-03) — a pinned row that turns out to be
 			// discovered too is no longer held up by its pin alone.
-			m.items[i].Resource = d
-			m.items[i].Available = true
-			m.items[i].Discovered = true
+			m.full[i].Resource = d
+			m.full[i].Available = true
+			m.full[i].Discovered = true
 		} else if failedGroups[gvr.Group] {
-			m.items[i].Available = false
+			m.full[i].Available = false
 		}
 	}
 
@@ -535,7 +638,7 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 		if seen[r.GVR] {
 			continue
 		}
-		m.items = append(m.items, Item{
+		m.full = append(m.full, Item{
 			Resource:   r,
 			Title:      r.GVK.Kind,
 			Section:    sectionCustom,
@@ -544,20 +647,12 @@ func (m *Model) Reconcile(result kube.DiscoveryResult) {
 		})
 	}
 
-	// Restore the selection to the same resource and re-clamp the scroll. The seed
-	// is never reordered or prepended to, so the index is stable; resolving by GVR
-	// keeps the guarantee robust regardless.
-	if haveSelection {
-		for i := range m.items {
-			if m.items[i].Kind != selectedKind {
-				continue
-			}
-			if selectedKind != ItemResource || m.items[i].Resource.GVR == selectedGVR {
-				m.cursor = i
-				break
-			}
-		}
-	}
+	// Re-derive the displayed list from the authoritative one, then restore the
+	// selection to the same resource and re-clamp the scroll. The seed is never
+	// reordered or prepended to, so the index is stable; resolving by GVR keeps
+	// the guarantee robust regardless.
+	m.applyFilter()
+	m.restoreSelection(selGVR, selKind)
 	m.clampOffset()
 }
 

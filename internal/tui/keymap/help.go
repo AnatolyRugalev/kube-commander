@@ -97,9 +97,10 @@ const (
 	// HelpViewer is the shared read-only viewer (YAML/describe/secret, M3-03): it
 	// scrolls on navigation and closes on back/quit, swallowing everything else.
 	HelpViewer
-	// HelpTableFilter is the browse table's filter field while it is open (`/`), which
-	// captures text exactly as the logs grep and the picker filters do — so only the
-	// no-text keys act: move through the live-narrowed rows, commit, clear-and-close.
+	// HelpTableFilter is the browse filter field while it is open (`/`), which since
+	// STORY-06m narrows whichever pane holds focus — the table's rows or the menu's
+	// kinds. It captures text exactly as the logs grep and the picker filters do — so
+	// only the no-text keys act: move through the live-narrowed list, commit, clear-and-close.
 	HelpTableFilter
 	// HelpForwards is the port-forward panel (M3-13b), a global overlay that captures
 	// input: move the cursor, stop the selected forward or all of them, close.
@@ -163,9 +164,11 @@ func HelpContexts() []HelpContext {
 }
 
 // contextShortHelpActions is the curated hint subset per focus context. Each set
-// is ordered as shown and rendered enabled-only. Filter/search/sort appear only in
-// the table context (they act on a resource table, no-ops on the menu), while
-// drill-in appears only in the menu context (opening the selected resource);
+// is ordered as shown and rendered enabled-only. Filter/search/sort appear in the
+// table context (they act on a resource table, no-ops on the menu) — since
+// STORY-06m `/` also acts on the menu pane (it narrows the resource kinds there),
+// so filter is hinted in the menu context too, right after drill-in. Drill-in
+// appears only in the menu context (opening the selected resource);
 // namespace, help and quit are always-relevant and shown in both browse contexts.
 //
 // The pin toggle (CRD-PIN-03) is hinted in the menu context only, directly after
@@ -291,7 +294,7 @@ func HelpContexts() []HelpContext {
 // "stop" one line up, and the same trade is already made by the prompt modal, where
 // enter submits. The hint's promise is which keys act, not a gloss of each verb.
 var contextShortHelpActions = map[HelpContext][]Action{
-	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
+	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionFilter, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionUnhealthy, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
 	// logs.regex is offered by HelpLogsFilter rather than here, which is where it acts

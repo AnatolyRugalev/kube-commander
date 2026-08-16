@@ -7840,3 +7840,31 @@ before the surface (D52's bottom-up rhythm, the M4-07→M4-08 / SEARCH-02a→02b
    when that slice lands (D69). The predicate is the classifier lifted to a row —
    the same one source 06g-1/H established (D275 pt 1, D164) — so the cross-kind
    list and the per-kind filter can never disagree about what is broken.
+
+## D277 — `/` filters whichever pane holds focus: the resource kinds in the menu, or the table rows (2026-08-16, STORY-06m)
+
+Feedback `2026-08-15-resources-pane-filter.md`: pressing `/` while the **resources
+pane** holds focus launched the filter in the **table** instead of narrowing the
+kind list in that pane. The old rule — "`/` targets the table wherever focus is" —
+is replaced by "`/` targets the focused pane":
+
+1. **`/` is a pane-scoped filter.** With the menu focused it opens the field over
+   the menu (`menu.SetFilter`); with the table focused it keeps its M2-09b table
+   meaning. The target is fixed when the field opens (`app.menuFilter`), so a key
+   typed mid-edit never re-aims. The menu mirror of the table split: authoritative
+   `full` list (seed + extras + discovery) beside a displayed `items` view, with
+   `SetFilter`/`ClearFilter`/`Filter` and the three mutators (`Reconcile`,
+   `addExtras`, `Unpin`) writing `full` and re-deriving `items` — so a narrowing
+   filter never loses a kind, exactly like the table's (D78).
+2. **The filter matches the D203 alias surface**, not just the display title:
+   title, Kind, plural resource, short names and API group all answer, so `deploy`
+   finds Deployments and a CRD's short name finds it. `Items()` keeps returning the
+   authoritative full list — the shell's kind inventory (availableResources, the
+   `:resource `/`:pin ` stages, pane memory) must not shrink when the menu is
+   narrowed, or a filtered pane would quietly limit what search and the pickers
+   offer.
+3. **The menu hint set advertises `/`** (`HelpMenu` gains ActionFilter), and the
+   hint context while either pane's filter field is open is the shared
+   `HelpTableFilter` — the field's no-text keys (move, commit, clear) act the same
+   over both targets. A later leg must not reintroduce a hard-coded `app.filter`
+   → table target, and must not make `menu.Items()` return the narrowed view.

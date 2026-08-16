@@ -60,7 +60,9 @@ Mouse capture is off by default to preserve native text selection. Toggle it on 
 
 ### Finding things
 
-Search the open table to quickly highlight and navigate matching rows. Typing narrows the view live; matched text is highlighted. Backspacing past the start of the query cancels the search entirely. 
+Search the open table to quickly highlight and navigate matching rows. Typing narrows the view live; matched text is highlighted. Backspacing past the start of the query cancels the search entirely.
+
+`/` filters whichever pane is focused: with the resource list (left pane) focused it narrows the kinds there — type part of a kind, its plural, or its short name (e.g. `deploy` for Deployments) — and with the table focused it narrows the rows. `esc` clears either filter and brings everything back.
 
 Press `H` to see only the rows that are not healthy — a CrashLoopBackOff or ImagePullBackOff pod, a Pending or unschedulable workload, a stuck claim. It is the "what's broken, filtered" view for the kind you are on: `H` again (or `esc`) brings every row back, and it composes with `/` so you can search inside the broken set.
 

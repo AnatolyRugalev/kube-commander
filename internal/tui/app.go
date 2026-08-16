@@ -1038,17 +1038,19 @@ type Model struct {
 	searchTarget    kube.ObjectRef
 	hasSearchTarget bool
 
-	// filter is the table filter field (M2-09b): app.filter (`/`) opens it over
-	// the current table, typing narrows the live rows through table.SetFilter (D78),
-	// and it re-scopes to whatever is showing. Active is whether it is open and
-	// capturing text — while true the root routes every keypress through
-	// routeFilterKey (control/text split, D73), bypassing the sequencer, exactly as
-	// the namespace picker does. The narrowing is a view over the table's
-	// authoritative full set, so clearing the filter restores every live row. The
-	// field's own state — open and query text — lives in the components/filter
-	// sub-model (MONO-03/D265); the shell keeps the table and performs the
-	// narrowing.
-	filter filter.Model
+	// filter is the filter field (M2-09b / STORY-06m): app.filter (`/`) opens it
+	// over whichever pane holds focus — the current resource table when the table
+	// is focused (typing narrows the live rows through table.SetFilter, D78), or
+	// the resource kinds in the left menu when the menu is focused (narrowing the
+	// pane's own list, STORY-06m). menuFilter records which pane the open field
+	// narrows, so routeFilterKey routes keystrokes and the status indicator to the
+	// right target; it is set when the field opens and consulted only while it is
+	// open. The narrowing is a view over the target's authoritative set, so
+	// clearing the filter restores everything. The field's own state — open and
+	// query text — lives in the components/filter sub-model (MONO-03/D265); the
+	// shell keeps the panes and performs the narrowing.
+	filter     filter.Model
+	menuFilter bool
 
 	// discoveryCancel tears the in-flight discovery pass down on quit (the cap-1
 	// discovery channel already keeps the goroutine from leaking, D8, but cancelling
@@ -3726,18 +3728,29 @@ func (m Model) confirmResolved(key tea.Key) (keymap.Action, bool) {
 	return "", false
 }
 
-// openFilter opens the live table filter input over the current resource table
-// (M2-09b). It is a no-op unless a resource table is showing (hasCurrent) —
-// filtering the welcome page has nothing to narrow. The field is seeded with any
-// already-active filter (reopening `/` edits the current query, cursor at the end)
-// and focus moves to the table; typing then narrows the rows live through
-// table.SetFilter, enter commits the narrowed view, esc clears it and restores
-// every row (D78). With no resource open yet it does nothing.
+// openFilter opens the live filter input over whichever pane holds focus
+// (STORY-06m): with the resources pane focused it narrows the resource kinds
+// there (menu.SetFilter, the field seeded with the menu's current query); with
+// the table focused it narrows the current resource table (M2-09b). Filtering
+// the menu needs no resource table — the kind list always exists — so the
+// welcome page is filterable from the menu pane; filtering the table stays a
+// no-op until a resource is open (hasCurrent), since the welcome page has no
+// rows to narrow. The field is seeded with any already-active filter for the
+// target pane (reopening `/` edits the current query, cursor at the end); enter
+// commits the narrowed view, esc clears it (D78).
 func (m Model) openFilter() (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	if m.menu.Focused() {
+		m.menuFilter = true
+		m.filter, cmd = m.filter.Open(m.menu.Filter())
+		m.syncHints() // filtering acts on the menu → menu-context hints
+		m.syncFilterStatus()
+		return m, cmd
+	}
 	if !m.hasCurrent {
 		return m, nil
 	}
-	var cmd tea.Cmd
+	m.menuFilter = false
 	m.filter, cmd = m.filter.Open(m.table.Filter())
 	m.menu.Blur()
 	m.table.Focus()
@@ -3777,9 +3790,10 @@ func isEmptyLineBackspace(key tea.Key, query string) bool {
 // routePickerKey's control/text split (D73): a mapped key carrying no text
 // (esc/enter/arrows/ctrl+d…) is a control Action the filter mode consumes, while any
 // text-producing or editing key (a rune, or an unmapped no-text key like backspace)
-// is filter input fed to the field — re-narrowing the table live. No view matches a
-// raw key (D11); the open field captures all input, so the sequencer and the panes
-// underneath never see it.
+// is filter input fed to the field — re-narrowing the pane the field targets (the
+// table or, since STORY-06m, the resource menu). No view matches a raw key (D11);
+// the open field captures all input, so the sequencer and the panes underneath
+// never see it.
 //
 // The one editing key that is not input is a backspace on an empty query: it resolves
 // to nav.back, which cancels the filter and closes the field (D238), so the line
@@ -3794,18 +3808,22 @@ func (m Model) routeFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.filter, cmd = m.filter.Update(msg)
-	m.table.SetFilter(m.filter.Value())
+	if m.menuFilter {
+		m.menu.SetFilter(m.filter.Value())
+	} else {
+		m.table.SetFilter(m.filter.Value())
+	}
 	m.syncFilterStatus()
 	return m, cmd
 }
 
 // handleFilterAction applies a control action while the filter input is open: enter
 // (nav.drillIn) commits the narrowed view and closes the input; esc (nav.back)
-// cancels — clears the filter, restoring every row — and closes it; the vertical
-// navigation actions move the selection through the live-narrowed rows so matches
-// can be previewed while typing; every other action is ignored (n/N, ns.switch,
-// help and quit cannot fire mid-filter — their keys either type into the field or
-// are dropped here).
+// cancels — clears the filter, restoring every item/row — and closes it; the vertical
+// navigation actions move the selection through the live-narrowed list of whichever
+// pane the field narrows so matches can be previewed while typing; every other action
+// is ignored (n/N, ns.switch, help and quit cannot fire mid-filter — their keys either
+// type into the field or are dropped here).
 func (m Model) handleFilterAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	switch a {
 	case keymap.ActionDrillIn:
@@ -3816,7 +3834,11 @@ func (m Model) handleFilterAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionUp, keymap.ActionDown, keymap.ActionTop, keymap.ActionBottom,
 		keymap.ActionHalfPageUp, keymap.ActionHalfPageDown, keymap.ActionPageUp, keymap.ActionPageDown:
 		var cmd tea.Cmd
-		m.table, cmd = m.table.Update(a)
+		if m.menuFilter {
+			m.menu, cmd = m.menu.Update(a)
+		} else {
+			m.table, cmd = m.table.Update(a)
+		}
 		return m, cmd
 	}
 	return m, nil
@@ -3831,16 +3853,18 @@ func (m Model) commitFilter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// clearFilter removes any active filter and closes the input, returning the table to
-// its full row set (D78) and the status bar to its normal content. Safe to call with
-// no filter set. It is esc's behaviour both while editing (clears-then-closes) and
-// on a committed filter (clears the applied narrowing). It also clears the
+// clearFilter removes any active filter and closes the input, returning the target
+// pane to its full set (D78) and the status bar to its normal content. Safe to call
+// with no filter set. It is esc's behaviour both while editing (clears-then-closes)
+// and on a committed filter (clears the applied narrowing). It also clears the
 // "what's broken" unhealthy narrowing (STORY-06g-1): esc is the "show me
 // everything again" gesture, and a view that hides rows must not survive it.
 func (m *Model) clearFilter() {
 	m.filter = m.filter.Reset()
+	m.menu.ClearFilter()
 	m.table.ClearFilter()
 	m.table.SetUnhealthyOnly(false)
+	m.menuFilter = false
 	m.syncFilterStatus()
 }
 
@@ -4011,15 +4035,18 @@ func (m *Model) hintContext() keymap.HelpContext {
 
 // syncFilterStatus reflects the current narrowing state on the status bar: the
 // live input prompt while editing, the committed "/query" indicator while a
-// substring filter is applied but the input is closed, an `unhealthy` marker while
-// the "what's broken" narrowing is on (STORY-06g-1), and nothing when neither is
-// set. The unhealthy marker is folded into the same sync so one call covers every
-// way the displayed view can narrow.
+// substring filter is applied but the input is closed (on the menu or the table,
+// whichever is narrowed), an `unhealthy` marker while the "what's broken"
+// narrowing is on (STORY-06g-1), and nothing when neither is set. The unhealthy
+// marker is folded into the same sync so one call covers every way the displayed
+// view can narrow.
 func (m *Model) syncFilterStatus() {
 	m.status.SetUnhealthy(m.table.UnhealthyOnly())
 	switch {
 	case m.filter.Active():
 		m.status.SetFilter(m.filter.View())
+	case m.menu.Filter() != "":
+		m.status.SetFilter("/" + m.menu.Filter())
 	case m.table.Filter() != "":
 		m.status.SetFilter("/" + m.table.Filter())
 	default:
@@ -4334,16 +4361,16 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m.toggleMenu()
 	case keymap.ActionBack:
 		// esc is the one-level-back key, resolved top-down, one level per press:
-		// close the help overlay if open; else clear a committed table filter or the
-		// unhealthy-only view (leaving the narrowed view — the live-editing esc is
-		// handled in routeFilterKey); else, with the table focused, pop focus back to
-		// the left menu pane (the "back to the menu" gesture). Inert when the menu
-		// already holds focus and nothing is open.
+		// close the help overlay if open; else clear a committed filter (menu or
+		// table) or the unhealthy-only view (leaving the narrowed view — the
+		// live-editing esc is handled in routeFilterKey); else, with the table
+		// focused, pop focus back to the left menu pane (the "back to the menu"
+		// gesture). Inert when the menu already holds focus and nothing is open.
 		if m.help.Visible() {
 			m.help.SetVisible(false)
 			return m, nil
 		}
-		if m.table.Filter() != "" || m.table.UnhealthyOnly() {
+		if m.menu.Filter() != "" || m.table.Filter() != "" || m.table.UnhealthyOnly() {
 			m.clearFilter()
 			return m, nil
 		}

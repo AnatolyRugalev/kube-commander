@@ -1187,6 +1187,134 @@ func TestSelectItemMovesCursor(t *testing.T) {
 	}
 }
 
+// TestSetFilterNarrowsItems is the STORY-06m mirror of the table's filter at the
+// component level: SetFilter narrows the displayed list to the matching kinds
+// (case-insensitive substring across title/kind/resource/short-names), the
+// authoritative full set survives untouched (Items), and ClearFilter brings every
+// kind back.
+func TestSetFilterNarrowsItems(t *testing.T) {
+	m := newTestModel()
+	full := len(m.items)
+
+	m.SetFilter("deploy")
+	if got := len(m.items); got != 1 {
+		t.Fatalf("filter 'deploy' left %d items, want 1 (Deployments)", got)
+	}
+	if sel, _ := m.Selected(); sel.Resource.GVR.Resource != "deployments" {
+		t.Fatalf("selection after narrowing = %q, want deployments", sel.Resource.GVR.Resource)
+	}
+	if m.Filter() != "deploy" {
+		t.Fatalf("Filter() = %q, want deploy", m.Filter())
+	}
+	if got := len(m.Items()); got != full {
+		t.Fatalf("the authoritative full set must survive a filter: %d items, want %d", got, full)
+	}
+
+	// A query that matches nothing narrows to an empty list (the seam row is a row
+	// too, so it filters with everything else) and still leaves the full set intact.
+	m.SetFilter("zzz-nothing")
+	if len(m.items) != 0 {
+		t.Fatalf("a no-match filter should show an empty list, got %d items", len(m.items))
+	}
+	if got := len(m.Items()); got != full {
+		t.Fatalf("authoritative set after a no-match filter: %d, want %d", got, full)
+	}
+
+	m.ClearFilter()
+	if len(m.items) != full {
+		t.Fatalf("ClearFilter should restore every kind: %d, want %d", len(m.items), full)
+	}
+	if m.Filter() != "" {
+		t.Fatalf("Filter() after clear = %q, want empty", m.Filter())
+	}
+}
+
+// TestSetFilterMatchesResourceAliases proves the menu filter answers to the names a
+// kind goes by, not just its display title: the plural resource, a short name and
+// the API group all narrow the same row (the D203 alias surface).
+func TestSetFilterMatchesResourceAliases(t *testing.T) {
+	m := newTestModel()
+	for _, q := range []string{"deployment", "deployments", "apps"} {
+		m.SetFilter(q)
+		if sel, ok := m.Selected(); !ok || sel.Resource.GVR.Resource != "deployments" {
+			t.Fatalf("filter %q selected %+v, want deployments", q, sel.Resource.GVR)
+		}
+	}
+	// A CRD appended by discovery matches by its short name.
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{{
+		GVK:        schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+		GVR:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		ShortNames: []string{"wg"},
+	}}})
+	m.SetFilter("wg")
+	if sel, ok := m.Selected(); !ok || sel.Resource.GVR.Resource != "widgets" {
+		t.Fatalf("short-name filter 'wg' selected %+v, want widgets", sel.Resource.GVR)
+	}
+}
+
+// TestSetFilterPreservesSelectionByGVR keeps the cursor on the same resource across
+// a filter change when it still matches, and lets a selection that stops matching
+// fall back onto the narrowed range rather than floating out of it.
+func TestSetFilterPreservesSelectionByGVR(t *testing.T) {
+	m := newTestModel()
+	// Move the cursor onto "pods" (a seed item), then narrow to "pod": the selection
+	// should follow the same row, and drilling in should still emit its resource.
+	target := findItem(m, "pods")
+	m.SelectItem(target)
+	m.SetFilter("pod")
+	if sel, _ := m.Selected(); sel.Resource.GVR.Resource != "pods" {
+		t.Fatalf("selection after narrowing to 'pod' = %q, want pods", sel.Resource.GVR.Resource)
+	}
+	if _, cmd := m.Update(keymap.ActionDrillIn); cmd == nil {
+		t.Fatal("drill-in on a filtered row should emit a ResourceSelectedMsg")
+	}
+
+	// A selection that stops matching falls back into range: narrow past the
+	// selection's row and the cursor must still point at a displayed item.
+	m.SetFilter("deploy")
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		t.Fatalf("cursor = %d out of range after its row stopped matching", m.cursor)
+	}
+}
+
+// TestReconcileKeepsFilterApplied proves a discovery pass lands inside the pane's
+// filter view: new kinds appear in the displayed list only when they match, and the
+// authoritative full list takes the append either way.
+func TestReconcileKeepsFilterApplied(t *testing.T) {
+	m := newTestModel()
+	m.SetFilter("widget")
+	before := len(m.items)
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{
+		{
+			GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+			GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		},
+		{
+			GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Gadget"},
+			GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "gadgets"},
+		},
+	}})
+	if got := len(m.items); got != before+1 {
+		t.Fatalf("reconcile under filter 'widget' shows %d items, want %d (only Widget joins)", got, before+1)
+	}
+	if sel, ok := m.Selected(); !ok || sel.Resource.GVR.Resource != "widgets" {
+		t.Fatalf("selection after reconcile = %+v, want widgets", sel.Resource.GVR)
+	}
+	if m.Filter() != "widget" {
+		t.Fatalf("the filter must survive reconcile, got %q", m.Filter())
+	}
+	// Both kinds are in the authoritative set.
+	foundGadget := false
+	for _, it := range m.Items() {
+		if it.Resource.GVR.Resource == "gadgets" {
+			foundGadget = true
+		}
+	}
+	if !foundGadget {
+		t.Error("the non-matching Gadget must still join the authoritative full set")
+	}
+}
+
 // Ensure the emitted command types satisfy tea.Cmd (compile-time contract).
 var (
 	_ tea.Cmd = func() tea.Msg { return ResourceSelectedMsg{} }

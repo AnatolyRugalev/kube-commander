@@ -1725,16 +1725,94 @@ func TestFilterMatchesAreHighlightedInTheFrame(t *testing.T) {
 	}
 }
 
-// TestFilterInertWithoutTable proves `/` does nothing before a resource is drilled
-// into (the welcome page is showing, so there is nothing to narrow).
+// TestFilterInertWithoutTable proves `/` does nothing when the *table* is focused
+// before a resource is drilled into (the welcome page is showing, so there is
+// nothing to narrow). With the menu focused it is not inert: `/` narrows the
+// resource kinds there (STORY-06m) — that path is TestMenuPaneFilterNarrowsKinds.
 func TestFilterInertWithoutTable(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{})) // watcher wired, but no selection yet
+	m.menu.Blur()
+	m.table.Focus()
 	m, cmd := press(t, m, slash)
 	if m.filter.Active() {
 		t.Fatal("app.filter should be inert with no current table")
 	}
 	if cmd != nil {
 		t.Fatal("inert filter open should issue no command")
+	}
+}
+
+// TestMenuPaneFilterNarrowsKinds is the STORY-06m headline at the app level: `/`
+// with the resources pane focused opens the field over the menu (not the table),
+// typing narrows the kinds there, and esc clears it — while the table's own
+// filter stays untouched.
+func TestMenuPaneFilterNarrowsKinds(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	// Hand focus back to the resources pane (nav.left at the table's left edge).
+	m.table.Blur()
+	m.menu.Focus()
+	if !m.menu.Focused() {
+		t.Fatal("setup: the menu should hold focus")
+	}
+
+	m, _ = press(t, m, slash)
+	if !m.filter.Active() {
+		t.Fatal("`/` should open the filter field with the menu focused")
+	}
+	if !m.menuFilter {
+		t.Fatal("the open field should target the menu pane")
+	}
+
+	m = typeStr(t, m, "deploy")
+	if got := m.menu.Filter(); got != "deploy" {
+		t.Fatalf("the menu filter should be 'deploy', got %q", got)
+	}
+	if len(m.menu.Items()) == 1 {
+		t.Fatal("setup: the full kind set must not shrink")
+	}
+	if sel, _ := m.menu.Selected(); sel.Resource.GVR.Resource != "deployments" {
+		t.Fatalf("the menu should be narrowed to Deployments, selection = %q", sel.Resource.GVR.Resource)
+	}
+	if m.table.RowCount() != 3 {
+		t.Fatalf("the table filter must be untouched by a menu filter: %d rows, want 3", m.table.RowCount())
+	}
+
+	// enter commits the narrowed menu (field closes, kinds stay narrowed)…
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	if m.filter.Active() {
+		t.Fatal("enter should close the filter input")
+	}
+	if m.menu.Filter() != "deploy" {
+		t.Fatalf("commit should keep the menu filter applied, got %q", m.menu.Filter())
+	}
+
+	// …and esc clears it, restoring every kind.
+	m, _ = press(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.menu.Filter() != "" {
+		t.Fatalf("esc should clear the menu filter, got %q", m.menu.Filter())
+	}
+	if len(m.menu.Items()) <= 1 {
+		t.Fatal("clearing the menu filter should restore the full kind set")
+	}
+}
+
+// TestMenuPaneFilterRoutesToTheMenu is the control half: the same `/` press with
+// the table focused narrows the table, proving the target follows focus (STORY-06m).
+func TestMenuPaneFilterRoutesToTheTable(t *testing.T) {
+	m, _ := tableWith(t, "web-1", "web-2", "api-1")
+	if !m.table.Focused() {
+		t.Fatal("setup: the table should hold focus after drilling in")
+	}
+	m, _ = press(t, m, slash)
+	if m.menuFilter {
+		t.Fatal("with the table focused the field should target the table, not the menu")
+	}
+	m = typeStr(t, m, "web")
+	if m.table.RowCount() != 2 {
+		t.Fatalf("the table filter should narrow to 2, got %d", m.table.RowCount())
+	}
+	if m.menu.Filter() != "" {
+		t.Fatalf("the menu filter must stay clear, got %q", m.menu.Filter())
 	}
 }
 
