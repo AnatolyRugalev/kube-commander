@@ -775,7 +775,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D273
 
 - [ ] **STORY-06f** A dedicated `events` action — the selected resource's events (kind, reason, message, age) as its own list, the surface for "why is this red" instead of hunting through describe (`2026-08-15-events-action.md`)
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: opencode | added: 2026-08-15
       notes: S02's describe was the lever only because events live nowhere else.
       → milestone: M5 · knowledge: decisions.md D268
 
