@@ -770,7 +770,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D272
 
 - [ ] **STORY-06e** The instrument sees what it missed — the recorder records a resolved confirm accept/decline (so a handled `esc` is not a dead end, `2026-08-15-confirm-key-false-deadends.md`) and the analyzer reports text-surface presses separately (so the picker `j`s are findings, `2026-08-15-analyzer-text-surface-blindspot.md`)
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: opencode | added: 2026-08-15
       notes: The two mirror-image instrument fixes; the walk's two dead-end classes were each invisible to the other half of `keys analyze`.
       → milestone: M5 · knowledge: decisions.md D268
 
