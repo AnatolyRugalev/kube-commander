@@ -795,7 +795,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D275, D276, D278
 
 - [ ] **STORY-06g-2b-2** The wiring: the cross-kind unhealthy gesture — a keymap action that opens the unhealthyview and runs `kube.Scan` over the menu's kinds with the M4-06 row predicate, pumping hits in, each drill-in switching browse to that resource (`2026-08-15-pod-first-blinds-non-pod-failures.md`)
-      status: todo | owner: — | added: 2026-08-16
+      status: in-progress | owner: opencode | added: 2026-08-16 | started: 2026-08-16
       notes: Second slice of STORY-06g-2b. The Scanner seam (mirroring Searcher), the action + default key, the open/route/pump/close handlers, drill-in → selectResource + pending selection, README + keybindings doc, and the deletion of the feedback file (D69).
       → milestone: M5 · knowledge: decisions.md D268, D275, D276
 
