@@ -18,15 +18,6 @@ func newTestModel(values ...string) Model {
 	return m
 }
 
-// newOptInModel builds the one picker shape that still waits for `/` (the port
-// picker's, WithOptInFilter).
-func newOptInModel(values ...string) Model {
-	m := New(styles.Default(), "port", WithOptInFilter())
-	m.SetSize(80, 24)
-	m.SetItems(values)
-	return m
-}
-
 // msgFrom runs a command (if any) and returns the message it produced, or nil.
 func msgFrom(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
@@ -161,52 +152,132 @@ func typeFilter(m Model, s string) Model {
 	return m
 }
 
-// TestShowOpensTheFilter is PAL-01's headline property: the field is open the moment
-// the picker is, so the next keystroke narrows the list instead of being discarded —
-// no `/` first, in any picker but the opt-in one.
-func TestShowOpensTheFilter(t *testing.T) {
+// showFiltered reveals the picker with its filter open — the type-to-filter state a
+// filter test needs. Navigation mode is the default open state since STORY-06d
+// (D272); a test of the filter itself opens the field with the same `/` (ActionFilter)
+// a reader would press.
+func showFiltered(m Model) Model {
+	m.Show()
+	m, _ = m.Update(keymap.ActionFilter)
+	return m
+}
+
+// TestShowRevealsInNavigationMode is STORY-06d's headline property: the picker opens
+// with the list focused and the filter closed, so the next letter navigates instead
+// of typing — the walk's dead `j`s (D272). `/` (ActionFilter) opens the field.
+func TestShowRevealsInNavigationMode(t *testing.T) {
 	m := newTestModel("default", "kube-system")
 	if m.Filtering() {
 		t.Fatal("a hidden picker should not be filtering")
 	}
 	m.Show()
+	if !m.Active() {
+		t.Fatal("Show() should make the picker active")
+	}
+	if m.Filtering() {
+		t.Fatal("Show() should leave the filter closed — navigation mode, not type-to-filter")
+	}
+	// j/k navigate in this state (j is ActionDown through the keymap).
+	m, _ = m.Update(keymap.ActionDown)
+	if v, _ := m.Selected(); v != "kube-system" {
+		t.Fatalf("j should navigate the list in navigation mode, selected %q", v)
+	}
+	// `/` opens the field; typing then narrows.
+	m, _ = m.Update(keymap.ActionFilter)
 	if !m.Filtering() {
-		t.Fatal("Show() should open the filter field")
+		t.Fatal("ActionFilter should open the filter field")
 	}
 	m = typeFilter(m, "sys")
 	if got := m.Len(); got != 1 {
-		t.Fatalf("typing straight into a shown picker left %d items, want 1", got)
+		t.Fatalf("typing after `/` left %d items, want 1", got)
 	}
 
-	// The opt-in picker keeps the old behaviour: shown, but not capturing text until
-	// app.filter opens the field.
-	p := newOptInModel("8080 http", "9090 metrics")
-	p.Show()
-	if p.Filtering() {
-		t.Fatal("WithOptInFilter picker should not start filtering")
-	}
-	p = typeFilter(p, "http")
-	if got := p.Len(); got != 2 {
-		t.Fatalf("an opt-in picker should ignore text before `/`: Len() = %d, want 2", got)
-	}
-	p, _ = p.Update(keymap.ActionFilter)
+	// ShowFiltered is the type-to-filter shape: the field opens with the picker, the
+	// next keystroke narrows without a `/` first.
+	p := newTestModel("default", "kube-system")
+	p.ShowFiltered()
 	if !p.Filtering() {
-		t.Fatal("app.filter should open the opt-in filter field")
+		t.Fatal("ShowFiltered() should open the filter field")
 	}
-	p = typeFilter(p, "http")
+	p = typeFilter(p, "sys")
 	if got := p.Len(); got != 1 {
-		t.Fatalf("opt-in filter narrowed to %d items, want 1", got)
+		t.Fatalf("typing into a ShowFiltered picker left %d items, want 1", got)
 	}
 }
 
-// TestFilterRanksMatches pins the ordering PAL-01 inherits from the cluster search's
-// matcher (D194 pt 1): a contiguous match always outranks a scattered one, however
-// well the scattered one is positioned, and the cursor starts on the best match.
+// TestSelectValuePreselectsTheCurrentChoice is STORY-06d's third ask: a picker that
+// opens in navigation mode can land its cursor on the current choice, so the reader
+// sees the thing they are about to change already highlighted. A value absent from
+// the list (a remembered scope the cluster no longer serves) leaves the cursor at the
+// top rather than failing.
+func TestSelectValuePreselectsTheCurrentChoice(t *testing.T) {
+	m := newTestModel("default", "kube-system", "monitoring")
+	m.SelectValue("kube-system")
+	if v, _ := m.Selected(); v != "kube-system" {
+		t.Fatalf("SelectValue moved the cursor to %q, want kube-system", v)
+	}
+	// Selecting a value not in the list is a no-op — the cursor stays put.
+	m.SelectValue("gone")
+	if v, _ := m.Selected(); v != "kube-system" {
+		t.Fatalf("a missing value moved the cursor to %q, want it to stay on kube-system", v)
+	}
+	// Seeding a fresh set resets the cursor to the top, so preselection is applied
+	// after seeding, not before.
+	m.SetItems([]string{"default", "monitoring"})
+	if v, _ := m.Selected(); v != "default" {
+		t.Fatalf("after reseed the cursor should be at the top, got %q", v)
+	}
+}
+
+// TestOpenFilterCloseFilterToggleModeInPlace covers the palette's in-place transitions:
+// a picker showing the type-to-filter verb list enters an argument stage by closing its
+// field (CloseFilter → navigation mode), and rewinds to the verb list by reopening it
+// (OpenFilter → type-to-filter). Both keep the picker shown.
+func TestOpenFilterCloseFilterToggleModeInPlace(t *testing.T) {
+	m := newTestModel("a", "b", "c")
+	m.ShowFiltered()
+	if !m.Filtering() {
+		t.Fatal("precondition: ShowFiltered should open the field")
+	}
+	m.CloseFilter()
+	if m.Filtering() {
+		t.Fatal("CloseFilter should close the field, returning to navigation mode")
+	}
+	// In navigation mode j/k navigate the still-shown list.
+	m, _ = m.Update(keymap.ActionDown)
+	if v, _ := m.Selected(); v != "b" {
+		t.Fatalf("after CloseFilter j should navigate to b, got %q", v)
+	}
+	m.OpenFilter()
+	if !m.Filtering() {
+		t.Fatal("OpenFilter should reopen the field, returning to type-to-filter")
+	}
+	m = typeFilter(m, "a")
+	if got := m.Len(); got != 1 {
+		t.Fatalf("after OpenFilter typing should narrow, Len() = %d, want 1", got)
+	}
+}
+
+// TestNavigationModeDrillInAndBack confirms the two ways out of a navigation-mode
+// picker are intact: enter selects, esc cancels, with no filter to clear first.
+func TestNavigationModeDrillInAndBack(t *testing.T) {
+	m := newTestModel("a", "b", "c")
+	m.Show()
+	_, cmd := m.Update(keymap.ActionDrillIn)
+	if sel, ok := msgFrom(cmd).(SelectedMsg); !ok || sel.Value != "a" {
+		t.Fatalf("drill-in in navigation mode produced %T, want SelectedMsg{a}", msgFrom(cmd))
+	}
+	_, cmd = m.Update(keymap.ActionBack)
+	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
+		t.Fatalf("back in navigation mode produced %T, want CancelledMsg", msgFrom(cmd))
+	}
+}
+
 func TestFilterRanksMatches(t *testing.T) {
 	// "kube-system" contains "sys" outright; "s-y-s" is only a subsequence of the
 	// other two, so both must sort below it whatever order they were seeded in.
 	m := newTestModel("some-yaml-service", "kube-system", "sync-yes-status")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "sys")
 	if got := m.Len(); got != 3 {
 		t.Fatalf("fuzzy filter matched %d values, want 3", got)
@@ -216,7 +287,7 @@ func TestFilterRanksMatches(t *testing.T) {
 	}
 	// The fuzzy half is what makes an abbreviation reach its value at all.
 	m2 := newTestModel("default", "kube-system", "monitoring")
-	m2.Show()
+	m2 = showFiltered(m2)
 	m2 = typeFilter(m2, "ksys")
 	if got := m2.Len(); got != 1 {
 		t.Fatalf("abbreviation 'ksys' matched %d values, want 1", got)
@@ -228,9 +299,9 @@ func TestFilterRanksMatches(t *testing.T) {
 
 func TestFilterOpensAndNarrows(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public", "monitoring")
-	m.Show()
+	m = showFiltered(m)
 	if !m.Filtering() {
-		t.Fatal("Show() should open the filter field")
+		t.Fatal("ActionFilter should open the filter field")
 	}
 	m = typeFilter(m, "kube")
 	if got := m.Len(); got != 2 {
@@ -241,7 +312,7 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 	}
 	// The filter matches case-insensitively on a substring anywhere in the value.
 	m2 := newTestModel("default", "kube-system", "monitoring")
-	m2.Show()
+	m2 = showFiltered(m2)
 	m2 = typeFilter(m2, "SYS")
 	if got := m2.Len(); got != 1 {
 		t.Fatalf("case-insensitive 'SYS' Len() = %d, want 1", got)
@@ -249,52 +320,51 @@ func TestFilterOpensAndNarrows(t *testing.T) {
 }
 
 func TestFilterBackClearsThenCancels(t *testing.T) {
+	// The navigation-mode picker (STORY-06d default): a filter opened with `/` is an
+	// overlay, so esc closes it back to the list, and a second esc cancels the picker.
 	m := newTestModel("default", "kube-system", "kube-public")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "public")
 	if got := m.Len(); got != 1 {
 		t.Fatalf("filtered Len() = %d, want 1", got)
 	}
-	// First back empties the query (does not cancel the picker) and restores all. The
-	// field stays open — a type-to-filter picker that stopped filtering after one esc
-	// would be a different picker until it was dismissed and reopened.
 	m, cmd := m.Update(keymap.ActionBack)
 	if msg := msgFrom(cmd); msg != nil {
 		t.Fatalf("back with a query emitted %T, want none", msg)
 	}
-	if !m.Filtering() {
-		t.Fatal("back should clear the query, not close a type-to-filter field")
+	if m.Filtering() {
+		t.Fatal("back on a navigation-mode picker should close the overlay filter")
 	}
 	if got := m.Len(); got != 3 {
-		t.Fatalf("after clearing filter, Len() = %d, want 3 (all restored)", got)
+		t.Fatalf("after closing the filter, Len() = %d, want 3 (all restored)", got)
 	}
-	// Second back — the query is now empty — cancels the picker.
+	// Second back — no filter to clear — cancels the picker.
 	_, cmd = m.Update(keymap.ActionBack)
 	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
-		t.Fatalf("back after clear produced %T, want CancelledMsg", msgFrom(cmd))
+		t.Fatalf("back after clearing produced %T, want CancelledMsg", msgFrom(cmd))
 	}
 
-	// The opt-in picker keeps its own shape: back closes the field, then cancels.
-	p := newOptInModel("8080 http", "9090 metrics")
-	p.Show()
-	p, _ = p.Update(keymap.ActionFilter)
+	// The type-to-filter shape (ShowFiltered, the verb list): esc empties the query
+	// and keeps the field open, so esc-esc dismisses.
+	p := newTestModel("8080 http", "9090 metrics")
+	p.ShowFiltered()
 	p = typeFilter(p, "http")
 	p, cmd = p.Update(keymap.ActionBack)
 	if msg := msgFrom(cmd); msg != nil {
-		t.Fatalf("opt-in back while filtering emitted %T, want none", msg)
+		t.Fatalf("type-to-filter back while filtering emitted %T, want none", msg)
 	}
-	if p.Filtering() {
-		t.Fatal("opt-in back while filtering should close the filter")
+	if !p.Filtering() {
+		t.Fatal("type-to-filter back should clear the query, not close the field")
 	}
 	_, cmd = p.Update(keymap.ActionBack)
 	if _, ok := msgFrom(cmd).(CancelledMsg); !ok {
-		t.Fatalf("opt-in back after clear produced %T, want CancelledMsg", msgFrom(cmd))
+		t.Fatalf("type-to-filter back after clear produced %T, want CancelledMsg", msgFrom(cmd))
 	}
 }
 
 func TestFilterDrillInSelectsFilteredValue(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "system")
 	_, cmd := m.Update(keymap.ActionDrillIn)
 	sel, ok := msgFrom(cmd).(SelectedMsg)
@@ -308,7 +378,7 @@ func TestFilterDrillInSelectsFilteredValue(t *testing.T) {
 
 func TestFilterNoMatchDrillInNoMsg(t *testing.T) {
 	m := newTestModel("default", "kube-system")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "zzz")
 	if got := m.Len(); got != 0 {
 		t.Fatalf("no-match filter Len() = %d, want 0", got)
@@ -321,7 +391,7 @@ func TestFilterNoMatchDrillInNoMsg(t *testing.T) {
 
 func TestFilterViewShowsInputLine(t *testing.T) {
 	m := newTestModel("default", "kube-system")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "kube")
 	v := m.View()
 	if !strings.Contains(v, "/") {
@@ -342,8 +412,9 @@ func TestUpdateFilterInertWhenNotFiltering(t *testing.T) {
 	if got := m.Len(); got != 2 {
 		t.Fatalf("UpdateFilter changed the list while hidden: Len() = %d, want 2", got)
 	}
-	// Shown opt-in picker with no filter open: raw keys are ignored too.
-	p := newOptInModel("default", "kube-system")
+	// Shown picker in navigation mode with no filter open (STORY-06d default): raw
+	// keys are ignored too — the list is navigated by j/k, not typed into.
+	p := newTestModel("default", "kube-system")
 	p.Show()
 	p = typeFilter(p, "kube")
 	if got := p.Len(); got != 2 {
@@ -353,7 +424,7 @@ func TestUpdateFilterInertWhenNotFiltering(t *testing.T) {
 
 func TestHideClosesFilter(t *testing.T) {
 	m := newTestModel("default", "kube-system", "kube-public")
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "public")
 	m.Hide()
 	if m.Filtering() {
@@ -415,7 +486,7 @@ func TestFilterMatchesAnAlias(t *testing.T) {
 		Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es", "external-secrets.io"}},
 		Item{Label: "Secret", Aliases: []string{"secrets"}},
 	)
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "externalsecrets")
 	if got := m.Len(); got != 1 {
 		t.Fatalf("query %q matched %d rows, want 1 (ExternalSecret via its plural)", "externalsecrets", got)
@@ -430,7 +501,7 @@ func TestFilterMatchesAnAlias(t *testing.T) {
 // appended to the label.
 func TestAliasNeverShowsOnTheRow(t *testing.T) {
 	m := newAliasModel(Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es"}})
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "es")
 	view := m.View()
 	if !strings.Contains(view, "ExternalSecret") {
@@ -451,7 +522,7 @@ func TestAliasHitRanksBesideALabelHit(t *testing.T) {
 		Item{Label: "Secret", Aliases: []string{"secrets"}},
 		Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets", "es"}},
 	)
-	m.Show()
+	m = showFiltered(m)
 	m = typeFilter(m, "es")
 	if got := m.Len(); got < 2 {
 		t.Fatalf("query %q matched %d rows, want both", "es", got)
@@ -467,7 +538,7 @@ func TestAliasHitRanksBesideALabelHit(t *testing.T) {
 // list it no longer shows.
 func TestSetItemsClearsAliases(t *testing.T) {
 	m := newAliasModel(Item{Label: "ExternalSecret", Aliases: []string{"externalsecrets"}})
-	m.Show()
+	m = showFiltered(m)
 	m.SetItems([]string{"ExternalSecret"})
 	m = typeFilter(m, "externalsecrets")
 	if got := m.Len(); got != 0 {
@@ -478,12 +549,14 @@ func TestSetItemsClearsAliases(t *testing.T) {
 // --- PAL-08: the name column -------------------------------------------------
 
 // newNamedModel builds the shape the command palette seeds since PAL-08: each value
-// carries the command's own name beside the description the reader picks by.
+// carries the command's own name beside the description the reader picks by. Like the
+// palette verb list it opens type-to-filter (the one surface whose identity is typing,
+// D197), so a test can type straight at it.
 func newNamedModel(items ...Item) Model {
 	m := New(styles.Default(), "command")
 	m.SetSize(80, 24)
 	m.SetItemsWithAliases(items)
-	m.Show()
+	m.ShowFiltered()
 	return m
 }
 

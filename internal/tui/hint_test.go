@@ -78,9 +78,9 @@ func TestHintBarTracksOpenPicker(t *testing.T) {
 }
 
 // TestHintBarPickerContextFollowsFilterState proves the two picker contexts are chosen
-// by the *field's* state, not by the picker's kind: the port picker opens with its
-// filter closed (WithOptInFilter, D139), so `/` genuinely acts and is hinted — and once
-// `/` opens the field it stops acting and drops out.
+// by the *field's* state, not by the picker's kind: every value picker opens in
+// navigation mode with its filter closed (STORY-06d, D272), so `/` genuinely acts and
+// is hinted — and once `/` opens the field it stops acting and drops out.
 func TestHintBarPickerContextFollowsFilterState(t *testing.T) {
 	pf := &fakePortForwarder{handle: newFakeForward()}
 	pl := &fakePortLister{ports: []kube.Port{{Port: 8080, Name: "http", Container: "app"}}}
@@ -92,7 +92,7 @@ func TestHintBarPickerContextFollowsFilterState(t *testing.T) {
 	m, cmd := dispatchRowAction(t, m, rowActionPortForward)
 	m = loadPorts(t, m, cmd)
 	if !m.portPicker.Active() || m.portPicker.Filtering() {
-		t.Fatal("the port picker should open with its opt-in filter closed")
+		t.Fatal("the port picker should open in navigation mode, filter closed")
 	}
 
 	closed := m.hintbar.View()
@@ -303,8 +303,8 @@ func TestEveryHelpContextIsReachable(t *testing.T) {
 			return m
 		},
 		keymap.HelpPicker: func(t *testing.T) Model {
-			// The only opt-in-filter picker left (D139), so the only way to reach a
-			// picker context with its field closed.
+			// Every value picker opens in navigation mode with its field closed
+			// (STORY-06d); the port picker is a representative example.
 			pl := &fakePortLister{ports: []kube.Port{{Port: 8080, Name: "http", Container: "app"}}}
 			m := wide(t, openPodTable(t, "Pod",
 				WithPortForwarder(&fakePortForwarder{handle: newFakeForward()}), WithPortLister(pl)))

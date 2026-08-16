@@ -73,14 +73,16 @@ const (
 	// HelpLogsFilter is the same logs mini-app with its live grep *open*, which
 	// captures text — so it advertises only the keys that still act there.
 	HelpLogsFilter
-	// HelpPickerFilter is any modal picker with its filter field open — which is
-	// every picker from the moment it is shown (PAL-01/D194 pt 2), the port picker
-	// excepted. The overlay captures all input and the open field takes every
-	// text-producing key, so only the no-text keys act: move, select, cancel.
+	// HelpPickerFilter is any modal picker with its filter field open. The overlay
+	// captures all input and the open field takes every text-producing key, so only
+	// the no-text keys act: move, select, cancel. Since STORY-06d this is the
+	// *momentary* state — the field the reader opened with `/`, and the palette's
+	// verb list on show (D197) — rather than every picker from the moment it is
+	// shown (D272).
 	HelpPickerFilter
-	// HelpPicker is a modal picker with its filter field *closed* — reachable only on
-	// a WithOptInFilter picker (the port picker, D139), where the letter keys are free
-	// and `/` opens the field.
+	// HelpPicker is a modal picker with its filter field *closed* — the default open
+	// state of every value picker since STORY-06d, where j/k move the list and `/`
+	// opens the field (D272).
 	HelpPicker
 	// HelpConfirm is the yes/no confirm modal (M3-09/D132), which captures all input:
 	// its two answers resolve in the confirm key context, and everything else is
@@ -221,19 +223,20 @@ func HelpContexts() []HelpContext {
 //
 // The two picker contexts (HINT-01) are the same rule applied to an *overlay* rather
 // than a full-screen view: a modal picker captures every keypress while it is up, so
-// the browse hints underneath it advertised ten keys of which two acted. The
-// type-to-filter picker — every picker but the port one, since PAL-01 — opens its
-// field with itself, so `/`, `s`, `a`, `?` and `q` type a character and the honest set
-// is the four no-text keys the root actually routes: move the cursor, confirm, cancel.
-// Paging (ctrl+d/u) acts too and is left out as it is in every other context: the hint
-// is the keys a reader must be told about, not an inventory.
+// the browse hints underneath it advertised ten keys of which two acted. Since
+// STORY-06d a picker opens in **navigation mode** — list focused, filter closed — so
+// the honest set is move/select/cancel plus `/`, which opens the field. Only the
+// field-open state (the palette's type-to-filter verb list, D197, or a `/` the reader
+// pressed) drops to the four no-text keys the root actually routes: move the cursor,
+// confirm, cancel. Paging (ctrl+d/u) acts too and is left out as it is in every other
+// context: the hint is the keys a reader must be told about, not an inventory.
 //
-// HelpPicker is the closed-field state, which only a WithOptInFilter picker can be in
-// (the port picker, D139). It adds `/` — the key that opens the field — and nothing
-// else. The port picker's own two gestures (`p` local port, `0` free port) are *not*
-// hinted here even though they act: a HelpContext names an input state, not a picker
-// kind, and this set is shared by any future opt-in picker that does not bind them.
-// They stay in `?` and in the port picker's own title.
+// HelpPickerFilter is the field-open state, and HelpPicker the navigation-mode
+// default every value picker opens in (D272). The port picker's own two gestures
+// (`p` local port, `0` free port) are *not* hinted in either even though they act: a
+// HelpContext names an input state, not a picker kind, and this set is shared by
+// every picker that does not bind them. They stay in `?` and in the port picker's own
+// title.
 //
 // The four HINT-02 contexts are the rest of the capturing surfaces, each one the same
 // rule as the pickers: what the surface's own router honours, nothing else.

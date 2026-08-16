@@ -7686,3 +7686,38 @@ only the resource-table context changes.
    nothing is lost. A later leg must not re-introduce a bare `enter`-drills-into-
    row behaviour on the table.
 
+## D272 — pickers open in navigation mode: the list is the target, `j`/`k` move it, and `/` opens the filter; the current choice is preselected (2026-08-16, STORY-06d)
+
+The S01 walk's sharpest dead end (`2026-08-15-picker-navigation-mode.md`): pressing
+`j`/`k` in the namespace switcher typed into its filter instead of navigating — 4
+dead `j`s across two picker visits. This supersedes D194 pt 2's "a picker filters
+as you type; the filter field opens with the picker" for **value pickers**: the
+filter is a `/`-away overlay, not the default state.
+
+1. **A picker's `Show()` opens in navigation mode** — list focused, j/k navigate,
+   `/` (ActionFilter) opens the filter field. Every value picker opens this way:
+   the palette's argument stages (`:namespace `, `:context `, `:resource `,
+   `:theme `, `:action `, `:pin `) and the container/port pickers. A later leg must
+   not return a value picker to type-to-filter-on-open; the walk measured that
+   shape and found it the sharpest dead end of the whole pass. The esc ladder is
+   now: esc closes a filter opened by `/` (back to the list), a second esc cancels.
+2. **The command palette's verb list is the one type-to-filter surface left.** It
+   opens via `ShowFiltered` (the field opens with it) because its identity is "one
+   place you type to make anything happen" (D197), and the S04 walk gave it a clean
+   bill. `OpenFilter`/`CloseFilter` are the in-place transitions between the two
+   modes as the palette moves verb → argument stage → verb list; backspace-rewind
+   must keep working from a navigation-mode stage too (D233 pt 3).
+3. **A value picker preselects the current choice.** The namespace stage preselects
+   the current workspace (or the all-namespaces sentinel when scope is empty), the
+   context stage the shell's current context, the theme stage the theme rendering
+   now — via `picker.SelectValue`, applied after seeding (async stages preselect
+   when their values land). A current value absent from the list leaves the cursor
+   at the top rather than failing. A later leg must not drop preselection: opening
+   a switcher to change something and finding the thing you are changing already
+   highlighted is the point.
+4. **This does not touch `WithOptInFilter` or a second matcher.** D194 pt 1 (one
+   fuzzy matcher) stands; the port picker's old opt-in construction is gone because
+   navigation mode is now the default for it too. A later leg must not reintroduce
+   a per-construction filter-on-show knob for value pickers — the mode follows the
+   surface's identity (verb list vs value list), not the picker's kind.
+

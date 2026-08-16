@@ -1133,11 +1133,11 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.hintbar = hintbar.New(s)
 	m.ctrPicker = picker.New(s, containerPickerKind)
 	m.cmdPicker = picker.New(s, commandPickerKind)
-	// The port picker is the one picker that does not filter as you type (D194 pt 3):
-	// its own `p` (local-port prompt) and `0` (let the OS pick) gestures carry text,
-	// and an always-open query field swallows every text-carrying key (D140 pt 1), so
-	// it keeps the opt-in `/` filter every picker had before PAL-01.
-	m.portPicker = picker.New(s, portPickerKind, picker.WithOptInFilter())
+	// The port picker opens in navigation mode like every picker since STORY-06d
+	// (D272): its own `p` (local-port prompt) and `0` (let the OS pick) gestures carry
+	// text, and the filter stays closed until `/` opens it, exactly as it was when it
+	// was the one opt-in picker.
+	m.portPicker = picker.New(s, portPickerKind)
 	m.viewer = viewer.New(s, viewerKindDescribe)
 	m.modal = modal.New(s)
 	m.welcome = welcome.New(s)
@@ -3568,6 +3568,15 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if mapped {
 		*p, cmd = p.Update(action)
 	}
+	// A navigation-mode picker's backspace has no text to erase, so the palette's
+	// rewind gesture (D233 pt 3: backspace unwinds the line from anywhere) has to be
+	// routed here rather than through handlePaletteFilterKey's filtering branch: with
+	// the filter closed, `:namespace ` backspace still returns to the verb list.
+	if p.Kind() == commandPickerKind && msg.Key().Code == tea.KeyBackspace {
+		if next, load, consumed := m.handlePaletteFilterKey(msg); consumed {
+			return next.previewTheme(), load
+		}
+	}
 	// A control key that moved the palette's cursor re-themes the shell to the row
 	// it now highlights (the live theme preview), so the reader sees each palette
 	// before committing to it. No-op on every stage but `:theme ` and on every key
@@ -3819,8 +3828,10 @@ func (m *Model) hintContext() keymap.HelpContext {
 	case m.activePicker() != nil:
 		// A modal picker captures all input while it is up, so the browse hints under it
 		// are unreachable (HINT-01). Which of the two picker contexts applies is the
-		// field's state, not the picker's kind: open (every picker since PAL-01) leaves
-		// only the no-text keys, closed (WithOptInFilter) also honours `/`.
+		// field's state, not the picker's kind: since STORY-06d a picker opens in
+		// navigation mode with the field closed (HelpPicker, j/k navigate, `/` opens
+		// it); open — the palette's verb list on show, or a field the reader opened
+		// with `/` — leaves only the no-text keys (HelpPickerFilter).
 		if m.activePicker().Filtering() {
 			return keymap.HelpPickerFilter
 		}

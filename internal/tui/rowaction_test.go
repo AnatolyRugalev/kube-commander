@@ -135,6 +135,7 @@ func TestActionStageMarksTheVerbsThatConfirm(t *testing.T) {
 func TestMarkedActionStillDispatchesItsIntent(t *testing.T) {
 	m := openPodTable(t, "Node", allActionSeams()...)
 	m = openActionStage(t, m)
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "drain")
 
 	if v, _ := m.cmdPicker.Selected(); v != rowActionLabel(rowActionDrain) {

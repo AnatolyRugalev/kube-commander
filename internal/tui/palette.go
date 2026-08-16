@@ -321,6 +321,11 @@ func (m Model) showPaletteVerbs() Model {
 	m.cmdPicker.SetPrompt(palettePrompt)
 	m.cmdPicker.ClearQuery()
 	m.cmdPicker.SetItemsWithAliases(items)
+	// The verb list is the one type-to-filter surface (D197), so rewinding to it from
+	// a navigation-mode argument stage reopens the filter — a verb is found by typing
+	// it. No-op when the picker was never on an argument stage (its filter is open
+	// from ShowFiltered).
+	m.cmdPicker.OpenFilter()
 	return m
 }
 
@@ -366,10 +371,12 @@ func logsVerbItems(taken map[string]keymap.Action) ([]picker.Item, map[string]ke
 // openPalette opens the command palette on its verb stage, labelled by each action's
 // registry description and ranked by the shared matcher as you type (D194). It is
 // never inert — the verbs are compiled in, like the theme picker's palettes — so `:`
-// opens something even with no cluster.
+// opens something even with no cluster. The verb list is the one surface that opens
+// type-to-filter (ShowFiltered, D197); its argument stages open in navigation mode
+// (STORY-06d).
 func (m Model) openPalette() (tea.Model, tea.Cmd) {
 	m = m.showPaletteVerbs()
-	return m, m.cmdPicker.Show()
+	return m, m.cmdPicker.ShowFiltered()
 }
 
 // openPaletteArg opens the palette *already* in verb a's argument stage — the pre-typed
@@ -530,6 +537,13 @@ func (m Model) enterPaletteArg(a keymap.Action) (Model, tea.Cmd, bool) {
 	m.cmdPicker.SetPrompt(palettePrompt + word + " ")
 	m.cmdPicker.ClearQuery() // SetItems applies the standing query; the verb's is spent.
 	m.cmdPicker.SetItemsWithAliases(items)
+	// Argument stages are navigation mode (STORY-06d): the value list is the target,
+	// j/k move it, `/` opens the filter. The picker was showing the type-to-filter
+	// verb list, so entering the stage closes its field (no-op when already closed).
+	m.cmdPicker.CloseFilter()
+	if !pending {
+		m = m.preselectPaletteArg(a)
+	}
 	return m, load, true
 }
 
@@ -544,10 +558,55 @@ func (m Model) awaitingPaletteArg(a keymap.Action) bool {
 // fillPaletteArg seeds a pending argument stage with the values that have arrived and
 // drops the loading marker from its title. The query the reader typed while waiting is
 // deliberately kept — SetItems applies it — so typing ahead of a slow list narrows it
-// the moment it lands instead of being thrown away.
+// the moment it lands instead of being thrown away. The stage is already in navigation
+// mode (enterPaletteArg closed the filter), so the current choice is preselected now
+// that the values exist to preselect from.
 func (m Model) fillPaletteArg(a keymap.Action, labels []string) Model {
 	m.cmdPicker.SetTitle(a.Describe())
 	m.cmdPicker.SetItems(labels)
+	return m.preselectPaletteArg(a)
+}
+
+// preselectPaletteArg moves the cursor onto the current value of an argument stage,
+// where one exists (STORY-06d): the namespace the shell is scoped to (or the
+// all-namespaces sentinel when scope is empty), the context the shell is on, the
+// theme rendering now. Stages without a current value — the row actions, the pin
+// kinds — preselect nothing; a current value the list does not contain (a remembered
+// namespace the cluster no longer serves) leaves the cursor at the top. The cursor
+// landing on the current choice is the whole ask of the walk's dead-end finding: the
+// reader opened the picker to change something, and the thing they are changing is
+// already highlighted.
+func (m Model) preselectPaletteArg(a keymap.Action) Model {
+	var label string
+	switch a {
+	case keymap.ActionNamespace:
+		// The scope the shell is on: a concrete namespace if one is set, else the
+		// all-namespaces sentinel (which is what an empty scope means).
+		label = m.namespace
+		if label == "" {
+			label = namespaceAllItem
+		}
+	case keymap.ActionContext:
+		// The row label carries the marker and the cluster name; the byLabel map
+		// resolves back to the bare context name the shell tracks.
+		for l, name := range m.ctxByLabel {
+			if name == m.context {
+				label = l
+				break
+			}
+		}
+	case keymap.ActionTheme:
+		// Same for the theme rows: the label is the marked name, the map the theme id.
+		for l, name := range m.themeByLabel {
+			if name == m.styles.Theme.Name {
+				label = l
+				break
+			}
+		}
+	}
+	if label != "" {
+		m.cmdPicker.SelectValue(label)
+	}
 	return m
 }
 

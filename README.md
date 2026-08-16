@@ -66,7 +66,7 @@ To search the entire cluster instead of just the open table, use the cluster sea
 
 For broader queries, you can widen the search to every kind your cluster exposes or to all namespaces. These toggles are temporary and reset on your next search to keep regular queries fast.
 
-The command palette (`:`) is your single entry point for app-wide verbs and actions. It lists available commands and filters as you type. Verbs that require an argument (like picking a resource, namespace, or theme) accept it in the same input box. Every pop-up picker filters as you type.
+The command palette (`:`) is your single entry point for app-wide verbs and actions. It lists available commands and filters as you type. Verbs that require an argument (like picking a resource, namespace, or theme) accept it in the same input box. Pickers open in navigation mode: `j`/`k` move the list, and `/` narrows it as you type.
 
 ### Inspecting objects
 

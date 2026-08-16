@@ -9,11 +9,14 @@
 // filtering is a later slice (M2-08b); the namespace-list plumbing and the app-shell
 // wiring are M2-08c.
 //
-// Since PAL-01 the filter is **open from the moment the picker is shown** and the
-// visible list is ranked by `kube.NameMatcher` — the cluster search's own matcher —
-// so every picker narrows as you type, with the same substring-above-subsequence
-// ordering the search view has (D194). A picker that must keep text-carrying
-// gestures of its own opts out with WithOptInFilter.
+// Since STORY-06d a picker opens in **navigation mode**: the list is focused, `j`/`k`
+// move the cursor, and the filter stays closed until `/` opens it — the walk's
+// finding that a picker whose field swallowed every letter was its sharpest dead end
+// (D272). The filter, when open, ranks by `kube.NameMatcher` — the cluster search's
+// own matcher — so a picker narrows as you type with the same substring-above-
+// subsequence ordering the search view has (D194). The one surface whose identity is
+// typing — the command palette's verb list — opens filtered instead (ShowFiltered,
+// D197), and a caller may preselect the current choice with SelectValue.
 //
 // Since PAL-08 a value may also carry a **Name** — its own short id — which is drawn
 // in a left-hand column before the label and matched alongside it (D237). Only the
@@ -230,10 +233,15 @@ type Model struct {
 	filter    textinput.Model // the incremental filter field (shown only while filtering)
 	filtering bool            // whether the filter field is open and capturing text
 
-	// optInFilter keeps the filter closed until app.filter (`/`) opens it, instead of
-	// opening it with the picker (PAL-01/D194 pt 3). Only a picker carrying
-	// text-producing gestures of its own wants this.
-	optInFilter bool
+	// filterOnShow records whether this surface's filter opens with the picker
+	// (ShowFiltered) instead of staying closed until `/` opens it (Show, the
+	// navigation-mode default since STORY-06d). It is a per-show property: the
+	// command palette's one picker serves both a type-to-filter verb list and
+	// navigation-mode argument stages, so the palette toggles it as the stage
+	// changes (OpenFilter/CloseFilter). It drives what esc does while filtering:
+	// on a filter-on-show surface it clears the query; on a navigation-mode picker
+	// it closes the field it opened.
+	filterOnShow bool
 
 	// nameW is the current name-column width (0 in a list where nothing is named).
 	// It is derived from the visible items by applyFilter and handed to the delegate.
@@ -244,29 +252,14 @@ type Model struct {
 	height int  // full screen height
 }
 
-// Option tunes a picker at construction. The zero set is the type-to-filter picker
-// every value-choosing surface wants; an Option is for the exception.
-type Option func(*Model)
-
-// WithOptInFilter builds a picker whose filter field stays closed until app.filter
-// (`/`) opens it — the pre-PAL-01 behaviour.
-//
-// It exists for one case and should stay rare: a picker that binds text-producing
-// keys to gestures of its own cannot also swallow every text key into a query field
-// (D140 pt 1). The port picker is the case — `p` prompts for a local port and `0`
-// asks the OS to pick one (FB-pf-local-port/D139) — and a future picker should
-// prefer giving up such a gesture over opting out of type-to-filter, since the
-// uniform typing behaviour is the point of the palette line (D194 pt 3).
-func WithOptInFilter() Option { return func(m *Model) { m.optInFilter = true } }
-
 // New builds a picker of the given kind (also its default title) rendered through
 // the shared styles. It starts hidden and empty; the caller seeds it with SetItems
-// and reveals it with Show, which also opens the filter field unless WithOptInFilter
-// was passed. The list's own chrome and key bindings — including its native filter —
-// stay disabled: the picker runs its own incremental filter over an owned textinput
-// (M2-08b) so it fully controls input and appearance, and no hard-coded list key
-// leaks into the view (D11).
-func New(s styles.Styles, kind string, opts ...Option) Model {
+// and reveals it with Show (navigation mode) or ShowFiltered (type-to-filter). The
+// list's own chrome and key bindings — including its native filter — stay disabled:
+// the picker runs its own incremental filter over an owned textinput (M2-08b) so it
+// fully controls input and appearance, and no hard-coded list key leaks into the
+// view (D11).
+func New(s styles.Styles, kind string) Model {
 	l := list.New(nil, itemDelegate{styles: s}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -283,9 +276,6 @@ func New(s styles.Styles, kind string, opts ...Option) Model {
 		kind:   kind,
 		title:  strings.ToUpper(kind[:1]) + kind[1:],
 		filter: fi,
-	}
-	for _, opt := range opts {
-		opt(&m)
 	}
 	return m
 }
@@ -464,20 +454,59 @@ func (m *Model) syncListSize() {
 	m.filter.SetWidth(iw)
 }
 
-// Show reveals the picker (it then captures input until Hide) and — unless the
-// picker was built WithOptInFilter — opens and focuses the filter field, so the
-// next thing typed narrows the list instead of being discarded (PAL-01/D194 pt 2).
-// The returned cmd is the cursor blink; a caller that has none of its own can
-// return it directly. Hide dismisses the picker and closes the filter so it reopens
-// clean next time.
+// Show reveals the picker in navigation mode: the list is focused and j/k move the
+// cursor, while the filter stays closed until `/` (ActionFilter) opens it. This is
+// the default open state for every picker since STORY-06d (D272) — a picker whose
+// field swallowed every letter was the walk's sharpest dead end. A surface whose
+// identity is typing opens with ShowFiltered instead (the command palette verb list,
+// D197). Returns nil — navigation mode focuses no field. Hide dismisses the picker
+// and closes the filter so it reopens clean next time.
 func (m *Model) Show() tea.Cmd {
 	m.active = true
-	if m.optInFilter || m.filtering {
+	m.filterOnShow = false
+	if m.filtering {
+		m.closeFilter()
+	}
+	return nil
+}
+
+// ShowFiltered reveals the picker in type-to-filter mode: the filter field opens
+// with it, focused and capturing text. Only the command palette's verb list wants
+// this — its identity is "one place you type to make anything happen" (D197), and
+// the walk that overturned type-to-filter for value pickers gave the palette a clean
+// bill (D272). Returns the filter field's cursor blink cmd.
+func (m *Model) ShowFiltered() tea.Cmd {
+	m.active = true
+	m.filterOnShow = true
+	if m.filtering {
 		return nil
 	}
 	m.filtering = true
 	m.syncListSize()
 	return m.filter.Focus()
+}
+
+// OpenFilter opens and focuses the filter field on an already-shown picker, leaving
+// it in type-to-filter mode. It is the in-place counterpart of ShowFiltered — how
+// the palette returns to its verb list from a navigation-mode argument stage — and
+// how a navigation-mode picker's `/` is routed. Returns the cursor blink cmd.
+func (m *Model) OpenFilter() tea.Cmd {
+	m.filterOnShow = true
+	if !m.active || m.filtering {
+		return nil
+	}
+	m.filtering = true
+	m.syncListSize()
+	return m.filter.Focus()
+}
+
+// CloseFilter closes the filter field, returning an already-shown picker to
+// navigation mode. It is the in-place counterpart of Show — how the palette enters
+// an argument stage from its type-to-filter verb list. Safe to call when the filter
+// is already closed.
+func (m *Model) CloseFilter() {
+	m.filterOnShow = false
+	m.closeFilter()
 }
 
 func (m *Model) Hide() {
@@ -501,6 +530,22 @@ func (m Model) Selected() (string, bool) {
 		return "", false
 	}
 	return it.label, true
+}
+
+// SelectValue moves the cursor to the row whose label is v, if present, and reports
+// whether it did. It is how a caller preselects the current choice when a picker
+// opens (STORY-06d): the namespace stage preselects the current workspace, the theme
+// stage the current theme, and so on. A value absent from the list (a scope that no
+// longer exists) leaves the cursor at the top, which is the sensible fallback.
+func (m *Model) SelectValue(v string) bool {
+	items := m.list.Items()
+	for i, it := range items {
+		if row, ok := it.(item); ok && row.label == v {
+			m.list.Select(i)
+			return true
+		}
+	}
+	return false
 }
 
 // Update handles a resolved keymap action while the picker is active. Navigation
@@ -544,13 +589,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return SelectedMsg{Kind: kind, Value: v} }
 	case keymap.ActionBack:
 		// One esc clears the filter, a second cancels the picker. What "clears" means
-		// differs by mode: an opt-in filter closes (returning to the plain list it was
-		// opened from), while a type-to-filter picker only empties the query — closing
-		// its field would leave a picker that no longer does the one thing PAL-01 gave
-		// it, until it was dismissed and reopened. An already-empty query falls through
-		// to the cancel below, so esc-esc dismisses in both modes.
+		// differs by mode: a navigation-mode picker's filter is an overlay `/` opened
+		// — esc closes it, returning to the plain list it was opened from — while a
+		// filter-on-show surface (the verb list, D197) only empties the query: closing
+		// its field would leave a picker that no longer does the one thing it exists
+		// to do. An already-empty query falls through to the cancel below, so esc-esc
+		// dismisses in both modes.
 		if m.filtering {
-			if m.optInFilter {
+			if !m.filterOnShow {
 				m.closeFilter()
 				return m, nil
 			}

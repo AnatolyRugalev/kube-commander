@@ -141,6 +141,7 @@ func TestPaletteArgumentSwitchesTheResource(t *testing.T) {
 	m, _ = press(t, m, colon)
 	m = typeInto(t, m, "resource")
 	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	m, _ = press(t, m, slash) // the argument stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "cron")
 	if v, _ := m.cmdPicker.Selected(); v != "CronJob" {
 		t.Fatalf("filtering the argument to \"cron\" selected %q, want CronJob", v)
@@ -177,6 +178,7 @@ func TestPaletteArgumentAppliesATheme(t *testing.T) {
 	if m.palArg != keymap.ActionTheme {
 		t.Fatalf("space should commit the theme verb, stage = %q", m.palArg)
 	}
+	m, _ = press(t, m, slash) // the argument stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "monokai")
 
 	m, _ = selectInPalette(t, m)
@@ -197,6 +199,7 @@ func TestPaletteBackspaceLeavesTheArgumentStage(t *testing.T) {
 	m, _ = press(t, m, colon)
 	m = typeInto(t, m, "resource")
 	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "cr")
 
 	// The first backspaces erase the argument itself; only one into an empty query
@@ -215,6 +218,26 @@ func TestPaletteBackspaceLeavesTheArgumentStage(t *testing.T) {
 	}
 	if !m.cmdPicker.Active() {
 		t.Fatal("leaving the argument stage should not close the palette")
+	}
+}
+
+// TestPaletteBackspaceRewindsFromNavigationMode is STORY-06d's counterpart: an
+// argument stage opens in navigation mode (filter closed, D272), and backspace there
+// still unwinds the line — the same rewind gesture, without a query to erase first.
+func TestPaletteBackspaceRewindsFromNavigationMode(t *testing.T) {
+	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
+	m, _ = press(t, m, colon)
+	m = typeInto(t, m, "resource")
+	m, _ = press(t, m, tea.Key{Code: ' ', Text: " "})
+	if m.cmdPicker.Filtering() {
+		t.Fatal("the argument stage should open in navigation mode, filter closed")
+	}
+	m, _ = press(t, m, tea.Key{Code: tea.KeyBackspace})
+	if m.palArg != "" {
+		t.Fatalf("backspace in a navigation-mode stage should rewind to the verbs, stage = %q", m.palArg)
+	}
+	if !m.cmdPicker.Filtering() {
+		t.Fatal("rewinding to the verb list should reopen its filter — the verb list is type-to-filter")
 	}
 }
 
@@ -301,6 +324,9 @@ func TestPaletteNamespaceArgumentLoadsThenSeeds(t *testing.T) {
 		t.Fatalf("the commit produced %T, want namespacesLoadedMsg", pickerMsg(t, cmd))
 	}
 
+	// The stage opens in navigation mode (STORY-06d): the field is closed until `/`
+	// opens it, so type ahead opens it first.
+	m, _ = press(t, m, slash)
 	m = typeInto(t, m, "sys") // type ahead of the answer
 	next, _ := m.Update(lm)
 	m = next.(Model)
@@ -334,6 +360,7 @@ func TestPaletteNamespaceArgumentAppliesTheScope(t *testing.T) {
 	if got := m.cmdPicker.Len(); got != 3 {
 		t.Fatalf("stage seeded with %d entries, want 3 (2 namespaces + the all-namespaces sentinel)", got)
 	}
+	m, _ = press(t, m, slash) // navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "kube-sys")
 
 	m, _ = selectInPalette(t, m)
@@ -370,6 +397,7 @@ func TestPaletteContextArgumentSwitchesContext(t *testing.T) {
 	if got := pickerLabelFor(t, m, "prod"); !strings.HasPrefix(got, "* ") {
 		t.Errorf("the stage should mark the context the shell is on, row = %q", got)
 	}
+	m, _ = press(t, m, slash) // navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "dev")
 
 	m, selCmd := selectInPalette(t, m)
@@ -715,6 +743,9 @@ func TestActionStageNamesTheRowItWouldActOn(t *testing.T) {
 	if got := frame(m); !strings.Contains(got, target) {
 		t.Fatalf("the action stage should name its target %q on screen, got:\n%s", target, got)
 	}
+	// The stage opens in navigation mode (STORY-06d): the `:action ` prompt is the
+	// filter's, revealed by `/`.
+	m, _ = press(t, m, slash)
 	if got := frame(m); !strings.Contains(got, palettePrompt+paletteArgVerbs[keymap.ActionActions]) {
 		t.Fatalf("the action stage should prompt %q, got:\n%s",
 			palettePrompt+paletteArgVerbs[keymap.ActionActions]+" ", got)
@@ -811,6 +842,7 @@ func TestActionStageEscClosesToTheTable(t *testing.T) {
 func TestActionStageEscClearsATypedQueryFirst(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	m = openActionStage(t, m)
+	m, _ = press(t, m, slash) // navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "log")
 	if m.cmdPicker.Query() == "" {
 		t.Fatal("typing should reach the stage's query")

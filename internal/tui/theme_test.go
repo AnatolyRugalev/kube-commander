@@ -439,6 +439,9 @@ func TestThemeKeyOpensThePaletteThemeStage(t *testing.T) {
 	if got, want := len(m.themeByLabel), len(styles.Themes()); got != want {
 		t.Errorf("stage rows = %d, want %d (%v)", got, want, m.themeByLabel)
 	}
+	// The stage opens in navigation mode (STORY-06d): the `:theme ` line is the
+	// filter's prompt, revealed by `/`.
+	m, _ = press(t, m, slash)
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, palettePrompt+"theme ") {
 		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
@@ -458,6 +461,7 @@ func TestThemeKeyOpensThePaletteThemeStage(t *testing.T) {
 	typed, _ = press(t, typed, tea.Key{Code: ':', Text: ":"})
 	typed = typeInto(t, typed, "theme")
 	typed, _ = press(t, typed, tea.Key{Code: ' ', Text: " "})
+	typed, _ = press(t, typed, slash)
 	if got, want := stripANSI(typed.View().Content), view; got != want {
 		t.Errorf("`T` and `:theme ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -740,6 +744,7 @@ func TestThemePreviewFollowsTypingNarrowing(t *testing.T) {
 	m = openThemeStage(t, m)
 	target := styles.Themes()[1].Name
 
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, target)
 	if got := m.styles.Theme.Name; got != target {
 		t.Errorf("narrowing to %q should preview it, shell renders %q", target, got)

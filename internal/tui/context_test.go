@@ -310,6 +310,7 @@ func TestContextKeyOpensThePaletteContextStage(t *testing.T) {
 	if !m.cmdPicker.Active() {
 		t.Error("the stage should stay open once the rows land")
 	}
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` reveals the line
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, palettePrompt+"context ") {
 		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
@@ -323,6 +324,7 @@ func TestContextKeyOpensThePaletteContextStage(t *testing.T) {
 	typed, spaceCmd := press(t, typed, tea.Key{Code: ' ', Text: " "})
 	next, _ = typed.Update(pickerMsg(t, spaceCmd))
 	typed = next.(Model)
+	typed, _ = press(t, typed, slash)
 	if got, want := stripANSI(typed.View().Content), view; got != want {
 		t.Errorf("`C` and `:context ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}

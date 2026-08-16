@@ -533,6 +533,9 @@ func pinInPalette(t *testing.T, m Model) Model {
 	if m.palArg != keymap.ActionPin {
 		t.Fatalf("space should commit the pin verb, stage = %q", m.palArg)
 	}
+	// The argument stage opens in navigation mode (STORY-06d): `/` opens the field the
+	// pin kind is typed into.
+	m, _ = press(t, m, slash)
 	return m
 }
 

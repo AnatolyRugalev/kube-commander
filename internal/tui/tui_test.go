@@ -28,10 +28,10 @@ import (
 )
 
 // pickerMsgs runs a picker-opening command and returns the messages that are not the
-// filter field's cursor blink. Opening a picker focuses its filter field (PAL-01), so
-// every open now batches a cursor.BlinkMsg with whatever async work it kicked off;
-// a test that wants the async result — or wants to assert there was none — has to
-// look past the blink rather than at the raw command.
+// filter field's cursor blink. The palette verb list opens with its filter focused
+// (the one type-to-filter surface, D197), so that open batches a cursor.BlinkMsg with
+// whatever async work it kicked off; a test that wants the async result — or wants to
+// assert there was none — has to look past the blink rather than at the raw command.
 func pickerMsgs(cmd tea.Cmd) []tea.Msg {
 	var out []tea.Msg
 	for _, msg := range drainMsgs(cmd) {
@@ -964,6 +964,9 @@ func TestNamespaceKeyOpensThePaletteNamespaceStage(t *testing.T) {
 	if v, _ := m.cmdPicker.Selected(); v != namespaceAllItem {
 		t.Fatalf("sentinel should be pinned at the top, got %q", v)
 	}
+	// The stage opens in navigation mode (STORY-06d): the `:namespace ` line is the
+	// filter's prompt, so `/` opens it before the line is visible.
+	m, _ = press(t, m, slash)
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, palettePrompt+"namespace ") {
 		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
@@ -977,6 +980,7 @@ func TestNamespaceKeyOpensThePaletteNamespaceStage(t *testing.T) {
 	typed, spaceCmd := press(t, typed, tea.Key{Code: ' ', Text: " "})
 	next, _ = typed.Update(pickerMsg(t, spaceCmd))
 	typed = next.(Model)
+	typed, _ = press(t, typed, slash)
 	if got, want := stripANSI(typed.View().Content), view; got != want {
 		t.Errorf("N and `:namespace ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -1059,10 +1063,15 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 	// Open + seed the stage.
 	m = openNamespaceStage(t, m)
 
-	// The filter is open the moment the stage is (PAL-01) — no `/` first: typing
-	// narrows straight away.
+	// The stage opens in navigation mode (STORY-06d): the list is focused and the
+	// filter closed, so j/k navigate instead of typing — the walk's dead `j`s. `/`
+	// opens the field, then typing narrows.
+	if m.cmdPicker.Filtering() {
+		t.Fatal("opening the stage should leave the filter closed — navigation mode")
+	}
+	m, _ = press(t, m, slash)
 	if !m.cmdPicker.Filtering() {
-		t.Fatal("opening the stage should open its filter")
+		t.Fatal("/ should open the filter field")
 	}
 	for _, r := range "mon" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
@@ -1091,6 +1100,35 @@ func TestNamespaceSelectRescopesWatch(t *testing.T) {
 	}
 	if len(fw.ns) != 2 || fw.ns[1] != "monitoring" {
 		t.Fatalf("selection should re-scope the watch to monitoring, got ns calls %v", fw.ns)
+	}
+}
+
+// TestNamespaceStagePreselectsAndNavigates is STORY-06d's headline on the walker's
+// exact surface: the namespace stage opens in navigation mode with the current
+// workspace preselected, so `j`/`k` move the list (the dead `j`s the walk hit) and the
+// thing they came to change is already highlighted.
+func TestNamespaceStagePreselectsAndNavigates(t *testing.T) {
+	fl := &fakeLister{ns: []string{"default", "kube-system", "monitoring"}}
+	m := sizedWith(t, WithNamespaceLister(fl), WithNamespace("kube-system"))
+
+	m = openNamespaceStage(t, m)
+	if m.cmdPicker.Filtering() {
+		t.Fatal("the stage should open in navigation mode, filter closed")
+	}
+	// The current workspace is preselected: kube-system, not the pinned sentinel.
+	if v, _ := m.cmdPicker.Selected(); v != "kube-system" {
+		t.Fatalf("the stage should preselect the current workspace kube-system, got %q", v)
+	}
+	// `j` (nav.down) moves the cursor instead of typing.
+	m, _ = press(t, m, tea.Key{Code: 'j', Text: "j"})
+	if v, _ := m.cmdPicker.Selected(); v != "monitoring" {
+		t.Fatalf("`j` should move down from the preselected row to monitoring, got %q", v)
+	}
+	// With no scope set, the all-namespaces sentinel is the current workspace.
+	unscoped := sizedWith(t, WithNamespaceLister(fl))
+	unscoped = openNamespaceStage(t, unscoped)
+	if v, _ := unscoped.cmdPicker.Selected(); v != namespaceAllItem {
+		t.Fatalf("an unscoped shell should preselect the all-namespaces sentinel, got %q", v)
 	}
 }
 
@@ -1177,8 +1215,9 @@ func openResourceStage(t *testing.T, m Model) Model {
 // longer opens a modal of its own, it opens the one palette with the resource verb
 // already committed — the pane-free switch of FB-nav-resource-palette (D96 slice 2)
 // on the palette's line. It is seeded synchronously from the menu's own available
-// kinds (no seam, no Cmd, nothing to wait for) and the prompt reading `:resource ` is
-// the tell that this is the palette and not a picker.
+// kinds (no seam, no Cmd, nothing to wait for). The stage opens in navigation mode
+// (STORY-06d): the list is focused, and the `:resource ` line is the filter field's
+// prompt, which appears once `/` opens the field.
 func TestResourceKeyOpensThePaletteResourceStage(t *testing.T) {
 	m := sizedWith(t, WithWatcher(&fakeWatcher{}))
 	m, cmd := press(t, m, capitalR)
@@ -1197,6 +1236,14 @@ func TestResourceKeyOpensThePaletteResourceStage(t *testing.T) {
 	if got := m.cmdPicker.Len(); got == 0 {
 		t.Fatal("the stage should list the seed resource kinds")
 	}
+	// Navigation mode: the list is the target and the line is hidden until `/`.
+	if m.cmdPicker.Filtering() {
+		t.Fatal("the stage should open in navigation mode, filter closed")
+	}
+	m, _ = press(t, m, slash)
+	if !m.cmdPicker.Filtering() {
+		t.Fatal("/ should open the filter field")
+	}
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, palettePrompt+"resource ") {
 		t.Errorf("the key should land on the palette's pre-typed line:\n%s", view)
@@ -1208,6 +1255,7 @@ func TestResourceKeyOpensThePaletteResourceStage(t *testing.T) {
 	typed, _ = press(t, typed, colon)
 	typed = typeInto(t, typed, "resource")
 	typed, _ = press(t, typed, tea.Key{Code: ' ', Text: " "})
+	typed, _ = press(t, typed, slash)
 	if got, want := stripANSI(typed.View().Content), view; got != want {
 		t.Errorf("`R` and `:resource ` should open the same stage:\ngot:\n%s\nwant:\n%s", got, want)
 	}
@@ -1245,13 +1293,18 @@ func TestResourceStageSelectSwitchesResource(t *testing.T) {
 		t.Fatal("menu.toggle should hide the menu")
 	}
 
-	// Open the stage and filter to "CronJob" (query "cron"). The filter is open with
-	// the palette (PAL-01), so the query starts on the first keystroke; the fuzzy
-	// fallback may add scattered matches below, but the contiguous one ranks first
-	// (D194 pt 1), so the cursor lands on CronJob.
+	// Open the stage and filter to "CronJob" (query "cron"). The stage opens in
+	// navigation mode (STORY-06d): the list is focused, the filter closed — `/` opens
+	// it, then the query starts on the first keystroke; the fuzzy fallback may add
+	// scattered matches below, but the contiguous one ranks first (D194 pt 1), so the
+	// cursor lands on CronJob.
 	m = openResourceStage(t, m)
+	if m.cmdPicker.Filtering() {
+		t.Fatal("opening the stage should leave the filter closed — navigation mode")
+	}
+	m, _ = press(t, m, slash)
 	if !m.cmdPicker.Filtering() {
-		t.Fatal("opening the stage should open its filter")
+		t.Fatal("/ should open the filter field")
 	}
 	for _, r := range "cron" {
 		m, _ = press(t, m, tea.Key{Code: r, Text: string(r)})
@@ -1528,9 +1581,9 @@ func menuSeamNamespace(t *testing.T, m Model) string {
 
 // TestNamespacePickerCapturesInput proves the open picker captures input: neither a
 // nav key nor a letter reaches the panes underneath (the menu cursor stays put). It
-// also pins the PAL-01 split — with the filter open from the start, a text-carrying
-// key types into the query and only a no-text key navigates (D194 pt 2/D140 pt 1),
-// so `j` filters where the arrow moves.
+// also pins the STORY-06d split — a picker opens in **navigation mode**, so `j`/`k`
+// move the list and only `/` opens a query field (D272) — so `j` navigates where the
+// arrow moves, and a letter before `/` is swallowed rather than typed.
 func TestNamespacePickerCapturesInput(t *testing.T) {
 	fl := &fakeLister{ns: []string{"default", "kube-system"}}
 	m := sizedWith(t, WithNamespaceLister(fl))
@@ -1540,7 +1593,7 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	}
 	// nav.down while the picker is open moves the picker cursor, not the menu. The
 	// picker starts on the pinned all-namespaces sentinel (row 0), so one step lands
-	// on the first concrete namespace. It has to be the arrow: `j` carries text.
+	// on the first concrete namespace.
 	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture nav.down; menu moved to %d", m.menu.Cursor())
@@ -1548,14 +1601,24 @@ func TestNamespacePickerCapturesInput(t *testing.T) {
 	if v, _ := m.cmdPicker.Selected(); v != "default" {
 		t.Fatalf("nav.down should move the picker cursor to default, got %q", v)
 	}
-	// A vim letter now types into the always-open query instead of navigating: the
-	// menu still must not move, and the list narrows to the values matching "k".
+	// The vim letter is a navigation key in navigation mode, not query text: it moves
+	// the cursor (k → up, back onto the sentinel) instead of filtering — the exact
+	// dead-end the walk found (D272). The menu still must not move.
 	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
 	if m.menu.Cursor() != 0 {
 		t.Fatalf("picker should capture a letter too; menu moved to %d", m.menu.Cursor())
 	}
+	if v, _ := m.cmdPicker.Selected(); v != namespaceAllItem {
+		t.Fatalf("'k' should navigate up to the sentinel, got %q", v)
+	}
+	// `/` opens the query field; only then does a letter filter.
+	m, _ = press(t, m, slash)
+	if !m.cmdPicker.Filtering() {
+		t.Fatal("/ should open the picker's filter field")
+	}
+	m, _ = press(t, m, tea.Key{Code: 'k', Text: "k"})
 	if v, _ := m.cmdPicker.Selected(); v != "kube-system" {
-		t.Fatalf("typing 'k' should filter to kube-system, got %q", v)
+		t.Fatalf("typing 'k' after / should filter to kube-system, got %q", v)
 	}
 }
 

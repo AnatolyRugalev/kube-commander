@@ -211,10 +211,10 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
-	// The picker contexts (HINT-01) apply the same rule to an overlay. Every picker
-	// opens its filter with itself since PAL-01, so the honest set with the field open
-	// is the no-text keys the root routes: move, confirm, cancel. The closed-field
-	// state exists only on a WithOptInFilter picker, where `/` is what opens it.
+	// The picker contexts (HINT-01) apply the same rule to an overlay. Since STORY-06d
+	// a picker opens in navigation mode with its field closed, so the honest set with
+	// the field open (HelpPickerFilter) is the no-text keys the root routes: move,
+	// confirm, cancel — plus `/`, which is what opens the closed field (HelpPicker).
 	pickerFilter := descs(hm.ShortHelpContext(HelpPickerFilter))
 	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionBack} {
 		if !pickerFilter[a.Describe()] {

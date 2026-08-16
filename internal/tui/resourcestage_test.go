@@ -59,6 +59,7 @@ func pickerLabels(m Model) []string {
 func TestResourceStageFindsAKindByItsPlural(t *testing.T) {
 	m := discoveredWith(t, crd("external-secrets.io", "ExternalSecret", "externalsecrets", "es"))
 	m = openResourceStage(t, m)
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "externalsecrets")
 	if got := m.cmdPicker.Len(); got != 1 {
 		t.Fatalf("query %q left %d rows, want 1 (ExternalSecret)", "externalsecrets", got)
@@ -73,6 +74,7 @@ func TestResourceStageFindsAKindByItsPlural(t *testing.T) {
 func TestResourceStageFindsAKindByItsShortName(t *testing.T) {
 	m := discoveredWith(t, crd("external-secrets.io", "ExternalSecret", "externalsecrets", "es"))
 	m = openResourceStage(t, m)
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "es")
 	if v, _ := m.cmdPicker.Selected(); v != "ExternalSecret" {
 		t.Fatalf("selected %q, want ExternalSecret (its short name is the exact query)", v)
@@ -88,6 +90,7 @@ func TestResourceStageFindsAKindByItsGroup(t *testing.T) {
 		crd("external-secrets.io", "SecretStore", "secretstores"),
 	)
 	m = openResourceStage(t, m)
+	m, _ = press(t, m, slash) // the stage is navigation mode (STORY-06d); `/` opens the field
 	m = typeInto(t, m, "external-secrets.io")
 	if got := m.cmdPicker.Len(); got != 2 {
 		t.Fatalf("query by group left %d rows, want the group's 2 kinds", got)
