@@ -784,10 +784,15 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       notes: Landed as D275: `app.unhealthy` (`H`, shift+h — the feedback's own "healthy vs h") narrows the current resource table to the rows the M4-06 classifier reads as unhealthy — a row any visible cell classifies to warn/error (CrashLoopBackOff, ImagePullBackOff, Pending/unschedulable, not-ready, a stuck claim). It composes with the `/` substring filter (a row must survive both), resets on a new resource exactly as the substring filter does, and `esc` clears it as "show me everything again". The status bar shows an `unhealthy` marker while the view is on, so a narrowed table never reads as an empty one; the palette lists the verb too. Feedback `2026-08-15-unhealthy-workloads-quick-access.md` deleted (D69). The cross-kind sweep that makes a non-pod failure findable from anywhere is 06g-2.
       → milestone: M5 · knowledge: decisions.md D268, D275
 
-- [ ] **STORY-06g-2** The unhealthy surface spans kinds — from anywhere, list broken resources across kinds (pods *and* claims/volumes etc.), so a failure that is not a pod finds the operator (`2026-08-15-pod-first-blinds-non-pod-failures.md`)
+- [ ] **STORY-06g-2a** The cross-kind unhealthy sweep primitive — `kube.Scan` fans out a concurrent, capped, fault-isolated list across kinds keeping rows a caller-supplied `RowFilter` accepts (the M4-06 health predicate is a display concern, so the primitive takes it as a seam), streaming ScanMatch/ScanKindDone/ScanDone events like Search — the bottom-up first slice of STORY-06g-2
+      status: in-progress | owner: opencode | added: 2026-08-16
+      notes: First half of STORY-06g-2, split on pickup (D52's primitive-before-surface rhythm, the M4-07→M4-08 / SEARCH-02a→02b shape). The feedback file `2026-08-15-pod-first-blinds-non-pod-failures.md` stays with the surface that completes the address (06g-2b, D69). The predicate is `func(*Table, Row) bool` so kube never learns the M4-06 classifier (color.go); a hit carries the row cells so the surface can render the reason without re-listing.
+      → milestone: M5 · knowledge: decisions.md D268, D275, D276
+
+- [ ] **STORY-06g-2b** The cross-kind unhealthy surface — from anywhere, list the broken resources `kube.Scan` finds across kinds (pods *and* claims/volumes), each row navigable, so a failure that is not a pod finds the operator (`2026-08-15-pod-first-blinds-non-pod-failures.md`)
       status: todo | owner: — | added: 2026-08-16
-      notes: Second half of STORY-06g, split from 06g-1 by D275. Needs a cross-kind sweep primitive (like `kube.Search` but filtering on the M4-06 health predicate) plus a surface to present it — the S02 story's fifth failure is a PVC, invisible to a pod-first walk.
-      → milestone: M5 · knowledge: decisions.md D268, D275
+      notes: Second half of STORY-06g-2. Needs a viewer/list surface fed by `kube.Scan` with the M4-06 row predicate plus a gesture to open it from anywhere; deletes the feedback file when it lands (D69).
+      → milestone: M5 · knowledge: decisions.md D268, D275, D276
 
 - [ ] **STORY-06h** Rich describe panel — the describe view fully replaces the right pane and paints the diagnosis with color: phase/status/conditions in theme-aware colours, problem states emphasized (`2026-08-15-rich-describe-panel.md` + `2026-08-15-describe-replaces-right-pane.md`)
       status: todo | owner: — | added: 2026-08-15
