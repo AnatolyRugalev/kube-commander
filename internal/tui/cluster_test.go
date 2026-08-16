@@ -72,6 +72,9 @@ func (fakeClusterClient) ServicePorts(context.Context, kube.ObjectRef, kube.Obje
 func (fakeClusterClient) Search(context.Context, []kube.Resource, string, kube.SearchQuery, int) <-chan kube.SearchEvent {
 	return nil
 }
+func (fakeClusterClient) Scan(context.Context, []kube.Resource, string, kube.RowFilter, int) <-chan kube.ScanEvent {
+	return nil
+}
 func (fakeClusterClient) Exec(context.Context, kube.ObjectRef, kube.ExecOptions) error { return nil }
 func (fakeClusterClient) Children(context.Context, kube.Resource, kube.ObjectRef, []kube.Resource) (kube.ChildScope, error) {
 	return kube.ChildScope{}, nil

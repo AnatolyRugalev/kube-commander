@@ -67,6 +67,12 @@ const (
 	// browse body and captures every keypress while it is up: navigate the streamed
 	// results, open one, or clear-then-close the query.
 	HelpSearch
+	// HelpUnhealthy is the cross-kind unhealthy list (STORY-06g-2), which like the
+	// search mini-app replaces the browse body and captures every keypress while it
+	// is up: navigate the streamed hits, open one, or close the view. It is a pure
+	// list with no query field — every mapped key is a navigation action, so the
+	// hint is the pager set (D276).
+	HelpUnhealthy
 	// HelpLogs is the dedicated logs mini-app (LOGS-02) with its live grep closed:
 	// scroll the stream, open the grep, toggle follow, close the view.
 	HelpLogs
@@ -128,6 +134,7 @@ var helpContextNames = [helpContextCount]string{
 	HelpMenu:         "HelpMenu",
 	HelpTable:        "HelpTable",
 	HelpSearch:       "HelpSearch",
+	HelpUnhealthy:    "HelpUnhealthy",
 	HelpLogs:         "HelpLogs",
 	HelpLogsFilter:   "HelpLogsFilter",
 	HelpPickerFilter: "HelpPickerFilter",
@@ -297,6 +304,10 @@ var contextShortHelpActions = map[HelpContext][]Action{
 	HelpMenu:   {ActionDown, ActionUp, ActionDrillIn, ActionFilter, ActionPin, ActionNamespace, ActionHelp, ActionQuit},
 	HelpTable:  {ActionDown, ActionUp, ActionFilter, ActionUnhealthy, ActionSearchNext, ActionSort, ActionActions, ActionBack, ActionNamespace, ActionHelp, ActionQuit},
 	HelpSearch: {ActionDown, ActionUp, ActionDrillIn, ActionSearchAllKinds, ActionSearchAllNamespaces, ActionBack},
+	// The unhealthy list is a pager (D276): navigate the hits, open one, leave. The
+	// quit key closes the view like every full-screen pager, and drillIn is what
+	// opens a hit (switching browse to it), so the set is the pager's.
+	HelpUnhealthy: {ActionDown, ActionUp, ActionDrillIn, ActionBack, ActionQuit},
 	// logs.regex is offered by HelpLogsFilter rather than here, which is where it acts
 	// on something: with the grep closed there is no query for it to re-interpret, and
 	// the hint is a line, not a list — LOGS-SEL-02's `v`/`y` are the two gestures a

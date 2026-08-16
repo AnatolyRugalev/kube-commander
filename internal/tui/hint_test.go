@@ -290,6 +290,10 @@ func TestEveryHelpContextIsReachable(t *testing.T) {
 		keymap.HelpSearch: func(t *testing.T) Model {
 			return wide(t, openSearchView(t, &fakeSearcher{}))
 		},
+		keymap.HelpUnhealthy: func(t *testing.T) Model {
+			m, _ := openUnhealthyView(t, &fakeScanner{})
+			return wide(t, m)
+		},
 		keymap.HelpLogs: func(t *testing.T) Model {
 			return wide(t, openLogsWithLines(t, "GET /healthz 200"))
 		},

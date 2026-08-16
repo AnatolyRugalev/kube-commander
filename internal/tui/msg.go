@@ -230,6 +230,38 @@ func searchPump(ch <-chan kube.SearchEvent) tea.Cmd {
 	}
 }
 
+// ScanEventMsg is one event from a cross-kind scan sweep (STORY-06g-2), carried
+// into the update loop verbatim from kube.Scan's channel: a match, a kind that
+// finished (the progress signal), or the terminal done-with-cap-reason (D276). A
+// scan has no error channel — a per-kind List failure is swallowed by the kube
+// layer into ScanKindDone{Failed} and simply contributes nothing (D131 pt 3) — so
+// a consumer only ever sees events and the terminal ScanClosedMsg.
+type ScanEventMsg struct {
+	Event kube.ScanEvent
+}
+
+// ScanClosedMsg tells the model a Scan channel has closed and the pump has
+// stopped: the sweep finished, hit its cap, or was cancelled (the view closing or
+// the app quitting). Like SearchClosedMsg it is the pump's terminal message — the
+// model must not re-issue the pump after it.
+type ScanClosedMsg struct{}
+
+// scanPump reads one event from a kube.Scan channel and returns it as a
+// ScanEventMsg, or ScanClosedMsg when the channel closes. The model re-issues it
+// after each event to pull the next (one receive per Cmd, M2-02/D53) and stops on
+// the close, so hits stream into the view as each kind returns rather than
+// landing in one batch at the end. The whole receive happens inside the returned
+// tea.Cmd, off the update goroutine.
+func scanPump(ch <-chan kube.ScanEvent) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return ScanClosedMsg{}
+		}
+		return ScanEventMsg{Event: ev}
+	}
+}
+
 // DrainProgressMsg is one progress step from a streaming node drain (M3-11b),
 // carried into the update loop verbatim from a kube.DrainEvent's Message ("evicted
 // ns/web (2/5)"). A drain failure is *not* delivered as a DrainProgressMsg — the

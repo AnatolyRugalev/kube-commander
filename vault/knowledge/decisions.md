@@ -7900,3 +7900,40 @@ full-screen surfaces:
    and knows nothing about clients (SEARCH-02a's rhythm). This slice (06g-2b-1)
    is the component + the seams in isolation; the wiring that opens it and feeds
    it `kube.Scan` is 06g-2b-2, which deletes the feedback file (D69).
+
+## D279 — the unhealthy sweep is wired as a one-shot scan on `U`, over the menu's kinds, reusing the search pending-selection mechanism (2026-08-16, STORY-06g-2b-2)
+
+The wiring that makes the cross-kind list reachable (the second half of D278
+pt 3) lands the seam and the gesture:
+
+1. **The `Scanner` seam mirrors `Searcher` exactly** — `Scanner` over `kube.Scan`
+   on the `Cluster` bundle (D155), `WithScanner` option, nil → scan-inert (the
+   `U` key opens nothing, like `ctrl+f` with no searcher). A later leg must not
+   give the sweep a hand-rolled fan-out or a second client path: one primitive
+   (`kube.Scan`), one seam.
+2. **The gesture is a browse action `app.unhealthyScan` on `U`** — the capital
+   **U**nhealthy, the cross-kind partner to the per-kind `H` filter, app-global
+   and inert without a scanner. It opens the view and runs exactly one sweep over
+   `availableResources()` (every kind the menu offers — the whole point is that
+   the broken thing may be a kind the operator is not looking at), in the app's
+   own namespace, capped at `scanHitLimit` = 200 (the search cap, D131 pt 4).
+   Unlike search there is no curated narrow set: the sweep covers all offered
+   kinds, never a subset.
+3. **The sweep runs once, on open, over a generation-guarded pump.** `scanGen`/
+   `scanCancel`/`scanCh` mirror `searchGen`/`searchCancel`/`searchCh` (D140
+   pt 3): every close bumps the generation so a cancelled sweep's draining events
+   are dropped rather than appended to a view that is no longer up. `stopScan`
+   joins the `stopClusterAsync` inventory (D155 pt 1) so the sweep dies on quit
+   and on a context switch.
+4. **Drill-in reuses the search pending-selection mechanism.** `handleUnhealthySelected`
+   closes the list, switches browse to the hit's kind through `selectResource`,
+   and stashes the hit's row object as `searchTarget`/`hasSearchTarget` — the
+   exact fields the search drill-in leaves behind (D276 pt 4's sibling), consumed
+   by the same `applyPendingSelect` when the fresh watch's first RESET lands. A
+   later leg must not add a second pending-selection field: one mechanism, shared
+   by both drill-ins, cleared by `watchResource` and `resetCluster`.
+5. **The view routes like the logs view with its grep closed** — it has no text
+   field, so keys resolve through the browse keymap (sequencer) and `handleAction`
+   intercepts `unhealthyView.Active()` to feed them to the view; `q` closes the
+   view like every full-screen pager. It gets its own `HelpUnhealthy` hint context
+   (D143 pt 1) so the bottom line never advertises the browse set underneath.

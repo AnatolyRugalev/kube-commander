@@ -27,6 +27,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/components/secretviewer"
 	"github.com/neuroplastio/kubecom/internal/tui/components/statusbar"
 	"github.com/neuroplastio/kubecom/internal/tui/components/table"
+	"github.com/neuroplastio/kubecom/internal/tui/components/unhealthyview"
 	"github.com/neuroplastio/kubecom/internal/tui/components/viewer"
 	"github.com/neuroplastio/kubecom/internal/tui/components/welcome"
 	"github.com/neuroplastio/kubecom/internal/tui/help"
@@ -617,13 +618,16 @@ type Model struct {
 	viewer     viewer.Model
 	modal      modal.Model
 	welcome    welcome.Model
-	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b) and logsView
-	// the dedicated logs mini-app (LOGS-01/02): unlike every field above neither is an
-	// overlay — while one is up it *is* the body, composited in place of the browse
-	// panes (D134). Follow state and the live grep live inside logsView, not on the
-	// model, so the shell holds no second copy of what the view renders.
-	searchView searchview.Model
-	logsView   logsview.Model
+	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b), logsView
+	// the dedicated logs mini-app (LOGS-01/02), and unhealthyView the cross-kind
+	// unhealthy list (STORY-06g-2b-1): unlike every field above none is an overlay —
+	// while one is up it *is* the body, composited in place of the browse panes
+	// (D134). Follow state and the live grep live inside logsView, the hits and
+	// cursor inside unhealthyView, so the shell holds no second copy of what the
+	// view renders.
+	searchView    searchview.Model
+	logsView      logsview.Model
+	unhealthyView unhealthyview.Model
 
 	// context is the resolved kube context name and version the build version;
 	// both are cosmetic, shown on the status bar (context) and the startup welcome
@@ -1038,6 +1042,19 @@ type Model struct {
 	searchTarget    kube.ObjectRef
 	hasSearchTarget bool
 
+	// The one-shot cross-kind scan sweep behind the app.unhealthyScan action
+	// (STORY-06g-2b-2). Like a search the sweep is a channel pumped item by item
+	// (D53): scanCh is re-read to pull the next hit and scanCancel tears the
+	// fan-out down when the view closes or the app quits. scanGen tags every
+	// pumped event with the sweep it belongs to, so an event from a superseded
+	// sweep — one whose channel is still draining after cancellation — is dropped
+	// rather than shown under a sweep it does not describe, exactly as watchGen
+	// and searchGen guard their pumps. All are touched only from the single-
+	// threaded update loop.
+	scanCh     <-chan kube.ScanEvent
+	scanCancel context.CancelFunc
+	scanGen    int
+
 	// filter is the filter field (M2-09b / STORY-06m): app.filter (`/`) opens it
 	// over whichever pane holds focus — the current resource table when the table
 	// is focused (typing narrows the live rows through table.SetFilter, D78), or
@@ -1164,6 +1181,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.welcome = welcome.New(s)
 	m.searchView = searchview.New(s)
 	m.logsView = logsview.New(s)
+	m.unhealthyView = unhealthyview.New(s)
 	m.pfPanel = forwards.New(s)
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
@@ -1586,6 +1604,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closeSearch()
 		return m, nil
 
+	case scanMsg:
+		return m.handleScanMsg(msg)
+
+	case unhealthyview.SelectedMsg:
+		return m.handleUnhealthySelected(msg)
+
+	case unhealthyview.ClosedMsg:
+		// The unhealthy list dismissed itself (nav.back). Hide it and cancel any sweep
+		// still running; the browse view underneath is untouched, so the table keeps
+		// whatever selection it had.
+		m.closeUnhealthy()
+		return m, nil
+
 	case viewer.ClosedMsg:
 		// The viewer dismissed itself (nav.back). Hide it and return focus to the browse
 		// view underneath (the table keeps whatever selection it had). No log stream to
@@ -1897,7 +1928,9 @@ func (m *Model) stopClusterAsync() {
 	m.discoveryGen++ // a result from the cancelled pass is now stale.
 	m.stopLogStream()
 	m.stopSearch()
-	m.searchGen++    // in-flight search hits are now stale.
+	m.searchGen++ // in-flight search hits are now stale.
+	m.stopScan()
+	m.scanGen++      // in-flight scan hits are now stale.
 	m.viewerGen++    // in-flight describe/secret/YAML fetches and log lines are now stale.
 	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
 	m.childGen++     // an in-flight child-scope resolve names an object on this cluster.
@@ -4001,6 +4034,12 @@ func (m *Model) hintContext() keymap.HelpContext {
 		// The confirm modal captures all input and answers in the confirm key context
 		// (D132), so the keys that act here are not browse keys at all (HINT-02).
 		return keymap.HelpConfirm
+	case m.unhealthyView.Active():
+		// The cross-kind unhealthy list replaces the browse body and captures every
+		// keypress while it is up (handleUnhealthyAction), so the browse set underneath
+		// is unreachable (STORY-06g-2b). Resolved before the logs view for the same
+		// reason handleAction orders them so.
+		return keymap.HelpUnhealthy
 	case m.logsView.Active():
 		// The logs mini-app with its grep closed honours every key it advertises, `q`
 		// included — quit closes the view, as it does in any pager.
@@ -4069,7 +4108,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filter.Active()
+	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filter.Active() || m.unhealthyView.Active()
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -4249,6 +4288,7 @@ func (m *Model) resize() {
 	// outright (D134), so they take the full body geometry rather than centering in it.
 	m.searchView.SetSize(m.width, bodyH)
 	m.logsView.SetSize(m.width, bodyH)
+	m.unhealthyView.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
 }
 
@@ -4298,6 +4338,15 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	// help/viewer capture pattern). It consumes actions, never raw keys (D11).
 	if m.modal.Active() {
 		return m.handleModalAction(a)
+	}
+	// The cross-kind unhealthy list (STORY-06g-2b) is a full-screen mini-app like
+	// the logs view: while it is up it captures every action — scrolling the hits,
+	// drill-in (SelectedMsg), back (ClosedMsg) — and swallows the rest, so the
+	// browse panes underneath never move. It opens no pickers or modals, so no
+	// surface can appear over it (the capture pattern). Resolved before the logs
+	// view for the same reason hintContext orders them so.
+	if m.unhealthyView.Active() {
+		return m.handleUnhealthyAction(a)
 	}
 	// The dedicated logs view (LOGS-02) is a full-screen mini-app: while it is up it
 	// captures every action — scrolling, the live grep, the follow toggle, close — and
@@ -4437,6 +4486,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionSearch:
 		return m.openSearch()
+	case keymap.ActionUnhealthyScan:
+		return m.openUnhealthy()
 	case keymap.ActionPin:
 		return m.pinResource()
 	case keymap.ActionDescribe, keymap.ActionEvents, keymap.ActionLogs,
@@ -4632,6 +4683,13 @@ func (m Model) View() tea.View {
 		// keeping only the status bar above and the hint line below. No overlay can be
 		// open at the same time — it captures all input and opens none.
 		body = m.searchView.View()
+	case m.unhealthyView.Active():
+		// The cross-kind unhealthy list is the other full-screen view (STORY-06g-2b):
+		// it too replaces the browse body while it is up (hits span kinds and want every
+		// row), keeping only the status bar above and the hint line below. No overlay can
+		// be open at the same time — it captures all input and opens none, exactly like
+		// the search view.
+		body = m.unhealthyView.View()
 	case m.logsView.Active():
 		// The logs mini-app is the other full-screen view (LOGS-02): logs want every
 		// row for throughput, so it too replaces the browse body rather than centering

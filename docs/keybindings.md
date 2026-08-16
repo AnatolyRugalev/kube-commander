@@ -33,6 +33,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `app.searchNext` | `n` | Next match |
 | `app.searchPrev` | `#` | Previous match |
 | `app.unhealthy` | `H` | Unhealthy only |
+| `app.unhealthyScan` | `U` | Unhealthy anywhere |
 | `app.help` | `?` | Toggle help |
 | `app.quit` | `q` / `ctrl+c` | Quit |
 | `app.palette` | `:` | Command palette |

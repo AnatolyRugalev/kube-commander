@@ -66,6 +66,8 @@ Search the open table to quickly highlight and navigate matching rows. Typing na
 
 Press `H` to see only the rows that are not healthy — a CrashLoopBackOff or ImagePullBackOff pod, a Pending or unschedulable workload, a stuck claim. It is the "what's broken, filtered" view for the kind you are on: `H` again (or `esc`) brings every row back, and it composes with `/` so you can search inside the broken set.
 
+Press `U` to list every unhealthy resource **across all kinds at once** — pods *and* the non-pod things a pod-first check misses (a stuck PVC or claim, an unschedulable workload of any kind). The list streams in as each kind is scanned, tracks its progress in the header, and each hit can be opened to jump straight to the broken object.
+
 To search the entire cluster instead of just the open table, use the cluster search (`:search`). Matches stream in across kinds in the current namespace. Results are ranked and fuzzy-matched, and can also be narrowed using standard Kubernetes label selectors (`-l app=web`). 
 
 For broader queries, you can widen the search to every kind your cluster exposes or to all namespaces. These toggles are temporary and reset on your next search to keep regular queries fast.

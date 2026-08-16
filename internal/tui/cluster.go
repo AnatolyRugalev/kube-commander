@@ -77,6 +77,12 @@ type Cluster struct {
 	searcher Searcher
 	execer   Execer
 
+	// scanner runs the cross-kind unhealthy sweep (STORY-06g-2): a one-shot,
+	// cancellable kube.Scan over the menu's kinds keeping the rows the M4-06
+	// classifier reads as unhealthy. Nil → the unhealthy-scan action is inert,
+	// exactly as a nil searcher makes cluster search inert.
+	scanner Scanner
+
 	// childResolver turns a selected owner row into the scope its pods are listed
 	// under (M4-08). Nil → the children drill-down is inert.
 	childResolver ChildResolver
@@ -119,6 +125,7 @@ type ClusterClient interface {
 	Execer
 	ChildResolver
 	MetricsLister
+	Scanner
 }
 
 // NewCluster bundles one cluster's client into the seams the shell drives. It is the
@@ -151,6 +158,7 @@ func NewCluster(c ClusterClient, pf PortForwarder) Cluster {
 		execer:          c,
 		childResolver:   c,
 		metricsLister:   c,
+		scanner:         c,
 	}
 }
 

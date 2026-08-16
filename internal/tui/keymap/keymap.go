@@ -55,6 +55,14 @@ const (
 	// action (not row-scoped), app-global like app.filter, and inert with no
 	// resource table showing.
 	ActionUnhealthy Action = "app.unhealthy"
+	// ActionUnhealthyScan opens the cross-kind "what's broken" list (STORY-06g-2):
+	// a kube.Scan sweep over every kind the menu offers, keeping the rows the M4-06
+	// classifier reads as unhealthy, so a failure that is not a pod — a stuck PVC,
+	// a broken claim — finds the operator instead of the operator guessing which
+	// kind to visit (D276). It is the cross-kind twin of ActionUnhealthy (H narrows
+	// the kind you are on; this sweeps them all), app-global, and inert with no
+	// scanner wired.
+	ActionUnhealthyScan Action = "app.unhealthyScan"
 	// ActionPalette opens the command palette (PAL-02): one modal list of the
 	// app-global *verbs*, fuzzy-ranked like every other picker (D194 pt 1), whose
 	// pick runs the chosen verb through the same action dispatch a key press takes.
@@ -314,6 +322,7 @@ var actionMeta = []struct {
 	{ActionSearchNext, "Next match"},
 	{ActionSearchPrev, "Previous match"},
 	{ActionUnhealthy, "Unhealthy only"},
+	{ActionUnhealthyScan, "Unhealthy anywhere"},
 	{ActionHelp, "Toggle help"},
 	{ActionQuit, "Quit"},
 	{ActionPalette, "Command palette"},
@@ -407,6 +416,14 @@ var defaultBindings = map[Action][]string{
 	// partner to the lowercase nav keys, free in the browse context, not a reserved
 	// nav chord (D10). It is the "what's broken, filtered" twin of `/` (STORY-06g-1).
 	ActionUnhealthy: {"H"},
+	// The cross-kind sweep takes the capital `U` — the mnemonic **U**nhealthy
+	// (across kinds), the capital-letter partner to the per-kind `H` filter beside
+	// it, free in the browse context, not a reserved nav chord (D10), and it joins
+	// the capital-letter app-global family (`C` context, `N` namespace, `E` events,
+	// `L` logs, `P` pods, `F` forwards, `X` stop-all). One gesture from anywhere to
+	// "everything broken, of any kind" — the answer to the S02 miss the sweep
+	// exists for (D276).
+	ActionUnhealthyScan: {"U"},
 	// Previous-match leaves the n-family entirely after the walk read it as the most
 	// confusing corner of the keymap: `N` is now ns.switch, and `#` is vim's own
 	// backward-occurrence gesture (the mirror of `*`, which pin already claims).
