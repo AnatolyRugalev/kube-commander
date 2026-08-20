@@ -4259,14 +4259,7 @@ func (m *Model) resize() {
 	if bodyH < 0 {
 		bodyH = 0
 	}
-	menuW := menuPaneWidth(m.width)
-	if m.menuHidden {
-		menuW = 0 // hidden menu: the table takes the full width.
-	}
-	tableW := m.width - menuW
-	if tableW < 0 {
-		tableW = 0
-	}
+	menuW, tableW := m.paneWidths()
 	m.menu.SetSize(menuW, bodyH)
 	m.table.SetSize(tableW, bodyH)
 	// The welcome page stands in for the table until a resource is drilled into, so
@@ -4278,9 +4271,11 @@ func (m *Model) resize() {
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
-	// The viewer is the large overlay; it too centers within the body area (above the
-	// status bar) so the top status line and bottom hint line stay visible around it.
-	m.viewer.SetSize(m.width, bodyH)
+	// The shared viewer (describe / YAML / secret / events) is not an overlay: it
+	// takes the right pane outright (D284), so it gets the table's geometry and the
+	// composite lands it at the pane's origin. A hidden menu hands it the full
+	// width, exactly as it does the table.
+	m.viewer.SetSize(tableW, bodyH)
 	// The confirm modal (M3-09) is a small centered overlay; it too sits within the
 	// body area so the top status line and bottom hint line stay visible around it.
 	m.modal.SetSize(m.width, bodyH)
@@ -4290,6 +4285,35 @@ func (m *Model) resize() {
 	m.logsView.SetSize(m.width, bodyH)
 	m.unhealthyView.SetSize(m.width, bodyH)
 	m.help.SetHeight(bodyH)
+}
+
+// rightPaneX is the body column the right pane starts at — where the viewer is
+// composited so it covers exactly the pane the table occupies (D284). It is read
+// off the *rendered* menu rather than computed from paneWidths because the menu's
+// frame is two columns narrower than the width it is sized to (its View hands
+// m.width-2 to the border-box frame), so menuPaneWidth is not where the boundary
+// actually falls. A hidden menu renders nothing and the pane starts at 0.
+func (m Model) rightPaneX() int { return lipgloss.Width(m.menu.View()) }
+
+// paneWidths splits the terminal width between the two browse panes: the menu's
+// total width and the right pane's (the table's, and — since D284 — the shared
+// viewer's). A hidden menu (menu.toggle) is zero-width, handing the full width to
+// the right pane. Both are floored at zero so a degenerate terminal cannot produce
+// a negative geometry. resize sizes the panes from it and View composites the
+// viewer at menuW, so the two can never disagree about where the right pane starts.
+func (m Model) paneWidths() (menuW, rightW int) {
+	menuW = menuPaneWidth(m.width)
+	if m.menuHidden {
+		menuW = 0
+	}
+	rightW = m.width - menuW
+	if rightW < 0 {
+		rightW = 0
+	}
+	if menuW < 0 {
+		menuW = 0
+	}
+	return menuW, rightW
 }
 
 // menuPaneWidth is the menu pane's total width for a given terminal width: a
@@ -4715,7 +4739,10 @@ func (m Model) View() tea.View {
 	case m.portPicker.Active():
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
-		body = overlayCenter(body, m.viewer.View(), m.width, m.bodyHeight())
+		// The shared pager replaces the right pane rather than floating inside it
+		// (D284): describe output — the on-call diagnostic — gets the pane's whole
+		// width and height, and the resources menu stays visible to its left.
+		body = overlayAt(body, m.viewer.View(), m.rightPaneX(), 0, m.width, m.bodyHeight())
 	case m.pfPanel.Active():
 		body = overlayCenter(body, m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.keymap), m.width, m.bodyHeight())
 	}

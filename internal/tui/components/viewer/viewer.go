@@ -1,5 +1,5 @@
-// Package viewer is kubecom's shared read-only text pager: a centered, bordered
-// overlay that renders a block of text (an object's YAML, a describe dump, a log
+// Package viewer is kubecom's shared read-only text pager: a bordered pane that
+// renders a block of text (an object's YAML, a describe dump, a log
 // stream, a revealed secret) in a scrollable viewport with a title bar. It is the
 // common substrate every M3 viewer sits on — M3-03 (YAML), M3-04 (describe),
 // M3-05..07 (logs), M3-08 (secret) all feed content into this one component rather
@@ -15,9 +15,11 @@
 // resolves a KeyMsg to an Action and hands the Action to Update. The viewport's own
 // key bindings are never fed a KeyMsg, so no hard-coded key leaks into behaviour. It
 // emits its own message type (ClosedMsg) so it never imports the root package (D56),
-// holds no shared mutable state (principle 1), and returns a **bare box** the root
-// composites over the base browse view via overlayCenter (D95) — it never replaces
-// the base.
+// holds no shared mutable state (principle 1), and returns a **bare box** sized to
+// exactly the area it was given, which the root composites over the *right pane* of
+// the browse view (D284): a pager is not a popup — its content is the thing being
+// read, so it takes the whole pane rather than floating as an inset inside it. D95
+// (popups overlay the browse view) still governs the modals — help, pickers, confirm.
 package viewer
 
 import (
@@ -39,14 +41,12 @@ type ClosedMsg struct {
 	Kind string
 }
 
-// Layout: the viewer takes most of the screen (viewers show large content — YAML,
-// logs, describe output — so unlike the small picker it wants room), clamped to a
-// margin so the base browse view still peeks around the bordered box.
+// Layout: the viewer fills the area it is sized to, edge to edge (D284). Viewers
+// show large content — YAML, logs, describe output — and the shell hands them the
+// right pane, so every cell of it is content; there is no margin to keep clear,
+// since the pane the box replaces is the base that used to peek around it.
 const (
-	screenMargin = 4 // cells kept clear around the box on each axis
-	minWidth     = 20
-	minHeight    = 5
-	titleHeight  = 1 // the title line above the viewport
+	titleHeight = 1 // the title line above the viewport
 )
 
 // Model is the read-only pager overlay. Every field is owned by the embedding root
@@ -128,8 +128,9 @@ func (m *Model) AppendContent(line string) {
 // on screen (a mid-stream drop after some output).
 func (m Model) Empty() bool { return m.content == "" }
 
-// SetSize records the full screen size; the box is sized and centered within it, and
-// the inner viewport is sized to the box's content area.
+// SetSize records the area the viewer occupies — the shell's right pane, not the
+// full screen (D284). The box fills it exactly and the inner viewport is sized to
+// the box's content area inside the frame.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = w, h
 	iw, ih := m.innerSize()
@@ -192,24 +193,11 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// boxSize is the bordered box's total width/height (including its border): the
-// screen minus a small margin on each axis, floored so it never collapses, and never
-// larger than the screen.
+// boxSize is the bordered box's total width/height (including its border): exactly
+// the area the viewer was sized to (D284), floored at zero so a degenerate size
+// renders nothing rather than a negative geometry.
 func (m Model) boxSize() (int, int) {
-	w := m.width - screenMargin
-	if w < minWidth {
-		w = minWidth
-	}
-	if w > m.width {
-		w = m.width
-	}
-	h := m.height - screenMargin
-	if h < minHeight {
-		h = minHeight
-	}
-	if h > m.height {
-		h = m.height
-	}
+	w, h := m.width, m.height
 	if w < 0 {
 		w = 0
 	}
@@ -236,8 +224,8 @@ func (m Model) innerSize() (int, int) {
 
 // View renders the viewer as a bordered box with a title bar above the scrollable
 // content, or "" when the viewer is hidden or unsized. The root model composites the
-// box centered over the base browse view (overlayCenter, D95) so the two-pane layout
-// stays visible underneath — the viewer floats, it never replaces the base.
+// box over the browse view's *right pane* (overlayAt, D284), so the resources menu
+// stays beside it while the pager replaces the pane it covers.
 func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""

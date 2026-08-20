@@ -2931,6 +2931,75 @@ func TestDescribeViewerOpensAndShowsContent(t *testing.T) {
 	}
 }
 
+// TestViewerReplacesTheRightPane pins D284, the S02 feedback
+// (`2026-08-15-describe-replaces-right-pane.md`): the shared pager is not a
+// centered inset — it takes the browse view's right pane whole, so a describe dump
+// gets the pane's full width and height, while the resources menu stays visible
+// beside it. The assertion is the composite itself: every body row is the menu's
+// own row followed by the viewer's own row, with nothing of the table left between
+// them.
+func TestViewerReplacesTheRightPane(t *testing.T) {
+	m := describeViewerModel(t, &fakeDescriber{text: "Name: web-1\nStatus: Running\n"})
+	_, cmd := press(t, m, describeKey)
+	next, fetchCmd := m.Update(cmd().(rowActionMsg))
+	m = next.(Model)
+	next, _ = m.Update(fetchCmd().(describeLoadedMsg))
+	m = next.(Model)
+	if !m.viewer.Active() {
+		t.Fatal("precondition: the viewer should be open")
+	}
+
+	_, rightW := m.paneWidths()
+	menuW := m.rightPaneX()
+	if menuW <= 0 || rightW <= 0 {
+		t.Fatalf("precondition: a two-pane split, got menu %d / right %d", menuW, rightW)
+	}
+	box := m.viewer.View()
+	if got := lipgloss.Width(box); got != rightW {
+		t.Errorf("viewer box width = %d, want the right pane's %d", got, rightW)
+	}
+	if got := lipgloss.Height(box); got != m.bodyHeight() {
+		t.Errorf("viewer box height = %d, want the body's %d", got, m.bodyHeight())
+	}
+
+	menuRows := strings.Split(stripANSI(m.menu.View()), "\n")
+	boxRows := strings.Split(stripANSI(box), "\n")
+	all := strings.Split(stripANSI(m.View().Content), "\n")
+	bodyRows := all[statusBarHeight : statusBarHeight+m.bodyHeight()]
+	for i, row := range bodyRows {
+		r := []rune(row)
+		if len(r) < menuW {
+			t.Fatalf("body row %d is shorter than the menu pane: %q", i, row)
+		}
+		if got, want := string(r[:menuW]), menuRows[i]; got != want {
+			t.Errorf("body row %d left of the pane origin = %q, want the menu's %q", i, got, want)
+		}
+		got := strings.TrimRight(string(r[menuW:]), " ")
+		want := strings.TrimRight(boxRows[i], " ")
+		if got != want {
+			t.Errorf("body row %d right of the pane origin = %q, want the viewer's %q", i, got, want)
+		}
+	}
+}
+
+// TestHiddenMenuGivesTheViewerTheFullWidth proves the viewer follows the same rule
+// the table does when the menu pane is toggled away (D284): no menu, no split — the
+// pager gets every column.
+func TestHiddenMenuGivesTheViewerTheFullWidth(t *testing.T) {
+	m := describeViewerModel(t, &fakeDescriber{text: "Name: web-1\n"})
+	m.menuHidden = true
+	m.resize()
+	menuW, rightW := m.paneWidths()
+	if menuW != 0 || rightW != m.width {
+		t.Fatalf("hidden menu split = %d/%d, want 0/%d", menuW, rightW, m.width)
+	}
+	m.viewer.SetContent("Name: web-1")
+	m.viewer.Show()
+	if got := lipgloss.Width(m.viewer.View()); got != m.width {
+		t.Errorf("viewer width with the menu hidden = %d, want the full %d", got, m.width)
+	}
+}
+
 // TestDescribeViewerCloses proves nav.back (esc) dismisses the viewer (its ClosedMsg,
 // delivered back through Update, hides it) and returns to the browse view.
 func TestDescribeViewerCloses(t *testing.T) {

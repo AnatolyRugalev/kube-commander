@@ -177,3 +177,38 @@ func TestTitleClipsToBox(t *testing.T) {
 		}
 	}
 }
+
+// TestBoxFillsTheAreaItIsSizedTo pins D284: the viewer is a pane, not an inset —
+// its box is exactly the width and height it was handed, with no margin kept clear
+// for a base to peek around, so the shell can drop it straight onto the right pane.
+func TestBoxFillsTheAreaItIsSizedTo(t *testing.T) {
+	for _, tc := range []struct{ w, h int }{{40, 12}, {60, 20}, {21, 6}} {
+		m := New(styles.Default(), "describe")
+		m.SetSize(tc.w, tc.h)
+		m.SetContent(numberedLines(50))
+		m.Show()
+		v := m.View()
+		if got := lipgloss.Width(v); got != tc.w {
+			t.Errorf("SetSize(%d,%d): box width = %d, want %d", tc.w, tc.h, got, tc.w)
+		}
+		if got := lipgloss.Height(v); got != tc.h {
+			t.Errorf("SetSize(%d,%d): box height = %d, want %d", tc.w, tc.h, got, tc.h)
+		}
+	}
+}
+
+// TestFillingTheAreaGrowsTheReadableWindow is the feedback's own point (S02: a
+// describe needed scrolling right after opening): the same content in the same
+// terminal shows strictly more lines now that the box is not inset by a margin.
+func TestFillingTheAreaGrowsTheReadableWindow(t *testing.T) {
+	m := New(styles.Default(), "describe")
+	m.SetSize(60, 20)
+	m.SetContent(numberedLines(200))
+	m.Show()
+	// The old inset box kept 4 cells clear on each axis, so its inner viewport was
+	// 4 rows shorter than the pane-filling one is now.
+	visible := lipgloss.Height(m.viewport.View())
+	if want := 20 - 2 - titleHeight; visible != want {
+		t.Errorf("visible content rows = %d, want %d (the pane minus its frame and title)", visible, want)
+	}
+}

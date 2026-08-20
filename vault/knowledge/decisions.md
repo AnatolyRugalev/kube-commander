@@ -8044,3 +8044,28 @@ search is paid for twice. The preview that answers it:
    fetch (describe, YAML, live status) belongs to opening the object, not to
    choosing it; a later leg that enriches this preview must keep a cursor movement
    request-free.
+
+## D284 — a pager fills the pane; only popups overlay (2026-08-20, STORY-06h-1)
+
+The S02 feedback `2026-08-15-describe-replaces-right-pane.md` reported the cost of
+rendering the shared viewer as a centered inset: describe was the walk's primary
+diagnostic and its output needed scrolling immediately, inside a box deliberately
+kept 4 cells clear of the screen edge. The split this settles:
+
+1. **The shared viewer (`components/viewer`) is a pane, not a popup.** Its box is
+   exactly the area it is sized to — no margin kept clear for a base to peek around
+   — and the shell composites it over the browse view's **right pane** (`overlayAt`
+   at the pane's origin) instead of centering it. Describe, YAML, secret and events
+   all ride that one component, so all four fill the pane. A hidden menu hands it
+   the full width exactly as it does the table.
+2. **D95 is unchanged for the modals.** Help, the pickers, the confirm modal and the
+   port-forward panel are popups — transient answers *about* the thing behind them —
+   and keep floating centered over the browse view. The distinguishing test is
+   whether the surface's content is the thing being read: a pager's is, so it takes
+   the pane; a popup's is not, so the base stays visible around it.
+3. **The pane boundary is read off the rendered menu, never recomputed.** The menu's
+   frame renders two columns narrower than the width `resize` sizes it to (its View
+   hands `m.width-2` to a border-box frame), so `menuPaneWidth` is *not* where the
+   panes actually meet. Anything composited onto the right pane must take its origin
+   from `rightPaneX()` (the rendered menu's width) so it cannot drift from the table
+   it replaces.
