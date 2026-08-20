@@ -830,7 +830,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D282
 
 - [ ] **STORY-06k-2** Search result preview — the highlighted hit's identity/snippet shown inside the search view, so the right row is picked before the view closes (`2026-08-15-search-result-preview.md`)
-      status: todo | owner: — | added: 2026-08-20
+      status: in-progress | owner: claude-opus | added: 2026-08-20 | claimed: 2026-08-20
       notes: Second slice of STORY-06k. Reuse what describe/logs already render; the S05 question "did the results tell you enough to pick the right one without opening each" is the acceptance test.
       → milestone: M5 · knowledge: decisions.md D268
 
