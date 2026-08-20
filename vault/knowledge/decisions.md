@@ -8019,3 +8019,28 @@ replaces D235's commit-then-open half:
 
 A view that pairs a text field with a result list should follow this shape rather
 than spending its confirm key on a focus change.
+
+## D283 — a search hit carries the row it was matched in, and the search view previews it (2026-08-20, STORY-06k-2)
+
+The S05 feedback `2026-08-15-search-result-preview.md` (Priority high) reported the
+cost of a result list that shows only identity: the wrong hit gets opened and the
+search is paid for twice. The preview that answers it:
+
+1. **`kube.SearchHit` carries `Columns` and `Cells`** — the object's server-printed
+   row and the column set it sat under. The search already listed that row to match
+   its name, so carrying it is free; a hit that carried nothing would force either a
+   fetch per highlighted row (a cluster round-trip on every `j`) or a preview that
+   repeats the row above it. This supersedes the "a search hit carries no printed
+   cells because drilling re-lists" rationale of D276 pt 2 — drilling in still
+   re-lists and watches the real table; the cells are for deciding *whether* to
+   drill in. Columns are shared by every hit of a kind and never mutated; a short
+   row is normal and is indexed defensively.
+2. **The preview is a two-line footer, reserved unconditionally.** Identity (kind ·
+   apiVersion · namespace/name) over the printed cells as `COLUMN: value` pairs;
+   `previewHeight` is subtracted from the list's height whether or not there are
+   hits, so rows never shift under the cursor when the first hit arrives. A kind
+   that printed no cells keeps the block's height with a blank second line.
+3. **A preview is the data the surface already holds, never a fetch.** A per-cursor
+   fetch (describe, YAML, live status) belongs to opening the object, not to
+   choosing it; a later leg that enriches this preview must keep a cursor movement
+   request-free.

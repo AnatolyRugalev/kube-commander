@@ -15,12 +15,29 @@ import (
 // SearchHit is one object matched by a cluster search. Resource is the kind the
 // object belongs to — enough for a caller to switch the browse view to that kind
 // and select the row — and Ref is the object's identity (Ref.Namespace is empty
-// for cluster-scoped kinds). A hit intentionally carries no printed cells: the
-// search matches on object name only (M1-05 rows expose the name in
-// Row.Object.Name), and drilling into a hit re-lists/watches the real table.
+// for cluster-scoped kinds).
 type SearchHit struct {
 	Resource Resource
 	Ref      ObjectRef
+
+	// Columns and Cells are the object's server-printed table row — exactly what
+	// the browse table would show for it — carried so a surface can *preview* a
+	// hit (STORY-06k-2) without listing the kind again. The search already
+	// listed that row to match its name, so carrying it is free; re-fetching it
+	// per highlighted row would put a cluster round-trip on a cursor movement.
+	//
+	// Columns is the kind's whole column set, shared by every hit of that kind
+	// (never mutated), and Cells is the row's own values in the same order —
+	// short rows are normal, so a consumer indexes defensively. Both are nil
+	// when the lister returned no columns; a consumer renders the hit's identity
+	// alone rather than treating that as an error.
+	//
+	// This supersedes the "a search hit carries no printed cells because
+	// drilling re-lists" half of D276 pt 2: drilling in still re-lists and
+	// watches the real table — the cells here are for the preview that decides
+	// *whether* to drill in.
+	Columns []Column
+	Cells   []any
 
 	// Score ranks this hit against the others of the same search: higher is a
 	// better match for SearchQuery.Name. It is a relative number with no meaning
@@ -728,6 +745,8 @@ func searchRows(ctx context.Context, lister rowLister, resources []Resource, nam
 					hit := SearchEvent{Type: SearchMatch, Hit: SearchHit{
 						Resource: r,
 						Ref:      row.Object,
+						Columns:  tbl.Columns,
+						Cells:    row.Cells,
 						Score:    score,
 						Match:    matcher.MatchSpans(row.Object.Name),
 					}}

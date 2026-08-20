@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/neuroplastio/kubecom/internal/kube"
@@ -1166,4 +1167,104 @@ func stripANSI(s string) string {
 		i++
 	}
 	return b.String()
+}
+
+// hitRow is hit() plus the printed row the search matched it in: an apiVersion on
+// the kind, the kind's columns and this object's cells (STORY-06k-2).
+func hitRow(kind, group, version, ns, name string, columns []string, cells ...any) kube.SearchHit {
+	h := hit(kind, ns, name)
+	h.Resource.GVK = schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
+	for _, c := range columns {
+		h.Columns = append(h.Columns, kube.Column{Name: c})
+	}
+	h.Cells = cells
+	return h
+}
+
+// The preview under the list describes the *highlighted* hit: its full identity
+// (kind · apiVersion · namespace/name) plus the object's own printed cells — the
+// snippet that lets the right row be picked before the view closes.
+func TestPreviewShowsTheHighlightedHitsIdentityAndCells(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hitRow("Pod", "", "v1", "default", "api-0",
+		[]string{"Name", "Ready", "Status"}, "api-0", "1/1", "Running"))
+
+	v := m.View()
+	if !strings.Contains(v, "Pod · v1 · default/api-0") {
+		t.Errorf("preview should carry the hit's full identity; got:\n%s", v)
+	}
+	if !strings.Contains(v, "READY: 1/1") || !strings.Contains(v, "STATUS: Running") {
+		t.Errorf("preview should carry the object's printed cells; got:\n%s", v)
+	}
+}
+
+// The preview tracks the cursor: moving down describes the hit now highlighted,
+// which is the whole point — the reader compares candidates without opening one.
+func TestPreviewFollowsTheCursor(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hitRow("Pod", "", "v1", "web", "api-0", []string{"Name", "Status"}, "api-0", "Running"))
+	m.AppendHit(hitRow("Deployment", "apps", "v1", "web", "api", []string{"Name", "Ready"}, "api", "0/3"))
+
+	if v := m.View(); !strings.Contains(v, "STATUS: Running") {
+		t.Fatalf("preview should start on the first hit; got:\n%s", v)
+	}
+	m, _ = m.Update(keymap.ActionDown)
+	v := m.View()
+	if !strings.Contains(v, "Deployment · apps/v1 · web/api") {
+		t.Errorf("preview should follow the cursor to the second hit; got:\n%s", v)
+	}
+	if !strings.Contains(v, "READY: 0/3") || strings.Contains(v, "STATUS: Running") {
+		t.Errorf("preview should show only the highlighted hit's cells; got:\n%s", v)
+	}
+}
+
+// With no hits there is nothing to preview: the hint takes the list's place and
+// the block is not rendered at all.
+func TestNoHitsRenderNoPreview(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "nothing")
+	if lines := m.previewLines(); lines != nil {
+		t.Errorf("previewLines with no hits = %q; want none", lines)
+	}
+	if v := m.View(); strings.Contains(v, "STATUS:") {
+		t.Errorf("no-hit view should carry no preview; got:\n%s", v)
+	}
+}
+
+// The detail line drops the NAME column (the identity line one row up already is
+// the name) and any cell the server printed nothing into, and indexes a short row
+// defensively rather than assuming cells align with columns.
+func TestPreviewDetailDropsTheNameAndEmptyCells(t *testing.T) {
+	h := hitRow("Pod", "", "v1", "web", "api-0",
+		[]string{"Name", "Ready", "Status", "Node"}, "api-0", "1/1", "", "node-a")
+	if got, want := previewDetail(h), "READY: 1/1 · NODE: node-a"; got != want {
+		t.Errorf("previewDetail = %q; want %q", got, want)
+	}
+
+	short := hitRow("Pod", "", "v1", "web", "api-0", []string{"Name", "Ready", "Status"}, "api-0", "1/1")
+	if got, want := previewDetail(short), "READY: 1/1"; got != want {
+		t.Errorf("short-row previewDetail = %q; want %q", got, want)
+	}
+}
+
+// A kind that printed no columns still gets the two-line block — the identity it
+// does have over a blank line — so the list never changes height as the cursor
+// crosses kinds.
+func TestPreviewKeepsItsHeightWithoutCells(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Node", "", "worker-1"))
+
+	lines := m.previewLines()
+	if len(lines) != previewHeight {
+		t.Fatalf("previewLines = %d lines; want %d", len(lines), previewHeight)
+	}
+	if !strings.Contains(lines[0], "Node · worker-1") {
+		t.Errorf("identity line = %q; want the cluster-scoped hit's bare name", lines[0])
+	}
+	if strings.TrimSpace(ansi.Strip(lines[1])) != "" {
+		t.Errorf("detail line = %q; want it blank when the kind printed no cells", lines[1])
+	}
 }

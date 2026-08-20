@@ -25,6 +25,12 @@
 // at their rank as they stream in, with the cursor carried along with its row (D152). The
 // view still does no matching — it sorts on the score kube already put on every hit.
 //
+// STORY-06k-2 added the **preview**: a two-line footer under the list describing the
+// highlighted hit — its full identity plus the object's own printed cells, which ride on
+// the hit (kube.SearchHit.Columns/Cells) so the preview costs no request and cannot
+// disagree with the browse table. It is what lets the right row be picked before the
+// view closes, instead of by opening the wrong one and searching again.
+//
 // SEARCH-05 gave the view its one mode: **focus**. The query field used to be open for
 // the view's entire life, which made every rune text — so `hjkl` typed instead of moving
 // and only the arrows navigated. The mode fixed that, but it put the mode change on
@@ -57,6 +63,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/neuroplastio/kubecom/internal/kube"
+	"github.com/neuroplastio/kubecom/internal/tui/components/table"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
@@ -66,9 +73,15 @@ const kind = "search"
 
 // headerHeight is the one status line above the body; queryHeight is the always-shown
 // query input line.
+// previewHeight is the footer block describing the highlighted hit (STORY-06k-2):
+// one identity line and one line of the object's own printed cells. It is
+// reserved unconditionally — the list is sized against it whether or not there
+// are hits — so the result rows never shift under the cursor at the moment the
+// first hit arrives and the block appears.
 const (
-	headerHeight = 1
-	queryHeight  = 1
+	headerHeight  = 1
+	queryHeight   = 1
+	previewHeight = 2
 )
 
 // allNamespacesLabel is what the header calls a namespace-widened search (SEARCH-04b).
@@ -739,7 +752,7 @@ func (m *Model) SetSize(w, h int) {
 // lines. Full width — the view is full-screen with no border.
 func (m Model) innerSize() (int, int) {
 	iw := m.width
-	ih := m.height - headerHeight - queryHeight
+	ih := m.height - headerHeight - queryHeight - previewHeight
 	if iw < 0 {
 		iw = 0
 	}
@@ -750,9 +763,10 @@ func (m Model) innerSize() (int, int) {
 }
 
 // View renders the full-screen search view: a header line (scope · result count ·
-// in-flight state), the query field, then the result list — or a hint line in the
-// list's place while there is nothing to show. Returns "" when hidden or unsized. The
-// root composites it as the base while it is up, not as a centered overlay (D134).
+// in-flight state), the query field, then the result list with the highlighted hit's
+// preview under it — or a hint line in the list's place while there is nothing to show.
+// Returns "" when hidden or unsized. The root composites it as the base while it is up,
+// not as a centered overlay (D134).
 func (m Model) View() string {
 	if !m.active || m.width <= 0 || m.height <= 0 {
 		return ""
@@ -779,8 +793,85 @@ func (m Model) View() string {
 		parts = append(parts, style.Width(m.width).MaxWidth(m.width).Render(m.emptyHint()))
 	} else {
 		parts = append(parts, m.list.View())
+		parts = append(parts, m.previewLines()...)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// previewLines renders the footer describing the **highlighted** hit: its full
+// identity (kind · apiVersion · namespace/name) over the object's own
+// server-printed cells (STATUS, READY, AGE, …). It answers the question a result
+// list cannot — "is this the one?" — before the reader spends an enter on it and
+// has to search again (feedback 2026-08-15-search-result-preview).
+//
+// The cells come off the hit itself (kube.SearchHit.Columns/Cells): the search
+// already listed that row to match its name, so previewing costs no request and
+// the preview cannot disagree with what the browse table would show. It is
+// deliberately *not* a describe: a per-cursor-row fetch would put a cluster
+// round-trip on every `j`, and the printed row is what a reader is picking
+// between anyway.
+//
+// Two lines, always both, so the block never changes height as the cursor moves
+// across kinds with different columns; a hit whose kind printed no cells shows a
+// blank second line rather than a shorter block. Nothing is rendered at all with
+// no hits — View shows the hint in the list's place there, and a preview of
+// nothing is a frame with no content.
+func (m Model) previewLines() []string {
+	h, ok := m.Selected()
+	if !ok {
+		return nil
+	}
+	return []string{
+		m.styles.Accent.Width(m.width).MaxWidth(m.width).Render(clip(previewIdentity(h), m.width)),
+		m.styles.Subtle.Width(m.width).MaxWidth(m.width).Render(clip(previewDetail(h), m.width)),
+	}
+}
+
+// previewIdentity is the hit's full identity line: kind · apiVersion ·
+// namespace/name. It repeats what the row shows and adds the apiVersion, which
+// is the piece that disambiguates two same-named kinds from different groups —
+// the exact case where the list row alone cannot tell the reader which hit this
+// is. A cluster-scoped object shows a bare name (its Ref.Namespace is empty).
+func previewIdentity(h kube.SearchHit) string {
+	seg := h.Resource.GVK.Kind
+	if gv := h.Resource.GVK.GroupVersion().String(); gv != "" {
+		seg += " · " + gv
+	}
+	path := h.Ref.Name
+	if h.Ref.Namespace != "" {
+		path = h.Ref.Namespace + "/" + h.Ref.Name
+	}
+	if path != "" {
+		seg += " · " + path
+	}
+	return seg
+}
+
+// previewDetail is the hit's printed row as "COLUMN: value" pairs in the
+// server's own column order — the snippet that makes two similarly named
+// objects tell themselves apart (one Running, one CrashLoopBackOff).
+//
+// The NAME column is dropped because the identity line one row up already is
+// the name, and empty values are dropped because a column the server printed
+// nothing into says nothing about this object while costing the width a column
+// that did. A row shorter than its column set is normal (the server may print
+// fewer cells), so cells are indexed defensively rather than assumed aligned.
+func previewDetail(h kube.SearchHit) string {
+	var parts []string
+	for i, c := range h.Columns {
+		if i >= len(h.Cells) {
+			break
+		}
+		if strings.EqualFold(c.Name, "name") {
+			continue
+		}
+		v := strings.TrimSpace(table.FormatCell(h.Cells[i]))
+		if v == "" {
+			continue
+		}
+		parts = append(parts, strings.ToUpper(c.Name)+": "+v)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // emptyHint is the line shown in place of an empty result list: a query that cannot be

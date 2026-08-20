@@ -890,3 +890,36 @@ func TestSearchBudgetsScatteredHitsWithinTheCap(t *testing.T) {
 		t.Error("a search that only dropped over-budget scattered hits must not report Capped")
 	}
 }
+
+// A hit carries the printed row it was matched in — the columns of its kind and
+// its own cells — so a surface can preview the object without listing the kind
+// again (STORY-06k-2). The search already read that row to match its name.
+func TestSearchCarriesThePrintedRow(t *testing.T) {
+	pods := res("", "v1", "Pod", "pods", true)
+	table := &Table{
+		Columns: []Column{{Name: "Name"}, {Name: "Status"}, {Name: "Age"}},
+		Rows: []Row{
+			{Cells: []any{"api-0", "Running", "3d"}, Object: ObjectRef{Namespace: "web", Name: "api-0"}},
+			{Cells: []any{"api-1", "CrashLoopBackOff", "5m"}, Object: ObjectRef{Namespace: "web", Name: "api-1"}},
+		},
+	}
+	f := &fakeLister{tables: map[string]*Table{"pods": table}}
+
+	cells := map[string][]any{}
+	cols := map[string][]Column{}
+	for ev := range searchRows(context.Background(), f, []Resource{pods}, "web", nameQ("api"), 0) {
+		if ev.Type == SearchMatch {
+			cells[ev.Hit.Ref.Name] = ev.Hit.Cells
+			cols[ev.Hit.Ref.Name] = ev.Hit.Columns
+		}
+	}
+	if got := cells["api-1"]; len(got) != 3 || got[1] != "CrashLoopBackOff" {
+		t.Errorf("api-1 cells = %v; want the printed row", got)
+	}
+	if got := cols["api-0"]; len(got) != 3 || got[1].Name != "Status" {
+		t.Errorf("api-0 columns = %v; want the kind's column set", got)
+	}
+	if got := cells["api-0"]; len(got) != 3 || got[1] != "Running" {
+		t.Errorf("api-0 cells = %v; want its own row, not another hit's", got)
+	}
+}
