@@ -558,6 +558,9 @@ func (m *Model) SetSize(w, h int) {
 // (mirrors the shared viewer's M3-06 follow semantics, now inside the component).
 // nav.bottom is the inverse gesture: an explicit jump to the end *resumes* following, so
 // a reader who scrolled back has one key that catches up and keeps tailing (LOGS-04c).
+// A downward scroll *past* the newest line does the same, one press later: landing on the
+// last line is still browsing, but asking to go beyond it is the same statement of intent
+// nav.bottom makes, so a reader who scrolled back down is live again (scrollDown, D281).
 // app.filter opens the live grep; logs.regex switches that grep between substring and
 // regex matching (LOGS-03); logs.wrap switches long lines between soft-wrapped and
 // clipped, and while clipped nav.left/nav.right scroll horizontally to the tail of a
@@ -588,11 +591,11 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 		m.following = false
 		m.moveCursor(-len(m.shownLines))
 	case keymap.ActionDown:
-		m.moveCursor(1)
+		m = m.scrollDown(1)
 	case keymap.ActionHalfPageDown:
-		m.moveCursor(m.page(2))
+		m = m.scrollDown(m.page(2))
 	case keymap.ActionPageDown:
-		m.moveCursor(m.page(1))
+		m = m.scrollDown(m.page(1))
 	case keymap.ActionBottom:
 		if m.Selecting() {
 			// vim's visual-mode `G`: extend the selection to the last line. It must not
@@ -603,14 +606,14 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 			m.moveCursor(len(m.shownLines))
 			return m, nil
 		}
-		// The one "catch up and keep tailing" gesture (LOGS-04c, D147). In a streaming
-		// pager the bottom is not a position: the newest line keeps moving, so a jump to
-		// the end that did not rejoin the stream would be true for exactly one frame and
-		// then drift upward as lines arrived. This is the exact inverse of the rule above
-		// — any *upward* movement pauses following, an explicit jump to the end resumes
-		// it. Incremental downward movement (nav.down, page down) deliberately does not:
-		// stepping onto the last line is browsing, not a statement about the tail, and a
-		// reader parked at the end of a paused view must be able to stay there.
+		// The immediate "catch up and keep tailing" gesture (LOGS-04c, D147). In a
+		// streaming pager the bottom is not a position: the newest line keeps moving, so
+		// a jump to the end that did not rejoin the stream would be true for exactly one
+		// frame and then drift upward as lines arrived. This is the exact inverse of the
+		// rule above — any *upward* movement pauses following, an explicit jump to the
+		// end resumes it. Incremental downward movement gets there too, one press later:
+		// stepping *onto* the last line is still browsing, and a reader parked at the end
+		// of a paused view stays there until they ask for more (scrollDown, D281).
 		// It moves the cursor too: re-arming follow pins the cursor to the newest line
 		// (syncContent does it), so `G` lands the reader and their cursor in the same
 		// place, which is where the next line will arrive.
@@ -987,6 +990,37 @@ func (m *Model) placeCursor() {
 	if m.anchor >= len(m.shownLines) {
 		m.anchor = len(m.shownLines) - 1
 	}
+}
+
+// scrollDown is every downward navigation: it steps the cursor d shown lines toward the
+// newest one — unless the cursor is already *on* the newest line, in which case the press
+// asks to go past the end of the buffer, and the only thing past the end of a stream is
+// the stream. So it re-arms following instead, exactly as nav.bottom would (D281).
+//
+// The two-step shape is the point. Landing on the last line stays browsing, so a paused
+// reader who scrolls down to read the newest line keeps their frozen snapshot; the *next*
+// press — the one vim would make a no-op — is the unambiguous "and keep going", which in
+// a pager over a live stream can only mean rejoin it. That closes the trap the S03 walk
+// hit: scrolling back to the bottom left the view silently paused, with only `G` (a key
+// the reader had no reason to reach for, being already at the end) able to revive it.
+func (m Model) scrollDown(d int) Model {
+	if m.atNewest() {
+		m.following = true
+		m.syncContent()
+		return m
+	}
+	m.moveCursor(d)
+	return m
+}
+
+// atNewest reports whether a downward move would be a no-op: the cursor sits on the last
+// shown line of a non-empty, paused, non-selecting body. Following is excluded because it
+// pins the cursor there anyway (there is nothing to re-arm), and visual mode because a
+// downward key there extends the selection — re-arming would hand its moving end to the
+// stream, the same reason `G` does not resume following mid-selection (D242 pt 5).
+func (m Model) atNewest() bool {
+	return !m.following && !m.Selecting() && len(m.shownLines) > 0 &&
+		m.cursor == len(m.shownLines)-1
 }
 
 // moveCursor steps the cursor d shown lines (negative is up), clamping at both ends, and

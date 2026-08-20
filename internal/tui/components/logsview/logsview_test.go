@@ -175,29 +175,83 @@ func TestJumpToBottomResumesFollowing(t *testing.T) {
 	}
 }
 
-// TestDownwardScrollDoesNotResumeFollowing draws the other half of the line: only the
-// *explicit* jump to the end rejoins the stream. Stepping or paging down — even all the
-// way onto the last line — is browsing, and a reader parked at the end of a paused view
-// must be able to stay there.
-func TestDownwardScrollDoesNotResumeFollowing(t *testing.T) {
+// TestDownwardScrollOntoTheLastLineStaysPaused draws the near half of the D281 line:
+// stepping or paging down *onto* the newest line is still browsing, so a reader who
+// scrolled back to read the end of a frozen snapshot keeps it frozen.
+func TestDownwardScrollOntoTheLastLineStaysPaused(t *testing.T) {
 	m := newLogs()
 	appendLines(&m, 50)
 	m, _ = m.Update(keymap.ActionTop) // pause at the top
 	for _, a := range []keymap.Action{keymap.ActionDown, keymap.ActionHalfPageDown, keymap.ActionPageDown} {
 		m, _ = m.Update(a)
 		if m.Following() {
-			t.Fatalf("%v should not resume following; only nav.bottom does", a)
+			t.Fatalf("%v short of the end should not resume following", a)
 		}
 	}
-	// Reach the last line the slow way: still paused.
-	for i := 0; i < 60; i++ {
+	// Reach the last line the slow way, one press short of stepping past it.
+	for m.Cursor() < 49 {
 		m, _ = m.Update(keymap.ActionDown)
 	}
 	if m.Following() {
-		t.Fatal("scrolling onto the last line should not resume following")
+		t.Fatal("landing on the last line should not resume following")
 	}
 	if v := plain(m.View()); !strings.Contains(v, "[paused]") {
 		t.Errorf("header should still show [paused]; got:\n%s", v)
+	}
+}
+
+// TestScrollingPastTheLastLineResumesFollowing is the S03 fold-in (D281,
+// `2026-08-15-logs-scroll-past-end-resumes-follow.md`): the press *after* the one that
+// lands on the newest line — the no-op vim would make of it — asks to go past the end of
+// the buffer, and past the end of a stream there is only the stream. Every downward key
+// says it, and the assertion that matters is the same as `G`'s: the line arriving after
+// is still on screen.
+func TestScrollingPastTheLastLineResumesFollowing(t *testing.T) {
+	for _, a := range []keymap.Action{keymap.ActionDown, keymap.ActionHalfPageDown, keymap.ActionPageDown} {
+		m := newLogs()
+		appendLines(&m, 50)
+		m, _ = m.Update(keymap.ActionTop) // pause at the top
+		for m.Cursor() < 49 {             // scroll back down to the newest line
+			m, _ = m.Update(keymap.ActionDown)
+		}
+		if m.Following() {
+			t.Fatalf("%v: precondition — parked on the last line is still paused", a)
+		}
+		m, _ = m.Update(a) // one more: past the end
+		if !m.Following() {
+			t.Fatalf("%v past the last line should re-arm following", a)
+		}
+		m.Append("", "line-51")
+		v := plain(m.View())
+		if !strings.Contains(v, "line-51") {
+			t.Errorf("%v: the view should keep tailing after the re-arm; got:\n%s", a, v)
+		}
+		if !strings.Contains(v, "[following]") {
+			t.Errorf("%v: header should show [following] after the re-arm; got:\n%s", a, v)
+		}
+	}
+}
+
+// TestScrollPastTheEndInVisualModeKeepsFollowingOff: inside a selection a downward key
+// extends it, and re-arming would hand the selection's moving end to the stream — the
+// same reason `G` does not resume following mid-selection (D242 pt 5). The press stays a
+// selection gesture; leaving visual mode is what decides the follow state.
+func TestScrollPastTheEndInVisualModeKeepsFollowingOff(t *testing.T) {
+	m := newLogs()
+	appendLines(&m, 50)
+	m, _ = m.Update(keymap.ActionTop) // pause at the top
+	for m.Cursor() < 49 {
+		m, _ = m.Update(keymap.ActionDown)
+	}
+	m, _ = m.Update(keymap.ActionLogsSelect)
+	for i := 0; i < 3; i++ {
+		m, _ = m.Update(keymap.ActionDown)
+		if m.Following() {
+			t.Fatal("a downward key inside a selection must not re-arm following")
+		}
+	}
+	if !m.Selecting() {
+		t.Fatal("the selection should survive the presses past the end")
 	}
 }
 

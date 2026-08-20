@@ -7966,3 +7966,29 @@ of the fix is settled so later legs stop re-deriving it:
    clipped it away degrades to today's plain form rather than paint a broken
    span), and the prefix/suffix get their own `Header` render so the badge's
    reset does not leave the rest of the line in the terminal default.
+
+## D281 — a downward scroll *past* the newest log line re-arms following (2026-08-16, STORY-06j-2)
+
+The S03 feedback `2026-08-15-logs-scroll-past-end-resumes-follow.md` (Priority
+high) reported the trap: scrolling up to read pauses follow, and scrolling back
+down leaves the reader at the end of a *silently frozen* stream — only `G` re-arms,
+and a reader already sitting on the newest line has no reason to press it. The
+rule that replaces D147's downward half, so later legs stop re-deriving it:
+
+1. **The gesture is the press *after* the one that lands on the newest line.**
+   Landing on the last shown line stays browsing (a paused reader scrolling down
+   to read the end keeps their frozen snapshot); the *next* downward press — the
+   no-op vim would make of it — asks to go past the end of the buffer, and past
+   the end of a stream there is only the stream, so it re-arms following exactly
+   as `nav.bottom` does. This supersedes D147's "incremental downward movement
+   deliberately does not resume following": it now does, one press later.
+2. **Every downward navigation says it, and only when the move is a no-op.**
+   `nav.down`, `nav.halfPageDown` and `nav.pageDown` all route through
+   `scrollDown`, which re-arms iff `atNewest()` — paused, not selecting, a
+   non-empty body, cursor on the last shown line. A page-down that *overshoots*
+   the end from above still only lands there; it does not re-arm. A future
+   surface with a tailing pager should reuse this two-step shape rather than
+   invent a "close enough to the bottom" threshold.
+3. **Visual mode is excluded.** Inside a selection a downward key extends it, and
+   re-arming would hand the selection's moving end to the stream — the same
+   reason `G` does not resume following mid-selection (D242 pt 5).
