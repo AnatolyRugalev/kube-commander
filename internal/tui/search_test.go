@@ -1034,16 +1034,20 @@ func searchWithTwoHits(t *testing.T) Model {
 	return m
 }
 
-// TestSearchNavigatesResults proves navigation inside the view moves the result cursor
-// and that `enter` on the *results* drills into the highlighted hit (not the first one).
-// The first `enter` is the commit (SEARCH-05); the arrows work either side of it, which
-// is why they are the keys this test uses.
+// TestSearchNavigatesResults proves the D282 pair at the routing seam: a single `enter`
+// straight off the query line opens the top hit, and an arrow first moves the cursor so
+// the same `enter` opens the *highlighted* hit instead. The arrows are the keys this test
+// uses because they work either side of the hand-off.
 func TestSearchNavigatesResults(t *testing.T) {
 	m := searchWithTwoHits(t)
-	m, commit := press(t, m, tea.Key{Code: tea.KeyEnter})
-	if commit != nil {
-		t.Fatal("the committing enter should emit nothing — it moves focus, it does not open a hit")
+	_, first := press(t, m, tea.Key{Code: tea.KeyEnter})
+	if first == nil {
+		t.Fatal("one enter from the query line should open the highlighted hit")
 	}
+	if sel, ok := first().(searchview.SelectedMsg); !ok || sel.Hit.Ref.Name != "api-1" {
+		t.Fatalf("the single enter should open the top hit, got %v (%T)", sel.Hit.Ref.Name, first())
+	}
+
 	m, _ = press(t, m, tea.Key{Code: tea.KeyDown})
 	_, drill := press(t, m, tea.Key{Code: tea.KeyEnter})
 	if drill == nil {
@@ -1061,7 +1065,8 @@ func TestSearchNavigatesResults(t *testing.T) {
 // TestSearchCommittedResultsTakeVimKeys is the feedback
 // (2026-08-06-cross-search-enter-navigate) at the routing seam: `j`/`k` typed themselves
 // into the query before the commit and move the cursor after it, and the query is not
-// re-run by either movement (D235).
+// re-run by either movement (D235). The commit itself is now an arrow rather than enter
+// (D282) — the up arrow, which hands the keyboard over without moving off the top hit.
 func TestSearchCommittedResultsTakeVimKeys(t *testing.T) {
 	m := searchWithTwoHits(t)
 	// Before the commit `j` is text, exactly as it is in the table filter.
@@ -1070,7 +1075,7 @@ func TestSearchCommittedResultsTakeVimKeys(t *testing.T) {
 		t.Fatalf("before the commit `j` should type into the query, got %q", q)
 	}
 
-	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyUp})
 	m, cmd := press(t, m, tea.Key{Code: 'j', Text: "j"})
 	if cmd != nil {
 		t.Fatalf("moving the result cursor should not restart the search, got %T", cmd())
@@ -1093,7 +1098,7 @@ func TestSearchCommittedResultsTakeVimKeys(t *testing.T) {
 // line would re-run the search and throw away the very rows the reader is standing on.
 func TestSearchCommittedResultsDropUnmappedText(t *testing.T) {
 	m := searchWithTwoHits(t)
-	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyUp})
 	m, cmd := press(t, m, tea.Key{Code: 'z', Text: "z"})
 	if cmd != nil {
 		t.Fatalf("an unmapped key on the results should do nothing, got %T", cmd())
@@ -1111,7 +1116,7 @@ func TestSearchCommittedResultsDropUnmappedText(t *testing.T) {
 // esc-then-type rather than esc-and-start-over.
 func TestSearchEscFromResultsResumesTyping(t *testing.T) {
 	m := searchWithTwoHits(t)
-	m, _ = press(t, m, tea.Key{Code: tea.KeyEnter})
+	m, _ = press(t, m, tea.Key{Code: tea.KeyUp})
 	m, _ = press(t, m, tea.Key{Code: tea.KeyEscape})
 	if !m.searchView.Active() {
 		t.Fatal("esc off the results should not close the search view")

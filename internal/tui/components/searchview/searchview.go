@@ -27,10 +27,12 @@
 //
 // SEARCH-05 gave the view its one mode: **focus**. The query field used to be open for
 // the view's entire life, which made every rune text — so `hjkl` typed instead of moving
-// and only the arrows navigated. Now `nav.drillIn` (enter) is the seam the reader asked
-// for: from the query field it commits into the result list, and only from there does it
-// open a hit; `nav.back` returns focus to the query. The wiring reads Focus to route
-// (D235).
+// and only the arrows navigated. The mode fixed that, but it put the mode change on
+// enter, which cost a second enter to reach a hit. STORY-06k-1 splits the two gestures:
+// **enter opens the highlighted hit** wherever the focus is, and **a movement over the
+// result list is what commits into it** (the down arrow on the query line already meant
+// "down the list"); `nav.back` returns focus to the query. The wiring reads Focus to
+// route (D235, D282).
 //
 // Shape follows the two established component rhythms: full-screen like the logs view
 // (results span kinds and want every row, D134) and list/delegate like the picker
@@ -81,7 +83,9 @@ const allNamespacesLabel = "all namespaces"
 //
 //   - FocusQuery — the query field takes every rune. Navigation still works from here on
 //     the keys that carry no text (the arrows), because those never collided with typing
-//     and readers already use them.
+//     and readers already use them — and the first such movement is also what hands the
+//     keyboard over (STORY-06k-1), so the mode is entered by using it rather than by a
+//     separate keystroke.
 //   - FocusResults — the result list takes every mapped key, so `hjkl`, `g`/`G` and the
 //     page chords all move. Text that maps to nothing is dropped rather than typed: a
 //     surface where some letters move and the rest edit a field one line up is worse than
@@ -505,11 +509,12 @@ func (m Model) Selected() (kube.SearchHit, bool) {
 // the result cursor (bubbles/list manages pagination); search.allKinds and
 // search.allNamespaces flip their scope widen and emit ScopeChangedMsg.
 //
-// nav.drillIn and nav.back are the two that read the focus, and together they are
-// SEARCH-05's seam (D235). **drillIn commits, then opens**: on the query field it hands
-// the keyboard to the result list (and does nothing at all with no results — there is
-// nowhere to go), and only from the list does it emit SelectedMsg for the highlighted
-// hit. **back unwinds one step at a time**, innermost first: results → query field,
+// **drillIn always opens** the highlighted hit, from the query line as well as from the
+// list, so one enter reaches a result (STORY-06k-1, superseding D235's commit-then-open
+// half); with no results it emits nothing, because there is nothing to open. The
+// hand-off into the list is carried by the movements instead — see enterResults — which
+// is why nav.back is now the only action here that reads the focus. **back unwinds one
+// step at a time**, innermost first: results → query field,
 // non-empty query → cleared (dropping its results and emitting QueryChangedMsg{""} so
 // the wiring cancels the in-flight search), empty query → ClosedMsg. That is D233's rule
 // applied to this view — esc leaves the surface for the one the reader came from — and it
@@ -522,29 +527,24 @@ func (m Model) Update(a keymap.Action) (Model, tea.Cmd) {
 	}
 	switch a {
 	case keymap.ActionUp:
+		m.enterResults()
 		m.list.CursorUp()
 	case keymap.ActionDown:
+		m.enterResults()
 		m.list.CursorDown()
 	case keymap.ActionTop:
+		m.enterResults()
 		m.list.GoToStart()
 	case keymap.ActionBottom:
+		m.enterResults()
 		m.list.GoToEnd()
 	case keymap.ActionHalfPageDown, keymap.ActionPageDown:
+		m.enterResults()
 		m.list.NextPage()
 	case keymap.ActionHalfPageUp, keymap.ActionPageUp:
+		m.enterResults()
 		m.list.PrevPage()
 	case keymap.ActionDrillIn:
-		if m.focus == FocusQuery {
-			// Nothing to hand the keyboard to: an empty list would trap the reader
-			// in a mode with no rows and no visible reason for their typing to have
-			// stopped working.
-			if len(m.hits) == 0 {
-				return m, nil
-			}
-			m.focus = FocusResults
-			m.query.Blur()
-			return m, nil
-		}
 		h, ok := m.Selected()
 		if !ok {
 			return m, nil
@@ -614,6 +614,23 @@ func queryChanged(q string) tea.Cmd {
 func (m Model) scopeChanged() tea.Cmd {
 	msg := ScopeChangedMsg{Kind: kind, AllKinds: m.allKinds, AllNamespaces: m.allNamespaces}
 	return func() tea.Msg { return msg }
+}
+
+// enterResults hands the keyboard to the result list, and is called by every action that
+// moves the result cursor (STORY-06k-1). A movement *over* the list is the gesture that
+// commits into it: the reader who presses the down arrow on the query line has already
+// stopped typing and started picking, so the list may as well take the keys — which is
+// what makes `hjkl`, `g`/`G` and the page chords navigate from the second press on.
+//
+// It is deliberately a no-op with no hits: results focus over no rows is a mode with no
+// cursor, nothing to open, and no visible reason for typing to have stopped working.
+// `nav.back` is the way out, with the query and its hits intact.
+func (m *Model) enterResults() {
+	if m.focus == FocusResults || len(m.hits) == 0 {
+		return
+	}
+	m.focus = FocusResults
+	m.query.Blur()
 }
 
 // refocusQuery hands the keyboard back to the query field and returns the field's own

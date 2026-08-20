@@ -7992,3 +7992,30 @@ rule that replaces D147's downward half, so later legs stop re-deriving it:
 3. **Visual mode is excluded.** Inside a selection a downward key extends it, and
    re-arming would hand the selection's moving end to the stream — the same
    reason `G` does not resume following mid-selection (D242 pt 5).
+
+## D282 — in the cluster search, `enter` opens a hit and a *movement* commits into the result list (2026-08-20, STORY-06k-1)
+
+The S05 feedback `2026-08-15-search-single-enter.md` (Priority high) reported the
+cost of SEARCH-05's mode: reaching a result took two enters, because the first one
+was spent moving focus from the query field to the result list. The split that
+replaces D235's commit-then-open half:
+
+1. **`nav.drillIn` always opens the highlighted hit**, from the query line as well
+   as from the result list, and emits nothing when there are no hits. Enter in this
+   view means "open this", never "change mode" — a surface where the same key means
+   a mode change on the first press and an action on the second charges the reader
+   a keystroke for state they cannot see.
+2. **A movement over the list is what commits into it.** Every cursor action
+   (`nav.up`/`down`/`top`/`bottom`, the page pair) routes through `enterResults`,
+   which hands the keyboard over on the first such press and then moves; from the
+   second press on the list owns every mapped key, so `hjkl`, `g`/`G` and the page
+   chords navigate. The mode is entered by *using* it, so it needs no key of its
+   own and nothing new to advertise in the hint.
+3. **The hand-off refuses an empty list.** With no hits both gestures are inert and
+   focus stays on the query: results focus over no rows is a mode with no cursor,
+   nothing to open, and no visible reason for typing to have stopped working.
+4. **`nav.back` is unchanged and is now the only action here that reads the focus** —
+   results → query field → cleared query → closed, one step per press (D233).
+
+A view that pairs a text field with a result list should follow this shape rather
+than spending its confirm key on a focus change.

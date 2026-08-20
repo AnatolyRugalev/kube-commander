@@ -70,6 +70,8 @@ Press `U` to list every unhealthy resource **across all kinds at once** — pods
 
 To search the entire cluster instead of just the open table, use the cluster search (`:search`). Matches stream in across kinds in the current namespace. Results are ranked and fuzzy-matched, and can also be narrowed using standard Kubernetes label selectors (`-l app=web`). 
 
+`enter` opens the highlighted result straight from the query line — one press, no commit step. To pick a different hit first, move down the list with the arrow keys: the first movement hands the keyboard to the results, where `j`/`k`, `g`/`G` and the page keys all navigate and `enter` opens whatever is highlighted. `esc` returns to the query with your text and results intact.
+
 For broader queries, you can widen the search to every kind your cluster exposes or to all namespaces. These toggles are temporary and reset on your next search to keep regular queries fast.
 
 The command palette (`:`) is your single entry point for app-wide verbs and actions. It lists available commands and filters as you type. Verbs that require an argument (like picking a resource, namespace, or theme) accept it in the same input box. Pickers open in navigation mode: `j`/`k` move the list, and `/` narrows it as you type.

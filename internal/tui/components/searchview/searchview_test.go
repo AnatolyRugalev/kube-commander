@@ -180,15 +180,14 @@ func TestAppendKeepsCursorOnRow(t *testing.T) {
 	}
 }
 
-// commit presses nav.drillIn on the query field, the keystroke that hands the keyboard to
-// the result list (SEARCH-05). Every test that wants to be *on* the results goes through
-// it rather than setting the field, so the seam is exercised by everything that depends
-// on it.
+// commit hands the keyboard to the result list the way a reader does — by moving over it
+// (STORY-06k-1) — without disturbing the cursor: nav.up on the top hit has nothing above
+// it to move to, so the only thing that changes is the focus.
 func commit(t *testing.T, m Model) Model {
 	t.Helper()
-	m, _ = m.Update(keymap.ActionDrillIn)
+	m, _ = m.Update(keymap.ActionUp)
 	if m.Focus() != FocusResults {
-		t.Fatalf("nav.drillIn on the query field should focus the results; focus = %s", m.Focus())
+		t.Fatalf("a movement over the results should focus them; focus = %s", m.Focus())
 	}
 	return m
 }
@@ -234,33 +233,57 @@ func TestDrillInWithNoResultsEmitsNothing(t *testing.T) {
 	}
 }
 
-// TestEnterIsTheSeamBetweenTypingAndNavigating is the feedback
-// (2026-08-06-cross-search-enter-navigate) as a test: before enter the query field owns
-// every rune, after it the result list does, and the *second* enter is the one that
-// opens a hit (D235).
-func TestEnterIsTheSeamBetweenTypingAndNavigating(t *testing.T) {
+// TestSingleEnterFromTheQueryOpensTheHighlightedHit is the feedback
+// (2026-08-15-search-single-enter) as a test: one enter, straight off the query line,
+// reaches a result. SEARCH-05 spent the first enter on a focus change (D235); D282 gives
+// it back — drillIn opens whatever is highlighted, wherever the keyboard is.
+func TestSingleEnterFromTheQueryOpensTheHighlightedHit(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "api")
+	m.AppendHit(hit("Pod", "default", "api-0"))
+	m.AppendHit(hit("Pod", "default", "api-1"))
+	if m.Focus() != FocusQuery {
+		t.Fatalf("a fresh search should start on the query field; got %s", m.Focus())
+	}
+
+	next, cmd := m.Update(keymap.ActionDrillIn)
+	msgs := drain(cmd)
+	sel, ok := msgs[0].(SelectedMsg)
+	if len(msgs) != 1 || !ok {
+		t.Fatalf("nav.drillIn on the query field emitted %v; want one SelectedMsg", msgs)
+	}
+	if sel.Hit.Ref.Name != "api-0" {
+		t.Errorf("one enter should open the highlighted (top) hit; got %q", sel.Hit.Ref.Name)
+	}
+	// Opening is not a mode change: the query is untouched and still has the keyboard,
+	// so an enter the wiring cannot act on leaves the reader exactly where they were.
+	if next.Query() != "api" || next.Focus() != FocusQuery {
+		t.Errorf("opening a hit should not disturb the query line; query %q focus %s", next.Query(), next.Focus())
+	}
+}
+
+// TestMovingOverTheResultsHandsTheKeyboardOver is the other half of D282: the mode is
+// still there — it is what makes `hjkl` navigate — but it is entered by *using* the list
+// rather than by a keystroke spent on nothing else.
+func TestMovingOverTheResultsHandsTheKeyboardOver(t *testing.T) {
 	m := newSearch()
 	m, _ = typeQuery(m, "api")
 	m.AppendHit(hit("Pod", "default", "api-0"))
 	m.AppendHit(hit("Pod", "default", "api-1"))
 
-	// Before: the query field has the keyboard, and it is the only thing that does.
-	if m.Focus() != FocusQuery {
-		t.Fatalf("a fresh search should start on the query field; got %s", m.Focus())
-	}
-	m = commit(t, m)
-
-	// After: the list moves and the query is untouched — the wiring stops sending it
-	// text (routeSearchKey), and the view never re-runs the search on a movement.
+	// One movement both commits and moves: the reader pressed down to go down.
 	m, _ = m.Update(keymap.ActionDown)
+	if m.Focus() != FocusResults {
+		t.Fatalf("a movement over the results should hand them the keyboard; focus = %s", m.Focus())
+	}
 	if got, _ := m.Selected(); got.Ref.Name != "api-1" {
-		t.Errorf("nav.down after the commit should move the result cursor; selected %q", got.Ref.Name)
+		t.Errorf("the committing movement should still move the cursor; selected %q", got.Ref.Name)
 	}
 	if m.Query() != "api" {
 		t.Errorf("committing must not disturb the query; got %q", m.Query())
 	}
 
-	// The second enter is the one that opens the highlighted hit.
+	// And from there enter opens what is highlighted, not the top hit.
 	_, cmd := m.Update(keymap.ActionDrillIn)
 	msgs := drain(cmd)
 	sel, ok := msgs[0].(SelectedMsg)
@@ -269,6 +292,23 @@ func TestEnterIsTheSeamBetweenTypingAndNavigating(t *testing.T) {
 	}
 	if sel.Hit.Ref.Name != "api-1" {
 		t.Errorf("nav.drillIn should open the highlighted hit; got %q", sel.Hit.Ref.Name)
+	}
+}
+
+// TestMovementWithNoResultsKeepsTheQueryFocused guards the one case the hand-off must
+// refuse: results focus over no rows is a mode with no cursor and no visible reason for
+// typing to have stopped working.
+func TestMovementWithNoResultsKeepsTheQueryFocused(t *testing.T) {
+	m := newSearch()
+	m, _ = typeQuery(m, "nope")
+	for _, a := range []keymap.Action{keymap.ActionDown, keymap.ActionUp, keymap.ActionBottom, keymap.ActionPageDown} {
+		m, _ = m.Update(a)
+		if m.Focus() != FocusQuery {
+			t.Fatalf("%s over an empty result list should leave focus on the query; got %s", a, m.Focus())
+		}
+	}
+	if m2, _ := m.UpdateQuery(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"})); m2.Query() != "nopex" {
+		t.Errorf("the query field should still take typing; Query() = %q", m2.Query())
 	}
 }
 
