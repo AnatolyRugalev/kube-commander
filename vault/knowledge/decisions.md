@@ -8100,3 +8100,35 @@ and there must be exactly one answer:
 4. **Painted content is palette state.** A component holding painted text keeps the
    raw text and repaints it in `SetStyles` at the same scroll offset (a restyle is not
    a reopen), so a runtime theme switch cannot leave a surface on the departed theme.
+
+## D286 — a relation is a scope or a name, resolved in one Get, and never an edge that cannot be opened (2026-08-21, STORY-06i-1)
+
+The S04 feedback `2026-08-15-relations-navigation-popup.md` asks to move from a pod
+to its parent workload and back, and on to whatever a resource is linked to. That is
+a graph, and the graph is the primitive under the popup (D52's order). `kube.Relations(ctx, res, ref, kinds)`
+returns it; these constraints bind every later slice and every surface over it:
+
+1. **A relation is either *named* or *set-shaped*, and the shape decides how it
+   opens.** `Relation.Name` set means one object: browse `Relation.Resource` and
+   select `Ref()`. `Name` empty means a filtered list: hand `Scope()` to the
+   drill-down path `Children` already feeds. There is no third shape and no
+   fetched-list shape — a relation stays a *scope* for the reason `ChildScope` does
+   (D155 pt 3): the caller gets a live watched table, not a snapshot that goes stale
+   the moment a pod restarts.
+2. **A relation's target `Resource` comes from the caller's discovered kind set,
+   never synthesized.** A target kind this cluster (or this user) cannot see is
+   dropped silently. An edge nobody can open must not be listed and then fail on
+   open, so `Relations` returns fewer rows rather than optimistic ones.
+3. **`Relations` costs exactly one Get.** Owners come from `ownerReferences`, the
+   child direction from `childScope` over the object already in hand (`Children` is
+   now the thin fetch-then-`childScope` wrapper), and the rest from that object's own
+   spec. A relation that needs its own List — *which Services select this pod* — is a
+   different cost class and belongs in its own leg (STORY-06i-3); it is never folded
+   in silently, because a popup that quietly lists the namespace is a popup that
+   stops being instant. Only the Get may fail; an object with no neighbours is an
+   empty slice and no error.
+4. **`RelationRole` is a display label; `RelationDirection` is the grouping.** Up is
+   what made or hosts the object, down is what it makes or selects, side is what it
+   references. Two relations may share a role, and a secret that is both a mounted
+   volume and an image-pull secret stays two rows — they are two different facts, and
+   only an exact (role, kind, namespace, name, selector) repeat collapses.

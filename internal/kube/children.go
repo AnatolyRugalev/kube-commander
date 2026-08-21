@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -114,6 +115,28 @@ func (c *Clients) Children(ctx context.Context, owner Resource, ref ObjectRef, k
 	if !ok {
 		return ChildScope{}, fmt.Errorf("kube: %s has no child resources to drill into", owner.GVK.Kind)
 	}
+	// The Node path is derived from the ref alone, so only a selector-based owner
+	// pays for the Get.
+	var obj *unstructured.Unstructured
+	if !link.byNodeName && ref.Name != "" {
+		var err error
+		obj, err = c.Dynamic.Resource(owner.GVR).Namespace(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return ChildScope{}, fmt.Errorf("kube: getting %s %q: %w", owner.GVR.Resource, ref.Name, err)
+		}
+	}
+	return childScope(owner, ref, obj, kinds)
+}
+
+// childScope is Children without the fetch: it resolves the scope from an owner
+// object the caller already holds, so a caller that has just fetched the object
+// for another reason (Relations) gets the child direction for free. obj may be
+// nil only for the Node link, which reads nothing but the ref.
+func childScope(owner Resource, ref ObjectRef, obj *unstructured.Unstructured, kinds []Resource) (ChildScope, error) {
+	link, ok := childLinks[owner.GVK.GroupKind()]
+	if !ok {
+		return ChildScope{}, fmt.Errorf("kube: %s has no child resources to drill into", owner.GVK.Kind)
+	}
 	if ref.Name == "" {
 		return ChildScope{}, fmt.Errorf("kube: children of %s: empty object name", owner.GVK.Kind)
 	}
@@ -131,9 +154,8 @@ func (c *Clients) Children(ctx context.Context, owner Resource, ref ObjectRef, k
 			Options:   metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", ref.Name).String()},
 		}, nil
 	}
-	obj, err := c.Dynamic.Resource(owner.GVR).Namespace(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
-	if err != nil {
-		return ChildScope{}, fmt.Errorf("kube: getting %s %q: %w", owner.GVR.Resource, ref.Name, err)
+	if obj == nil {
+		return ChildScope{}, fmt.Errorf("kube: children of %s %q: owner object not loaded", owner.GVK.Kind, ref.Name)
 	}
 	sel, err := podSelector(obj)
 	if err != nil {
