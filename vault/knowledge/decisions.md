@@ -8132,3 +8132,37 @@ returns it; these constraints bind every later slice and every surface over it:
    references. Two relations may share a role, and a secret that is both a mounted
    volume and an image-pull secret stays two rows — they are two different facts, and
    only an exact (role, kind, namespace, name, selector) repeat collapses.
+
+## D287 — navigating a relation reuses the two paths the shell has; `gr` opens the list (2026-08-21, STORY-06i-2)
+
+D286 shaped the graph so its surface could be thin. This is the surface, and these
+constraints bind whatever extends it (STORY-06i-3's reverse-selector relations first):
+
+1. **The gesture is `gr`, and it is a row action.** `gr` is vim's goto family, where
+   "go to references" already lives, and the relations list is that question asked of
+   a Kubernetes object. It is a sequence rather than a letter because the mnemonic is
+   spent three times over (`R` resources.switch, `r` secret.reveal, `P` res.children)
+   and `g` already buffers for `gg`, so it costs no key its own timeout. It is
+   registered as a **row action** (`Related resources`, gated on `get`), so the key,
+   the actions menu and the palette dispatch one intent — a new relation kind never
+   needs a second entry point.
+2. **A relation opens through a path the shell already has, never a third one.**
+   Named → `selectResource` plus the pending selection a search/unhealthy drill-in
+   arms; set-shaped → `selectChildScope` with the object the popup was opened on as
+   the owner, so the scope label names it and `nav.back` returns to it. If a future
+   relation cannot be opened by one of those two, that is a reason to reshape the
+   relation, not to add a third navigation path.
+3. **A cross-namespace hop re-scopes display state only.** A named target outside the
+   browsed namespace re-points the shell before selecting (otherwise the pending
+   selection waits for a row the watch will never list), and that re-scope is never
+   persisted as the reader's chosen namespace — they picked a resource, not a scope.
+   An all-namespaces scope is never narrowed: it already lists the target.
+4. **Direction is the grouping, and the label is the identity.** Rows are stably
+   sorted up → down → side and carry the direction's arrow in the name column, since
+   a picker has no section headings; the label is the target (`Kind/name`, or
+   `Kind (selector)` for a scope), qualified by namespace when it differs from the
+   browsed scope, and it is the key a pick resolves by (D203 pt 3). Two rows may
+   therefore collapse only when they name the same object, which costs nothing.
+5. **No neighbours is a notice, not a popup.** An empty relation set is a true answer
+   (D286 pt 3), so it is said in the status bar; an empty modal is a dead end the
+   reader then has to dismiss. A failed resolve is one toast with the table untouched.

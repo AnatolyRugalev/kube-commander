@@ -14,7 +14,7 @@ import (
 // asserts a confirm appeared exactly when the registry said it would (D228).
 
 // rowActionKinds names a kind each row action is dispatched over, so the pin drives all
-// fifteen rather than the three it already suspects. A new action has no entry and fails
+// sixteen rather than the three it already suspects. A new action has no entry and fails
 // the test until it gets one — deliberately: the point is that nothing joins the registry
 // without its confirm answer being checked against its handler.
 var rowActionKinds = map[rowAction]string{
@@ -22,6 +22,7 @@ var rowActionKinds = map[rowAction]string{
 	rowActionEvents:         "Pod",
 	rowActionLogs:           "Pod",
 	rowActionChildren:       "Deployment",
+	rowActionRelations:      "Pod",
 	rowActionSecret:         "Secret",
 	rowActionScale:          "Deployment",
 	rowActionRolloutRestart: "Deployment",
@@ -46,6 +47,7 @@ func allActionSeams() []Option {
 		WithEventLister(&fakeEventLister{}),
 		WithLogStreamer(&fakeLogStreamer{}),
 		WithChildResolver(&fakeChildResolver{scope: podScope()}),
+		WithRelater(&fakeRelater{}),
 		WithSecretGetter(&fakeSecretGetter{}),
 		WithScaler(&fakeScaler{}),
 		WithRolloutRestarter(&fakeRestarter{}),
@@ -64,7 +66,7 @@ func allActionSeams() []Option {
 // becoming a fourth hand-maintained list: every registered action is dispatched over a
 // real selected row with every seam wired, and the registry's answer must match what the
 // handler did. Delete, Rollout restart and Drain open a confirm stamped with their own
-// modal kind; the other twelve open no confirm at all — Scale and Port-forward open a
+// modal kind; the other thirteen open no confirm at all — Scale and Port-forward open a
 // *prompt*, which is a different question and is not what this column marks.
 func TestRowActionConfirmsMatchesTheHandlers(t *testing.T) {
 	for _, meta := range rowActions {

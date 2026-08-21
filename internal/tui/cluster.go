@@ -83,6 +83,12 @@ type Cluster struct {
 	// exactly as a nil searcher makes cluster search inert.
 	scanner Scanner
 
+	// relater resolves a selected object into its navigable neighbours for the
+	// relations popup (STORY-06i-2): owners, the child scope, and the links the
+	// object's own spec names. Nil → the relations gesture is inert, exactly as a
+	// nil childResolver makes the drill-down inert.
+	relater Relater
+
 	// childResolver turns a selected owner row into the scope its pods are listed
 	// under (M4-08). Nil → the children drill-down is inert.
 	childResolver ChildResolver
@@ -126,6 +132,7 @@ type ClusterClient interface {
 	ChildResolver
 	MetricsLister
 	Scanner
+	Relater
 }
 
 // NewCluster bundles one cluster's client into the seams the shell drives. It is the
@@ -157,6 +164,7 @@ func NewCluster(c ClusterClient, pf PortForwarder) Cluster {
 		searcher:        c,
 		execer:          c,
 		childResolver:   c,
+		relater:         c,
 		metricsLister:   c,
 		scanner:         c,
 	}

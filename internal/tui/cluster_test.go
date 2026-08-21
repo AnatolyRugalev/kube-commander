@@ -79,6 +79,9 @@ func (fakeClusterClient) Exec(context.Context, kube.ObjectRef, kube.ExecOptions)
 func (fakeClusterClient) Children(context.Context, kube.Resource, kube.ObjectRef, []kube.Resource) (kube.ChildScope, error) {
 	return kube.ChildScope{}, nil
 }
+func (fakeClusterClient) Relations(context.Context, kube.Resource, kube.ObjectRef, []kube.Resource) ([]kube.Relation, error) {
+	return nil, nil
+}
 func (fakeClusterClient) Metrics(context.Context, kube.Resource, string) (map[kube.UsageKey]kube.Usage, error) {
 	return nil, nil
 }

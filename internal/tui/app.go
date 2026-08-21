@@ -615,9 +615,14 @@ type Model struct {
 	// portPicker offers a port-forward target's declared ports as choices
 	// (FB-pf-port-picker-b); its selection is stashed against mutateRes/mutateRef.
 	portPicker picker.Model
-	viewer     viewer.Model
-	modal      modal.Model
-	welcome    welcome.Model
+	// relPicker is the relations popup (STORY-06i-2): the object's navigable
+	// neighbours as picker rows, resolved back to a kube.Relation through
+	// relByLabel and opened against the object relRes/relRef they were resolved
+	// for. relGen guards the async resolve behind it.
+	relPicker picker.Model
+	viewer    viewer.Model
+	modal     modal.Model
+	welcome   welcome.Model
 	// searchView is the full-screen cluster-search mini-app (SEARCH-02a/b), logsView
 	// the dedicated logs mini-app (LOGS-01/02), and unhealthyView the cross-kind
 	// unhealthy list (STORY-06g-2b-1): unlike every field above none is an overlay —
@@ -793,6 +798,17 @@ type Model struct {
 	childOwner    kube.Resource
 	childOwnerRef kube.ObjectRef
 	childGen      int
+
+	// The relations popup (STORY-06i-2). relRes/relRef stash the object the open
+	// popup was resolved for — the picker's SelectedMsg carries only the row label
+	// (D65), and a set-shaped relation opens as that object's child scope, so both
+	// halves of its identity are needed when the pick lands. relByLabel resolves the
+	// label back to its kube.Relation (the ctxByLabel/resByLabel pattern) and relGen
+	// tags the async resolve so a result the reader has moved past is dropped.
+	relRes     kube.Resource
+	relRef     kube.ObjectRef
+	relByLabel map[string]kube.Relation
+	relGen     int
 
 	// The metrics overlay (M4-10). metricsRes is the metrics kind measuring the
 	// browsed one (zero when this cluster does not measure it — the whole "no
@@ -1176,6 +1192,7 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	// text, and the filter stays closed until `/` opens it, exactly as it was when it
 	// was the one opt-in picker.
 	m.portPicker = picker.New(s, portPickerKind)
+	m.relPicker = picker.New(s, relationPickerKind)
 	m.viewer = viewer.New(s, viewerKindDescribe)
 	m.modal = modal.New(s)
 	m.welcome = welcome.New(s)
@@ -1448,6 +1465,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleContainerSelected(msg)
 		case portPickerKind:
 			return m.handlePortSelected(msg)
+		case relationPickerKind:
+			return m.handleRelationSelected(msg)
 		}
 		// No default arm since PAL-05c-1: it used to mean "the namespace picker",
 		// which was the one surface whose Kind nothing branched on. With that picker
@@ -1482,6 +1501,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ctrByLabel = nil
 		case portPickerKind:
 			m.portPicker.Hide()
+		case relationPickerKind:
+			m.closeRelations()
 		}
 		// No default arm — see picker.SelectedMsg above.
 		return m, nil
@@ -1491,6 +1512,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case childScopeMsg:
 		return m.handleChildScope(msg)
+
+	case relationsMsg:
+		return m.handleRelations(msg)
 
 	case restoreDrillMsg:
 		return m.handleRestoreDrill(msg)
@@ -1934,6 +1958,7 @@ func (m *Model) stopClusterAsync() {
 	m.viewerGen++    // in-flight describe/secret/YAML fetches and log lines are now stale.
 	m.pfResolveGen++ // in-flight service→pod and port-list resolutions are now stale.
 	m.childGen++     // an in-flight child-scope resolve names an object on this cluster.
+	m.relGen++       // an in-flight relations resolve names an object on this cluster.
 	m.stopMetrics()  // the metrics poll lists this cluster's samples on a ticker.
 	m.stopAuthDiag() // a credential-plugin re-run asks about the context being left.
 	m.stopDrain()
@@ -1977,6 +2002,7 @@ func (m *Model) resetCluster() {
 	m.modal.Hide() // a pending confirm targets an object on the cluster being left.
 	m.ctrPicker.Hide()
 	m.portPicker.Hide()
+	m.closeRelations() // its rows name objects on the cluster being left.
 	// The command palette lists verbs, not cluster data, so a switch does not make its
 	// rows wrong — but a verb picked *after* the switch would act on the new cluster
 	// while the reader opened the list against the old one, so it closes with the rest.
@@ -2174,6 +2200,8 @@ func (m *Model) activePicker() *picker.Model {
 		return &m.cmdPicker
 	case m.portPicker.Active():
 		return &m.portPicker
+	case m.relPicker.Active():
+		return &m.relPicker
 	}
 	return nil
 }
@@ -2364,6 +2392,8 @@ func (m Model) handleRowAction(msg rowActionMsg) (tea.Model, tea.Cmd) {
 		return m.openDeleteConfirm(msg)
 	case rowActionChildren:
 		return m.openChildren(msg)
+	case rowActionRelations:
+		return m.openRelations(msg)
 	}
 	label := rowActionTitle(msg.Action)
 	if msg.Object.Name != "" {
@@ -4112,7 +4142,7 @@ func (m *Model) syncFilterStatus() {
 // any modal picker, or the live filter field). Mouse events are inert while one is
 // up so a click cannot reach and mutate the panes underneath it.
 func (m Model) overlayActive() bool {
-	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filter.Active() || m.unhealthyView.Active()
+	return m.help.Visible() || m.ctrPicker.Active() || m.cmdPicker.Active() || m.portPicker.Active() || m.relPicker.Active() || m.viewer.Active() || m.modal.Active() || m.searchView.Active() || m.logsView.Active() || m.pfPanel.Active() || m.filter.Active() || m.unhealthyView.Active()
 }
 
 // bodyHeight is the height of the two-pane body between the top status bar and the
@@ -4275,6 +4305,7 @@ func (m *Model) resize() {
 	m.ctrPicker.SetSize(m.width, bodyH)
 	m.cmdPicker.SetSize(m.width, bodyH)
 	m.portPicker.SetSize(m.width, bodyH)
+	m.relPicker.SetSize(m.width, bodyH)
 	// The shared viewer (describe / YAML / secret / events) is not an overlay: it
 	// takes the right pane outright (D284), so it gets the table's geometry and the
 	// composite lands it at the pane's origin. A hidden menu hands it the full
@@ -4519,7 +4550,8 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionPin:
 		return m.pinResource()
 	case keymap.ActionDescribe, keymap.ActionEvents, keymap.ActionLogs,
-		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren:
+		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren,
+		keymap.ActionRelations:
 		return m.triggerRowActionKey(a)
 	}
 	return m.routeNav(a)
@@ -4742,6 +4774,10 @@ func (m Model) View() tea.View {
 		body = overlayCenter(body, m.cmdPicker.View(), m.width, m.bodyHeight())
 	case m.portPicker.Active():
 		body = overlayCenter(body, m.portPicker.View(), m.width, m.bodyHeight())
+	case m.relPicker.Active():
+		// The relations popup is a modal over the browse view, not a pager: its list
+		// is *about* the row behind it, which is the side of D95 that centers.
+		body = overlayCenter(body, m.relPicker.View(), m.width, m.bodyHeight())
 	case m.viewer.Active():
 		// The shared pager replaces the right pane rather than floating inside it
 		// (D284): describe output — the on-call diagnostic — gets the pane's whole

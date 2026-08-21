@@ -56,6 +56,7 @@ const (
 	rowActionEdit           rowAction = "edit"
 	rowActionDelete         rowAction = "delete"
 	rowActionChildren       rowAction = "children"
+	rowActionRelations      rowAction = "relations"
 )
 
 // rowActionMeta is one row-action's registry entry: the id, the menu title, the
@@ -104,6 +105,7 @@ var rowActions = []rowActionMeta{
 	{rowActionEvents, "Events", keymap.ActionEvents, canGet, actsAtOnce},
 	{rowActionLogs, "Logs", keymap.ActionLogs, kindIn("Pod", "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"), actsAtOnce},
 	{rowActionChildren, "Show pods", keymap.ActionChildren, kube.HasChildren, actsAtOnce},
+	{rowActionRelations, "Related resources", keymap.ActionRelations, canGet, actsAtOnce},
 	{rowActionSecret, "Reveal secret", "", kindIn("Secret"), actsAtOnce},
 	{rowActionScale, "Scale", "", kindIn("Deployment", "ReplicaSet", "StatefulSet", "ReplicationController"), actsAtOnce},
 	{rowActionRolloutRestart, "Rollout restart", "", kindIn("Deployment", "DaemonSet", "StatefulSet"), asksFirst},

@@ -84,6 +84,8 @@ View an object's **describe** output in a scrollable viewer — it takes over th
 
 Open the dedicated full-screen **logs view** for any workload. It tails the last 1000 lines live. You can grep the live stream (with substring or regex matching) without pausing the tail, or pause following to explore historical lines. The header paints the `[following]` badge while the stream is live, so a frozen snapshot is unmistakable at a glance, and scrolling back down *past* the newest line rejoins the stream — no separate key to remember. Logs can be wrapped, timestamped, or switched to the previous terminated container instance (`-p`). A visual selection mode lets you yank exact log lines to your system clipboard without terminal wrapping artifacts. The command palette opens over the logs view too, listing the view's own verbs next to the app-wide ones — so the context switcher, the theme picker, and every log toggle are reachable without leaving the stream.
 
+`gr` opens the **relations popup** on any object: the things it is attached to, in one list — the owner that created it (pod → ReplicaSet → Deployment), the pods it owns, the node it runs on, and the claims, config maps and secrets it mounts. Rows are grouped by direction (`↑` what made it, `↓` what it makes, `→` what it references) and each one opens the thing it names, so moving from a pod to its Deployment and back is a gesture rather than a hunt through another kind's list.
+
 Secret contents are masked by default. You can reveal them in place or copy a decoded value straight to your clipboard without putting it on screen.
 
 ### Acting on objects
@@ -96,6 +98,7 @@ Open the **actions menu** to see what you can do to the selected row. It lists o
 | Events | anything you can `get` |
 | Logs | Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, ReplicationController |
 | Show pods | Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, ReplicationController, Service, Node |
+| Related resources | anything you can `get` |
 | Reveal secret | Secret |
 | Scale | Deployment, ReplicaSet, StatefulSet, ReplicationController |
 | Rollout restart | Deployment, DaemonSet, StatefulSet |

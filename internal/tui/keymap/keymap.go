@@ -131,6 +131,13 @@ const (
 	// Service and Node); on any other kind it is inert, exactly as the entry is
 	// absent from that kind's actions menu.
 	ActionChildren Action = "res.children"
+	// ActionRelations opens the relations popup over the selected row (STORY-06i-2):
+	// the object's navigable neighbours — the owner that created it, the pods it
+	// owns, the node it runs on, the claims/config maps/secrets it mounts — as one
+	// list, each row opening the thing it names. It is the reverse of res.children
+	// generalized to both directions, gated on the kind's get verb like describe;
+	// elsewhere it is inert.
+	ActionRelations Action = "res.relations"
 	// ActionLogsFollow toggles follow (auto-scroll + live streaming) inside the
 	// open logs viewer (M3-06). It is meaningful only while the logs viewer is up;
 	// elsewhere it is inert.
@@ -341,6 +348,7 @@ var actionMeta = []struct {
 	{ActionEdit, "View / edit the selected row's YAML in $EDITOR"},
 	{ActionDelete, "Delete the selected row"},
 	{ActionChildren, "Show the selected owner's pods"},
+	{ActionRelations, "Show what the selected row is related to"},
 	{ActionLogsFollow, "Toggle log follow (auto-scroll) in the logs viewer"},
 	{ActionLogsRegex, "Toggle regex matching for the logs filter"},
 	{ActionLogsWrap, "Toggle line wrapping in the logs viewer"},
@@ -503,7 +511,17 @@ var defaultBindings = map[Action][]string{
 	// local-port prompt, so the capital keeps it with the other capital-letter
 	// gestures (`D` describe, `L` logs, `C` context) and stays clear of the reserved
 	// nav chords (D10).
-	ActionChildren:   {"P"},
+	ActionChildren: {"P"},
+	// The relations popup takes `gr` — vim's own goto family, where `gr` is
+	// "go to references" in every LSP-flavoured config a vim user has, and the
+	// relations list is exactly that question asked of a Kubernetes object. It is a
+	// sequence rather than a single key because the letter this gesture wants is
+	// spent three times over (`R` resources.switch, `r` secret.reveal, `P`
+	// res.children), and the free capitals left carry no mnemonic at all; `g`
+	// already buffers for `gg` (nav.top), so the sequence costs no key its own
+	// timeout and adds no pause to anything that resolves today (D287). The actions
+	// menu (`enter`) lists the verb by name, which is where it is discovered.
+	ActionRelations:  {"gr"},
 	ActionLogsFollow: {"f"},
 	// The regex toggle joins the ctrl+<letter> family for the reason given at its
 	// declaration: it has to keep working with the grep field open, and only a key
