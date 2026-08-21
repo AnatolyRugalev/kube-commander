@@ -822,7 +822,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D286
 
 - [ ] **STORY-06i-2** The relations popup — one gesture on any resource opens the list `kube.Relations` returns, each row navigable: a named relation switches browse to that kind with the object selected, a set-shaped one opens the child scope (`2026-08-15-relations-navigation-popup.md`)
-      status: todo | owner: — | added: 2026-08-21
+      status: in-progress | owner: claude-opus | added: 2026-08-21
       notes: Second slice of STORY-06i; the surface over 06i-1's primitive, and the slice that **deletes the feedback file** (D69). Decide the gesture here (`R` is free); a popup, so D95 governs it — the list is *about* the row behind it. Rows group by direction (up / down / sideways). The `Cluster` bundle gets a `Relater` seam like `Searcher`/`Scanner`, nil → inert.
       → milestone: M5 · knowledge: decisions.md D268, D95
 
