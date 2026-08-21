@@ -63,11 +63,21 @@ func pinnedCRD() config.MenuResource {
 // (SelectItem), used here to place the cursor without simulating a run of j presses.
 func menuAt(t *testing.T, m Model, resource string) Model {
 	t.Helper()
-	for i, it := range m.menu.Items() {
-		if it.Kind == menu.ItemResource && it.Resource.GVR.Resource == resource {
-			m.menu.SelectItem(i)
+	for _, it := range m.menu.Items() {
+		if it.Kind != menu.ItemResource || it.Resource.GVR.Resource != resource {
+			continue
+		}
+		if m.menu.SelectResource(it.Resource.GVR) {
 			return m
 		}
+		// A custom resource the pane holds back (D288) is reached the way the reader
+		// reaches it: a typed query in the pane reveals it, and then the cursor can
+		// land on it.
+		m.menu.SetFilter(resource)
+		if !m.menu.SelectResource(it.Resource.GVR) {
+			t.Fatalf("menu cannot reach %q even under a pane filter", resource)
+		}
+		return m
 	}
 	t.Fatalf("menu does not list %q", resource)
 	return m

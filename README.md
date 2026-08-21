@@ -118,8 +118,9 @@ Open the **actions menu** to see what you can do to the selected row. It lists o
 - **Keys.** Every action is rebindable in `config.yaml` — there are no hard-coded keys. Run `kubecom keys` to print your effective map.
 - **Themes.** Fourteen are built in (including Catppuccin, Nord, Solarized, and gruvbox). Kubecom sets your terminal's background to match.
 - **The resource menu.** Each context can add its own custom resource types (CRDs) via a per-context YAML file.
-- **Pinned kinds.** Pin any resource kind you work with frequently so it stays in the menu regardless of discovery.
-- **Where you left off.** Kubecom reopens on the last namespace and resource you used per context, remembering your place across sessions — and if that pane was a drill-in to an owner's pods, the scope comes back too.
+- **Custom resources, on request.** The menu lists the built-in kinds; the CRDs a cluster serves — often hundreds — are not listed until you ask for one. They stay one keystroke away: `/` in the menu finds any of them, and so do `:resource` and cluster search. A trailing `+N custom` row tells you how many are being held back.
+- **Pinned kinds.** Pin any resource kind you work with frequently so it stays in the menu regardless of discovery — that pin is also how a CRD joins the menu for good. Press it again to take it back out.
+- **Where you left off.** Kubecom opens on the Pods table, then on the last namespace and resource you used per context, remembering your place across sessions — and if that pane was a drill-in to an owner's pods, the scope comes back too.
 
 ### When something doesn't work
 

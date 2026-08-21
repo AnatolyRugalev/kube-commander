@@ -44,16 +44,21 @@ func WithResourcePersister(p ResourcePersister) Option {
 }
 
 // WithLastResource seeds the kind this context was last left browsing, as read from
-// its state file (config.State.LastResource). Non-nil arms one restore attempt, taken
+// its state file (config.State.LastResource), and arms the one restore attempt taken
 // when the launch discovery pass reconciles — by then the menu holds the cluster's real
 // API surface, so a remembered CRD is resolvable rather than merely absent (D240 pt 4).
-// Nil (the default, and every hermetic test that does not wire one) restores nothing.
+//
+// A nil r still arms it (STORY-06l/D288): a context with nothing remembered lands on
+// the default kind rather than the welcome pane, so the first frame of a fresh launch
+// is the one an operator opened kubecom to see. Wiring the option at all is the opt-in
+// — a model built without it (every hermetic test that does not wire one) restores
+// nothing and keeps landing on the welcome pane.
 func WithLastResource(r *config.MenuResource, sortCol string, sortAsc bool) Option {
 	return func(m *Model) {
 		m.lastResource = r
 		m.lastSortCol = sortCol
 		m.lastSortAsc = sortAsc
-		m.restorePending = r != nil
+		m.restorePending = true
 	}
 }
 
@@ -185,24 +190,43 @@ func (m Model) restoreLastResource() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.restorePending = false
-	if m.lastResource == nil || m.hasCurrent {
+	if m.hasCurrent {
 		return m, nil
 	}
-	i, ok := menuIndexOfGVR(m.menu.Items(), *m.lastResource)
+	target := defaultLandingResource
+	if m.lastResource != nil {
+		target = *m.lastResource
+	}
+	it, ok := menuItemOfGVR(m.menu.Items(), target)
 	if !ok {
 		return m, nil // this cluster does not serve the remembered kind — say nothing.
 	}
-	m.menu.SelectItem(i)
+	m.menu.SelectResource(it.Resource.GVR) // best effort: a held-back CRD has no row yet.
 	// A remembered drill-in re-opens the *child table under the owner's scope* when
 	// the owner can still be re-resolved, instead of landing on the plain child list.
 	// The re-resolve is a single Get, so it runs off the loop like the live
 	// drill-down's, and it rides the same gen guard: a reader who drilled in
 	// themselves, or a context switch, drops the stale result.
-	if m.lastDrillOwner != nil && m.childResolver != nil {
-		return m.restoreDrillIn(i)
+	if m.lastResource != nil && m.lastDrillOwner != nil && m.childResolver != nil {
+		return m.restoreDrillIn(it.Resource)
 	}
-	next, cmd := m.selectResource(m.menu.Items()[i].Resource)
-	return next.(Model), cmd
+	next, cmd := m.selectResource(it.Resource)
+	n := next.(Model)
+	// Now that the kind is the open one its row is listed whatever the pane's own
+	// default hiding says (menu.SetActive/D288), so the cursor can land on it — the
+	// reader must find the highlight where the table is, exactly as a drill-in leaves it.
+	n.menu.SelectResource(it.Resource.GVR)
+	return n, cmd
+}
+
+// defaultLandingResource is the kind a context with nothing remembered opens on:
+// Pods, the table an operator reaches for first (feedback 2026-08-15, STORY-06l).
+// It is addressed like any other remembered kind — resolved in the menu after the
+// discovery pass, opened through the ordinary drill-in path, and silently skipped
+// when the cluster does not serve it — so the welcome pane stays exactly one degrade
+// away and every later leg that changes the restore changes this with it.
+var defaultLandingResource = config.MenuResource{
+	Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true,
 }
 
 // restoreDrillIn is the drill-in half of restoreLastResource: it re-resolves the
@@ -210,8 +234,7 @@ func (m Model) restoreLastResource() (Model, tea.Cmd) {
 // openChildren does, and hands the result back as a restoreDrillMsg. The gen is the
 // child-scope generation, so an openChildren by the reader or a resetCluster bumps it
 // and the stale result is dropped by handleRestoreDrill.
-func (m Model) restoreDrillIn(menuIdx int) (Model, tea.Cmd) {
-	child := m.menu.Items()[menuIdx].Resource
+func (m Model) restoreDrillIn(child kube.Resource) (Model, tea.Cmd) {
 	owner := drillOwnerResource(*m.lastDrillOwner)
 	ref := kube.ObjectRef{Namespace: m.lastDrillOwner.Namespace, Name: m.lastDrillOwner.Name}
 	m.childGen++
@@ -268,21 +291,21 @@ func drillOwnerResource(o config.DrillOwner) kube.Resource {
 	}
 }
 
-// menuIndexOfGVR finds the menu row addressing entry's group/version/resource, matching
+// menuItemOfGVR finds the menu row addressing entry's group/version/resource, matching
 // indexOfGVR's rule that a GVR is a kind's identity and title/section/Kind spelling are
 // presentation. Rows that cannot be watched are skipped rather than matched: the
 // namespace seam has no GVR at all, and an unavailable row names a kind whose API group
 // discovery could not load, so drilling into it would start a watch that can only fail —
 // which is precisely the error the restore promises never to cause.
-func menuIndexOfGVR(items []menu.Item, entry config.MenuResource) (int, bool) {
-	for i, it := range items {
+func menuItemOfGVR(items []menu.Item, entry config.MenuResource) (menu.Item, bool) {
+	for _, it := range items {
 		if it.Kind != menu.ItemResource || !it.Available {
 			continue
 		}
 		gvr := it.Resource.GVR
 		if gvr.Group == entry.Group && gvr.Version == entry.Version && gvr.Resource == entry.Resource {
-			return i, true
+			return it, true
 		}
 	}
-	return 0, false
+	return menu.Item{}, false
 }

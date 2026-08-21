@@ -517,3 +517,64 @@ func TestRestoreDrillOwnerGoneLandsOnThePlainListAndSaysSo(t *testing.T) {
 		t.Errorf("the degrade should clear the dead drill owner from memory, got %+v", m.lastDrillOwner)
 	}
 }
+
+// TestALaunchWithNothingRememberedLandsOnPods is the STORY-06l startup default
+// (feedback 2026-08-15, D288): a context whose state file records no kind opens the
+// Pods table once discovery lands, not the welcome pane — the first frame is the one
+// an operator opened kubecom to see.
+func TestALaunchWithNothingRememberedLandsOnPods(t *testing.T) {
+	fw := preloadedWatcher()
+	m := sizedWith(t, WithWatcher(fw), WithLastResource(nil, "", false))
+
+	if m.hasCurrent {
+		t.Fatal("construction must not open a table before discovery")
+	}
+	m = discover(t, m, kube.DiscoveryResult{Resources: []kube.Resource{podsResource()}})
+
+	if !m.hasCurrent || m.current.GVR.Resource != "pods" {
+		t.Fatalf("the default landing kind should be open, hasCurrent=%v current=%v", m.hasCurrent, m.current.GVR)
+	}
+	if len(fw.res) != 1 || fw.res[0].GVR.Resource != "pods" {
+		t.Fatalf("watches started = %v, want one on pods", fw.res)
+	}
+	// It is the ordinary drill-in, so the table takes focus exactly as it would have
+	// had the reader pressed the keys.
+	if !m.table.Focused() {
+		t.Error("the default landing should hand focus to the table, as a drill-in does")
+	}
+}
+
+// TestARememberedKindStillWinsOverTheDefault: the landing default is a fallback, not
+// an override — a context that recorded a kind reopens on it (D240 is unchanged).
+func TestARememberedKindStillWinsOverTheDefault(t *testing.T) {
+	entry := widgetEntry()
+	m := sizedWith(t, WithWatcher(preloadedWatcher()), WithLastResource(&entry, "", false))
+	m = discover(t, m, kube.DiscoveryResult{Resources: []kube.Resource{widgetResource(), podsResource()}})
+
+	if !m.hasCurrent || m.current.GVR.Resource != "widgets" {
+		t.Fatalf("the remembered kind should win, got hasCurrent=%v current=%v", m.hasCurrent, m.current.GVR)
+	}
+}
+
+// TestWithoutTheOptionNothingIsRestored keeps the seam an opt-in: a model built with
+// no WithLastResource — every hermetic test that does not wire one, and any shell that
+// cannot resolve a context — still lands on the welcome pane.
+func TestWithoutTheOptionNothingIsRestored(t *testing.T) {
+	m := sizedWith(t, WithWatcher(preloadedWatcher()))
+	m = discover(t, m, kube.DiscoveryResult{Resources: []kube.Resource{podsResource()}})
+
+	if m.hasCurrent {
+		t.Fatalf("an unarmed model must open nothing, got %v", m.current.GVR)
+	}
+}
+
+// podsResource is the discovered twin for the seed's Pod row, as a discovery pass
+// reports it — what the landing default resolves against.
+func podsResource() kube.Resource {
+	return kube.Resource{
+		GVK:        schema.GroupVersionKind{Version: "v1", Kind: "Pod"},
+		GVR:        schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+		Namespaced: true,
+		Verbs:      []string{"get", "list", "watch"},
+	}
+}

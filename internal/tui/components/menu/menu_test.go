@@ -196,6 +196,18 @@ func findItem(m Model, resource string) int {
 	return -1
 }
 
+// findFull returns the index of the item with the given resource name in the
+// authoritative list — the one that carries the custom resources the pane holds
+// back (D288).
+func findFull(m Model, resource string) int {
+	for i, it := range m.full {
+		if it.Resource.GVR.Resource == resource {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestReconcileFillsTwinAndAppendsExtras(t *testing.T) {
 	m := newTestModel()
 	seedLen := len(m.items)
@@ -216,11 +228,16 @@ func TestReconcileFillsTwinAndAppendsExtras(t *testing.T) {
 	}
 	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{pods, crd}})
 
-	// The seed grew by exactly the one unknown resource, appended after the seed.
-	if len(m.items) != seedLen+1 {
-		t.Fatalf("item count = %d, want %d", len(m.items), seedLen+1)
+	// The seed grew by exactly the one unknown resource, appended after the seed. It
+	// lands in the authoritative list; the pane holds an unpinned CRD back (D288), so
+	// the displayed list is unchanged.
+	if len(m.full) != seedLen+1 {
+		t.Fatalf("item count = %d, want %d", len(m.full), seedLen+1)
 	}
-	last := m.items[len(m.items)-1]
+	if len(m.items) != seedLen {
+		t.Fatalf("displayed count = %d, want the seed alone (%d)", len(m.items), seedLen)
+	}
+	last := m.full[len(m.full)-1]
 	if last.Resource.GVR.Resource != "widgets" || last.Title != "Widget" || !last.Available {
 		t.Fatalf("appended item = %+v, want available Widget/widgets", last)
 	}
@@ -500,10 +517,12 @@ func TestReconcileAppendsCRDIntoCustomResourcesSection(t *testing.T) {
 	}
 	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{crd}})
 
-	last := m.items[len(m.items)-1]
+	last := m.full[len(m.full)-1]
 	if last.Section != sectionCustom {
 		t.Fatalf("appended CRD section = %q, want %q", last.Section, sectionCustom)
 	}
+	// Pinning it is what puts it in the pane (D288); the section header follows.
+	m.AddPinned([]config.MenuResource{{Group: "example.com", Version: "v1", Resource: "widgets", Kind: "Widget"}})
 	// A Custom Resources header now renders, once.
 	headers := 0
 	for _, r := range m.rows() {
@@ -1065,7 +1084,9 @@ func TestUnpinRemovesAPinOnlyRow(t *testing.T) {
 
 // TestUnpinKeepsARowDiscoveryLists is the revert-to-a-discovered-row rule at the
 // component level: Reconcile marked the row discovered, so the unpin takes the
-// marker and leaves the row — and a second Unpin has nothing left to do.
+// marker and leaves the *kind* in the inventory — and a second Unpin has nothing
+// left to do. Since D288 the pane no longer lists it, which is the point of the
+// toggle: unpinning a CRD is how you get it out of the pane again.
 func TestUnpinKeepsARowDiscoveryLists(t *testing.T) {
 	m := newTestModel()
 	m.AddPinned([]config.MenuResource{{Version: "v1", Resource: "widgets", Kind: "Widget"}})
@@ -1073,17 +1094,22 @@ func TestUnpinKeepsARowDiscoveryLists(t *testing.T) {
 	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{{
 		GVK: schema.GroupVersionKind{Version: "v1", Kind: "Widget"}, GVR: gvr,
 	}}})
-	before := len(m.items)
+	before := len(m.full)
 
 	if m.Unpin(gvr) {
 		t.Error("a discovered row is not removed by an unpin")
 	}
-	i := findItem(m, "widgets")
-	if i < 0 || len(m.items) != before {
-		t.Fatalf("the row should still be listed: count %d, want %d", len(m.items), before)
+	i := findFull(m, "widgets")
+	if i < 0 || len(m.full) != before {
+		t.Fatalf("the kind should still be listed: count %d, want %d", len(m.full), before)
 	}
-	if m.items[i].Pinned {
-		t.Error("the pin marker should be gone even though the row stayed")
+	if m.full[i].Pinned {
+		t.Error("the pin marker should be gone even though the kind stayed")
+	}
+	// It stays in the inventory but leaves the pane: with no pin behind it, a
+	// discovered CRD is one of the rows the pane holds back (D288).
+	if findItem(m, "widgets") >= 0 {
+		t.Error("an unpinned custom resource should no longer be listed in the pane")
 	}
 	if m.Unpin(gvr) {
 		t.Error("a second unpin has nothing to remove")
@@ -1320,3 +1346,131 @@ var (
 	_ tea.Cmd = func() tea.Msg { return ResourceSelectedMsg{} }
 	_ tea.Cmd = func() tea.Msg { return NamespaceRequestedMsg{} }
 )
+
+// crdFor is a discovered custom resource, the kind the pane holds back by default.
+func crdFor(name, kind string) kube.Resource {
+	return kube.Resource{
+		GVK: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: kind},
+		GVR: schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: name},
+	}
+}
+
+// discoveredCRDs is a model whose discovery pass reported two CRDs — the state the
+// hiding rule is about.
+func discoveredCRDs(t *testing.T) Model {
+	t.Helper()
+	m := newTestModel()
+	m.SetSize(30, 60)
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{
+		crdFor("widgets", "Widget"), crdFor("sprockets", "Sprocket"),
+	}})
+	return m
+}
+
+// TestDiscoveredCRDsAreHeldBackButStayInTheInventory is the STORY-06l headline
+// (feedback 2026-08-15, D288): discovery finds hundreds of custom resources on an
+// operator-heavy cluster and the pane stops listing them, while the kind inventory
+// every other surface reads — Items(), and so the resource picker, cluster search,
+// relations and pane memory — keeps every one.
+func TestDiscoveredCRDsAreHeldBackButStayInTheInventory(t *testing.T) {
+	m := discoveredCRDs(t)
+
+	if findItem(m, "widgets") >= 0 || findItem(m, "sprockets") >= 0 {
+		t.Error("an unpinned custom resource should not be listed in the pane")
+	}
+	if findFull(m, "widgets") < 0 || findFull(m, "sprockets") < 0 {
+		t.Error("the kinds must stay in the inventory Items() reports")
+	}
+	if got := len(m.Items()); got != len(m.full) {
+		t.Errorf("Items() = %d rows, want the whole authoritative list (%d)", got, len(m.full))
+	}
+	// And the pane says how many it is holding back, so "this cluster has no CRDs" and
+	// "kubecom is not showing you two of them" are not the same frame.
+	if v := lipglossStrip(m.View()); !strings.Contains(v, "+2 custom") {
+		t.Errorf("the pane should report the held-back count:\n%s", v)
+	}
+}
+
+// TestAPaneFilterReachesTheHeldBackCRDs is the reachability half of the rule: hiding
+// is only ever about the default frame, so an explicit `/` query in the pane finds a
+// custom resource the pane does not list.
+func TestAPaneFilterReachesTheHeldBackCRDs(t *testing.T) {
+	m := discoveredCRDs(t)
+	m.SetFilter("widget")
+
+	if findItem(m, "widgets") < 0 {
+		t.Fatal("a typed query must reach a held-back custom resource")
+	}
+	if n := m.HiddenCustom(); n != 0 {
+		t.Errorf("nothing is held back under a filter, got %d", n)
+	}
+	m.ClearFilter()
+	if findItem(m, "widgets") >= 0 {
+		t.Error("clearing the filter should hold the custom resource back again")
+	}
+}
+
+// TestPinningAListedCRDOptsItIn is the opt-in the feedback asked for: `*` over a kind
+// discovery already listed marks that row rather than inserting a second one, and the
+// pane lists it from then on. Unpinning takes it back out without losing the kind.
+func TestPinningAListedCRDOptsItIn(t *testing.T) {
+	m := discoveredCRDs(t)
+	before := len(m.full)
+	entry := config.MenuResource{Group: "example.com", Version: "v1", Resource: "widgets", Kind: "Widget"}
+
+	m.AddPinned([]config.MenuResource{entry})
+	if len(m.full) != before {
+		t.Fatalf("a pin over a listed kind must not add a row: %d, want %d", len(m.full), before)
+	}
+	if findItem(m, "widgets") < 0 {
+		t.Fatal("a pinned custom resource should be listed in the pane")
+	}
+	if findItem(m, "sprockets") >= 0 {
+		t.Error("pinning one kind must not reveal the others")
+	}
+
+	m.Unpin(schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"})
+	if findItem(m, "widgets") >= 0 {
+		t.Error("unpinning should hold the custom resource back again")
+	}
+	if findFull(m, "widgets") < 0 {
+		t.Error("unpinning must not drop the kind from the inventory")
+	}
+}
+
+// TestAnAuthoredEntryIsNeverHeldBack keeps the menus/<context>.yaml file authoritative
+// (D193 pt 3): a kind the user wrote down by hand is listed whether or not discovery
+// also reports it, and no pin is needed to keep it.
+func TestAnAuthoredEntryIsNeverHeldBack(t *testing.T) {
+	m := newTestModel()
+	m.AddExtras([]config.MenuResource{{Group: "example.com", Version: "v1", Resource: "widgets", Kind: "Widget"}})
+	m.Reconcile(kube.DiscoveryResult{Resources: []kube.Resource{
+		crdFor("widgets", "Widget"), crdFor("sprockets", "Sprocket"),
+	}})
+
+	if findItem(m, "widgets") < 0 {
+		t.Error("an authored menu entry must stay listed")
+	}
+	if findItem(m, "sprockets") >= 0 {
+		t.Error("a merely discovered CRD is still held back")
+	}
+}
+
+// TestTheOpenKindIsAlwaysListed: reaching a held-back CRD through the resource picker
+// or a search hit is an ordinary way in, and a left pane that cannot point at what the
+// right pane has open is worse than a long one.
+func TestTheOpenKindIsAlwaysListed(t *testing.T) {
+	m := discoveredCRDs(t)
+	m.SetActive(crdFor("widgets", "Widget"))
+
+	if findItem(m, "widgets") < 0 {
+		t.Fatal("the open kind must be listed even when the pane would hold it back")
+	}
+	if !m.SelectResource(crdFor("widgets", "Widget").GVR) {
+		t.Error("the cursor must be able to land on the open kind's row")
+	}
+	m.ClearActive()
+	if findItem(m, "widgets") >= 0 {
+		t.Error("closing the table holds the custom resource back again")
+	}
+}

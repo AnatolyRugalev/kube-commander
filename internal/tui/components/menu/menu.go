@@ -2,8 +2,12 @@
 // view, a vertical list of Kubernetes resource kinds the user moves through to
 // choose what the table pane shows. The list is grouped into the familiar
 // Kubernetes-Dashboard scopes (Cluster / Workloads / Config / Network / Storage /
-// Access Control, plus Custom Resources for discovered CRDs) with non-selectable
-// section headers the cursor skips over (D77). Between the cluster-scoped section
+// Access Control, plus Custom Resources) with non-selectable section headers the
+// cursor skips over (D77). The Custom Resources section lists only the CRDs the user
+// asked for — a menus/<context>.yaml entry or a pin — since discovery finds hundreds
+// on an operator-heavy cluster; the rest stay in the kind inventory (Items(), and so
+// the picker, cluster search and pane memory) and reappear in the pane under an
+// explicit `/` query, with a trailing row reporting how many are held back (D288). Between the cluster-scoped section
 // and the namespaced ones sits a namespace-picker seam row (ItemNamespace): a
 // selectable non-resource row that shows the scoped namespace and, on drill-in,
 // requests the namespace picker (NamespaceRequestedMsg) — the same effect as the
@@ -36,6 +40,7 @@
 package menu
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -143,6 +148,23 @@ type Item struct {
 	// matched to a discovered twin, or one it appended. A pinned row that is also
 	// discovered survives its unpin as a plain discovered row (CRD-PIN-03).
 	Discovered bool
+	// Authored marks a row a hand-written menus/<context>.yaml entry put there
+	// (AddExtras). Like Pinned it is provenance, not display — but it is the other
+	// half of the answer to "did the user ask for this row?", which is what decides
+	// whether a Custom Resources row is listed at all (STORY-06l/D288).
+	Authored bool
+}
+
+// hiddenByDefault reports whether the row is a custom resource the user has not
+// asked for: a Custom Resources row that neither a menus/<context>.yaml entry nor a
+// pin accounts for. Discovery finds hundreds of these on an operator-heavy cluster
+// and listing them all is what made the pane a thing to scroll past rather than read
+// (STORY-06l/D288), so the pane leaves them out until a pin opts one in. They stay in
+// the authoritative list — Items(), and so the resource picker, cluster search,
+// relations and pane memory — and an explicit `/` query in the pane reveals them
+// again, so hiding is only ever about the default frame.
+func (it Item) hiddenByDefault() bool {
+	return it.Kind == ItemResource && it.Section == sectionCustom && !it.Authored && !it.Pinned
 }
 
 // ResourceSelectedMsg is emitted when the user drills into the highlighted menu
@@ -218,9 +240,15 @@ func (m *Model) SetNamespace(ns string) { m.namespace = ns }
 // even when the nav cursor moves elsewhere (dogfood-05). The root model wires this
 // from selectResource every time it (re)starts a watch. Keyed by GVR so it survives
 // a discovery Reconcile that appends CRDs.
+//
+// It re-derives the displayed list: the open kind is always listed, even when it is
+// a custom resource the pane would otherwise hold back (D288) — a left pane that
+// cannot show what the right pane has open is worse than a long one, and reaching a
+// hidden CRD through the resource picker or a search hit is an ordinary way in.
 func (m *Model) SetActive(r kube.Resource) {
 	m.activeGVR = r.GVR
 	m.hasActive = true
+	m.reapply()
 }
 
 // ClearActive drops the opened/active marker (no resource is open). Kept for
@@ -228,6 +256,17 @@ func (m *Model) SetActive(r kube.Resource) {
 func (m *Model) ClearActive() {
 	m.hasActive = false
 	m.activeGVR = schema.GroupVersionResource{}
+	m.reapply()
+}
+
+// reapply re-derives the displayed list and puts the cursor back on the row it was
+// on, for the mutators that change what is *shown* without changing the item set
+// (SetActive/ClearActive, which can add or drop the open kind's row under D288).
+func (m *Model) reapply() {
+	selGVR, selKind := m.selectionRef()
+	m.applyFilter()
+	m.restoreSelection(selGVR, selKind)
+	m.clampOffset()
 }
 
 // isActive reports whether it is the opened/active resource row (the one whose
@@ -329,14 +368,24 @@ func (m *Model) restoreSelection(selGVR schema.GroupVersionResource, selKind Ite
 }
 
 // applyFilter re-derives the pane's displayed item list from the authoritative
-// full list under the active filter: full when none, else the matching subset.
+// full list under the active filter: with no filter every row but the custom
+// resources nobody asked for (hiddenByDefault), else the matching subset — a
+// typed query reaches the hidden kinds too, which is what keeps them one `/` away
+// rather than gone (STORY-06l/D288).
 // Only rows that answer to the query survive — the namespace seam included, since
 // it is one more row in the list (a filter that matches its "Namespace" title
 // keeps it; any other query hides it with the kinds it narrows past). Callers
 // that narrowed the selection restore it via restoreSelection + clampOffset.
 func (m *Model) applyFilter() {
 	if m.filter == "" {
-		m.items = m.full
+		out := make([]Item, 0, len(m.full))
+		for _, it := range m.full {
+			if m.hides(it) {
+				continue
+			}
+			out = append(out, it)
+		}
+		m.items = out
 		return
 	}
 	q := strings.ToLower(m.filter)
@@ -390,6 +439,47 @@ func (m Model) RowItemAt(contentRow int) (int, bool) {
 // mouse-clicked row before drilling in. Keyboard navigation uses the same moveTo.
 func (m *Model) SelectItem(i int) { m.moveTo(i) }
 
+// SelectResource moves the nav cursor onto the displayed row for gvr and reports
+// whether there was one. It is the by-identity entry the shell uses when it knows a
+// kind but not a row number — pane memory restoring the kind a context was left on —
+// and it exists because the displayed list is no longer the authoritative one: an
+// index into Items() has not addressed a row since the pane started narrowing itself
+// (a `/` query, the hidden custom resources of D288), and a GVR still does.
+func (m *Model) SelectResource(gvr schema.GroupVersionResource) bool {
+	for i := range m.items {
+		if m.items[i].Kind == ItemResource && m.items[i].Resource.GVR == gvr {
+			m.moveTo(i)
+			return true
+		}
+	}
+	return false
+}
+
+// HiddenCustom counts the custom-resource rows the pane is leaving out right now:
+// discovered CRDs with neither an authored entry nor a pin behind them (D288). It is
+// zero whenever a filter is active, since a typed query reaches them. The pane
+// reports the count on a trailing row so the reader can tell "this cluster has no
+// CRDs" from "kubecom is not showing you 200 of them".
+func (m Model) HiddenCustom() int {
+	if m.filter != "" {
+		return 0
+	}
+	n := 0
+	for _, it := range m.full {
+		if m.hides(it) {
+			n++
+		}
+	}
+	return n
+}
+
+// hides is the pane's decision about one row under no filter: a custom resource
+// nobody asked for is left out — unless it is the kind currently open, which the
+// left pane must always be able to point at (SetActive).
+func (m Model) hides(it Item) bool {
+	return it.hiddenByDefault() && !m.isActive(it)
+}
+
 // AddExtras merges per-context menu customizations (config.MenuResource entries,
 // D83) into the menu: extra resource kinds — chiefly CRDs the built-in seed does
 // not know — that a user has named for the current kubeconfig context. Each entry
@@ -420,7 +510,8 @@ func (m *Model) AddExtras(extras []config.MenuResource) { m.addExtras(extras, fa
 func (m *Model) AddPinned(pins []config.MenuResource) { m.addExtras(pins, true) }
 
 // addExtras is the shared merge behind AddExtras/AddPinned; pinned tags the rows it
-// inserts (and only those) as Pinned.
+// inserts (and only those) as Pinned, and an unpinned merge tags them Authored — the
+// two provenances that keep a Custom Resources row listed (D288).
 func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 	if len(extras) == 0 {
 		return
@@ -442,9 +533,18 @@ func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 	for _, e := range extras {
 		it := extraItem(e)
 		if seen[it.Resource.GVR] {
+			// The kind is already listed. A pin over a row the pane hides — a
+			// discovered CRD — is the gesture that opts it in, so it marks that row
+			// rather than inserting a second one (STORY-06l/D288). A pin over any other
+			// row (a seed kind, an authored entry) stays inert exactly as before: the
+			// row is shown regardless, and marking it would let an unpin take it away.
+			if pinned {
+				m.markPinned(it.Resource.GVR)
+			}
 			continue
 		}
 		it.Pinned = pinned
+		it.Authored = !pinned
 		seen[it.Resource.GVR] = true
 		m.full = insertExtra(m.full, it)
 	}
@@ -455,6 +555,20 @@ func (m *Model) addExtras(extras []config.MenuResource, pinned bool) {
 	m.applyFilter()
 	m.restoreSelection(selGVR, selKind)
 	m.clampOffset()
+}
+
+// markPinned records the pin behind a row that is already listed but hidden — the
+// discovered-CRD case addExtras cannot insert for, since a second row for the same
+// GVR is exactly what the dedupe exists to prevent. Only a row the pane would
+// otherwise leave out is marked, so Unpin's "a row a pin put there" rule keeps
+// naming rows whose visibility the pin really does account for.
+func (m *Model) markPinned(gvr schema.GroupVersionResource) {
+	for i := range m.full {
+		if m.full[i].Resource.GVR == gvr && m.full[i].hiddenByDefault() {
+			m.full[i].Pinned = true
+			return
+		}
+	}
 }
 
 // extraItem maps one per-context config.MenuResource to a menu Item. The title
@@ -552,20 +666,37 @@ func (m *Model) Unpin(gvr schema.GroupVersionResource) bool {
 	}
 	if m.full[idx].Discovered {
 		m.full[idx].Pinned = false
+		// The kind stays in the inventory, but a custom-resource row with no pin
+		// behind it is no longer listed in the pane (D288), so the displayed list is
+		// re-derived exactly as for a real removal.
+		m.rederive(selGVR, selKind, gvr, removedDisplayed)
 		return false
 	}
 	m.full = append(m.full[:idx], m.full[idx+1:]...)
+	m.rederive(selGVR, selKind, gvr, removedDisplayed)
+	return true
+}
+
+// rederive is Unpin's shared tail: re-narrow the displayed list, put the cursor back
+// on the row it was on, and keep the "never at a gap" rule — a row that left the
+// displayed list at or before the cursor takes the cursor back one. restoreSelection
+// resolves by GVR, so the step-back only fires when the departed row *was* the
+// selection.
+func (m *Model) rederive(selGVR schema.GroupVersionResource, selKind ItemKind,
+	gone schema.GroupVersionResource, goneDisplayed int) {
 	m.applyFilter()
+	stillShown := false
+	for i := range m.items {
+		if m.items[i].Kind == ItemResource && m.items[i].Resource.GVR == gone {
+			stillShown = true
+			break
+		}
+	}
 	m.restoreSelection(selGVR, selKind)
-	// The "never at a gap" rule (kept from the pre-filter menu): a row removed at
-	// or before the cursor takes the cursor back one. restoreSelection resolves the
-	// selection by GVR, so this only fires when the removed row *was* the selection
-	// (the GVR is gone) — step back one, never past the top.
-	if selGVR == gvr && selKind == ItemResource && removedDisplayed >= 0 {
-		m.moveTo(removedDisplayed - 1)
+	if !stillShown && selGVR == gone && selKind == ItemResource && goneDisplayed >= 0 {
+		m.moveTo(goneDisplayed - 1)
 	}
 	m.clampOffset()
-	return true
 }
 
 // Reconcile merges an async discovery result into the seed menu without
@@ -577,7 +708,9 @@ func (m *Model) Unpin(gvr schema.GroupVersionResource) bool {
 //   - marks a seed item unavailable (Item.Available = false — rendered muted, a
 //     no-op on drill-in) when it has no twin and its API group failed discovery;
 //   - appends the discovered resources the seed does not already list (CRDs and
-//     extra groups), in discovery's stable sorted order, after the seed.
+//     extra groups), in discovery's stable sorted order, after the seed. They join
+//     the authoritative list; whether the pane *shows* one is applyFilter's business
+//     (D288) — an appended row with no pin or authored entry behind it is held back.
 //
 // A total discovery failure (Result.Err != nil) leaves the menu untouched so it
 // stays navigable on the seed alone (principle 3): degrade, don't blank. Merging
@@ -796,6 +929,13 @@ func (m Model) rows() []row {
 			prev = sec
 		}
 		rows = append(rows, row{itemIdx: i})
+	}
+	// The hidden-custom-resources footer (D288). It is a header row, which is to say
+	// non-selectable and skipped by the cursor, so it costs the navigation nothing and
+	// answers the one question hiding raises: what am I not being shown, and how do I
+	// get at it.
+	if n := m.HiddenCustom(); n > 0 {
+		rows = append(rows, row{header: true, title: fmt.Sprintf("+%d custom · / to find", n)})
 	}
 	return rows
 }

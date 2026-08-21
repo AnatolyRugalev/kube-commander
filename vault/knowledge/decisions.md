@@ -8166,3 +8166,33 @@ constraints bind whatever extends it (STORY-06i-3's reverse-selector relations f
 5. **No neighbours is a notice, not a popup.** An empty relation set is a true answer
    (D286 pt 3), so it is said in the status bar; an empty modal is a dead end the
    reader then has to dismiss. A failed resolve is one toast with the table untouched.
+
+## D288 — the browse view's first frame is a table, and the menu lists only the kinds you asked for (2026-08-21, STORY-06l)
+
+Two startup defaults, from the S01/S02 walk (`2026-08-15-land-on-pods-by-default.md`,
+`2026-08-15-hide-custom-resources.md`). Both are about the frame kubecom paints before
+the reader does anything, and both bind whatever changes it later:
+
+1. **A launch, and a context switch, land on a table.** A context with nothing
+   recorded opens the default landing kind (Pods) through the ordinary restore path —
+   resolved in the menu after discovery, opened as a drill-in, silently skipped when
+   the cluster does not serve it. The welcome pane is what a failed restore degrades
+   to, not the destination. A remembered kind still wins (D240 is untouched), and the
+   restore stays opt-in at the seam: a model built without `WithLastResource` opens
+   nothing.
+2. **The resources pane lists a custom resource only when someone asked for it.** A
+   discovered CRD with neither a `menus/<context>.yaml` entry nor a pin behind it is
+   held back — discovery finds hundreds on an operator-heavy cluster and listing them
+   made the pane a thing to scroll past. `menu.pin` is the opt-in and the way back out.
+3. **Holding back is a display rule, never an inventory one.** The kinds stay in the
+   menu's authoritative list, so `Items()` — and therefore the resource picker, the
+   `:pin` stage, cluster search, the unhealthy sweep, relations and pane memory — sees
+   every kind discovery found. A surface that needs the cluster's kinds reads `Items()`;
+   only the pane's own rendering may narrow. Two rows are exempt from the hiding: one
+   an explicit `/` query matches (which is what keeps a held-back kind one keystroke
+   away), and the kind currently open (the left pane must always be able to point at
+   what the right pane shows).
+4. **The displayed list is not addressable by index.** Since the pane narrows itself
+   without being asked, an index into `Items()` no longer names a row. A caller that
+   knows a kind and wants the cursor on it uses `menu.SelectResource(gvr)`; `SelectItem`
+   remains for callers that resolved a row *from* the displayed list (a mouse click).

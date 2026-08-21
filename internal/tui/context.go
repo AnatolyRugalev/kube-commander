@@ -261,7 +261,10 @@ func (m Model) handleClusterConnected(msg clusterConnectedMsg) (tea.Model, tea.C
 		m.lastDrillOwner = msg.state.LastDrillOwner
 		m.lastSortCol = msg.state.LastSortCol
 		m.lastSortAsc = msg.state.LastSortAsc
-		m.restorePending = msg.state.LastResource != nil
+		// Armed whatever the new context remembers: a context with nothing recorded
+		// lands on the default kind rather than the welcome pane, exactly as a launch
+		// does (STORY-06l/D288) — a switch and a launch are one restore.
+		m.restorePending = true
 	}
 
 	// Start the stopwatch's second half now the swap has landed; the discovery pass
