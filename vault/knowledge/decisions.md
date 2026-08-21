@@ -8069,3 +8069,34 @@ kept 4 cells clear of the screen edge. The split this settles:
    panes actually meet. Anything composited onto the right pane must take its origin
    from `rightPaneX()` (the rendered menu's width) so it cannot drift from the table
    it replaces.
+
+## D285 — one health vocabulary: a surface paints through the M4-06 classifier, never its own word list (2026-08-21, STORY-06h-2)
+
+The S04/S05 feedback `2026-08-15-rich-describe-panel.md` asked for a describe panel
+that surfaces the failure with colour instead of a plain dump. Painting text raises
+the question every non-table surface will now hit — *what counts as broken here?* —
+and there must be exactly one answer:
+
+1. **`table.ClassifyValue(column, value)` is the single classifier.** It is the M4-06
+   cell classifier (`classifyCell`) exported for surfaces that are not tables, with
+   `table.Role` (`RoleNone` < `RoleSuccess` < `RoleWarn` < `RoleError`) as its
+   verdict. The browse table's colouring, the `H`/`U` unhealthy predicates
+   (`UnhealthyRow`/`UnhealthyCells`) and the describe panel all read it, so they
+   cannot disagree about what is broken. A surface that wants a word painted extends
+   `statusWords`/the shape heuristics in `components/table/color.go` — never a second
+   word list of its own.
+2. **A non-table surface maps its own labels onto the classifier's columns.** The
+   describe panel's `describeKeyColumns` is that map (Reason/Last State → STATUS,
+   Restart Count → RESTARTS, …); it names only the keys that carry a *state*, and a
+   key not in it leaves its value plain. Painting is opt-in per key, so a
+   configuration flag (`sidecar.istio.io/inject: false`) is never coloured as a
+   failed condition.
+3. **Painting adds colour and nothing else.** `viewer.PaintDescribe` is text→text and
+   `ansi.Strip` of its output is the describer's dump byte for byte — kubectl's own
+   alignment survives, and no surface may reflow, re-align or re-order a dump it
+   paints. In the whitespace-aligned blocks (Conditions, Events) each field is
+   classified alone and only **warn-or-worse** is painted: a dump is mostly fine, and
+   colouring the fine parts is what buries the broken one.
+4. **Painted content is palette state.** A component holding painted text keeps the
+   raw text and repaints it in `SetStyles` at the same scroll offset (a restyle is not
+   a reopen), so a runtime theme switch cannot leave a surface on the departed theme.

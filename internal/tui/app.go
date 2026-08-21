@@ -3217,6 +3217,10 @@ func (m Model) openDescribeViewer(msg rowActionMsg) (tea.Model, tea.Cmd) {
 // after the viewer closed is dropped. A render error degrades: it closes the viewer
 // and surfaces a transient status-bar toast (D74), never breaking the layout or
 // leaving an empty box.
+//
+// The dump is seeded through SetDescribeContent, not SetContent: the viewer paints
+// it (STORY-06h-2) so the phase/state/reason lines carry the same colours the browse
+// table gives the same values, and it keeps the raw dump so a theme switch repaints.
 func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.viewerGen || !m.viewer.Active() {
 		return m, nil
@@ -3225,7 +3229,7 @@ func (m Model) handleDescribeLoaded(msg describeLoadedMsg) (tea.Model, tea.Cmd) 
 		m.viewer.Hide()
 		return m, m.surfaceError(NewErrorMsg("describe", msg.err))
 	}
-	m.viewer.SetContent(msg.content)
+	m.viewer.SetDescribeContent(msg.content)
 	return m, nil
 }
 

@@ -57,6 +57,7 @@ type Model struct {
 	kind     string // stamped into ClosedMsg
 	title    string // shown above the content
 	content  string // the accumulated text (so AppendContent can grow it in place)
+	describe string // the unpainted describe dump behind a painted content, "" otherwise
 
 	active bool // whether the viewer is shown (captures input) — "" View when false
 	width  int  // full screen width  (the box is centered within it)
@@ -81,9 +82,19 @@ func New(s styles.Styles, kind string) Model {
 // SetStyles repaints the viewer through s, replacing the palette it was built with
 // (M4-12b-1). A component caches the Styles it is handed, so a theme chosen at
 // runtime reaches an already-constructed model only through this (D170 pt 2).
-// Colors only: the content, the title and the scroll position are untouched — the
-// viewport holds the text unstyled, so nothing has to be re-rendered into it.
-func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+// Colors only: the title and the scroll position are untouched, and so is the text
+// itself — the viewport holds it unstyled, with the one exception of a painted
+// describe dump (SetDescribeContent), whose colours *are* the palette: the raw dump
+// is kept for exactly this, so it is repainted in place, at the same scroll offset,
+// rather than left on the departed theme.
+func (m *Model) SetStyles(s styles.Styles) {
+	m.styles = s
+	if m.describe == "" {
+		return
+	}
+	m.content = PaintDescribe(s, m.describe)
+	m.viewport.SetContent(m.content) // no GotoTop: a restyle is not a reopen.
+}
 
 // Kind returns the viewer's kind id.
 func (m Model) Kind() string { return m.kind }
@@ -101,9 +112,21 @@ func (m *Model) SetTitle(t string) { m.title = t }
 // SetContent replaces the displayed text and resets the scroll position to the top,
 // so opening a viewer always starts at the first line regardless of a prior scroll.
 func (m *Model) SetContent(text string) {
+	m.describe = ""
 	m.content = text
 	m.viewport.SetContent(text)
 	m.viewport.GotoTop()
+}
+
+// SetDescribeContent replaces the displayed text with the painted rendering of a
+// describe dump (PaintDescribe, STORY-06h-2) and keeps the raw dump beside it, so a
+// theme picked while the panel is open repaints it (SetStyles). It is the describe
+// open path's SetContent: the shell hands over the describer's output and the
+// panel's colouring is the component's business, so no styled string ever crosses
+// the shell boundary.
+func (m *Model) SetDescribeContent(text string) {
+	m.SetContent(PaintDescribe(m.styles, text))
+	m.describe = text
 }
 
 // AppendContent adds one more block of text (a single log line, M3-05) to the

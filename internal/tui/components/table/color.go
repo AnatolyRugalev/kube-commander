@@ -81,6 +81,9 @@ var statusWords = map[string]cellRole{
 	"suspended":              roleWarn,
 	"degraded":               roleWarn,
 	"containerstatusunknown": roleWarn,
+	// An event of type Warning, and any CRD printer that names the state
+	// outright: the word is a warning by definition.
+	"warning": roleWarn,
 	// "Unknown" is the apiserver saying it has lost touch, not a confirmed
 	// failure — a warning, so a genuinely failed object still stands out from it.
 	"unknown": roleWarn,
@@ -250,6 +253,30 @@ func (m Model) rowUnhealthy(r kube.Row) bool {
 	}
 	return false
 }
+
+// Role is the M4-06 cell classifier's verdict, exported for the surfaces that are
+// not tables. A describe dump is text, not rows (STORY-06h-2), so the panel that
+// paints it cannot go through UnhealthyCells — but it must not grow a second
+// vocabulary either, or the panel and the lists would disagree about what is
+// broken. It reads the same statusWords/heuristics the browse table's colouring
+// and the `H`/`U` unhealthy predicates read; only the entry point differs.
+//
+// The values mirror cellRole's severity order, so `>= RoleWarn` is "the reader
+// should look at this".
+type Role uint8
+
+const (
+	RoleNone    Role = Role(roleNone)    // nothing to say; ordinary text
+	RoleSuccess Role = Role(roleSuccess) // healthy, settled
+	RoleWarn    Role = Role(roleWarn)    // in flight, held, or degraded
+	RoleError   Role = Role(roleError)   // broken
+)
+
+// ClassifyValue reports how the classifier reads value when it sits under a column
+// (or, for a describe panel, a key) of the given name. Column names it knows
+// nothing about — the common case — yield RoleNone, so a caller can hand it every
+// key it meets and paint only what comes back coloured.
+func ClassifyValue(column, value string) Role { return Role(classifyCell(column, value)) }
 
 // UnhealthyRow is the M4-06 classifier lifted to a whole table: it reports
 // whether any of a row's cells classifies to a warning or error role under its
