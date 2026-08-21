@@ -857,7 +857,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D283
 
 - [ ] **STORY-06l** The default panel — land on the Pods table instead of the welcome page (`2026-08-15-land-on-pods-by-default.md`) and hide custom resources by default, shown only once pinned (`2026-08-15-hide-custom-resources.md`)
-      status: todo | owner: — | added: 2026-08-15
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-15 | claimed: 2026-08-21
       notes: Two startup defaults; the welcome page stays reachable and the pin gesture already exists (`menu.pin`).
       → milestone: M5 · knowledge: decisions.md D268
 
