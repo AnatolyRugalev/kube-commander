@@ -8196,3 +8196,57 @@ the reader does anything, and both bind whatever changes it later:
    without being asked, an index into `Items()` no longer names a row. A caller that
    knows a kind and wants the cursor on it uses `menu.SelectResource(gvr)`; `SelectItem`
    remains for callers that resolved a row *from* the displayed list (a mouse click).
+
+## D289 — the logs view stays oldest-first; newest-first is declined, and reopens only on event grouping (2026-08-21, STORY-06j-3)
+
+The S03 feedback `2026-08-15-logs-newest-first-order.md` (Priority normal) asked
+this to be *considered*, not done: reverse the buffer so the newest line is at the
+top with the filter box at the top, the way grafana and datadog render a live
+stream. Weighed and **declined** — no reversal, and no config option for one. The
+constraints, so a later leg does not relitigate it from scratch:
+
+1. **Half the ask is already true, and the other half is what the follow rule
+   bought.** The filter field already renders directly under the header, *above*
+   the body (`View`), and the view opens following with the cursor on the newest
+   line — so the fresh line is the first thing on screen without a gesture, and
+   the input already sits over recent lines rather than a wall of old ones,
+   because a tailing full-screen pane only ever shows the newest screenful. The
+   residual pain the web UIs answer — chasing a stream that silently froze — is
+   already answered more cheaply by D147 (`G` rejoins), D281 (a downward press
+   past the newest line rejoins) and the `[following]` badge (STORY-06j-1).
+
+2. **It would invert every nav key in exactly one view.** `j` would walk backwards
+   in time, `G` would reach the *oldest* line and `gg` the newest. Goals principle
+   6 makes the vim vocabulary the primary path, and D147 pt 3 already draws the
+   line for a shared nav key: a view may add an *effect* to `G` (it announces
+   itself in the header), it may not redefine the *direction* of the whole
+   movement set — a registry description is global, and the `?` overlay, the
+   generated keybindings doc and the README would all have to stop stating
+   truthfully what `G` does.
+
+3. **Grafana reverses events; this pager addresses lines.** Their log panels
+   render one ordered block per event, so the reversal is over records that stay
+   internally forward. kubecom's buffer is line-granular over a raw byte stream
+   (D242 pt 1) with no grouping available from the API, so a reversal would print
+   every multi-line record — stack traces, pretty-printed JSON, panics — from its
+   last line to its first. The analogy does not survive the representation
+   difference, and that is the load-bearing objection, not the muscle memory.
+
+4. **A reversal would split the screen from the clipboard.** D242 pt 4 fixes that
+   a yank matches what is shown; a newest-first selection would have to be
+   un-reversed to paste usefully into a bug report, so screen order and copy order
+   would disagree. The same doubling hits the rest of the view's state: `trim`
+   drops the *oldest* lines and the `[trimmed]` marker means "there was more above
+   this", `atNewest`/`scrollDown`/`placeCursor`/`showCursor`/`shownIdx`, the
+   selection range and the wrapped row arithmetic (D242 pt 6) all encode the
+   direction. An **opt-in setting is the worst option of the three**: it makes
+   every one of those a two-branch problem forever, doubles the tests on the most
+   intricate component in the tree, and still leaves the docs unable to say what a
+   key does.
+
+5. **The reopen condition is event grouping, not taste.** If the logs view ever
+   gains records rather than lines — a structured/JSON log mode that folds a
+   multi-line entry into one addressable unit — pt 3 dissolves and newest-first
+   becomes coherent (reverse the records, each internally forward). A later leg
+   may revisit this decision *then*, and should supersede it rather than bolt an
+   order flag onto the line-granular pager.
