@@ -842,7 +842,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D281
 
 - [ ] **STORY-06j-3** The newest-first log order weighed — grafana/datadog style, newest line at the top with the filter box also at the top — a design to consider, not a demand; lands with follow-rearm (06j-2) or not at all (`2026-08-15-logs-newest-first-order.md`)
-      status: todo | owner: — | added: 2026-08-16
+      status: in-progress | owner: claude-opus-5 | added: 2026-08-16 | claimed: 2026-08-21
       notes: Third slice of STORY-06j. Weigh the trade-off (it inverts `G`-to-bottom muscle memory and what "scrolling down" means) against the follow-rearm work; record the fold-in decision, and only then decide whether to implement.
       → milestone: M5 · knowledge: decisions.md D268
 
