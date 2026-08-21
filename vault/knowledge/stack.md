@@ -603,3 +603,20 @@ this is here for context only — do not resurrect the workflow steps on its str
   captured writer and a forked child both hold), and `syscall.Dup2` does not exist
   on every GOARCH: linux/arm64 has only `dup3` (`dup3(old,new,0)` ≡ `dup2`), darwin
   only `dup2`, so the shim is build-tagged per GOOS.
+- **The renderer erases trailing blanks instead of painting them, and that bet is
+  keyed off `$TERM`, not off `bce`.** kubecom paints a selected row by padding it
+  with styled literal spaces (lipgloss), but Bubble Tea v2's renderer
+  (`charmbracelet/ultraviolet`, `terminal_renderer.go`) compresses a run of blank
+  cells into `SGR bg` + `ECH`/`EL` rather than emitting the spaces — see
+  `canClearWith`, whose own comment says it *assumes* the `bce` (background colour
+  erase) capability. The assumption is never checked: `capECH` comes from a
+  `$TERM`-prefix switch in the same file, and that switch grants it to `tmux` and
+  `screen` — whose terminfos deliberately do **not** declare `bce`. So a selection
+  bar (or any full-width styled fill) that stops at the last glyph instead of
+  reaching the pane edge is the host's BCE handling, **not** kubecom's row
+  painting: our output is correct and re-rendering it differently cannot fix it.
+  Observed 2026-08-21 running kubecom inside plexos, where the terminal layer
+  dropped the erased cells' background when re-encoding the grid (fixed there, not
+  here); bare ghostty and one nested-multiplexer case rendered it correctly. If a
+  tmux/screen report ever arrives, that is the first suspect — reproduce outside
+  the multiplexer before touching any painting code.
