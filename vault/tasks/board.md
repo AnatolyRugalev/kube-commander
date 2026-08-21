@@ -781,7 +781,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       notes: The two mirror-image instrument fixes; the walk's two dead-end classes were each invisible to the other half of `keys analyze`. Landed as D273: the recorder writes the confirm modal's resolved action (ConfirmAction → confirm.accept/decline, shared `confirmResolved` with the router) so a handled `y`/`n`/`enter`/`esc` reads as the action it ran, not a dead end — while an unhandled confirm key stays a dead end (the modal is not a text surface); and `keys analyze` gains a "presses on text surfaces" section ranking `Text` presses that resolved to nothing, so the picker `j`s of S01 are a finding rather than silently skipped. The analyzer's dead-end predicate is unchanged; text presses just tally into their own bucket. Both feedback files deleted (D69).
       → milestone: M5 · knowledge: decisions.md D268, D273
 
-- [ ] **STORY-06f** A dedicated `events` action — the selected resource's events (kind, reason, message, age) as its own list, the surface for "why is this red" instead of hunting through describe (`2026-08-15-events-action.md`)
+- [x] **STORY-06f** A dedicated `events` action — the selected resource's events (kind, reason, message, age) as its own list, the surface for "why is this red" instead of hunting through describe (`2026-08-15-events-action.md`)
       status: done | owner: opencode | added: 2026-08-15 | done: 2026-08-16
       notes: Landed as D274: a new `kube.Clients.Events` primitive lists the object's own core Events as a server-printed Table (the `kubectl get events` columns, no hard-coded columns) filtered by involvedObject UID (name fallback, empty name rejected), and `res.events` (`E`, gated on the kind's get verb) opens it in the shared viewer — the columns padded to their widest cell except the last, which flows. `EventLister` seam on the Cluster bundle; empty list says "(no events)", error degrades to a toast (D74); README + generated keybindings doc updated. Verified live against the story cluster's crash-looping pod.
       → milestone: M5 · knowledge: decisions.md D268, D274
@@ -812,7 +812,7 @@ feature legs. Re-split any slice that proves > ~300 lines. **06a (the letter rem
       → milestone: M5 · knowledge: decisions.md D268, D284
 
 - [ ] **STORY-06h-2** The painted describe panel — the describe output rendered as a styled panel: phase/status/conditions in theme-aware colours, problem states (CrashLoopBackOff, ImagePullBackOff, Unschedulable, unready) emphasized so the failing part is where the eye lands first (`2026-08-15-rich-describe-panel.md`)
-      status: todo | owner: — | added: 2026-08-20
+      status: in-progress | owner: claude-opus | added: 2026-08-20
       notes: Second slice of STORY-06h; lands on 06h-1's full-pane geometry. Reuse the describe data and re-render it styled through the M4-06 classifier the unhealthy filter/sweep already share (`table.UnhealthyCells`), so the panel and the lists cannot disagree about what is broken; pairs with STORY-06f (events) so "why is this red" is one glance.
       → milestone: M5 · knowledge: decisions.md D268
 
