@@ -87,7 +87,16 @@ func runTUI(opts runOptions) error {
 	if err != nil {
 		return err
 	}
-	km := keymap.DefaultKeymap()
+	// So does a keymap kubecom cannot use: a key, context or action it cannot read,
+	// or a value an action does not take (D303). It is used whole or not at all.
+	userKeys, err := keymap.UserDocs(cfg)
+	if err != nil {
+		return err
+	}
+	km, err := keymap.New(userKeys...)
+	if err != nil {
+		return err
+	}
 
 	// Build the live cluster client. Connect resolves the rest.Config (bad/missing
 	// kubeconfig or context surfaces here as KindBadContext) and wires the client-go

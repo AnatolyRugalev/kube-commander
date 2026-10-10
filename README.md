@@ -142,10 +142,12 @@ forwards.
 
 ### Make it yours
 
-- **Keys** — every action rebindable; `kubecom keys` prints your effective map.
+- **Keys** — every action rebindable, in context: a key can mean one thing on
+  the Pods table and another everywhere else. `kubecom keys` prints what is in force.
 - **Themes** — **Fourteen are built in**, including Catppuccin, Nord, Solarized
   and gruvbox; kubecom sets your terminal background to match.
-- **Menus and CRDs** — a per-context file adds custom resource types; the rest stay
+- **Menus and CRDs** — a `menu` in `config.kdl` adds custom resource types, for
+  every context or one; the rest stay
   one `/` or `:resource` away, with a `+N custom` row telling you how many are held
   back. **Pin** the kinds you live in.
 - **Resume** — kubecom opens on Pods, then wherever you left off per context.
@@ -195,7 +197,9 @@ kubecom --context prod -n web    # a specific context and namespace
 kubecom --kubeconfig ~/.kube/x   # a specific kubeconfig
 kubecom update                   # update to the newest build of its channel
 kubecom version                  # build information
-kubecom keys                     # the resolved keymap
+kubecom keys                     # the keymap in force, and where each key comes from
+kubecom keys default             # the default keymap (default.kdl)
+kubecom keys check               # check your keymap without starting kubecom
 kubecom keys analyze trace.jsonl # read a --keylog trace back as findings
 ```
 

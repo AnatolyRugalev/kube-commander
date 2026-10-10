@@ -7,53 +7,66 @@ Two decisions govern this file:
   **fully configurable, zero hard-coded keys.**
 
 Everything below (the vim scheme included) is the **default keymap**. Users can
-rebind any action via config. Implement with `bubbles/key`, but build the
-`Binding`s *from the resolved keymap*, never from literals.
+rebind any action, in any context, in config.kdl's `keymap { }` (D303). Help and
+hints are built *from the keymap in the context path*, never from literals.
 
-> The authoritative, always-current default map is generated from the registry
-> into [`docs/keybindings.md`](../../docs/keybindings.md) (`make keys-doc`;
+> The authoritative default map is `internal/tui/keymap/default.kdl`
+> (`kubecom keys default` prints it), generated into
+> [`docs/keybindings.md`](../../docs/keybindings.md) (`make keys-doc`;
 > drift-guarded by `TestKeybindingsDoc`, M2-01e/D51). The tables in this file are
-> the human design intent; the generated doc is what actually ships.
+> the human design intent; default.kdl is what actually ships.
 
-## Architecture: action registry (the "zero hard-coded keys" rule)
+## Architecture: actions, contexts, layers (D11, D303)
 
 - Every user-triggerable behavior is a named **`Action`** (a stable string id,
-  e.g. `nav.down`, `list.drillIn`, `res.describe`, `pod.logs`).
-- A **default keymap** — one data table in code — maps `Action → []key`,
-  expressing the vim-first defaults + fallbacks.
-- At startup: `resolved = merge(defaultKeymap, config.Keys)` then **validate**.
-- Every view resolves input as `keymap.Action(keyMsg)` and switches on the
-  `Action`. **No view ever matches a raw key.** (`case KeyRune 'l'` is banned.)
-- The help overlay and the generated keybindings doc are produced **from the
-  registry**, so they can't drift from reality.
+  e.g. `nav.down`, `res.describe`), registered in `internal/tui/keymap`.
+- Keys live in KDL keymaps, the context engine in `internal/keybind` (ported
+  from plexos, not imported): `bind "<keys>" "<action>" [value]`, `unbind`,
+  `group`, `leader`, `base`, and `context "<CEL>" { … }` blocks.
+- Layers load in order: default.kdl, config.kdl's `keymap`, the overlay's.
+  Precedence: the deepest context wins, then the later layer, then the later line.
+- The TUI builds a **context path** for every key (`Model.keyPath`): cluster,
+  menu or table (resource, kind…), sort, one view (logs, viewer, search,
+  unhealthy), one overlay (forwards, help, picker, prompt, confirm), field, and
+  `focus`, the innermost node. Every key resolves in it: `Keymap.Action(key,
+  path)` or the Sequencer for `g g`. **No view ever matches a raw key.**
+- A **field** on the path keeps its text: a key that types goes to the field
+  unless a binding as deep as the field takes it (D303 pt 5) — the old
+  "mapped and no text" split, now in one place.
+- The help overlay, the hint line (`HelpContextOf(path)` picks the curated set)
+  and the generated doc read the same keymap, so they can't drift from it.
 
 ### Key syntax (config + defaults)
-Human-readable tokens: `j`, `k`, `up`, `down`, `enter`, `esc`, `pgup`, `pgdn`,
-`home`, `end`, `ctrl+d`, `ctrl+u`, `space`, `/`. Multi-key sequences allowed
-(`gg`). An action may bind multiple keys (vim + fallback).
+Human-readable tokens: `j`, `G`, `up`, `down`, `enter`, `esc`, `pgup`, `pgdn`,
+`home`, `end`, `ctrl+d`, `alt+b`, `shift+tab`, `space`, `/`. A sequence is
+space-separated (`g g`, `<leader> p`). An action may have several bindings (vim
++ fallback).
 
 ### Validation at load
-- Unknown action id → error (typo protection).
-- Two actions bound to the same key **in the same context** → error with both names.
-- Binding an action over a default navigation key → allowed, but **warn** (D10).
-- Empty binding → action becomes unavailable (allowed; user opt-out).
+- Unknown action id, a value for an action that takes none, an unreadable key or
+  context, `<leader>` with no leader → the launch fails at file:line
+  (`kubecom keys check` runs the same check).
+- Two bindings of the same keys are not an error: precedence picks one.
+- The old nav-shadow warning (binding an action over a navigation key) is
+  retired with the flat map: a context binding over `j` is the point.
+- `unbind` (or `base "none"`) makes an action unavailable; the palette still runs it.
 
 ## Config format
 
-Lives in the plain-YAML config (see [`stack.md`](stack.md)) under `keys:`.
-Overrides are merged onto defaults — you only list what you change:
-
-```yaml
-keys:
-  # action id: list of keys (replaces that action's default binding)
-  res.describe: [d, f3]
-  pod.logs:     [L]
-  nav.down:     [j, down]     # redundant with default; shown for shape
-  res.delete:   [x, delete]
+```kdl
+version 1
+keymap {
+    bind "L" "res.logs"
+    unbind "q"
+    context "table.kind == 'Pod'" {
+        bind "g p" "resources.switch" "pods"
+    }
+}
 ```
 
-Omitted actions keep their defaults. `kubecom keys` (planned) prints the fully
-resolved map and any warnings.
+The full reference, with the contexts and their attributes, is
+[`docs/configuration.md#key-bindings`](../../docs/configuration.md#key-bindings).
+`kubecom keys` lists what is in force and where each binding comes from.
 
 ## Default navigation keys
 
@@ -69,7 +82,7 @@ These are defaults (overridable), but action **defaults** must not collide with 
 | Move left pane / right pane | `h` / `l` | `←` / `→` |
 | Drill in / open selection | `l` or `Enter` | `→`, `Enter` |
 | Back / up a level | `h` or `Esc` | `←`, `Esc` |
-| Top / bottom | `gg` / `G` | `Home` / `End` |
+| Top / bottom | `g g` / `G` | `Home` / `End` |
 | Half page down / up | `Ctrl+d` / `Ctrl+u` | `PgDn` / `PgUp` |
 | Full page down / up | `Ctrl+f` / `Ctrl+b` | `PgDn` / `PgUp` |
 | Filter / search | `/` | `/` |
@@ -131,8 +144,11 @@ menu both dispatch one typed `rowActionMsg` intent (D107); each later M3 leg
 [`docs/keybindings.md`](../../docs/keybindings.md) is the shipping map.
 
 ## Rules for implementers
-- Every binding registered via `bubbles/key.Binding` with **both** the vim key and
-  its fallback, plus help text — so the help overlay and generated docs stay honest.
+- Every default binding goes in default.kdl with **both** the vim key and its
+  fallback; the registry carries the help text — so the help overlay and generated
+  docs stay honest.
+- A key that should act only on one surface goes in that surface's `context`
+  block, not in a router.
 - Never assign an action to `h j k l n g G /` or the `Ctrl+u/d/f/b` set.
 - Modal/picker views inherit `j/k` + arrows and `Enter`/`Esc` consistently.
 

@@ -125,7 +125,10 @@ func (m Model) handlePortsLoaded(msg portsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.mutateRef = msg.ref
 	m.pfPorts = msg.ports
 	m.portPicker.SetItems(portPickerItems(msg.ports))
-	return m, m.portPicker.Show()
+	cmd := m.portPicker.Show()
+	// The title's keys are read in the path the open picker makes.
+	m.portPicker.SetTitle(portPickerTitle(m.keymap.HelpMap(m.keyPath())))
+	return m, cmd
 }
 
 // handlePortSelected acts on the port the user picked: it closes the picker and starts
@@ -262,17 +265,18 @@ func portLabel(p kube.Port) string {
 }
 
 // portPickerTitle renders the port picker's title with the two local-port gestures
-// advertised by their *resolved* keys. The picker is the only surface where they do
-// anything and a modal has no hint bar, so the title is where they are discoverable —
-// e.g. "Port-forward port · p local · 0 free". The keys come from the keymap, never a
-// literal (D11), so a rebind is reflected and a disabled action drops out of the title.
-func portPickerTitle(km *keymap.Keymap) string {
+// advertised by the keys that run them in the picker's path. The picker is the only
+// surface where they do anything and a modal has no hint bar, so the title is where
+// they are discoverable — e.g. "Port-forward port · p local · 0 free". The keys come
+// from the keymap, never a literal (D11), so a rebind is reflected and an action
+// nothing runs there drops out of the title.
+func portPickerTitle(keys keymap.HelpKeyMap) string {
 	title := "Port-forward port"
 	var hints []string
-	if k := firstKey(km, keymap.ActionLocalPort); k != "" {
+	if k := firstKey(keys, keymap.ActionLocalPort); k != "" {
 		hints = append(hints, k+" local")
 	}
-	if k := firstKey(km, keymap.ActionFreeLocalPort); k != "" {
+	if k := firstKey(keys, keymap.ActionFreeLocalPort); k != "" {
 		hints = append(hints, k+" free")
 	}
 	if len(hints) > 0 {
@@ -281,10 +285,10 @@ func portPickerTitle(km *keymap.Keymap) string {
 	return title
 }
 
-// firstKey is an action's primary bound key ("" when the user disabled it), the token
-// a hint shows.
-func firstKey(km *keymap.Keymap, a keymap.Action) string {
-	if ks := km.Keys(a); len(ks) > 0 {
+// firstKey is an action's primary key in the path ("" when nothing runs it there),
+// the token a hint shows.
+func firstKey(keys keymap.HelpKeyMap, a keymap.Action) string {
+	if ks := keys.Keys(a); len(ks) > 0 {
 		return ks[0]
 	}
 	return ""

@@ -92,7 +92,7 @@ func TestScreencastTapeMatchesTheKeymap(t *testing.T) {
 			t.Errorf("%s:%d: annotated action %q is not registered", tapePath, k.line, k.action)
 			continue
 		}
-		bound := km.Keys(a)
+		bound := km.KeysAnywhere(a)
 		if !contains(bound, k.token) {
 			t.Errorf("%s:%d: %s presses %q, but %s is bound to %v — re-record the tape or fix the annotation",
 				tapePath, k.line, k.cmd, k.token, a, bound)

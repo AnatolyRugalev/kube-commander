@@ -51,7 +51,7 @@ type Theme struct {
 
 	// Semantic status.
 	Error   color.Color // failures, RBAC denials
-	Warn    color.Color // warnings (e.g. keymap nav-shadow, degraded feature)
+	Warn    color.Color // warnings (e.g. a degraded feature)
 	Success color.Color // healthy / ready states
 }
 

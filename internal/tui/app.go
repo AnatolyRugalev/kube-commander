@@ -601,10 +601,11 @@ type Model struct {
 	table   table.Model
 	status  statusbar.Model
 	hintbar hintbar.Model
-	// hintCtx is the hint subset the hintbar currently renders. It is the memo
-	// refreshHints compares against at the tail of every Update (HINT-01/D206), so a
-	// message that does not move input ownership re-renders nothing.
-	hintCtx keymap.HelpContext
+	// hintPath is the context path the hintbar was last rendered for, written out
+	// (keybind.Path.String). It is the memo refreshHints compares against at the
+	// tail of every Update (HINT-01/D206), so a message that does not move what
+	// holds the keyboard re-renders nothing.
+	hintPath string
 
 	ctrPicker picker.Model
 	// cmdPicker is the command palette (PAL-02): a picker over the app's verbs rather
@@ -1202,9 +1203,8 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 	m.pfPanel = forwards.New(s)
 	m.cmdPicker.SetTitle("Command")
 	m.ctrPicker.SetTitle("Container")
-	m.portPicker.SetTitle(portPickerTitle(km)) // advertises the local-port gestures by their bound keys
-	m.menu.AddExtras(m.menuExtras)             // fold in the per-context menu customizations (D83); no-op when none
-	m.menu.AddPinned(m.menuPinned)             // then this context's pins, behind them (D193 pt 3 / D202)
+	m.menu.AddExtras(m.menuExtras) // fold in the per-context menu customizations (D83); no-op when none
+	m.menu.AddPinned(m.menuPinned) // then this context's pins, behind them (D193 pt 3 / D202)
 	m.menu.Focus()
 	m.menu.SetNamespace(m.namespace)   // seam row reflects the initial -n scope
 	m.syncHints()                      // menu starts focused → menu-context hints
@@ -1317,20 +1317,20 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		//     field is always open, D140 pt 1) and nothing it does opens a picker or
 		//     modal, so it is resolved before them;
 		//   - the logs view's live grep captures text while it is open (LOGS-02), so
-		//     its keys are split raw here rather than resolved through the sequencer.
+		//     its keys are split here rather than resolved through the sequencer.
 		//     With the filter closed the logs view takes the ordinary action path
-		//     (handleLogsAction) so `gg` and `G` still work in a log.
-		// Every one of these surfaces handles its own keys, so the keymap resolves
-		// nothing for them and the record carries no action — except the confirm
-		// modal, which resolves its keys in a dedicated context (ConfirmAction:
-		// `y`/enter → confirm.accept, `n`/esc → confirm.decline, D132). A handled
-		// accept or decline is not a reach for a missing key, so it must be
-		// recorded with the action it ran, or the analyzer reads the walker's
-		// every `esc` decline as a dead end (STORY-06e).
+		//     (handleLogsAction) so `g g` and `G` still work in a log.
+		// Every one of these surfaces resolves its keys one at a time in the context
+		// path (keyPath, D303) — the path is what tells a key that types into a field
+		// from one that acts — and the record carries no action, except the confirm
+		// modal's: a handled accept or decline is not a reach for a missing key, so it
+		// is recorded with the action it ran, or the analyzer reads the walker's every
+		// `esc` decline as a dead end (STORY-06e).
+		path := m.keyPath()
 		if mode := m.keyMode(); mode != keyModeBrowse {
 			action, kind := keymap.Action(""), keymap.ResultNone
 			if mode == keyModeConfirm {
-				if a, ok := m.confirmResolved(msg.Key()); ok {
+				if a, _, ok := m.keymap.Action(msg.Key(), path); ok {
 					action, kind = a, keymap.ResultAction
 				}
 			}
@@ -1350,25 +1350,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.routeModalConfirmKey(msg)
 			}
 		}
-		// The resource table owns a second key context while it is the focused surface
-		// with nothing else capturing (STORY-06c): `enter` there opens the actions menu
-		// — TableAction → actions.menu, the `:action ` palette stage — instead of
-		// resolving to the browse drill-in, whose table meaning (RowSelectedMsg) was a
-		// dead end, the S01 walk's "lost gesture". The gate is the same ladder the hint
-		// uses (hintContext == HelpTable: no modal, logs view, viewer, forwards panel,
-		// help overlay or sort mode is up), the D132 pattern for a key that means
-		// different things in different surfaces; a lone `g` (pending `gg`) still owns
-		// the press, so the sequencer's buffered prefix is never orphaned. `enter`
-		// keeps its browse meaning (nav.drillIn) everywhere else.
-		if m.hintContext() == keymap.HelpTable && !m.seq.Pending() {
-			if action, ok := m.keymap.TableAction(msg.Key()); ok {
-				m.recordKey(msg, keyModeBrowse, action, keymap.ResultAction)
-				return m.handleAction(action)
-			}
-		}
-		// Recorded before it is handled, so the press that quit (or wedged) the
-		// session is in the trace that has to explain it.
-		switch r := m.seq.Input(msg.Key()); r.Kind {
+		// Everything else feeds the sequencer in the context path, so a key means what
+		// it means where it is pressed: `enter` on the resource table itself opens the
+		// actions menu (`context "focus == 'table'"`, STORY-06c) and drills in
+		// everywhere else. Recorded before it is handled, so the press that quit (or
+		// wedged) the session is in the trace that has to explain it.
+		switch r := m.seq.Input(msg.Key(), path); r.Kind {
 		case keymap.ResultAction:
 			m.recordKey(msg, keyModeBrowse, r.Action, r.Kind)
 			return m.handleAction(r.Action)
@@ -1394,6 +1381,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.seqGen {
 			return m, nil // superseded by a newer pending; ignore.
 		}
+		// The prefix resolves in the path it was typed in (the Sequencer keeps it).
 		if r := m.seq.Timeout(); r.Kind == keymap.ResultAction {
 			return m.handleAction(r.Action)
 		}
@@ -2316,9 +2304,9 @@ func resourceAliases(r kube.Resource) []string {
 // palette's `:action ` stage now opens over the same set (rowActionTitles, through
 // paletteRowVerbs), so its opener, its Kind and its picker are gone rather than
 // dormant (D207 pt 3 / D210). Since STORY-06c the gesture that opens that stage is
-// `enter` on the selected resource row — resolved in the resource-table key context
-// (TableAction → actions.menu) so the keymap keeps `enter` = nav.drillIn everywhere
-// else (D132's context split). What survives is everything that was not the surface:
+// `enter` on the selected resource row — bound to actions.menu in default.kdl's
+// `context "focus == 'table'"` so the keymap keeps `enter` = nav.drillIn everywhere
+// else (D132's context split, D303). What survives is everything that was not the surface:
 // the registry, the applicability predicates, and dispatchRowAction — which the stage,
 // the verb-stage row entries and the direct keys all still end in.
 
@@ -3696,11 +3684,10 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if p == nil {
 		return m, nil
 	}
-	key := msg.Key()
-	action, mapped := m.keymap.Action(key)
+	action, _, mapped := m.keymap.Action(msg.Key(), m.keyPath())
 	var cmd tea.Cmd
 	if p.Filtering() {
-		if mapped && key.Text == "" {
+		if mapped {
 			*p, cmd = p.Update(action)
 			return m.previewTheme(), cmd
 		}
@@ -3759,8 +3746,7 @@ func (m Model) routePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // the open prompt captures all input, so the sequencer and the panes never see it.
 // Confirm-mode modals are not prompting, so they still route through the sequencer.
 func (m Model) routeModalPromptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.Key()
-	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+	if action, _, mapped := m.keymap.Action(msg.Key(), m.keyPath()); mapped {
 		return m.handleModalAction(action)
 	}
 	var cmd tea.Cmd
@@ -3769,33 +3755,17 @@ func (m Model) routeModalPromptKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // routeModalConfirmKey resolves one keypress while the confirm modal is open (not
-// prompting). The confirm modal fully captures input, so a key resolves in the
-// confirm context first (ConfirmAction: `y`/enter → confirm.accept, `n`/esc →
-// confirm.decline — the y/n muscle memory the feedback asked for, still registered
-// and rebindable, D11/D132); anything the confirm context doesn't bind falls back
-// to the browse keymap so app.quit still dismisses the modal, and every other key
-// is swallowed so the panes underneath never move. No view matches a raw key (D11).
+// prompting). The confirm modal fully captures input: a key resolves in the confirm
+// path, where `context "confirm"` answers it (`y`/enter → confirm.accept, `n`/esc
+// → confirm.decline — the y/n muscle memory the feedback asked for, still
+// registered and rebindable, D11/D132/D303) and the rest of the keymap still
+// resolves under it, so app.quit dismisses the modal; every other key is swallowed
+// so the panes underneath never move. No view matches a raw key (D11).
 func (m Model) routeModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if action, ok := m.confirmResolved(msg.Key()); ok {
+	if action, _, ok := m.keymap.Action(msg.Key(), m.keyPath()); ok {
 		return m.handleModalAction(action)
 	}
 	return m, nil
-}
-
-// confirmResolved reports the action the confirm modal will take for a key, if
-// any: the confirm context first (ConfirmAction: `y`/enter → confirm.accept,
-// `n`/esc → confirm.decline), then the browse fallback so app.quit still
-// dismisses the modal. routeModalConfirmKey routes by it; the recorder uses it
-// too, so a handled accept or decline is written to the trace with the action it
-// ran rather than as a dead end (STORY-06e). No view matches a raw key (D11).
-func (m Model) confirmResolved(key tea.Key) (keymap.Action, bool) {
-	if action, ok := m.keymap.ConfirmAction(key); ok {
-		return action, true
-	}
-	if action, ok := m.keymap.Action(key); ok {
-		return action, true
-	}
-	return "", false
 }
 
 // openFilter opens the live filter input over whichever pane holds focus
@@ -3870,7 +3840,7 @@ func isEmptyLineBackspace(key tea.Key, query string) bool {
 // unwinds past its start instead of dead-ending on an empty prompt.
 func (m Model) routeFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.Key()
-	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+	if action, _, mapped := m.keymap.Action(key, m.keyPath()); mapped {
 		return m.handleFilterAction(action)
 	}
 	if isEmptyLineBackspace(key, m.filter.Value()) {
@@ -4007,106 +3977,34 @@ func (m Model) handleSortModeAction(a keymap.Action) (tea.Model, tea.Cmd) {
 // syncHints refreshes the persistent bottom key-hint to match what currently holds
 // focus (the dogfood ask, feedback 2026-07-21-06): the menu-context keys while the
 // left resource menu is focused, the table-context keys (filter/search, back) once
-// the right table is. The hint stays registry-generated (D11) — this only picks the
-// focus context. It feeds the dedicated hintbar line (FB-hintbar-dedicated), not
-// the status bar, so the live state and the hint never compete for one row. Call it
-// wherever focus switches, and on resize (the help renderer elides the hint to the
-// current width).
+// the right table is. The hint stays registry-generated (D11) — this only hands the
+// help component the context path (keyPath), which picks the hint set
+// (keymap.HelpContextOf) and the keys that act there (D303 pt 7). It feeds the
+// dedicated hintbar line (FB-hintbar-dedicated), not the status bar, so the live
+// state and the hint never compete for one row. Call it wherever focus switches, and
+// on resize (the help renderer elides the hint to the current width).
 func (m *Model) syncHints() {
-	ctx := m.hintContext()
-	m.hintCtx = ctx
-	m.hintbar.SetHint(m.help.ShortHelpContextView(ctx))
+	p := m.keyPath()
+	m.hintPath = p.String()
+	m.help.SetPath(p)
+	m.hintbar.SetHint(m.help.HintView())
 }
 
-// refreshHints re-renders the hint only when the context it derives from has
-// changed since the last sync — the tail of every Update (HINT-01/D206). The
-// forced syncHints stays the call for a change the context does not capture (a
-// resize re-elides the same context to a new width).
+// refreshHints re-renders the hint only when the path it derives from has changed
+// since the last sync — the tail of every Update (HINT-01/D206). The forced
+// syncHints stays the call for a change the path does not capture (a resize
+// re-elides the same hint to a new width).
 func (m *Model) refreshHints() {
-	if m.hintContext() != m.hintCtx {
+	if m.keyPath().String() != m.hintPath {
 		m.syncHints()
 	}
 }
 
-// hintContext derives which curated hint subset is truthful right now. It mirrors
-// the precedence Update routes keys by, in the same order, because that is exactly
-// what makes a hint entry a promise (D143 pt 1): whoever owns input owns the hint.
+// hintContext is which curated hint subset is truthful right now: the context
+// path's (keymap.HelpContextOf), because whoever owns input owns the hint (D143
+// pt 1) and the path is what the keys resolve in.
 func (m *Model) hintContext() keymap.HelpContext {
-	switch {
-	case m.searchView.Active():
-		// The search mini-app replaces the browse body and captures every keypress, so
-		// the browse hints (filter, sort, actions, namespace…) are all unreachable while
-		// it is up — it gets its own context (SEARCH-03b).
-		return keymap.HelpSearch
-	case m.logsView.Filtering():
-		// The logs mini-app's live grep captures text while it is open (LOGS-02), and
-		// D143 pt 1 makes the difference matter: `/`, `f` and `q` type instead of firing,
-		// so only the no-text keys may be advertised. Resolved before the picker for the
-		// same reason Update routes it first.
-		return keymap.HelpLogsFilter
-	case m.activePicker() != nil:
-		// A modal picker captures all input while it is up, so the browse hints under it
-		// are unreachable (HINT-01). Which of the two picker contexts applies is the
-		// field's state, not the picker's kind: since STORY-06d a picker opens in
-		// navigation mode with the field closed (HelpPicker, j/k navigate, `/` opens
-		// it); open — the palette's verb list on show, or a field the reader opened
-		// with `/` — leaves only the no-text keys (HelpPickerFilter).
-		if m.activePicker().Filtering() {
-			return keymap.HelpPickerFilter
-		}
-		return keymap.HelpPicker
-	case m.filter.Active():
-		// The browse filter field captures text while it is open (routeFilterKey), so
-		// the table set underneath — `/`, `n`, `s`, `a`, `?`, `q` — types instead of
-		// firing; only the no-text keys act (HINT-03). Resolved after the picker and
-		// before the modals, exactly where Update routes it.
-		return keymap.HelpTableFilter
-	case m.modal.Prompting():
-		// The modal's text field takes every text-producing key, so only the no-text
-		// control keys act — enter submits, esc cancels (routeModalPromptKey). Resolved
-		// before the confirm case for the same reason Update routes it first: a prompting
-		// modal is also Active().
-		return keymap.HelpPrompt
-	case m.modal.Active():
-		// The confirm modal captures all input and answers in the confirm key context
-		// (D132), so the keys that act here are not browse keys at all (HINT-02).
-		return keymap.HelpConfirm
-	case m.unhealthyView.Active():
-		// The cross-kind unhealthy list replaces the browse body and captures every
-		// keypress while it is up (handleUnhealthyAction), so the browse set underneath
-		// is unreachable (STORY-06g-2b). Resolved before the logs view for the same
-		// reason handleAction orders them so.
-		return keymap.HelpUnhealthy
-	case m.logsView.Active():
-		// The logs mini-app with its grep closed honours every key it advertises, `q`
-		// included — quit closes the view, as it does in any pager.
-		return keymap.HelpLogs
-	case m.viewer.Active():
-		// The shared read-only viewer is a pager overlay: it scrolls on navigation and
-		// closes on back/quit, swallowing the rest (handleViewerAction). Below the logs
-		// view for the same reason handleAction orders them so.
-		return keymap.HelpViewer
-	case m.pfPanel.Active():
-		// The port-forward panel swallows everything but its own cursor/stop/close keys
-		// (handleForwardsPanelAction), so the browse set underneath is unreachable
-		// (HINT-03). Below the viewer and above the overlay, as handleAction orders them.
-		return keymap.HelpForwards
-	case m.help.Visible():
-		// The keybindings overlay swallows navigation while it is open, so the only
-		// promise left to make is how to close it. Last of the capturing surfaces, as it
-		// is in handleAction — an overlay that owns input wins the hint over it.
-		return keymap.HelpKeybindings
-	case m.table.SortMode():
-		// The column-header sort mode is a capturing surface with its own hint set
-		// (HelpSort): while the header row holds the cursor, h/l move, enter toggles
-		// direction, x clears and esc/S leave — the browse set underneath is
-		// unreachable (STORY-06b). Resolved before the plain table case, exactly where
-		// handleAction routes it.
-		return keymap.HelpSort
-	case m.table.Focused():
-		return keymap.HelpTable
-	}
-	return keymap.HelpMenu
+	return keymap.HelpContextOf(m.keyPath())
 }
 
 // syncFilterStatus reflects the current narrowing state on the status bar: the
@@ -4793,7 +4691,7 @@ func (m Model) View() tea.View {
 		// width and height, and the resources menu stays visible to its left.
 		body = overlayAt(body, m.viewer.View(), m.rightPaneX(), 0, m.width, m.bodyHeight())
 	case m.pfPanel.Active():
-		body = overlayCenter(body, m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.keymap), m.width, m.bodyHeight())
+		body = overlayCenter(body, m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.help.Keys()), m.width, m.bodyHeight())
 	}
 
 	return m.screen(tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.status.View(), body, m.hintbar.View())))

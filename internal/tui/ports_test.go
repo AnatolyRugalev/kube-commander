@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
@@ -35,7 +36,7 @@ func pressPicker(t *testing.T, m Model, k tea.Key) Model {
 // keymap says rather than a literal (D11).
 func gestureKey(t *testing.T, m Model, a keymap.Action) tea.Key {
 	t.Helper()
-	keys := m.keymap.Keys(a)
+	keys := m.keymap.KeysAnywhere(a)
 	if len(keys) != 1 || len([]rune(keys[0])) != 1 {
 		t.Fatalf("action %s should default to one single-rune key, got %v", a, keys)
 	}
@@ -196,21 +197,19 @@ func TestLocalPortSpec(t *testing.T) {
 }
 
 // TestPortPickerTitleAdvertisesGestures proves the picker's only discovery surface
-// names the gestures by their *resolved* keys (D11), never a literal.
+// names the gestures by the keys that run them in the picker (D11), never a literal.
 func TestPortPickerTitleAdvertisesGestures(t *testing.T) {
+	ports := keybind.Path{Table: &keybind.Table{Kind: "Pod"}, Picker: &keybind.Picker{ID: "ports"}}
 	km := keymap.DefaultKeymap()
-	title := portPickerTitle(km)
+	title := portPickerTitle(km.HelpMap(ports))
 	for _, a := range []keymap.Action{keymap.ActionLocalPort, keymap.ActionFreeLocalPort} {
-		if k := km.Keys(a)[0]; !strings.Contains(title, k) {
+		if k := km.Keys(a, ports)[0]; !strings.Contains(title, k) {
 			t.Fatalf("the port picker title %q should advertise %s (%q)", title, a, k)
 		}
 	}
-	km, _, err := km.Merge(map[keymap.Action][]string{keymap.ActionLocalPort: {}})
-	if err != nil {
-		t.Fatalf("disabling the local-port action: %v", err)
-	}
-	if got := portPickerTitle(km); strings.Contains(got, "local") {
-		t.Fatalf("a disabled gesture should drop out of the title, got %q", got)
+	unbound := userKeymap(t, `unbind "`+km.Keys(keymap.ActionLocalPort, ports)[0]+`"`)
+	if got := portPickerTitle(unbound.HelpMap(ports)); strings.Contains(got, "local") {
+		t.Fatalf("an unbound gesture should drop out of the title, got %q", got)
 	}
 }
 

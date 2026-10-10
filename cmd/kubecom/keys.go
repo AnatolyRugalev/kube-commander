@@ -3,45 +3,118 @@ package main
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/keylog"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/spf13/cobra"
 )
 
-// newKeysCmd builds `kubecom keys`: it prints the effective keymap — every
-// action and the keys bound to it after merging the config's keys: section onto
-// the vim-first defaults — so a user can see exactly what their config resolves
-// to (D11: the keymap is the single source of truth for keys). Merge warnings go
-// to stderr; a genuinely invalid keymap (unknown action / bad token / collision)
-// fails the command.
+// newKeysCmd builds `kubecom keys`: it lists the keymap in force — default.kdl,
+// then the `keymap` in config.kdl, then the overlay's — one line per binding with
+// the context it holds in and the file:line it comes from, so a user can see
+// exactly what their config resolves to (D11, D303 pt 7). A keymap kubecom would
+// refuse at launch fails the command with the same file:line.
 func newKeysCmd() *cobra.Command {
 	var configPath string
 	cmd := &cobra.Command{
 		Use:   "keys",
-		Short: "Print the resolved keybindings",
-		Long: `keys prints the effective keymap: every action and the keys bound to it
-after merging your config's keys: section onto the vim-first defaults, plus any
-warnings from that merge. Disabled actions are shown as "(disabled)".`,
+		Short: "List the key bindings in force",
+		Long: `keys lists the keymap in force: kubecom's default.kdl, then the keymap in
+your config.kdl, then the one kubecom wrote to config.overlay.kdl. Each line is
+one binding, in the order they load: its keys, the action it runs (and the value
+it gives it), the context it holds in (empty for everywhere), and the file and
+line it comes from. A binding in a deeper context beats one around it; at the same
+depth your keymap beats the defaults, and a later line an earlier one. The actions
+no key runs are listed last: the command palette (:) reaches every one.
+
+  kubecom keys            list the bindings in force
+  kubecom keys default    print default.kdl, to read or to start a keymap from
+  kubecom keys check      check your keymap without starting kubecom`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dir, err := configDir(configPath)
+			km, err := loadKeymap(configPath)
 			if err != nil {
 				return err
 			}
-			if _, err := config.Load(dir); err != nil {
-				return err
-			}
-			return printKeys(cmd.OutOrStdout(), cmd.ErrOrStderr(), keymap.DefaultKeymap(), nil)
+			return printKeys(cmd.OutOrStdout(), km)
 		},
 	}
 	cmd.Flags().StringVar(&configPath, "config-dir", "",
 		"directory holding config.kdl (default: user config dir /kubecom)")
-	cmd.AddCommand(newKeysAnalyzeCmd())
+	cmd.AddCommand(newKeysDefaultCmd(), newKeysCheckCmd(), newKeysAnalyzeCmd())
 	return cmd
+}
+
+// newKeysDefaultCmd builds `kubecom keys default`: default.kdl as kubecom embeds it.
+func newKeysDefaultCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "default",
+		Short: "Print the default keymap (default.kdl)",
+		Long: `default prints kubecom's default keymap, default.kdl, as built in. Read it to
+see what each key does and where, or copy it into config.kdl's keymap under
+base "none" to start a keymap of your own from it.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := cmd.OutOrStdout().Write(keymap.DefaultSource())
+			return err
+		},
+	}
+}
+
+// newKeysCheckCmd builds `kubecom keys check`: the launch's check of the user's
+// keymap, without the launch.
+func newKeysCheckCmd() *cobra.Command {
+	var configPath string
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check your keymap",
+		Long: `check reads the keymap in config.kdl and config.overlay.kdl the way kubecom
+does at launch — every key, context and action, and the values given — and
+reports each mistake at its file and line. It exits non-zero when kubecom would
+refuse to start.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			km, err := loadKeymap(configPath)
+			if err != nil {
+				return err
+			}
+			user := 0
+			for _, e := range km.Engine().Bindings() {
+				if e.Binding.Layer() == keybind.User {
+					user++
+				}
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "keymap ok: %d bindings of yours over the defaults\n", user)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&configPath, "config-dir", "",
+		"directory holding config.kdl (default: user config dir /kubecom)")
+	return cmd
+}
+
+// loadKeymap is the keymap the launcher builds from the config directory (the
+// --config-dir flag, or the default): any error is the launch's, at its file:line.
+func loadKeymap(flag string) (*keymap.Keymap, error) {
+	dir, err := configDir(flag)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return nil, err
+	}
+	docs, err := keymap.UserDocs(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return keymap.New(docs...)
 }
 
 // newKeysAnalyzeCmd builds `kubecom keys analyze <trace.jsonl>`: it reads a
@@ -67,14 +140,10 @@ but never finished. Run it on a trace walked against the story cluster:
     kubecom keys analyze ~/traces/s02.jsonl`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir, err := configDir(configPath)
+			km, err := loadKeymap(configPath)
 			if err != nil {
 				return err
 			}
-			if _, err := config.Load(dir); err != nil {
-				return err
-			}
-			km := keymap.DefaultKeymap()
 			records, err := keylog.Read(args[0])
 			if err != nil {
 				return err
@@ -182,42 +251,55 @@ func human(d time.Duration) string {
 }
 
 // kmResolver adapts the keymap's Action-returning Resolve to the keylog
-// package's string-returning Resolver interface.
+// package's string-returning Resolver interface. A trace records which surface took
+// each press, not the whole context path, so a run of keys is read where nothing is
+// open: the multi-key sequences the analyser asks about are bound everywhere.
 type kmResolver struct{ km *keymap.Keymap }
 
 func (r kmResolver) Resolve(tokens ...string) (string, bool) {
-	a, ok := r.km.Resolve(tokens...)
+	a, ok := r.km.Resolve(keybind.Path{}, tokens...)
 	return string(a), ok
 }
 
-// printKeys renders the resolved keymap in registry order, warnings first (to
-// errOut). Kept separate from the command so it is testable without cobra.
-//
-// The two left columns are sized from the widest value actually printed rather than
-// from a fixed constant: registering one long action id (search.allNamespaces was the
-// first to pass 18 columns) must not silently push every following row's description
-// out of alignment.
-func printKeys(out, errOut io.Writer, km *keymap.Keymap, warnings []string) error {
-	for _, warn := range warnings {
-		if _, err := fmt.Fprintln(errOut, "warning:", warn); err != nil {
+// printKeys renders the keymap's bindings in load order, then the actions no key
+// runs. Kept separate from the command so it is testable without cobra. The columns
+// are sized from the widest value printed, so one long action or context does not
+// push every following row out of alignment.
+func printKeys(out io.Writer, km *keymap.Keymap) error {
+	rows := [][4]string{{"KEYS", "ACTION", "CONTEXT", "FROM"}}
+	bound := map[keymap.Action]bool{}
+	for _, e := range km.Engine().Bindings() {
+		b := e.Binding
+		action := "(unbind)"
+		if !b.Unbind() {
+			action = b.Action
+			for _, v := range b.Args {
+				action += " " + strconv.Quote(v)
+			}
+			bound[keymap.Action(b.Action)] = true
+		}
+		rows = append(rows, [4]string{keybind.FormatKeys(e.Keys), action, b.Context(), filepath.Base(b.Source())})
+	}
+	var widths [3]int
+	for _, r := range rows {
+		for i := range widths {
+			widths[i] = max(widths[i], len(r[i]))
+		}
+	}
+	for _, r := range rows {
+		line := fmt.Sprintf("%-*s  %-*s  %-*s  %s", widths[0], r[0], widths[1], r[1], widths[2], r[2], r[3])
+		if _, err := fmt.Fprintln(out, line); err != nil {
 			return err
 		}
 	}
-	actions := keymap.Actions()
-	rows := make([][2]string, 0, len(actions))
-	idWidth, keyWidth := 0, 0
-	for _, a := range actions {
-		keys := strings.Join(km.Keys(a), ", ")
-		if keys == "" {
-			keys = "(disabled)"
+	var unbound []string
+	for _, a := range keymap.Actions() {
+		if !bound[a] {
+			unbound = append(unbound, string(a))
 		}
-		rows = append(rows, [2]string{string(a), keys})
-		idWidth = max(idWidth, len(string(a)))
-		keyWidth = max(keyWidth, len(keys))
 	}
-	for i, a := range actions {
-		if _, err := fmt.Fprintf(out, "%-*s %-*s %s\n",
-			idWidth, rows[i][0], keyWidth, rows[i][1], a.Describe()); err != nil {
+	if len(unbound) > 0 {
+		if _, err := fmt.Fprintf(out, "\nno key (the palette runs them): %s\n", strings.Join(unbound, ", ")); err != nil {
 			return err
 		}
 	}

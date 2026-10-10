@@ -1,7 +1,7 @@
 package keymap
 
 import (
-	"sort"
+	"os"
 	"strings"
 	"testing"
 
@@ -51,133 +51,72 @@ func TestCheckBinding(t *testing.T) {
 
 // The port keeps every key (D303 pt 6): on every surface, each key the old flat
 // map, its confirm and table side tables and the text-field routes resolved, the
-// context keymap resolves to the same action — and nothing more. Each scenario is
-// a path and the old resolver that served it: the browse map through the
-// sequencer, the table's TableAction first, the confirm modal's ConfirmAction
-// then the browse map (confirmResolved), and a text field's "mapped and types no
-// text" (routeFilterKey, routeLogsFilterKey, routePickerKey, routeSearchKey,
-// routeModalPromptKey).
+// context keymap resolves to the same action — and nothing more. The old engine
+// is gone; testdata/oldkeys.golden is what it resolved, written from it before it
+// went: one line per scenario, key and action ("" for nothing), a single key over
+// every bound key, printable ASCII character, named key, ctrl+ and alt+ letter, and
+// every multi-key sequence on the surfaces that fed the sequencer.
 func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
-	old := DefaultKeymap()
 	km := keybind.Build(DefaultDoc())
-
-	type resolver func(c chord, text bool) (Action, bool)
-	browse := func(c chord, _ bool) (Action, bool) { return old.exact(seq{c}) }
-	field := func(c chord, text bool) (Action, bool) {
-		if text {
-			return "", false
-		}
-		return old.exact(seq{c})
-	}
-	table := func(c chord, _ bool) (Action, bool) {
-		if a, ok := old.tableBySeq[seq{c}.key()]; ok {
-			return a, true
-		}
-		return old.exact(seq{c})
-	}
-	confirm := func(c chord, _ bool) (Action, bool) {
-		if a, ok := old.confirmBySeq[seq{c}.key()]; ok {
-			return a, true
-		}
-		return old.exact(seq{c})
-	}
-
 	cluster := &keybind.Cluster{Context: "kind-dev", Namespace: "default"}
 	pods := &keybind.Table{Resource: "pods", Kind: "Pod", Namespaced: true}
-	scenarios := []struct {
-		name string
-		path keybind.Path
-		old  resolver
-		// seqs is whether the surface fed the sequencer (multi-key sequences).
-		seqs bool
-	}{
-		{"menu", keybind.Path{Cluster: cluster, Menu: true}, browse, true},
-		{"menu filter", keybind.Path{Cluster: cluster, Menu: true, Field: true}, field, false},
-		{"table", keybind.Path{Cluster: cluster, Table: pods}, table, true},
-		{"table filter", keybind.Path{Cluster: cluster, Table: pods, Field: true}, field, false},
-		{"sort", keybind.Path{Cluster: cluster, Table: pods, Sort: true}, browse, true},
-		{"logs", keybind.Path{Cluster: cluster, Table: pods, Logs: &keybind.Logs{Follow: true}}, browse, true},
-		{"logs grep", keybind.Path{Cluster: cluster, Table: pods, Logs: &keybind.Logs{}, Field: true}, field, false},
-		{"viewer", keybind.Path{Cluster: cluster, Table: pods, Viewer: &keybind.Viewer{Content: "secret"}}, browse, true},
-		{"search results", keybind.Path{Cluster: cluster, Table: pods, Search: &keybind.Search{}}, browse, false},
-		{"search query", keybind.Path{Cluster: cluster, Menu: true, Search: &keybind.Search{}, Field: true}, field, false},
-		{"unhealthy", keybind.Path{Cluster: cluster, Menu: true, Unhealthy: true}, browse, true},
-		{"forwards", keybind.Path{Cluster: cluster, Table: pods, Forwards: true}, browse, true},
-		{"help", keybind.Path{Cluster: cluster, Menu: true, Help: true}, browse, true},
-		{"picker", keybind.Path{Cluster: cluster, Table: pods, Picker: &keybind.Picker{ID: "ports"}}, browse, false},
-		{"picker query", keybind.Path{Cluster: cluster, Table: pods, Picker: &keybind.Picker{ID: "palette"}, Field: true}, field, false},
-		{"prompt", keybind.Path{Cluster: cluster, Table: pods, Prompt: true, Field: true}, field, false},
-		{"confirm", keybind.Path{Cluster: cluster, Table: pods, Confirm: true}, confirm, false},
-		{"no cluster", keybind.Path{}, browse, true},
+	paths := map[string]keybind.Path{
+		"menu":           {Cluster: cluster, Menu: true},
+		"menu filter":    {Cluster: cluster, Menu: true, Field: true},
+		"table":          {Cluster: cluster, Table: pods},
+		"table filter":   {Cluster: cluster, Table: pods, Field: true},
+		"sort":           {Cluster: cluster, Table: pods, Sort: true},
+		"logs":           {Cluster: cluster, Table: pods, Logs: &keybind.Logs{Follow: true}},
+		"logs grep":      {Cluster: cluster, Table: pods, Logs: &keybind.Logs{}, Field: true},
+		"viewer":         {Cluster: cluster, Table: pods, Viewer: &keybind.Viewer{Content: "secret"}},
+		"search results": {Cluster: cluster, Table: pods, Search: &keybind.Search{}},
+		"search query":   {Cluster: cluster, Menu: true, Search: &keybind.Search{}, Field: true},
+		"unhealthy":      {Cluster: cluster, Menu: true, Unhealthy: true},
+		"forwards":       {Cluster: cluster, Table: pods, Forwards: true},
+		"help":           {Cluster: cluster, Menu: true, Help: true},
+		"picker":         {Cluster: cluster, Table: pods, Picker: &keybind.Picker{ID: "ports"}},
+		"picker query":   {Cluster: cluster, Table: pods, Picker: &keybind.Picker{ID: "palette"}, Field: true},
+		"prompt":         {Cluster: cluster, Table: pods, Prompt: true, Field: true},
+		"confirm":        {Cluster: cluster, Table: pods, Confirm: true},
+		"no cluster":     {},
 	}
-
-	for _, sc := range scenarios {
-		for _, tok := range keyUniverse(old) {
-			k, err := keybind.ParseKey(tok)
-			if err != nil {
-				t.Fatalf("%s: %v", tok, err)
-			}
-			// A key the old syntax could not write (`+`) was bound to nothing.
-			var want Action
-			if c, err := parseChord(tok); err == nil {
-				want, _ = sc.old(c, k.Text())
-			}
-			var got Action
-			if m := km.Match([]keybind.Key{k}, sc.path); m.Exact != nil {
-				got = Action(m.Exact.Action)
-			}
-			if got != want {
-				t.Errorf("%s: %s resolves to %q, the old keymap to %q", sc.name, tok, got, want)
-			}
+	src, err := os.ReadFile("testdata/oldkeys.golden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := 0
+	for _, line := range strings.Split(strings.TrimSuffix(string(src), "\n"), "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) != 3 {
+			t.Fatalf("golden line %q", line)
 		}
-		if !sc.seqs {
-			continue
+		path, ok := paths[f[0]]
+		if !ok {
+			t.Fatalf("golden scenario %q has no path", f[0])
 		}
-		for key, a := range old.bySeq {
-			s := strings.Split(key, "\x00")
-			if len(s) < 2 {
-				continue
+		keys, err := keybind.ParseKeys(f[1])
+		if err != nil {
+			t.Fatalf("%s: %v", f[1], err)
+		}
+		lines++
+		m := km.Match(keys, path)
+		var got string
+		if m.Exact != nil {
+			got = m.Exact.Action
+		}
+		if got != f[2] {
+			t.Errorf("%s: %s resolves to %q, the old keymap to %q", f[0], f[1], got, f[2])
+		}
+		if len(keys) > 1 {
+			if m.Prefix {
+				t.Errorf("%s: %s is a prefix of a longer binding", f[0], f[1])
 			}
-			ks, err := keybind.ParseKeys(strings.Join(s, " "))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m := km.Match(ks, sc.path); m.Exact == nil || Action(m.Exact.Action) != a || m.Prefix {
-				t.Errorf("%s: %s is %+v, the old keymap's %s", sc.name, keybind.FormatKeys(ks), m, a)
-			}
-			if m := km.Match(ks[:1], sc.path); m.Prefix != old.hasExtension(seq{chord(s[0])}) {
-				t.Errorf("%s: %s as a prefix: %v", sc.name, s[0], m.Prefix)
+			if !km.Match(keys[:1], path).Prefix {
+				t.Errorf("%s: %s does not start a sequence", f[0], keybind.FormatKeys(keys[:1]))
 			}
 		}
 	}
-}
-
-// keyUniverse is every key the old maps bind, plus every printable ASCII
-// character, every named key and every ctrl+letter — so "nothing more" is tested
-// too.
-func keyUniverse(km *Keymap) []string {
-	seen := map[string]bool{}
-	for _, idx := range []map[string]Action{km.bySeq, km.confirmBySeq, km.tableBySeq} {
-		for key := range idx {
-			if !strings.Contains(key, "\x00") {
-				seen[key] = true
-			}
-		}
+	if lines < 3000 {
+		t.Fatalf("the golden has %d lines", lines)
 	}
-	for r := '!'; r <= '~'; r++ {
-		seen[string(r)] = true
-	}
-	for name := range specialNames {
-		seen[name] = true
-	}
-	for r := 'a'; r <= 'z'; r++ {
-		seen["ctrl+"+string(r)] = true
-		seen["alt+"+string(r)] = true
-	}
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

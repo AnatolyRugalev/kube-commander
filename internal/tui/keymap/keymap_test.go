@@ -1,35 +1,59 @@
 package keymap
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
-// TestDefaultKeymapValid is the load-bearing invariant: the built-in defaults
-// must parse and validate (no collisions). DefaultKeymap panics otherwise.
-func TestDefaultKeymapValid(t *testing.T) {
-	km := DefaultKeymap()
-	if err := (&Keymap{bindings: km.bindings}).validateForTest(); err != nil {
-		t.Fatalf("default keymap invalid: %v", err)
+// The context paths the tests read keys in.
+var (
+	testCluster = &keybind.Cluster{Context: "kind-dev", Namespace: "default"}
+	testPods    = &keybind.Table{Resource: "pods", Kind: "Pod", Namespaced: true}
+	menuPath    = keybind.Path{Cluster: testCluster, Menu: true}
+	tablePath   = keybind.Path{Cluster: testCluster, Table: testPods}
+	confirmPath = keybind.Path{Cluster: testCluster, Table: testPods, Confirm: true}
+)
+
+// withUser is the keymap with a config.kdl holding src as its `keymap` document,
+// and an overlay holding over (none when it is ""), read the way the launcher
+// reads them.
+func withUser(t *testing.T, src, over string) *Keymap {
+	t.Helper()
+	km, err := loadUser(t, src, over)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Every registered action has at least one default binding, except the
-	// palette-only ones, which are deliberately reachable only by typing.
-	for _, a := range Actions() {
-		if PaletteOnly(a) {
-			continue
-		}
-		if len(km.Keys(a)) == 0 {
-			t.Errorf("action %q has no default binding", a)
-		}
-	}
+	return km
 }
 
-// validateForTest re-runs build to surface any collision as an error.
-func (k *Keymap) validateForTest() error {
-	_, err := build(k.bindings)
-	return err
+func loadUser(t *testing.T, src, over string) (*Keymap, error) {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("version 1\nkeymap {\n"+body+"\n}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(config.AuthoredName, src)
+	if over != "" {
+		write(config.OverlayName, over)
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs, err := UserDocs(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return New(docs...)
 }
 
 func TestDefaultResolution(t *testing.T) {
@@ -58,9 +82,10 @@ func TestDefaultResolution(t *testing.T) {
 		{tea.Key{Code: 'D', Text: "D"}, ActionDelete},
 		{tea.Key{Code: 'd', Text: "d"}, ActionDescribe},
 		{tea.Key{Code: 'V', Text: "V"}, ActionLogsSelect},
+		{tea.Key{Code: tea.KeyHome}, ActionTop},
 	}
 	for _, tt := range tests {
-		got, ok := km.Action(tt.key)
+		got, _, ok := km.Action(tt.key, menuPath)
 		if !ok || got != tt.want {
 			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, got, ok, tt.want)
 		}
@@ -69,168 +94,187 @@ func TestDefaultResolution(t *testing.T) {
 	// remap freed it entirely (D270): the s-family is now `S` sort, `x` clear,
 	// `ctrl+f` search, nothing shares a letter. `a` is deliberately unbound too — the
 	// actions menu moved onto the resource table's `enter` (STORY-06c), freeing the
-	// letter.
-	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}, {Code: 'a', Text: "a"}} {
-		if a, ok := km.Action(k); ok {
+	// letter. A lone `g` only starts `g g`: on its own it runs nothing.
+	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}, {Code: 'a', Text: "a"}, {Code: 'g', Text: "g"}} {
+		if a, _, ok := km.Action(k, menuPath); ok {
 			t.Errorf("Action(%+v) = %q, want unbound", k, a)
 		}
 	}
 }
 
-func TestMergeOverride(t *testing.T) {
-	km := DefaultKeymap()
-	merged, warns, err := km.Merge(map[Action][]string{
-		ActionFilter: {"b"}, // replace "/" with "b" (a free, non-nav key)
-	})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
-	}
-	if len(warns) != 0 {
-		t.Errorf("unexpected warnings: %v", warns)
-	}
-	// New binding wins.
-	if a, ok := merged.Action(tea.Key{Code: 'b', Text: "b"}); !ok || a != ActionFilter {
-		t.Errorf("b resolved to %q,%v; want app.filter", a, ok)
-	}
-	// Old default no longer resolves.
-	if a, ok := merged.Action(tea.Key{Code: '/', Text: "/"}); ok {
-		t.Errorf("/ still resolves to %q after override", a)
-	}
-	// Original keymap is untouched (Merge returns a new value).
-	if a, ok := km.Action(tea.Key{Code: '/', Text: "/"}); !ok || a != ActionFilter {
-		t.Errorf("original keymap mutated: / = %q,%v", a, ok)
-	}
-}
-
-func TestMergeUnknownAction(t *testing.T) {
-	_, _, err := DefaultKeymap().Merge(map[Action][]string{"bogus.action": {"x"}})
-	if err == nil || !strings.Contains(err.Error(), "unknown action") {
-		t.Errorf("want unknown-action error, got %v", err)
+// KeyOf reads a live keypress the way the keymap writes keys: shift folds into a
+// printable character, ctrl folds case, a named key keeps its shift.
+func TestKeyOf(t *testing.T) {
+	for _, tc := range []struct {
+		key  tea.Key
+		want string
+	}{
+		{tea.Key{Code: 'g', Text: "g"}, "g"},
+		{tea.Key{Code: 'g', ShiftedCode: 'G', Mod: tea.ModShift}, "G"},
+		{tea.Key{Code: 'D', Text: "D"}, "D"},
+		{tea.Key{Code: '?', Text: "?"}, "?"},
+		{tea.Key{Code: 'd', Mod: tea.ModCtrl}, "ctrl+d"},
+		{tea.Key{Code: 'D', Mod: tea.ModCtrl | tea.ModShift}, "ctrl+d"},
+		{tea.Key{Code: 'b', Mod: tea.ModAlt}, "alt+b"},
+		{tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, "shift+tab"},
+		{tea.Key{Code: tea.KeyEnter}, "enter"},
+		{tea.Key{Code: tea.KeySpace, Text: " "}, "space"},
+		{tea.Key{Code: tea.KeyPgUp}, "pgup"},
+		{tea.Key{Code: tea.KeyF5}, "f5"},
+	} {
+		if got := KeyOf(tc.key).String(); got != tc.want {
+			t.Errorf("KeyOf(%+v) = %s, want %s", tc.key, got, tc.want)
+		}
 	}
 }
 
-func TestMergeBadToken(t *testing.T) {
-	_, _, err := DefaultKeymap().Merge(map[Action][]string{ActionHelp: {"shift+x"}})
-	if err == nil {
-		t.Fatal("want error for bad token")
-	}
-}
-
-func TestMergeCollision(t *testing.T) {
-	// Bind help to "j", which nav.down already owns.
-	_, _, err := DefaultKeymap().Merge(map[Action][]string{ActionHelp: {"j"}})
-	if err == nil || !strings.Contains(err.Error(), "bound to both") {
-		t.Fatalf("want collision error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "app.help") || !strings.Contains(err.Error(), "nav.down") {
-		t.Errorf("collision error should name both actions: %v", err)
-	}
-}
-
-// TestConfirmContextResolution proves the confirm actions resolve in their own key
-// context: `y`/`enter` → confirm.accept and `n`/`esc` → confirm.decline via
-// ConfirmAction, while the same keys keep their browse meaning via Action. The two
-// contexts coexist without a collision even though they share chords (D132).
+// The confirm modal's answers live in `context "confirm"`: `y`/`enter` →
+// confirm.accept and `n`/`esc` → confirm.decline there, while the same keys keep
+// their meaning everywhere else (D132, D303).
 func TestConfirmContextResolution(t *testing.T) {
 	km := DefaultKeymap()
-
-	confirm := []struct {
+	for _, tc := range []struct {
 		key  tea.Key
+		path keybind.Path
 		want Action
 	}{
-		{tea.Key{Code: 'y', Text: "y"}, ActionConfirmAccept},
-		{tea.Key{Code: tea.KeyEnter}, ActionConfirmAccept},
-		{tea.Key{Code: 'n', Text: "n"}, ActionConfirmDecline},
-		{tea.Key{Code: tea.KeyEsc}, ActionConfirmDecline},
-	}
-	for _, tt := range confirm {
-		if a, ok := km.ConfirmAction(tt.key); !ok || a != tt.want {
-			t.Errorf("ConfirmAction(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
+		{tea.Key{Code: 'y', Text: "y"}, confirmPath, ActionConfirmAccept},
+		{tea.Key{Code: tea.KeyEnter}, confirmPath, ActionConfirmAccept},
+		{tea.Key{Code: 'n', Text: "n"}, confirmPath, ActionConfirmDecline},
+		{tea.Key{Code: tea.KeyEsc}, confirmPath, ActionConfirmDecline},
+		// The confirm keys keep their browse meaning outside the modal, `y`
+		// included: left free when res.yaml was retired (D135/M3-15c), it is
+		// logs.yank since LOGS-SEL-02 — one key, two live actions, told apart by
+		// nothing but the context.
+		{tea.Key{Code: 'n', Text: "n"}, menuPath, ActionSearchNext},
+		{tea.Key{Code: tea.KeyEnter}, menuPath, ActionDrillIn},
+		{tea.Key{Code: tea.KeyEsc}, menuPath, ActionBack},
+		{tea.Key{Code: 'y', Text: "y"}, menuPath, ActionLogsYank},
+		// Under the modal the rest of the keymap still resolves, so app.quit
+		// dismisses it.
+		{tea.Key{Code: 'q', Text: "q"}, confirmPath, ActionQuit},
+	} {
+		if a, _, ok := km.Action(tc.key, tc.path); !ok || a != tc.want {
+			t.Errorf("%+v in %s: %q,%v; want %q", tc.key, tc.path.Innermost(), a, ok, tc.want)
 		}
-	}
-
-	// The confirm chords `n`/`enter`/`esc` keep their browse meaning in the default
-	// context, and so does `y`: left free when res.yaml was retired (D135/M3-15c), it
-	// is logs.yank since LOGS-SEL-02. That is the sharpest case the split has — one
-	// key, two live actions, told apart by nothing but the context — and it is safe
-	// because the two surfaces are modal: the confirm modal captures every key while
-	// it is up, so the logs view cannot be reading `y` at the same moment.
-	browse := []struct {
-		key  tea.Key
-		want Action
-	}{
-		{tea.Key{Code: 'n', Text: "n"}, ActionSearchNext},
-		{tea.Key{Code: tea.KeyEnter}, ActionDrillIn},
-		{tea.Key{Code: tea.KeyEsc}, ActionBack},
-	}
-	for _, tt := range browse {
-		if a, ok := km.Action(tt.key); !ok || a != tt.want {
-			t.Errorf("Action(%+v) = %q,%v; want %q", tt.key, a, ok, tt.want)
-		}
-	}
-	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); !ok || a != ActionLogsYank {
-		t.Errorf("Action(y) = %q,%v; want logs.yank in the browse context (LOGS-SEL-02)", a, ok)
-	}
-
-	// Browse resolution never yields a confirm action, and vice versa.
-	if a, ok := km.Action(tea.Key{Code: 'y', Text: "y"}); ok && a == ActionConfirmAccept {
-		t.Error("Action leaked a confirm-context action into the browse context")
-	}
-	if a, ok := km.ConfirmAction(tea.Key{Code: 'd', Text: "d"}); ok {
-		t.Errorf("ConfirmAction(d) = %q, want unbound in the confirm context", a)
 	}
 }
 
-// TestTableContextResolution proves actions.menu resolves in its own key context
-// (STORY-06c): `enter` → actions.menu via TableAction while `enter` keeps its browse
-// meaning (nav.drillIn) via Action — the same key, two live actions, told apart by
-// the resource-table context, exactly as the confirm context splits `enter` (D132).
-// `a` is deliberately unbound: the letter frees up entirely.
+// `enter` opens the actions menu while the resource table itself has the keys
+// (STORY-06c, `context "focus == 'table'"`), and keeps nav.drillIn everywhere
+// else — over the table too, once something is opened over it.
 func TestTableContextResolution(t *testing.T) {
 	km := DefaultKeymap()
-
-	if a, ok := km.TableAction(tea.Key{Code: tea.KeyEnter}); !ok || a != ActionActions {
-		t.Errorf("TableAction(enter) = %q,%v; want actions.menu", a, ok)
+	enter := tea.Key{Code: tea.KeyEnter}
+	if a, _, _ := km.Action(enter, tablePath); a != ActionActions {
+		t.Errorf("enter on the table = %q; want actions.menu", a)
 	}
-	// No other key lives in the table context — only enter opens the actions menu.
-	if a, ok := km.TableAction(tea.Key{Code: 'x', Text: "x"}); ok {
-		t.Errorf("TableAction(x) = %q, want unbound in the table context", a)
+	forwards := tablePath
+	forwards.Forwards = true
+	for _, p := range []keybind.Path{menuPath, forwards, {Cluster: testCluster, Table: testPods, Sort: true}} {
+		if a, _, _ := km.Action(enter, p); a != ActionDrillIn {
+			t.Errorf("enter in %s = %q; want nav.drillIn", p.Innermost(), a)
+		}
 	}
-	// The same key keeps its browse meaning outside the table context.
-	if a, ok := km.Action(tea.Key{Code: tea.KeyEnter}); !ok || a != ActionDrillIn {
-		t.Errorf("Action(enter) = %q,%v; want nav.drillIn in the browse context", a, ok)
-	}
-	// `a` frees up — no action binds the letter any more.
-	if a, ok := km.Action(tea.Key{Code: 'a', Text: "a"}); ok {
-		t.Errorf("Action(a) = %q, want unbound after STORY-06c freed it", a)
+	if a, _, ok := km.Action(tea.Key{Code: 'a', Text: "a"}, tablePath); ok {
+		t.Errorf("a on the table = %q, want unbound after STORY-06c freed it", a)
 	}
 }
 
-func TestMergeNavShadowWarns(t *testing.T) {
-	// Rebinding help onto a nav key is allowed but warns. Use "h" and also
-	// disable nav.left so there's no collision, isolating the warning.
-	_, warns, err := DefaultKeymap().Merge(map[Action][]string{
-		ActionLeft: {},    // free up "h"
-		ActionHelp: {"h"}, // shadow nav key
-	})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
+// A field keeps its text (D303 pt 5): `/` types into an open filter, while a key
+// that types nothing still acts.
+func TestFieldsKeepTheirText(t *testing.T) {
+	km := DefaultKeymap()
+	field := tablePath
+	field.Field = true
+	if a, _, ok := km.Action(tea.Key{Code: '/', Text: "/"}, field); ok {
+		t.Errorf("/ in the filter field = %q, want it typed", a)
 	}
-	if len(warns) != 1 || !strings.Contains(warns[0], "app.help") {
-		t.Errorf("want one nav-shadow warning naming app.help, got %v", warns)
+	if a, _, _ := km.Action(tea.Key{Code: tea.KeyEsc}, field); a != ActionBack {
+		t.Errorf("esc in the filter field = %q, want nav.back", a)
+	}
+	if a, _, _ := km.Action(tea.Key{Code: tea.KeyEnter}, field); a != ActionDrillIn {
+		t.Errorf("enter in the filter field = %q, want nav.drillIn", a)
 	}
 }
 
-func TestMergeDisableAction(t *testing.T) {
-	merged, _, err := DefaultKeymap().Merge(map[Action][]string{ActionQuit: {}})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
+// The user's keymap is laid over the defaults: config.kdl's, then the overlay's.
+func TestUserLayer(t *testing.T) {
+	km := withUser(t, `
+		bind "b" "app.filter"
+		unbind "/"
+		bind "z" "app.help"
+		context "confirm" { bind "Q" "confirm.accept" }
+	`, `bind "z" "app.quit"`)
+	key := func(r rune) tea.Key { return tea.Key{Code: r, Text: string(r)} }
+	for _, tc := range []struct {
+		key  tea.Key
+		path keybind.Path
+		want Action
+	}{
+		{key('b'), menuPath, ActionFilter},
+		{key('/'), menuPath, ""},
+		{key('z'), menuPath, ActionQuit}, // the overlay's line beats config.kdl's
+		{key('Q'), confirmPath, ActionConfirmAccept},
+		{key('Q'), menuPath, ""},
+		{key('y'), confirmPath, ActionConfirmAccept}, // the default still answers too
+	} {
+		if a, _, _ := km.Action(tc.key, tc.path); a != tc.want {
+			t.Errorf("%s in %s = %q; want %q", tc.key.Text, tc.path.Innermost(), a, tc.want)
+		}
 	}
-	if len(merged.Keys(ActionQuit)) != 0 {
-		t.Errorf("quit should be disabled, got %v", merged.Keys(ActionQuit))
+	// The default keymap is untouched.
+	if a, _, _ := DefaultKeymap().Action(key('/'), menuPath); a != ActionFilter {
+		t.Errorf("the default / = %q after a user keymap was built", a)
 	}
-	if _, ok := merged.Action(tea.Key{Code: 'q', Text: "q"}); ok {
-		t.Error("q still resolves after disabling quit")
+}
+
+// Unbinding every key of an action leaves nothing to run it, and the hints drop it.
+func TestUserUnbindsAnAction(t *testing.T) {
+	km := withUser(t, `unbind "q"; unbind "ctrl+c"`, "")
+	if keys := km.Keys(ActionQuit, menuPath); len(keys) != 0 {
+		t.Errorf("quit keys = %v after unbinding them", keys)
+	}
+	if _, _, ok := km.Action(tea.Key{Code: 'q', Text: "q"}, menuPath); ok {
+		t.Error("q still resolves after unbinding it")
+	}
+}
+
+// A user keymap that names no action, gives a value where none is taken, or
+// writes `<leader>` with no leader, is refused whole, at its file and line.
+func TestUserKeymapErrors(t *testing.T) {
+	for src, want := range map[string]string{
+		`bind "b" "app.filtr"`:          `config.kdl:3:`,
+		`bind "b" "nav.down" "2"`:       "nav.down takes no value",
+		`bind "<leader> b" "app.help"`:  "leader",
+		`context "tabel" { bind "b" }`:  "config.kdl:3:",
+		`bind "b" "ns.switch" "a" "b"`:  "takes one value, not 2",
+		`context "table.knd == 'Pod'"`:  "config.kdl:3:",
+		`bind "ctrl+" "app.help"`:       "config.kdl:3:",
+		`unbind "b" "app.help" "extra"`: "config.kdl:3:",
+	} {
+		if _, err := loadUser(t, src, ""); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want %q", src, err, want)
+		}
+	}
+}
+
+// Resolve reads a run of trace tokens as one sequence.
+func TestResolve(t *testing.T) {
+	km := DefaultKeymap()
+	for _, tc := range []struct {
+		tokens []string
+		want   Action
+	}{
+		{[]string{"g", "g"}, ActionTop},
+		{[]string{"j"}, ActionDown},
+		{[]string{"ctrl+d"}, ActionHalfPageDown},
+		{[]string{"g"}, ""},
+		{[]string{"ctrl+"}, ""},
+	} {
+		if a, ok := km.Resolve(keybind.Path{}, tc.tokens...); a != tc.want || ok != (tc.want != "") {
+			t.Errorf("Resolve(%v) = %q,%v; want %q", tc.tokens, a, ok, tc.want)
+		}
 	}
 }
 

@@ -128,7 +128,7 @@ func (m *Model) Move(delta, n int) {
 // panel keeps no scroll state of its own to resize, clamp, or forget (Window). The
 // title and the footer are rendered first-class like the modal's title and input;
 // only the list is elided, and the title says so by counting (Title).
-func (m Model) View(entries []Entry, width, height int, km *keymap.Keymap) string {
+func (m Model) View(entries []Entry, width, height int, keys keymap.HelpKeyMap) string {
 	if !m.open {
 		return ""
 	}
@@ -146,7 +146,7 @@ func (m Model) View(entries []Entry, width, height int, km *keymap.Keymap) strin
 	// The title always takes a row; the footer only when a content row survives it —
 	// a box listing nothing but its keys is worse than one with no footer.
 	rows := ih - 1
-	footer := Footer(km)
+	footer := Footer(keys)
 	if footer != "" && rows >= 2 {
 		rows--
 	} else {
@@ -242,17 +242,17 @@ func Title(total, start, end int) string {
 	}
 }
 
-// Footer builds the panel's key footer from the resolved keymap instead of
-// spelling literal keys, so a rebind moves it (D11) — this was the last view in
+// Footer builds the panel's key footer from the keymap read in the panel's path
+// instead of spelling literal keys, so a rebind moves it (D11, D303) — this was the last view in
 // kubecom that wrote a key into its own body (HINT-04). Only the *keys* are
 // generated: the verbs stay here because the registry's descriptions are global
 // (D218 pt 2) and nav.drillIn's is "Open / drill into selection", while in the
 // panel it stops the selected forward — this footer is the one place the panel's
 // verbs are stated, which is why HINT-03 declined to delete it in favour of the
-// hint line. An action the user disabled drops out entirely rather than rendering
+// hint line. An action nothing runs in the panel drops out entirely rather than rendering
 // a bare verb, the same trade portPickerTitle makes; disable all three and the
 // footer line itself disappears.
-func Footer(km *keymap.Keymap) string {
+func Footer(keys keymap.HelpKeyMap) string {
 	entries := []struct {
 		action keymap.Action
 		verb   string
@@ -263,19 +263,19 @@ func Footer(km *keymap.Keymap) string {
 	}
 	var parts []string
 	for _, e := range entries {
-		if k := firstKey(km, e.action); k != "" {
+		if k := firstKey(keys, e.action); k != "" {
 			parts = append(parts, k+": "+e.verb)
 		}
 	}
 	return strings.Join(parts, " · ")
 }
 
-// firstKey is an action's primary bound key ("" when the user disabled it), the
-// token a hint shows. It mirrors the shell's helper of the same name; the
+// firstKey is an action's primary key in the path ("" when nothing runs it there),
+// the token a hint shows. It mirrors the shell's helper of the same name; the
 // component cannot import the root package (which imports it) and the three lines
 // are not worth a shared seam.
-func firstKey(km *keymap.Keymap, a keymap.Action) string {
-	if ks := km.Keys(a); len(ks) > 0 {
+func firstKey(keys keymap.HelpKeyMap, a keymap.Action) string {
+	if ks := keys.Keys(a); len(ks) > 0 {
 		return ks[0]
 	}
 	return ""

@@ -2,6 +2,8 @@ package keybind
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 
 	"cel.dev/cel-go/cel"
@@ -159,6 +161,38 @@ func (p Path) Innermost() string {
 	return nodes[len(nodes)-1].name
 }
 
+// String writes the path from the outside in, each node with the attributes that
+// are set: `cluster(context="kind-dev") > table(kind="Pod", namespaced) > field`.
+// Two paths that write the same are the same path, so it is also what tells a
+// changed path from an unchanged one.
+func (p Path) String() string {
+	var b strings.Builder
+	for i, n := range p.nodes() {
+		if i > 0 {
+			b.WriteString(" > ")
+		}
+		b.WriteString(n.name)
+		attrs := make([]string, 0, len(n.attrs))
+		for a, v := range n.attrs {
+			switch v := v.(type) {
+			case string:
+				if v != "" {
+					attrs = append(attrs, fmt.Sprintf("%s=%q", a, v))
+				}
+			case bool:
+				if v {
+					attrs = append(attrs, a)
+				}
+			}
+		}
+		if len(attrs) > 0 {
+			sort.Strings(attrs)
+			b.WriteString("(" + strings.Join(attrs, ", ") + ")")
+		}
+	}
+	return b.String()
+}
+
 // activations are a path's prefixes as expression inputs: [d] binds the first d
 // nodes, every other node false and its attributes absent, and focus the name of
 // the d-th.
@@ -229,7 +263,17 @@ func CompileContext(src string) (*Context, error) {
 	}
 	ast, iss := env.Compile(src)
 	if iss.Err() != nil {
-		return nil, fmt.Errorf("context %q: %w", src, iss.Err())
+		var msgs []string
+		unknown := false
+		for _, e := range iss.Errors() {
+			msgs = append(msgs, strings.TrimSuffix(e.Message, " (in container '')"))
+			unknown = unknown || strings.HasPrefix(e.Message, "undeclared reference")
+		}
+		err := fmt.Errorf("context %q: %s", src, strings.Join(msgs, "; "))
+		if unknown {
+			err = fmt.Errorf("%w (a context reads %s)", err, vocabulary())
+		}
+		return nil, err
 	}
 	if !ast.OutputType().IsExactType(cel.BoolType) {
 		return nil, fmt.Errorf("context %q is a %s, not a boolean", src, ast.OutputType())
@@ -239,6 +283,15 @@ func CompileContext(src string) (*Context, error) {
 		return nil, fmt.Errorf("context %q: %w", src, err)
 	}
 	return &Context{src: src, prg: prg}, nil
+}
+
+// vocabulary is the names an expression may read, for an error that met another.
+func vocabulary() string {
+	names := []string{focusVar}
+	for _, n := range nodeNames {
+		names = append(names, n.name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // Holds reports whether the expression holds on the whole path; a nil context

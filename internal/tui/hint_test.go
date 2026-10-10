@@ -9,6 +9,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/tui/components/modal"
 	"github.com/neuroplastio/kubecom/internal/tui/components/picker"
+	"github.com/neuroplastio/kubecom/internal/tui/help"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 )
 
@@ -366,7 +367,10 @@ func TestEveryHelpContextIsReachable(t *testing.T) {
 			// context's, not a stale one from before the surface opened (refreshHints).
 			// Contains rather than equality — the hintbar wraps what it is given in its
 			// own style, and this test is about which bindings reached it.
-			if got, want := m.hintbar.View(), m.help.ShortHelpContextView(ctx); !strings.Contains(got, want) {
+			fresh := help.New(m.styles, m.keymap)
+			fresh.SetWidth(m.width)
+			fresh.SetPath(m.keyPath())
+			if got, want := m.hintbar.View(), fresh.HintView(); !strings.Contains(got, want) {
 				t.Errorf("the rendered hint is %q, want %s's %q", got, ctx, want)
 			}
 		})

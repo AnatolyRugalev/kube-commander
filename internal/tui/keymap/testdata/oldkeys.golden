@@ -1,0 +1,3132 @@
+menu	!	
+menu	"	
+menu	#	app.searchPrev
+menu	$	
+menu	%	
+menu	&	
+menu	'	
+menu	(	
+menu	)	
+menu	*	menu.pin
+menu	+	
+menu	,	
+menu	-	
+menu	.	
+menu	/	app.filter
+menu	0	forwards.freeLocal
+menu	1	
+menu	2	
+menu	3	
+menu	4	
+menu	5	
+menu	6	
+menu	7	
+menu	8	
+menu	9	
+menu	:	app.palette
+menu	;	
+menu	<	
+menu	=	
+menu	>	
+menu	?	app.help
+menu	@	
+menu	A	
+menu	B	
+menu	C	ctx.switch
+menu	D	res.delete
+menu	E	res.events
+menu	F	forwards.panel
+menu	G	nav.bottom
+menu	H	app.unhealthy
+menu	I	
+menu	J	
+menu	K	
+menu	L	res.logs
+menu	M	mouse.toggle
+menu	N	ns.switch
+menu	O	
+menu	P	res.children
+menu	Q	
+menu	R	resources.switch
+menu	S	sort.column
+menu	T	theme.switch
+menu	U	app.unhealthyScan
+menu	V	logs.select
+menu	W	
+menu	X	forwards.stopAll
+menu	Y	
+menu	Z	
+menu	[	
+menu	\	
+menu	]	
+menu	^	
+menu	_	
+menu	`	
+menu	a	
+menu	alt+a	
+menu	alt+b	
+menu	alt+c	
+menu	alt+d	
+menu	alt+e	
+menu	alt+f	
+menu	alt+g	
+menu	alt+h	
+menu	alt+i	
+menu	alt+j	
+menu	alt+k	
+menu	alt+l	
+menu	alt+m	
+menu	alt+n	
+menu	alt+o	
+menu	alt+p	
+menu	alt+q	
+menu	alt+r	
+menu	alt+s	
+menu	alt+t	
+menu	alt+u	
+menu	alt+v	
+menu	alt+w	
+menu	alt+x	
+menu	alt+y	
+menu	alt+z	
+menu	b	
+menu	backspace	
+menu	c	secret.copy
+menu	ctrl+a	search.allKinds
+menu	ctrl+b	nav.pageUp
+menu	ctrl+c	app.quit
+menu	ctrl+d	nav.halfPageDown
+menu	ctrl+e	
+menu	ctrl+f	search.cluster
+menu	ctrl+g	
+menu	ctrl+h	
+menu	ctrl+i	
+menu	ctrl+j	
+menu	ctrl+k	
+menu	ctrl+l	
+menu	ctrl+m	
+menu	ctrl+n	
+menu	ctrl+o	
+menu	ctrl+p	logs.previous
+menu	ctrl+q	
+menu	ctrl+r	logs.regex
+menu	ctrl+s	
+menu	ctrl+t	
+menu	ctrl+u	nav.halfPageUp
+menu	ctrl+v	
+menu	ctrl+w	search.allNamespaces
+menu	ctrl+x	
+menu	ctrl+y	
+menu	ctrl+z	
+menu	d	res.describe
+menu	delete	
+menu	down	nav.down
+menu	e	res.edit
+menu	end	nav.bottom
+menu	enter	nav.drillIn
+menu	esc	nav.back
+menu	f	logs.follow
+menu	f1	
+menu	f10	
+menu	f11	
+menu	f12	
+menu	f2	
+menu	f3	
+menu	f4	
+menu	f5	
+menu	f6	
+menu	f7	
+menu	f8	
+menu	f9	
+menu	g	
+menu	h	nav.left
+menu	home	nav.top
+menu	i	
+menu	insert	
+menu	j	nav.down
+menu	k	nav.up
+menu	l	nav.right
+menu	left	nav.left
+menu	m	menu.toggle
+menu	n	app.searchNext
+menu	o	logs.previous
+menu	p	forwards.localPort
+menu	pgdn	nav.halfPageDown
+menu	pgup	nav.halfPageUp
+menu	q	app.quit
+menu	r	secret.reveal
+menu	right	nav.right
+menu	s	
+menu	space	nav.pageDown
+menu	t	logs.timestamps
+menu	tab	
+menu	u	
+menu	up	nav.up
+menu	v	logs.select
+menu	w	logs.wrap
+menu	x	sort.clear
+menu	y	logs.yank
+menu	z	
+menu	{	
+menu	|	
+menu	}	
+menu	~	
+menu filter	!	
+menu filter	"	
+menu filter	#	
+menu filter	$	
+menu filter	%	
+menu filter	&	
+menu filter	'	
+menu filter	(	
+menu filter	)	
+menu filter	*	
+menu filter	+	
+menu filter	,	
+menu filter	-	
+menu filter	.	
+menu filter	/	
+menu filter	0	
+menu filter	1	
+menu filter	2	
+menu filter	3	
+menu filter	4	
+menu filter	5	
+menu filter	6	
+menu filter	7	
+menu filter	8	
+menu filter	9	
+menu filter	:	
+menu filter	;	
+menu filter	<	
+menu filter	=	
+menu filter	>	
+menu filter	?	
+menu filter	@	
+menu filter	A	
+menu filter	B	
+menu filter	C	
+menu filter	D	
+menu filter	E	
+menu filter	F	
+menu filter	G	
+menu filter	H	
+menu filter	I	
+menu filter	J	
+menu filter	K	
+menu filter	L	
+menu filter	M	
+menu filter	N	
+menu filter	O	
+menu filter	P	
+menu filter	Q	
+menu filter	R	
+menu filter	S	
+menu filter	T	
+menu filter	U	
+menu filter	V	
+menu filter	W	
+menu filter	X	
+menu filter	Y	
+menu filter	Z	
+menu filter	[	
+menu filter	\	
+menu filter	]	
+menu filter	^	
+menu filter	_	
+menu filter	`	
+menu filter	a	
+menu filter	alt+a	
+menu filter	alt+b	
+menu filter	alt+c	
+menu filter	alt+d	
+menu filter	alt+e	
+menu filter	alt+f	
+menu filter	alt+g	
+menu filter	alt+h	
+menu filter	alt+i	
+menu filter	alt+j	
+menu filter	alt+k	
+menu filter	alt+l	
+menu filter	alt+m	
+menu filter	alt+n	
+menu filter	alt+o	
+menu filter	alt+p	
+menu filter	alt+q	
+menu filter	alt+r	
+menu filter	alt+s	
+menu filter	alt+t	
+menu filter	alt+u	
+menu filter	alt+v	
+menu filter	alt+w	
+menu filter	alt+x	
+menu filter	alt+y	
+menu filter	alt+z	
+menu filter	b	
+menu filter	backspace	
+menu filter	c	
+menu filter	ctrl+a	search.allKinds
+menu filter	ctrl+b	nav.pageUp
+menu filter	ctrl+c	app.quit
+menu filter	ctrl+d	nav.halfPageDown
+menu filter	ctrl+e	
+menu filter	ctrl+f	search.cluster
+menu filter	ctrl+g	
+menu filter	ctrl+h	
+menu filter	ctrl+i	
+menu filter	ctrl+j	
+menu filter	ctrl+k	
+menu filter	ctrl+l	
+menu filter	ctrl+m	
+menu filter	ctrl+n	
+menu filter	ctrl+o	
+menu filter	ctrl+p	logs.previous
+menu filter	ctrl+q	
+menu filter	ctrl+r	logs.regex
+menu filter	ctrl+s	
+menu filter	ctrl+t	
+menu filter	ctrl+u	nav.halfPageUp
+menu filter	ctrl+v	
+menu filter	ctrl+w	search.allNamespaces
+menu filter	ctrl+x	
+menu filter	ctrl+y	
+menu filter	ctrl+z	
+menu filter	d	
+menu filter	delete	
+menu filter	down	nav.down
+menu filter	e	
+menu filter	end	nav.bottom
+menu filter	enter	nav.drillIn
+menu filter	esc	nav.back
+menu filter	f	
+menu filter	f1	
+menu filter	f10	
+menu filter	f11	
+menu filter	f12	
+menu filter	f2	
+menu filter	f3	
+menu filter	f4	
+menu filter	f5	
+menu filter	f6	
+menu filter	f7	
+menu filter	f8	
+menu filter	f9	
+menu filter	g	
+menu filter	h	
+menu filter	home	nav.top
+menu filter	i	
+menu filter	insert	
+menu filter	j	
+menu filter	k	
+menu filter	l	
+menu filter	left	nav.left
+menu filter	m	
+menu filter	n	
+menu filter	o	
+menu filter	p	
+menu filter	pgdn	nav.halfPageDown
+menu filter	pgup	nav.halfPageUp
+menu filter	q	
+menu filter	r	
+menu filter	right	nav.right
+menu filter	s	
+menu filter	space	
+menu filter	t	
+menu filter	tab	
+menu filter	u	
+menu filter	up	nav.up
+menu filter	v	
+menu filter	w	
+menu filter	x	
+menu filter	y	
+menu filter	z	
+menu filter	{	
+menu filter	|	
+menu filter	}	
+menu filter	~	
+table	!	
+table	"	
+table	#	app.searchPrev
+table	$	
+table	%	
+table	&	
+table	'	
+table	(	
+table	)	
+table	*	menu.pin
+table	+	
+table	,	
+table	-	
+table	.	
+table	/	app.filter
+table	0	forwards.freeLocal
+table	1	
+table	2	
+table	3	
+table	4	
+table	5	
+table	6	
+table	7	
+table	8	
+table	9	
+table	:	app.palette
+table	;	
+table	<	
+table	=	
+table	>	
+table	?	app.help
+table	@	
+table	A	
+table	B	
+table	C	ctx.switch
+table	D	res.delete
+table	E	res.events
+table	F	forwards.panel
+table	G	nav.bottom
+table	H	app.unhealthy
+table	I	
+table	J	
+table	K	
+table	L	res.logs
+table	M	mouse.toggle
+table	N	ns.switch
+table	O	
+table	P	res.children
+table	Q	
+table	R	resources.switch
+table	S	sort.column
+table	T	theme.switch
+table	U	app.unhealthyScan
+table	V	logs.select
+table	W	
+table	X	forwards.stopAll
+table	Y	
+table	Z	
+table	[	
+table	\	
+table	]	
+table	^	
+table	_	
+table	`	
+table	a	
+table	alt+a	
+table	alt+b	
+table	alt+c	
+table	alt+d	
+table	alt+e	
+table	alt+f	
+table	alt+g	
+table	alt+h	
+table	alt+i	
+table	alt+j	
+table	alt+k	
+table	alt+l	
+table	alt+m	
+table	alt+n	
+table	alt+o	
+table	alt+p	
+table	alt+q	
+table	alt+r	
+table	alt+s	
+table	alt+t	
+table	alt+u	
+table	alt+v	
+table	alt+w	
+table	alt+x	
+table	alt+y	
+table	alt+z	
+table	b	
+table	backspace	
+table	c	secret.copy
+table	ctrl+a	search.allKinds
+table	ctrl+b	nav.pageUp
+table	ctrl+c	app.quit
+table	ctrl+d	nav.halfPageDown
+table	ctrl+e	
+table	ctrl+f	search.cluster
+table	ctrl+g	
+table	ctrl+h	
+table	ctrl+i	
+table	ctrl+j	
+table	ctrl+k	
+table	ctrl+l	
+table	ctrl+m	
+table	ctrl+n	
+table	ctrl+o	
+table	ctrl+p	logs.previous
+table	ctrl+q	
+table	ctrl+r	logs.regex
+table	ctrl+s	
+table	ctrl+t	
+table	ctrl+u	nav.halfPageUp
+table	ctrl+v	
+table	ctrl+w	search.allNamespaces
+table	ctrl+x	
+table	ctrl+y	
+table	ctrl+z	
+table	d	res.describe
+table	delete	
+table	down	nav.down
+table	e	res.edit
+table	end	nav.bottom
+table	enter	actions.menu
+table	esc	nav.back
+table	f	logs.follow
+table	f1	
+table	f10	
+table	f11	
+table	f12	
+table	f2	
+table	f3	
+table	f4	
+table	f5	
+table	f6	
+table	f7	
+table	f8	
+table	f9	
+table	g	
+table	h	nav.left
+table	home	nav.top
+table	i	
+table	insert	
+table	j	nav.down
+table	k	nav.up
+table	l	nav.right
+table	left	nav.left
+table	m	menu.toggle
+table	n	app.searchNext
+table	o	logs.previous
+table	p	forwards.localPort
+table	pgdn	nav.halfPageDown
+table	pgup	nav.halfPageUp
+table	q	app.quit
+table	r	secret.reveal
+table	right	nav.right
+table	s	
+table	space	nav.pageDown
+table	t	logs.timestamps
+table	tab	
+table	u	
+table	up	nav.up
+table	v	logs.select
+table	w	logs.wrap
+table	x	sort.clear
+table	y	logs.yank
+table	z	
+table	{	
+table	|	
+table	}	
+table	~	
+table filter	!	
+table filter	"	
+table filter	#	
+table filter	$	
+table filter	%	
+table filter	&	
+table filter	'	
+table filter	(	
+table filter	)	
+table filter	*	
+table filter	+	
+table filter	,	
+table filter	-	
+table filter	.	
+table filter	/	
+table filter	0	
+table filter	1	
+table filter	2	
+table filter	3	
+table filter	4	
+table filter	5	
+table filter	6	
+table filter	7	
+table filter	8	
+table filter	9	
+table filter	:	
+table filter	;	
+table filter	<	
+table filter	=	
+table filter	>	
+table filter	?	
+table filter	@	
+table filter	A	
+table filter	B	
+table filter	C	
+table filter	D	
+table filter	E	
+table filter	F	
+table filter	G	
+table filter	H	
+table filter	I	
+table filter	J	
+table filter	K	
+table filter	L	
+table filter	M	
+table filter	N	
+table filter	O	
+table filter	P	
+table filter	Q	
+table filter	R	
+table filter	S	
+table filter	T	
+table filter	U	
+table filter	V	
+table filter	W	
+table filter	X	
+table filter	Y	
+table filter	Z	
+table filter	[	
+table filter	\	
+table filter	]	
+table filter	^	
+table filter	_	
+table filter	`	
+table filter	a	
+table filter	alt+a	
+table filter	alt+b	
+table filter	alt+c	
+table filter	alt+d	
+table filter	alt+e	
+table filter	alt+f	
+table filter	alt+g	
+table filter	alt+h	
+table filter	alt+i	
+table filter	alt+j	
+table filter	alt+k	
+table filter	alt+l	
+table filter	alt+m	
+table filter	alt+n	
+table filter	alt+o	
+table filter	alt+p	
+table filter	alt+q	
+table filter	alt+r	
+table filter	alt+s	
+table filter	alt+t	
+table filter	alt+u	
+table filter	alt+v	
+table filter	alt+w	
+table filter	alt+x	
+table filter	alt+y	
+table filter	alt+z	
+table filter	b	
+table filter	backspace	
+table filter	c	
+table filter	ctrl+a	search.allKinds
+table filter	ctrl+b	nav.pageUp
+table filter	ctrl+c	app.quit
+table filter	ctrl+d	nav.halfPageDown
+table filter	ctrl+e	
+table filter	ctrl+f	search.cluster
+table filter	ctrl+g	
+table filter	ctrl+h	
+table filter	ctrl+i	
+table filter	ctrl+j	
+table filter	ctrl+k	
+table filter	ctrl+l	
+table filter	ctrl+m	
+table filter	ctrl+n	
+table filter	ctrl+o	
+table filter	ctrl+p	logs.previous
+table filter	ctrl+q	
+table filter	ctrl+r	logs.regex
+table filter	ctrl+s	
+table filter	ctrl+t	
+table filter	ctrl+u	nav.halfPageUp
+table filter	ctrl+v	
+table filter	ctrl+w	search.allNamespaces
+table filter	ctrl+x	
+table filter	ctrl+y	
+table filter	ctrl+z	
+table filter	d	
+table filter	delete	
+table filter	down	nav.down
+table filter	e	
+table filter	end	nav.bottom
+table filter	enter	nav.drillIn
+table filter	esc	nav.back
+table filter	f	
+table filter	f1	
+table filter	f10	
+table filter	f11	
+table filter	f12	
+table filter	f2	
+table filter	f3	
+table filter	f4	
+table filter	f5	
+table filter	f6	
+table filter	f7	
+table filter	f8	
+table filter	f9	
+table filter	g	
+table filter	h	
+table filter	home	nav.top
+table filter	i	
+table filter	insert	
+table filter	j	
+table filter	k	
+table filter	l	
+table filter	left	nav.left
+table filter	m	
+table filter	n	
+table filter	o	
+table filter	p	
+table filter	pgdn	nav.halfPageDown
+table filter	pgup	nav.halfPageUp
+table filter	q	
+table filter	r	
+table filter	right	nav.right
+table filter	s	
+table filter	space	
+table filter	t	
+table filter	tab	
+table filter	u	
+table filter	up	nav.up
+table filter	v	
+table filter	w	
+table filter	x	
+table filter	y	
+table filter	z	
+table filter	{	
+table filter	|	
+table filter	}	
+table filter	~	
+sort	!	
+sort	"	
+sort	#	app.searchPrev
+sort	$	
+sort	%	
+sort	&	
+sort	'	
+sort	(	
+sort	)	
+sort	*	menu.pin
+sort	+	
+sort	,	
+sort	-	
+sort	.	
+sort	/	app.filter
+sort	0	forwards.freeLocal
+sort	1	
+sort	2	
+sort	3	
+sort	4	
+sort	5	
+sort	6	
+sort	7	
+sort	8	
+sort	9	
+sort	:	app.palette
+sort	;	
+sort	<	
+sort	=	
+sort	>	
+sort	?	app.help
+sort	@	
+sort	A	
+sort	B	
+sort	C	ctx.switch
+sort	D	res.delete
+sort	E	res.events
+sort	F	forwards.panel
+sort	G	nav.bottom
+sort	H	app.unhealthy
+sort	I	
+sort	J	
+sort	K	
+sort	L	res.logs
+sort	M	mouse.toggle
+sort	N	ns.switch
+sort	O	
+sort	P	res.children
+sort	Q	
+sort	R	resources.switch
+sort	S	sort.column
+sort	T	theme.switch
+sort	U	app.unhealthyScan
+sort	V	logs.select
+sort	W	
+sort	X	forwards.stopAll
+sort	Y	
+sort	Z	
+sort	[	
+sort	\	
+sort	]	
+sort	^	
+sort	_	
+sort	`	
+sort	a	
+sort	alt+a	
+sort	alt+b	
+sort	alt+c	
+sort	alt+d	
+sort	alt+e	
+sort	alt+f	
+sort	alt+g	
+sort	alt+h	
+sort	alt+i	
+sort	alt+j	
+sort	alt+k	
+sort	alt+l	
+sort	alt+m	
+sort	alt+n	
+sort	alt+o	
+sort	alt+p	
+sort	alt+q	
+sort	alt+r	
+sort	alt+s	
+sort	alt+t	
+sort	alt+u	
+sort	alt+v	
+sort	alt+w	
+sort	alt+x	
+sort	alt+y	
+sort	alt+z	
+sort	b	
+sort	backspace	
+sort	c	secret.copy
+sort	ctrl+a	search.allKinds
+sort	ctrl+b	nav.pageUp
+sort	ctrl+c	app.quit
+sort	ctrl+d	nav.halfPageDown
+sort	ctrl+e	
+sort	ctrl+f	search.cluster
+sort	ctrl+g	
+sort	ctrl+h	
+sort	ctrl+i	
+sort	ctrl+j	
+sort	ctrl+k	
+sort	ctrl+l	
+sort	ctrl+m	
+sort	ctrl+n	
+sort	ctrl+o	
+sort	ctrl+p	logs.previous
+sort	ctrl+q	
+sort	ctrl+r	logs.regex
+sort	ctrl+s	
+sort	ctrl+t	
+sort	ctrl+u	nav.halfPageUp
+sort	ctrl+v	
+sort	ctrl+w	search.allNamespaces
+sort	ctrl+x	
+sort	ctrl+y	
+sort	ctrl+z	
+sort	d	res.describe
+sort	delete	
+sort	down	nav.down
+sort	e	res.edit
+sort	end	nav.bottom
+sort	enter	nav.drillIn
+sort	esc	nav.back
+sort	f	logs.follow
+sort	f1	
+sort	f10	
+sort	f11	
+sort	f12	
+sort	f2	
+sort	f3	
+sort	f4	
+sort	f5	
+sort	f6	
+sort	f7	
+sort	f8	
+sort	f9	
+sort	g	
+sort	h	nav.left
+sort	home	nav.top
+sort	i	
+sort	insert	
+sort	j	nav.down
+sort	k	nav.up
+sort	l	nav.right
+sort	left	nav.left
+sort	m	menu.toggle
+sort	n	app.searchNext
+sort	o	logs.previous
+sort	p	forwards.localPort
+sort	pgdn	nav.halfPageDown
+sort	pgup	nav.halfPageUp
+sort	q	app.quit
+sort	r	secret.reveal
+sort	right	nav.right
+sort	s	
+sort	space	nav.pageDown
+sort	t	logs.timestamps
+sort	tab	
+sort	u	
+sort	up	nav.up
+sort	v	logs.select
+sort	w	logs.wrap
+sort	x	sort.clear
+sort	y	logs.yank
+sort	z	
+sort	{	
+sort	|	
+sort	}	
+sort	~	
+logs	!	
+logs	"	
+logs	#	app.searchPrev
+logs	$	
+logs	%	
+logs	&	
+logs	'	
+logs	(	
+logs	)	
+logs	*	menu.pin
+logs	+	
+logs	,	
+logs	-	
+logs	.	
+logs	/	app.filter
+logs	0	forwards.freeLocal
+logs	1	
+logs	2	
+logs	3	
+logs	4	
+logs	5	
+logs	6	
+logs	7	
+logs	8	
+logs	9	
+logs	:	app.palette
+logs	;	
+logs	<	
+logs	=	
+logs	>	
+logs	?	app.help
+logs	@	
+logs	A	
+logs	B	
+logs	C	ctx.switch
+logs	D	res.delete
+logs	E	res.events
+logs	F	forwards.panel
+logs	G	nav.bottom
+logs	H	app.unhealthy
+logs	I	
+logs	J	
+logs	K	
+logs	L	res.logs
+logs	M	mouse.toggle
+logs	N	ns.switch
+logs	O	
+logs	P	res.children
+logs	Q	
+logs	R	resources.switch
+logs	S	sort.column
+logs	T	theme.switch
+logs	U	app.unhealthyScan
+logs	V	logs.select
+logs	W	
+logs	X	forwards.stopAll
+logs	Y	
+logs	Z	
+logs	[	
+logs	\	
+logs	]	
+logs	^	
+logs	_	
+logs	`	
+logs	a	
+logs	alt+a	
+logs	alt+b	
+logs	alt+c	
+logs	alt+d	
+logs	alt+e	
+logs	alt+f	
+logs	alt+g	
+logs	alt+h	
+logs	alt+i	
+logs	alt+j	
+logs	alt+k	
+logs	alt+l	
+logs	alt+m	
+logs	alt+n	
+logs	alt+o	
+logs	alt+p	
+logs	alt+q	
+logs	alt+r	
+logs	alt+s	
+logs	alt+t	
+logs	alt+u	
+logs	alt+v	
+logs	alt+w	
+logs	alt+x	
+logs	alt+y	
+logs	alt+z	
+logs	b	
+logs	backspace	
+logs	c	secret.copy
+logs	ctrl+a	search.allKinds
+logs	ctrl+b	nav.pageUp
+logs	ctrl+c	app.quit
+logs	ctrl+d	nav.halfPageDown
+logs	ctrl+e	
+logs	ctrl+f	search.cluster
+logs	ctrl+g	
+logs	ctrl+h	
+logs	ctrl+i	
+logs	ctrl+j	
+logs	ctrl+k	
+logs	ctrl+l	
+logs	ctrl+m	
+logs	ctrl+n	
+logs	ctrl+o	
+logs	ctrl+p	logs.previous
+logs	ctrl+q	
+logs	ctrl+r	logs.regex
+logs	ctrl+s	
+logs	ctrl+t	
+logs	ctrl+u	nav.halfPageUp
+logs	ctrl+v	
+logs	ctrl+w	search.allNamespaces
+logs	ctrl+x	
+logs	ctrl+y	
+logs	ctrl+z	
+logs	d	res.describe
+logs	delete	
+logs	down	nav.down
+logs	e	res.edit
+logs	end	nav.bottom
+logs	enter	nav.drillIn
+logs	esc	nav.back
+logs	f	logs.follow
+logs	f1	
+logs	f10	
+logs	f11	
+logs	f12	
+logs	f2	
+logs	f3	
+logs	f4	
+logs	f5	
+logs	f6	
+logs	f7	
+logs	f8	
+logs	f9	
+logs	g	
+logs	h	nav.left
+logs	home	nav.top
+logs	i	
+logs	insert	
+logs	j	nav.down
+logs	k	nav.up
+logs	l	nav.right
+logs	left	nav.left
+logs	m	menu.toggle
+logs	n	app.searchNext
+logs	o	logs.previous
+logs	p	forwards.localPort
+logs	pgdn	nav.halfPageDown
+logs	pgup	nav.halfPageUp
+logs	q	app.quit
+logs	r	secret.reveal
+logs	right	nav.right
+logs	s	
+logs	space	nav.pageDown
+logs	t	logs.timestamps
+logs	tab	
+logs	u	
+logs	up	nav.up
+logs	v	logs.select
+logs	w	logs.wrap
+logs	x	sort.clear
+logs	y	logs.yank
+logs	z	
+logs	{	
+logs	|	
+logs	}	
+logs	~	
+logs grep	!	
+logs grep	"	
+logs grep	#	
+logs grep	$	
+logs grep	%	
+logs grep	&	
+logs grep	'	
+logs grep	(	
+logs grep	)	
+logs grep	*	
+logs grep	+	
+logs grep	,	
+logs grep	-	
+logs grep	.	
+logs grep	/	
+logs grep	0	
+logs grep	1	
+logs grep	2	
+logs grep	3	
+logs grep	4	
+logs grep	5	
+logs grep	6	
+logs grep	7	
+logs grep	8	
+logs grep	9	
+logs grep	:	
+logs grep	;	
+logs grep	<	
+logs grep	=	
+logs grep	>	
+logs grep	?	
+logs grep	@	
+logs grep	A	
+logs grep	B	
+logs grep	C	
+logs grep	D	
+logs grep	E	
+logs grep	F	
+logs grep	G	
+logs grep	H	
+logs grep	I	
+logs grep	J	
+logs grep	K	
+logs grep	L	
+logs grep	M	
+logs grep	N	
+logs grep	O	
+logs grep	P	
+logs grep	Q	
+logs grep	R	
+logs grep	S	
+logs grep	T	
+logs grep	U	
+logs grep	V	
+logs grep	W	
+logs grep	X	
+logs grep	Y	
+logs grep	Z	
+logs grep	[	
+logs grep	\	
+logs grep	]	
+logs grep	^	
+logs grep	_	
+logs grep	`	
+logs grep	a	
+logs grep	alt+a	
+logs grep	alt+b	
+logs grep	alt+c	
+logs grep	alt+d	
+logs grep	alt+e	
+logs grep	alt+f	
+logs grep	alt+g	
+logs grep	alt+h	
+logs grep	alt+i	
+logs grep	alt+j	
+logs grep	alt+k	
+logs grep	alt+l	
+logs grep	alt+m	
+logs grep	alt+n	
+logs grep	alt+o	
+logs grep	alt+p	
+logs grep	alt+q	
+logs grep	alt+r	
+logs grep	alt+s	
+logs grep	alt+t	
+logs grep	alt+u	
+logs grep	alt+v	
+logs grep	alt+w	
+logs grep	alt+x	
+logs grep	alt+y	
+logs grep	alt+z	
+logs grep	b	
+logs grep	backspace	
+logs grep	c	
+logs grep	ctrl+a	search.allKinds
+logs grep	ctrl+b	nav.pageUp
+logs grep	ctrl+c	app.quit
+logs grep	ctrl+d	nav.halfPageDown
+logs grep	ctrl+e	
+logs grep	ctrl+f	search.cluster
+logs grep	ctrl+g	
+logs grep	ctrl+h	
+logs grep	ctrl+i	
+logs grep	ctrl+j	
+logs grep	ctrl+k	
+logs grep	ctrl+l	
+logs grep	ctrl+m	
+logs grep	ctrl+n	
+logs grep	ctrl+o	
+logs grep	ctrl+p	logs.previous
+logs grep	ctrl+q	
+logs grep	ctrl+r	logs.regex
+logs grep	ctrl+s	
+logs grep	ctrl+t	
+logs grep	ctrl+u	nav.halfPageUp
+logs grep	ctrl+v	
+logs grep	ctrl+w	search.allNamespaces
+logs grep	ctrl+x	
+logs grep	ctrl+y	
+logs grep	ctrl+z	
+logs grep	d	
+logs grep	delete	
+logs grep	down	nav.down
+logs grep	e	
+logs grep	end	nav.bottom
+logs grep	enter	nav.drillIn
+logs grep	esc	nav.back
+logs grep	f	
+logs grep	f1	
+logs grep	f10	
+logs grep	f11	
+logs grep	f12	
+logs grep	f2	
+logs grep	f3	
+logs grep	f4	
+logs grep	f5	
+logs grep	f6	
+logs grep	f7	
+logs grep	f8	
+logs grep	f9	
+logs grep	g	
+logs grep	h	
+logs grep	home	nav.top
+logs grep	i	
+logs grep	insert	
+logs grep	j	
+logs grep	k	
+logs grep	l	
+logs grep	left	nav.left
+logs grep	m	
+logs grep	n	
+logs grep	o	
+logs grep	p	
+logs grep	pgdn	nav.halfPageDown
+logs grep	pgup	nav.halfPageUp
+logs grep	q	
+logs grep	r	
+logs grep	right	nav.right
+logs grep	s	
+logs grep	space	
+logs grep	t	
+logs grep	tab	
+logs grep	u	
+logs grep	up	nav.up
+logs grep	v	
+logs grep	w	
+logs grep	x	
+logs grep	y	
+logs grep	z	
+logs grep	{	
+logs grep	|	
+logs grep	}	
+logs grep	~	
+viewer	!	
+viewer	"	
+viewer	#	app.searchPrev
+viewer	$	
+viewer	%	
+viewer	&	
+viewer	'	
+viewer	(	
+viewer	)	
+viewer	*	menu.pin
+viewer	+	
+viewer	,	
+viewer	-	
+viewer	.	
+viewer	/	app.filter
+viewer	0	forwards.freeLocal
+viewer	1	
+viewer	2	
+viewer	3	
+viewer	4	
+viewer	5	
+viewer	6	
+viewer	7	
+viewer	8	
+viewer	9	
+viewer	:	app.palette
+viewer	;	
+viewer	<	
+viewer	=	
+viewer	>	
+viewer	?	app.help
+viewer	@	
+viewer	A	
+viewer	B	
+viewer	C	ctx.switch
+viewer	D	res.delete
+viewer	E	res.events
+viewer	F	forwards.panel
+viewer	G	nav.bottom
+viewer	H	app.unhealthy
+viewer	I	
+viewer	J	
+viewer	K	
+viewer	L	res.logs
+viewer	M	mouse.toggle
+viewer	N	ns.switch
+viewer	O	
+viewer	P	res.children
+viewer	Q	
+viewer	R	resources.switch
+viewer	S	sort.column
+viewer	T	theme.switch
+viewer	U	app.unhealthyScan
+viewer	V	logs.select
+viewer	W	
+viewer	X	forwards.stopAll
+viewer	Y	
+viewer	Z	
+viewer	[	
+viewer	\	
+viewer	]	
+viewer	^	
+viewer	_	
+viewer	`	
+viewer	a	
+viewer	alt+a	
+viewer	alt+b	
+viewer	alt+c	
+viewer	alt+d	
+viewer	alt+e	
+viewer	alt+f	
+viewer	alt+g	
+viewer	alt+h	
+viewer	alt+i	
+viewer	alt+j	
+viewer	alt+k	
+viewer	alt+l	
+viewer	alt+m	
+viewer	alt+n	
+viewer	alt+o	
+viewer	alt+p	
+viewer	alt+q	
+viewer	alt+r	
+viewer	alt+s	
+viewer	alt+t	
+viewer	alt+u	
+viewer	alt+v	
+viewer	alt+w	
+viewer	alt+x	
+viewer	alt+y	
+viewer	alt+z	
+viewer	b	
+viewer	backspace	
+viewer	c	secret.copy
+viewer	ctrl+a	search.allKinds
+viewer	ctrl+b	nav.pageUp
+viewer	ctrl+c	app.quit
+viewer	ctrl+d	nav.halfPageDown
+viewer	ctrl+e	
+viewer	ctrl+f	search.cluster
+viewer	ctrl+g	
+viewer	ctrl+h	
+viewer	ctrl+i	
+viewer	ctrl+j	
+viewer	ctrl+k	
+viewer	ctrl+l	
+viewer	ctrl+m	
+viewer	ctrl+n	
+viewer	ctrl+o	
+viewer	ctrl+p	logs.previous
+viewer	ctrl+q	
+viewer	ctrl+r	logs.regex
+viewer	ctrl+s	
+viewer	ctrl+t	
+viewer	ctrl+u	nav.halfPageUp
+viewer	ctrl+v	
+viewer	ctrl+w	search.allNamespaces
+viewer	ctrl+x	
+viewer	ctrl+y	
+viewer	ctrl+z	
+viewer	d	res.describe
+viewer	delete	
+viewer	down	nav.down
+viewer	e	res.edit
+viewer	end	nav.bottom
+viewer	enter	nav.drillIn
+viewer	esc	nav.back
+viewer	f	logs.follow
+viewer	f1	
+viewer	f10	
+viewer	f11	
+viewer	f12	
+viewer	f2	
+viewer	f3	
+viewer	f4	
+viewer	f5	
+viewer	f6	
+viewer	f7	
+viewer	f8	
+viewer	f9	
+viewer	g	
+viewer	h	nav.left
+viewer	home	nav.top
+viewer	i	
+viewer	insert	
+viewer	j	nav.down
+viewer	k	nav.up
+viewer	l	nav.right
+viewer	left	nav.left
+viewer	m	menu.toggle
+viewer	n	app.searchNext
+viewer	o	logs.previous
+viewer	p	forwards.localPort
+viewer	pgdn	nav.halfPageDown
+viewer	pgup	nav.halfPageUp
+viewer	q	app.quit
+viewer	r	secret.reveal
+viewer	right	nav.right
+viewer	s	
+viewer	space	nav.pageDown
+viewer	t	logs.timestamps
+viewer	tab	
+viewer	u	
+viewer	up	nav.up
+viewer	v	logs.select
+viewer	w	logs.wrap
+viewer	x	sort.clear
+viewer	y	logs.yank
+viewer	z	
+viewer	{	
+viewer	|	
+viewer	}	
+viewer	~	
+search results	!	
+search results	"	
+search results	#	app.searchPrev
+search results	$	
+search results	%	
+search results	&	
+search results	'	
+search results	(	
+search results	)	
+search results	*	menu.pin
+search results	+	
+search results	,	
+search results	-	
+search results	.	
+search results	/	app.filter
+search results	0	forwards.freeLocal
+search results	1	
+search results	2	
+search results	3	
+search results	4	
+search results	5	
+search results	6	
+search results	7	
+search results	8	
+search results	9	
+search results	:	app.palette
+search results	;	
+search results	<	
+search results	=	
+search results	>	
+search results	?	app.help
+search results	@	
+search results	A	
+search results	B	
+search results	C	ctx.switch
+search results	D	res.delete
+search results	E	res.events
+search results	F	forwards.panel
+search results	G	nav.bottom
+search results	H	app.unhealthy
+search results	I	
+search results	J	
+search results	K	
+search results	L	res.logs
+search results	M	mouse.toggle
+search results	N	ns.switch
+search results	O	
+search results	P	res.children
+search results	Q	
+search results	R	resources.switch
+search results	S	sort.column
+search results	T	theme.switch
+search results	U	app.unhealthyScan
+search results	V	logs.select
+search results	W	
+search results	X	forwards.stopAll
+search results	Y	
+search results	Z	
+search results	[	
+search results	\	
+search results	]	
+search results	^	
+search results	_	
+search results	`	
+search results	a	
+search results	alt+a	
+search results	alt+b	
+search results	alt+c	
+search results	alt+d	
+search results	alt+e	
+search results	alt+f	
+search results	alt+g	
+search results	alt+h	
+search results	alt+i	
+search results	alt+j	
+search results	alt+k	
+search results	alt+l	
+search results	alt+m	
+search results	alt+n	
+search results	alt+o	
+search results	alt+p	
+search results	alt+q	
+search results	alt+r	
+search results	alt+s	
+search results	alt+t	
+search results	alt+u	
+search results	alt+v	
+search results	alt+w	
+search results	alt+x	
+search results	alt+y	
+search results	alt+z	
+search results	b	
+search results	backspace	
+search results	c	secret.copy
+search results	ctrl+a	search.allKinds
+search results	ctrl+b	nav.pageUp
+search results	ctrl+c	app.quit
+search results	ctrl+d	nav.halfPageDown
+search results	ctrl+e	
+search results	ctrl+f	search.cluster
+search results	ctrl+g	
+search results	ctrl+h	
+search results	ctrl+i	
+search results	ctrl+j	
+search results	ctrl+k	
+search results	ctrl+l	
+search results	ctrl+m	
+search results	ctrl+n	
+search results	ctrl+o	
+search results	ctrl+p	logs.previous
+search results	ctrl+q	
+search results	ctrl+r	logs.regex
+search results	ctrl+s	
+search results	ctrl+t	
+search results	ctrl+u	nav.halfPageUp
+search results	ctrl+v	
+search results	ctrl+w	search.allNamespaces
+search results	ctrl+x	
+search results	ctrl+y	
+search results	ctrl+z	
+search results	d	res.describe
+search results	delete	
+search results	down	nav.down
+search results	e	res.edit
+search results	end	nav.bottom
+search results	enter	nav.drillIn
+search results	esc	nav.back
+search results	f	logs.follow
+search results	f1	
+search results	f10	
+search results	f11	
+search results	f12	
+search results	f2	
+search results	f3	
+search results	f4	
+search results	f5	
+search results	f6	
+search results	f7	
+search results	f8	
+search results	f9	
+search results	g	
+search results	h	nav.left
+search results	home	nav.top
+search results	i	
+search results	insert	
+search results	j	nav.down
+search results	k	nav.up
+search results	l	nav.right
+search results	left	nav.left
+search results	m	menu.toggle
+search results	n	app.searchNext
+search results	o	logs.previous
+search results	p	forwards.localPort
+search results	pgdn	nav.halfPageDown
+search results	pgup	nav.halfPageUp
+search results	q	app.quit
+search results	r	secret.reveal
+search results	right	nav.right
+search results	s	
+search results	space	nav.pageDown
+search results	t	logs.timestamps
+search results	tab	
+search results	u	
+search results	up	nav.up
+search results	v	logs.select
+search results	w	logs.wrap
+search results	x	sort.clear
+search results	y	logs.yank
+search results	z	
+search results	{	
+search results	|	
+search results	}	
+search results	~	
+search query	!	
+search query	"	
+search query	#	
+search query	$	
+search query	%	
+search query	&	
+search query	'	
+search query	(	
+search query	)	
+search query	*	
+search query	+	
+search query	,	
+search query	-	
+search query	.	
+search query	/	
+search query	0	
+search query	1	
+search query	2	
+search query	3	
+search query	4	
+search query	5	
+search query	6	
+search query	7	
+search query	8	
+search query	9	
+search query	:	
+search query	;	
+search query	<	
+search query	=	
+search query	>	
+search query	?	
+search query	@	
+search query	A	
+search query	B	
+search query	C	
+search query	D	
+search query	E	
+search query	F	
+search query	G	
+search query	H	
+search query	I	
+search query	J	
+search query	K	
+search query	L	
+search query	M	
+search query	N	
+search query	O	
+search query	P	
+search query	Q	
+search query	R	
+search query	S	
+search query	T	
+search query	U	
+search query	V	
+search query	W	
+search query	X	
+search query	Y	
+search query	Z	
+search query	[	
+search query	\	
+search query	]	
+search query	^	
+search query	_	
+search query	`	
+search query	a	
+search query	alt+a	
+search query	alt+b	
+search query	alt+c	
+search query	alt+d	
+search query	alt+e	
+search query	alt+f	
+search query	alt+g	
+search query	alt+h	
+search query	alt+i	
+search query	alt+j	
+search query	alt+k	
+search query	alt+l	
+search query	alt+m	
+search query	alt+n	
+search query	alt+o	
+search query	alt+p	
+search query	alt+q	
+search query	alt+r	
+search query	alt+s	
+search query	alt+t	
+search query	alt+u	
+search query	alt+v	
+search query	alt+w	
+search query	alt+x	
+search query	alt+y	
+search query	alt+z	
+search query	b	
+search query	backspace	
+search query	c	
+search query	ctrl+a	search.allKinds
+search query	ctrl+b	nav.pageUp
+search query	ctrl+c	app.quit
+search query	ctrl+d	nav.halfPageDown
+search query	ctrl+e	
+search query	ctrl+f	search.cluster
+search query	ctrl+g	
+search query	ctrl+h	
+search query	ctrl+i	
+search query	ctrl+j	
+search query	ctrl+k	
+search query	ctrl+l	
+search query	ctrl+m	
+search query	ctrl+n	
+search query	ctrl+o	
+search query	ctrl+p	logs.previous
+search query	ctrl+q	
+search query	ctrl+r	logs.regex
+search query	ctrl+s	
+search query	ctrl+t	
+search query	ctrl+u	nav.halfPageUp
+search query	ctrl+v	
+search query	ctrl+w	search.allNamespaces
+search query	ctrl+x	
+search query	ctrl+y	
+search query	ctrl+z	
+search query	d	
+search query	delete	
+search query	down	nav.down
+search query	e	
+search query	end	nav.bottom
+search query	enter	nav.drillIn
+search query	esc	nav.back
+search query	f	
+search query	f1	
+search query	f10	
+search query	f11	
+search query	f12	
+search query	f2	
+search query	f3	
+search query	f4	
+search query	f5	
+search query	f6	
+search query	f7	
+search query	f8	
+search query	f9	
+search query	g	
+search query	h	
+search query	home	nav.top
+search query	i	
+search query	insert	
+search query	j	
+search query	k	
+search query	l	
+search query	left	nav.left
+search query	m	
+search query	n	
+search query	o	
+search query	p	
+search query	pgdn	nav.halfPageDown
+search query	pgup	nav.halfPageUp
+search query	q	
+search query	r	
+search query	right	nav.right
+search query	s	
+search query	space	
+search query	t	
+search query	tab	
+search query	u	
+search query	up	nav.up
+search query	v	
+search query	w	
+search query	x	
+search query	y	
+search query	z	
+search query	{	
+search query	|	
+search query	}	
+search query	~	
+unhealthy	!	
+unhealthy	"	
+unhealthy	#	app.searchPrev
+unhealthy	$	
+unhealthy	%	
+unhealthy	&	
+unhealthy	'	
+unhealthy	(	
+unhealthy	)	
+unhealthy	*	menu.pin
+unhealthy	+	
+unhealthy	,	
+unhealthy	-	
+unhealthy	.	
+unhealthy	/	app.filter
+unhealthy	0	forwards.freeLocal
+unhealthy	1	
+unhealthy	2	
+unhealthy	3	
+unhealthy	4	
+unhealthy	5	
+unhealthy	6	
+unhealthy	7	
+unhealthy	8	
+unhealthy	9	
+unhealthy	:	app.palette
+unhealthy	;	
+unhealthy	<	
+unhealthy	=	
+unhealthy	>	
+unhealthy	?	app.help
+unhealthy	@	
+unhealthy	A	
+unhealthy	B	
+unhealthy	C	ctx.switch
+unhealthy	D	res.delete
+unhealthy	E	res.events
+unhealthy	F	forwards.panel
+unhealthy	G	nav.bottom
+unhealthy	H	app.unhealthy
+unhealthy	I	
+unhealthy	J	
+unhealthy	K	
+unhealthy	L	res.logs
+unhealthy	M	mouse.toggle
+unhealthy	N	ns.switch
+unhealthy	O	
+unhealthy	P	res.children
+unhealthy	Q	
+unhealthy	R	resources.switch
+unhealthy	S	sort.column
+unhealthy	T	theme.switch
+unhealthy	U	app.unhealthyScan
+unhealthy	V	logs.select
+unhealthy	W	
+unhealthy	X	forwards.stopAll
+unhealthy	Y	
+unhealthy	Z	
+unhealthy	[	
+unhealthy	\	
+unhealthy	]	
+unhealthy	^	
+unhealthy	_	
+unhealthy	`	
+unhealthy	a	
+unhealthy	alt+a	
+unhealthy	alt+b	
+unhealthy	alt+c	
+unhealthy	alt+d	
+unhealthy	alt+e	
+unhealthy	alt+f	
+unhealthy	alt+g	
+unhealthy	alt+h	
+unhealthy	alt+i	
+unhealthy	alt+j	
+unhealthy	alt+k	
+unhealthy	alt+l	
+unhealthy	alt+m	
+unhealthy	alt+n	
+unhealthy	alt+o	
+unhealthy	alt+p	
+unhealthy	alt+q	
+unhealthy	alt+r	
+unhealthy	alt+s	
+unhealthy	alt+t	
+unhealthy	alt+u	
+unhealthy	alt+v	
+unhealthy	alt+w	
+unhealthy	alt+x	
+unhealthy	alt+y	
+unhealthy	alt+z	
+unhealthy	b	
+unhealthy	backspace	
+unhealthy	c	secret.copy
+unhealthy	ctrl+a	search.allKinds
+unhealthy	ctrl+b	nav.pageUp
+unhealthy	ctrl+c	app.quit
+unhealthy	ctrl+d	nav.halfPageDown
+unhealthy	ctrl+e	
+unhealthy	ctrl+f	search.cluster
+unhealthy	ctrl+g	
+unhealthy	ctrl+h	
+unhealthy	ctrl+i	
+unhealthy	ctrl+j	
+unhealthy	ctrl+k	
+unhealthy	ctrl+l	
+unhealthy	ctrl+m	
+unhealthy	ctrl+n	
+unhealthy	ctrl+o	
+unhealthy	ctrl+p	logs.previous
+unhealthy	ctrl+q	
+unhealthy	ctrl+r	logs.regex
+unhealthy	ctrl+s	
+unhealthy	ctrl+t	
+unhealthy	ctrl+u	nav.halfPageUp
+unhealthy	ctrl+v	
+unhealthy	ctrl+w	search.allNamespaces
+unhealthy	ctrl+x	
+unhealthy	ctrl+y	
+unhealthy	ctrl+z	
+unhealthy	d	res.describe
+unhealthy	delete	
+unhealthy	down	nav.down
+unhealthy	e	res.edit
+unhealthy	end	nav.bottom
+unhealthy	enter	nav.drillIn
+unhealthy	esc	nav.back
+unhealthy	f	logs.follow
+unhealthy	f1	
+unhealthy	f10	
+unhealthy	f11	
+unhealthy	f12	
+unhealthy	f2	
+unhealthy	f3	
+unhealthy	f4	
+unhealthy	f5	
+unhealthy	f6	
+unhealthy	f7	
+unhealthy	f8	
+unhealthy	f9	
+unhealthy	g	
+unhealthy	h	nav.left
+unhealthy	home	nav.top
+unhealthy	i	
+unhealthy	insert	
+unhealthy	j	nav.down
+unhealthy	k	nav.up
+unhealthy	l	nav.right
+unhealthy	left	nav.left
+unhealthy	m	menu.toggle
+unhealthy	n	app.searchNext
+unhealthy	o	logs.previous
+unhealthy	p	forwards.localPort
+unhealthy	pgdn	nav.halfPageDown
+unhealthy	pgup	nav.halfPageUp
+unhealthy	q	app.quit
+unhealthy	r	secret.reveal
+unhealthy	right	nav.right
+unhealthy	s	
+unhealthy	space	nav.pageDown
+unhealthy	t	logs.timestamps
+unhealthy	tab	
+unhealthy	u	
+unhealthy	up	nav.up
+unhealthy	v	logs.select
+unhealthy	w	logs.wrap
+unhealthy	x	sort.clear
+unhealthy	y	logs.yank
+unhealthy	z	
+unhealthy	{	
+unhealthy	|	
+unhealthy	}	
+unhealthy	~	
+forwards	!	
+forwards	"	
+forwards	#	app.searchPrev
+forwards	$	
+forwards	%	
+forwards	&	
+forwards	'	
+forwards	(	
+forwards	)	
+forwards	*	menu.pin
+forwards	+	
+forwards	,	
+forwards	-	
+forwards	.	
+forwards	/	app.filter
+forwards	0	forwards.freeLocal
+forwards	1	
+forwards	2	
+forwards	3	
+forwards	4	
+forwards	5	
+forwards	6	
+forwards	7	
+forwards	8	
+forwards	9	
+forwards	:	app.palette
+forwards	;	
+forwards	<	
+forwards	=	
+forwards	>	
+forwards	?	app.help
+forwards	@	
+forwards	A	
+forwards	B	
+forwards	C	ctx.switch
+forwards	D	res.delete
+forwards	E	res.events
+forwards	F	forwards.panel
+forwards	G	nav.bottom
+forwards	H	app.unhealthy
+forwards	I	
+forwards	J	
+forwards	K	
+forwards	L	res.logs
+forwards	M	mouse.toggle
+forwards	N	ns.switch
+forwards	O	
+forwards	P	res.children
+forwards	Q	
+forwards	R	resources.switch
+forwards	S	sort.column
+forwards	T	theme.switch
+forwards	U	app.unhealthyScan
+forwards	V	logs.select
+forwards	W	
+forwards	X	forwards.stopAll
+forwards	Y	
+forwards	Z	
+forwards	[	
+forwards	\	
+forwards	]	
+forwards	^	
+forwards	_	
+forwards	`	
+forwards	a	
+forwards	alt+a	
+forwards	alt+b	
+forwards	alt+c	
+forwards	alt+d	
+forwards	alt+e	
+forwards	alt+f	
+forwards	alt+g	
+forwards	alt+h	
+forwards	alt+i	
+forwards	alt+j	
+forwards	alt+k	
+forwards	alt+l	
+forwards	alt+m	
+forwards	alt+n	
+forwards	alt+o	
+forwards	alt+p	
+forwards	alt+q	
+forwards	alt+r	
+forwards	alt+s	
+forwards	alt+t	
+forwards	alt+u	
+forwards	alt+v	
+forwards	alt+w	
+forwards	alt+x	
+forwards	alt+y	
+forwards	alt+z	
+forwards	b	
+forwards	backspace	
+forwards	c	secret.copy
+forwards	ctrl+a	search.allKinds
+forwards	ctrl+b	nav.pageUp
+forwards	ctrl+c	app.quit
+forwards	ctrl+d	nav.halfPageDown
+forwards	ctrl+e	
+forwards	ctrl+f	search.cluster
+forwards	ctrl+g	
+forwards	ctrl+h	
+forwards	ctrl+i	
+forwards	ctrl+j	
+forwards	ctrl+k	
+forwards	ctrl+l	
+forwards	ctrl+m	
+forwards	ctrl+n	
+forwards	ctrl+o	
+forwards	ctrl+p	logs.previous
+forwards	ctrl+q	
+forwards	ctrl+r	logs.regex
+forwards	ctrl+s	
+forwards	ctrl+t	
+forwards	ctrl+u	nav.halfPageUp
+forwards	ctrl+v	
+forwards	ctrl+w	search.allNamespaces
+forwards	ctrl+x	
+forwards	ctrl+y	
+forwards	ctrl+z	
+forwards	d	res.describe
+forwards	delete	
+forwards	down	nav.down
+forwards	e	res.edit
+forwards	end	nav.bottom
+forwards	enter	nav.drillIn
+forwards	esc	nav.back
+forwards	f	logs.follow
+forwards	f1	
+forwards	f10	
+forwards	f11	
+forwards	f12	
+forwards	f2	
+forwards	f3	
+forwards	f4	
+forwards	f5	
+forwards	f6	
+forwards	f7	
+forwards	f8	
+forwards	f9	
+forwards	g	
+forwards	h	nav.left
+forwards	home	nav.top
+forwards	i	
+forwards	insert	
+forwards	j	nav.down
+forwards	k	nav.up
+forwards	l	nav.right
+forwards	left	nav.left
+forwards	m	menu.toggle
+forwards	n	app.searchNext
+forwards	o	logs.previous
+forwards	p	forwards.localPort
+forwards	pgdn	nav.halfPageDown
+forwards	pgup	nav.halfPageUp
+forwards	q	app.quit
+forwards	r	secret.reveal
+forwards	right	nav.right
+forwards	s	
+forwards	space	nav.pageDown
+forwards	t	logs.timestamps
+forwards	tab	
+forwards	u	
+forwards	up	nav.up
+forwards	v	logs.select
+forwards	w	logs.wrap
+forwards	x	sort.clear
+forwards	y	logs.yank
+forwards	z	
+forwards	{	
+forwards	|	
+forwards	}	
+forwards	~	
+help	!	
+help	"	
+help	#	app.searchPrev
+help	$	
+help	%	
+help	&	
+help	'	
+help	(	
+help	)	
+help	*	menu.pin
+help	+	
+help	,	
+help	-	
+help	.	
+help	/	app.filter
+help	0	forwards.freeLocal
+help	1	
+help	2	
+help	3	
+help	4	
+help	5	
+help	6	
+help	7	
+help	8	
+help	9	
+help	:	app.palette
+help	;	
+help	<	
+help	=	
+help	>	
+help	?	app.help
+help	@	
+help	A	
+help	B	
+help	C	ctx.switch
+help	D	res.delete
+help	E	res.events
+help	F	forwards.panel
+help	G	nav.bottom
+help	H	app.unhealthy
+help	I	
+help	J	
+help	K	
+help	L	res.logs
+help	M	mouse.toggle
+help	N	ns.switch
+help	O	
+help	P	res.children
+help	Q	
+help	R	resources.switch
+help	S	sort.column
+help	T	theme.switch
+help	U	app.unhealthyScan
+help	V	logs.select
+help	W	
+help	X	forwards.stopAll
+help	Y	
+help	Z	
+help	[	
+help	\	
+help	]	
+help	^	
+help	_	
+help	`	
+help	a	
+help	alt+a	
+help	alt+b	
+help	alt+c	
+help	alt+d	
+help	alt+e	
+help	alt+f	
+help	alt+g	
+help	alt+h	
+help	alt+i	
+help	alt+j	
+help	alt+k	
+help	alt+l	
+help	alt+m	
+help	alt+n	
+help	alt+o	
+help	alt+p	
+help	alt+q	
+help	alt+r	
+help	alt+s	
+help	alt+t	
+help	alt+u	
+help	alt+v	
+help	alt+w	
+help	alt+x	
+help	alt+y	
+help	alt+z	
+help	b	
+help	backspace	
+help	c	secret.copy
+help	ctrl+a	search.allKinds
+help	ctrl+b	nav.pageUp
+help	ctrl+c	app.quit
+help	ctrl+d	nav.halfPageDown
+help	ctrl+e	
+help	ctrl+f	search.cluster
+help	ctrl+g	
+help	ctrl+h	
+help	ctrl+i	
+help	ctrl+j	
+help	ctrl+k	
+help	ctrl+l	
+help	ctrl+m	
+help	ctrl+n	
+help	ctrl+o	
+help	ctrl+p	logs.previous
+help	ctrl+q	
+help	ctrl+r	logs.regex
+help	ctrl+s	
+help	ctrl+t	
+help	ctrl+u	nav.halfPageUp
+help	ctrl+v	
+help	ctrl+w	search.allNamespaces
+help	ctrl+x	
+help	ctrl+y	
+help	ctrl+z	
+help	d	res.describe
+help	delete	
+help	down	nav.down
+help	e	res.edit
+help	end	nav.bottom
+help	enter	nav.drillIn
+help	esc	nav.back
+help	f	logs.follow
+help	f1	
+help	f10	
+help	f11	
+help	f12	
+help	f2	
+help	f3	
+help	f4	
+help	f5	
+help	f6	
+help	f7	
+help	f8	
+help	f9	
+help	g	
+help	h	nav.left
+help	home	nav.top
+help	i	
+help	insert	
+help	j	nav.down
+help	k	nav.up
+help	l	nav.right
+help	left	nav.left
+help	m	menu.toggle
+help	n	app.searchNext
+help	o	logs.previous
+help	p	forwards.localPort
+help	pgdn	nav.halfPageDown
+help	pgup	nav.halfPageUp
+help	q	app.quit
+help	r	secret.reveal
+help	right	nav.right
+help	s	
+help	space	nav.pageDown
+help	t	logs.timestamps
+help	tab	
+help	u	
+help	up	nav.up
+help	v	logs.select
+help	w	logs.wrap
+help	x	sort.clear
+help	y	logs.yank
+help	z	
+help	{	
+help	|	
+help	}	
+help	~	
+picker	!	
+picker	"	
+picker	#	app.searchPrev
+picker	$	
+picker	%	
+picker	&	
+picker	'	
+picker	(	
+picker	)	
+picker	*	menu.pin
+picker	+	
+picker	,	
+picker	-	
+picker	.	
+picker	/	app.filter
+picker	0	forwards.freeLocal
+picker	1	
+picker	2	
+picker	3	
+picker	4	
+picker	5	
+picker	6	
+picker	7	
+picker	8	
+picker	9	
+picker	:	app.palette
+picker	;	
+picker	<	
+picker	=	
+picker	>	
+picker	?	app.help
+picker	@	
+picker	A	
+picker	B	
+picker	C	ctx.switch
+picker	D	res.delete
+picker	E	res.events
+picker	F	forwards.panel
+picker	G	nav.bottom
+picker	H	app.unhealthy
+picker	I	
+picker	J	
+picker	K	
+picker	L	res.logs
+picker	M	mouse.toggle
+picker	N	ns.switch
+picker	O	
+picker	P	res.children
+picker	Q	
+picker	R	resources.switch
+picker	S	sort.column
+picker	T	theme.switch
+picker	U	app.unhealthyScan
+picker	V	logs.select
+picker	W	
+picker	X	forwards.stopAll
+picker	Y	
+picker	Z	
+picker	[	
+picker	\	
+picker	]	
+picker	^	
+picker	_	
+picker	`	
+picker	a	
+picker	alt+a	
+picker	alt+b	
+picker	alt+c	
+picker	alt+d	
+picker	alt+e	
+picker	alt+f	
+picker	alt+g	
+picker	alt+h	
+picker	alt+i	
+picker	alt+j	
+picker	alt+k	
+picker	alt+l	
+picker	alt+m	
+picker	alt+n	
+picker	alt+o	
+picker	alt+p	
+picker	alt+q	
+picker	alt+r	
+picker	alt+s	
+picker	alt+t	
+picker	alt+u	
+picker	alt+v	
+picker	alt+w	
+picker	alt+x	
+picker	alt+y	
+picker	alt+z	
+picker	b	
+picker	backspace	
+picker	c	secret.copy
+picker	ctrl+a	search.allKinds
+picker	ctrl+b	nav.pageUp
+picker	ctrl+c	app.quit
+picker	ctrl+d	nav.halfPageDown
+picker	ctrl+e	
+picker	ctrl+f	search.cluster
+picker	ctrl+g	
+picker	ctrl+h	
+picker	ctrl+i	
+picker	ctrl+j	
+picker	ctrl+k	
+picker	ctrl+l	
+picker	ctrl+m	
+picker	ctrl+n	
+picker	ctrl+o	
+picker	ctrl+p	logs.previous
+picker	ctrl+q	
+picker	ctrl+r	logs.regex
+picker	ctrl+s	
+picker	ctrl+t	
+picker	ctrl+u	nav.halfPageUp
+picker	ctrl+v	
+picker	ctrl+w	search.allNamespaces
+picker	ctrl+x	
+picker	ctrl+y	
+picker	ctrl+z	
+picker	d	res.describe
+picker	delete	
+picker	down	nav.down
+picker	e	res.edit
+picker	end	nav.bottom
+picker	enter	nav.drillIn
+picker	esc	nav.back
+picker	f	logs.follow
+picker	f1	
+picker	f10	
+picker	f11	
+picker	f12	
+picker	f2	
+picker	f3	
+picker	f4	
+picker	f5	
+picker	f6	
+picker	f7	
+picker	f8	
+picker	f9	
+picker	g	
+picker	h	nav.left
+picker	home	nav.top
+picker	i	
+picker	insert	
+picker	j	nav.down
+picker	k	nav.up
+picker	l	nav.right
+picker	left	nav.left
+picker	m	menu.toggle
+picker	n	app.searchNext
+picker	o	logs.previous
+picker	p	forwards.localPort
+picker	pgdn	nav.halfPageDown
+picker	pgup	nav.halfPageUp
+picker	q	app.quit
+picker	r	secret.reveal
+picker	right	nav.right
+picker	s	
+picker	space	nav.pageDown
+picker	t	logs.timestamps
+picker	tab	
+picker	u	
+picker	up	nav.up
+picker	v	logs.select
+picker	w	logs.wrap
+picker	x	sort.clear
+picker	y	logs.yank
+picker	z	
+picker	{	
+picker	|	
+picker	}	
+picker	~	
+picker query	!	
+picker query	"	
+picker query	#	
+picker query	$	
+picker query	%	
+picker query	&	
+picker query	'	
+picker query	(	
+picker query	)	
+picker query	*	
+picker query	+	
+picker query	,	
+picker query	-	
+picker query	.	
+picker query	/	
+picker query	0	
+picker query	1	
+picker query	2	
+picker query	3	
+picker query	4	
+picker query	5	
+picker query	6	
+picker query	7	
+picker query	8	
+picker query	9	
+picker query	:	
+picker query	;	
+picker query	<	
+picker query	=	
+picker query	>	
+picker query	?	
+picker query	@	
+picker query	A	
+picker query	B	
+picker query	C	
+picker query	D	
+picker query	E	
+picker query	F	
+picker query	G	
+picker query	H	
+picker query	I	
+picker query	J	
+picker query	K	
+picker query	L	
+picker query	M	
+picker query	N	
+picker query	O	
+picker query	P	
+picker query	Q	
+picker query	R	
+picker query	S	
+picker query	T	
+picker query	U	
+picker query	V	
+picker query	W	
+picker query	X	
+picker query	Y	
+picker query	Z	
+picker query	[	
+picker query	\	
+picker query	]	
+picker query	^	
+picker query	_	
+picker query	`	
+picker query	a	
+picker query	alt+a	
+picker query	alt+b	
+picker query	alt+c	
+picker query	alt+d	
+picker query	alt+e	
+picker query	alt+f	
+picker query	alt+g	
+picker query	alt+h	
+picker query	alt+i	
+picker query	alt+j	
+picker query	alt+k	
+picker query	alt+l	
+picker query	alt+m	
+picker query	alt+n	
+picker query	alt+o	
+picker query	alt+p	
+picker query	alt+q	
+picker query	alt+r	
+picker query	alt+s	
+picker query	alt+t	
+picker query	alt+u	
+picker query	alt+v	
+picker query	alt+w	
+picker query	alt+x	
+picker query	alt+y	
+picker query	alt+z	
+picker query	b	
+picker query	backspace	
+picker query	c	
+picker query	ctrl+a	search.allKinds
+picker query	ctrl+b	nav.pageUp
+picker query	ctrl+c	app.quit
+picker query	ctrl+d	nav.halfPageDown
+picker query	ctrl+e	
+picker query	ctrl+f	search.cluster
+picker query	ctrl+g	
+picker query	ctrl+h	
+picker query	ctrl+i	
+picker query	ctrl+j	
+picker query	ctrl+k	
+picker query	ctrl+l	
+picker query	ctrl+m	
+picker query	ctrl+n	
+picker query	ctrl+o	
+picker query	ctrl+p	logs.previous
+picker query	ctrl+q	
+picker query	ctrl+r	logs.regex
+picker query	ctrl+s	
+picker query	ctrl+t	
+picker query	ctrl+u	nav.halfPageUp
+picker query	ctrl+v	
+picker query	ctrl+w	search.allNamespaces
+picker query	ctrl+x	
+picker query	ctrl+y	
+picker query	ctrl+z	
+picker query	d	
+picker query	delete	
+picker query	down	nav.down
+picker query	e	
+picker query	end	nav.bottom
+picker query	enter	nav.drillIn
+picker query	esc	nav.back
+picker query	f	
+picker query	f1	
+picker query	f10	
+picker query	f11	
+picker query	f12	
+picker query	f2	
+picker query	f3	
+picker query	f4	
+picker query	f5	
+picker query	f6	
+picker query	f7	
+picker query	f8	
+picker query	f9	
+picker query	g	
+picker query	h	
+picker query	home	nav.top
+picker query	i	
+picker query	insert	
+picker query	j	
+picker query	k	
+picker query	l	
+picker query	left	nav.left
+picker query	m	
+picker query	n	
+picker query	o	
+picker query	p	
+picker query	pgdn	nav.halfPageDown
+picker query	pgup	nav.halfPageUp
+picker query	q	
+picker query	r	
+picker query	right	nav.right
+picker query	s	
+picker query	space	
+picker query	t	
+picker query	tab	
+picker query	u	
+picker query	up	nav.up
+picker query	v	
+picker query	w	
+picker query	x	
+picker query	y	
+picker query	z	
+picker query	{	
+picker query	|	
+picker query	}	
+picker query	~	
+prompt	!	
+prompt	"	
+prompt	#	
+prompt	$	
+prompt	%	
+prompt	&	
+prompt	'	
+prompt	(	
+prompt	)	
+prompt	*	
+prompt	+	
+prompt	,	
+prompt	-	
+prompt	.	
+prompt	/	
+prompt	0	
+prompt	1	
+prompt	2	
+prompt	3	
+prompt	4	
+prompt	5	
+prompt	6	
+prompt	7	
+prompt	8	
+prompt	9	
+prompt	:	
+prompt	;	
+prompt	<	
+prompt	=	
+prompt	>	
+prompt	?	
+prompt	@	
+prompt	A	
+prompt	B	
+prompt	C	
+prompt	D	
+prompt	E	
+prompt	F	
+prompt	G	
+prompt	H	
+prompt	I	
+prompt	J	
+prompt	K	
+prompt	L	
+prompt	M	
+prompt	N	
+prompt	O	
+prompt	P	
+prompt	Q	
+prompt	R	
+prompt	S	
+prompt	T	
+prompt	U	
+prompt	V	
+prompt	W	
+prompt	X	
+prompt	Y	
+prompt	Z	
+prompt	[	
+prompt	\	
+prompt	]	
+prompt	^	
+prompt	_	
+prompt	`	
+prompt	a	
+prompt	alt+a	
+prompt	alt+b	
+prompt	alt+c	
+prompt	alt+d	
+prompt	alt+e	
+prompt	alt+f	
+prompt	alt+g	
+prompt	alt+h	
+prompt	alt+i	
+prompt	alt+j	
+prompt	alt+k	
+prompt	alt+l	
+prompt	alt+m	
+prompt	alt+n	
+prompt	alt+o	
+prompt	alt+p	
+prompt	alt+q	
+prompt	alt+r	
+prompt	alt+s	
+prompt	alt+t	
+prompt	alt+u	
+prompt	alt+v	
+prompt	alt+w	
+prompt	alt+x	
+prompt	alt+y	
+prompt	alt+z	
+prompt	b	
+prompt	backspace	
+prompt	c	
+prompt	ctrl+a	search.allKinds
+prompt	ctrl+b	nav.pageUp
+prompt	ctrl+c	app.quit
+prompt	ctrl+d	nav.halfPageDown
+prompt	ctrl+e	
+prompt	ctrl+f	search.cluster
+prompt	ctrl+g	
+prompt	ctrl+h	
+prompt	ctrl+i	
+prompt	ctrl+j	
+prompt	ctrl+k	
+prompt	ctrl+l	
+prompt	ctrl+m	
+prompt	ctrl+n	
+prompt	ctrl+o	
+prompt	ctrl+p	logs.previous
+prompt	ctrl+q	
+prompt	ctrl+r	logs.regex
+prompt	ctrl+s	
+prompt	ctrl+t	
+prompt	ctrl+u	nav.halfPageUp
+prompt	ctrl+v	
+prompt	ctrl+w	search.allNamespaces
+prompt	ctrl+x	
+prompt	ctrl+y	
+prompt	ctrl+z	
+prompt	d	
+prompt	delete	
+prompt	down	nav.down
+prompt	e	
+prompt	end	nav.bottom
+prompt	enter	nav.drillIn
+prompt	esc	nav.back
+prompt	f	
+prompt	f1	
+prompt	f10	
+prompt	f11	
+prompt	f12	
+prompt	f2	
+prompt	f3	
+prompt	f4	
+prompt	f5	
+prompt	f6	
+prompt	f7	
+prompt	f8	
+prompt	f9	
+prompt	g	
+prompt	h	
+prompt	home	nav.top
+prompt	i	
+prompt	insert	
+prompt	j	
+prompt	k	
+prompt	l	
+prompt	left	nav.left
+prompt	m	
+prompt	n	
+prompt	o	
+prompt	p	
+prompt	pgdn	nav.halfPageDown
+prompt	pgup	nav.halfPageUp
+prompt	q	
+prompt	r	
+prompt	right	nav.right
+prompt	s	
+prompt	space	
+prompt	t	
+prompt	tab	
+prompt	u	
+prompt	up	nav.up
+prompt	v	
+prompt	w	
+prompt	x	
+prompt	y	
+prompt	z	
+prompt	{	
+prompt	|	
+prompt	}	
+prompt	~	
+confirm	!	
+confirm	"	
+confirm	#	app.searchPrev
+confirm	$	
+confirm	%	
+confirm	&	
+confirm	'	
+confirm	(	
+confirm	)	
+confirm	*	menu.pin
+confirm	+	
+confirm	,	
+confirm	-	
+confirm	.	
+confirm	/	app.filter
+confirm	0	forwards.freeLocal
+confirm	1	
+confirm	2	
+confirm	3	
+confirm	4	
+confirm	5	
+confirm	6	
+confirm	7	
+confirm	8	
+confirm	9	
+confirm	:	app.palette
+confirm	;	
+confirm	<	
+confirm	=	
+confirm	>	
+confirm	?	app.help
+confirm	@	
+confirm	A	
+confirm	B	
+confirm	C	ctx.switch
+confirm	D	res.delete
+confirm	E	res.events
+confirm	F	forwards.panel
+confirm	G	nav.bottom
+confirm	H	app.unhealthy
+confirm	I	
+confirm	J	
+confirm	K	
+confirm	L	res.logs
+confirm	M	mouse.toggle
+confirm	N	ns.switch
+confirm	O	
+confirm	P	res.children
+confirm	Q	
+confirm	R	resources.switch
+confirm	S	sort.column
+confirm	T	theme.switch
+confirm	U	app.unhealthyScan
+confirm	V	logs.select
+confirm	W	
+confirm	X	forwards.stopAll
+confirm	Y	
+confirm	Z	
+confirm	[	
+confirm	\	
+confirm	]	
+confirm	^	
+confirm	_	
+confirm	`	
+confirm	a	
+confirm	alt+a	
+confirm	alt+b	
+confirm	alt+c	
+confirm	alt+d	
+confirm	alt+e	
+confirm	alt+f	
+confirm	alt+g	
+confirm	alt+h	
+confirm	alt+i	
+confirm	alt+j	
+confirm	alt+k	
+confirm	alt+l	
+confirm	alt+m	
+confirm	alt+n	
+confirm	alt+o	
+confirm	alt+p	
+confirm	alt+q	
+confirm	alt+r	
+confirm	alt+s	
+confirm	alt+t	
+confirm	alt+u	
+confirm	alt+v	
+confirm	alt+w	
+confirm	alt+x	
+confirm	alt+y	
+confirm	alt+z	
+confirm	b	
+confirm	backspace	
+confirm	c	secret.copy
+confirm	ctrl+a	search.allKinds
+confirm	ctrl+b	nav.pageUp
+confirm	ctrl+c	app.quit
+confirm	ctrl+d	nav.halfPageDown
+confirm	ctrl+e	
+confirm	ctrl+f	search.cluster
+confirm	ctrl+g	
+confirm	ctrl+h	
+confirm	ctrl+i	
+confirm	ctrl+j	
+confirm	ctrl+k	
+confirm	ctrl+l	
+confirm	ctrl+m	
+confirm	ctrl+n	
+confirm	ctrl+o	
+confirm	ctrl+p	logs.previous
+confirm	ctrl+q	
+confirm	ctrl+r	logs.regex
+confirm	ctrl+s	
+confirm	ctrl+t	
+confirm	ctrl+u	nav.halfPageUp
+confirm	ctrl+v	
+confirm	ctrl+w	search.allNamespaces
+confirm	ctrl+x	
+confirm	ctrl+y	
+confirm	ctrl+z	
+confirm	d	res.describe
+confirm	delete	
+confirm	down	nav.down
+confirm	e	res.edit
+confirm	end	nav.bottom
+confirm	enter	confirm.accept
+confirm	esc	confirm.decline
+confirm	f	logs.follow
+confirm	f1	
+confirm	f10	
+confirm	f11	
+confirm	f12	
+confirm	f2	
+confirm	f3	
+confirm	f4	
+confirm	f5	
+confirm	f6	
+confirm	f7	
+confirm	f8	
+confirm	f9	
+confirm	g	
+confirm	h	nav.left
+confirm	home	nav.top
+confirm	i	
+confirm	insert	
+confirm	j	nav.down
+confirm	k	nav.up
+confirm	l	nav.right
+confirm	left	nav.left
+confirm	m	menu.toggle
+confirm	n	confirm.decline
+confirm	o	logs.previous
+confirm	p	forwards.localPort
+confirm	pgdn	nav.halfPageDown
+confirm	pgup	nav.halfPageUp
+confirm	q	app.quit
+confirm	r	secret.reveal
+confirm	right	nav.right
+confirm	s	
+confirm	space	nav.pageDown
+confirm	t	logs.timestamps
+confirm	tab	
+confirm	u	
+confirm	up	nav.up
+confirm	v	logs.select
+confirm	w	logs.wrap
+confirm	x	sort.clear
+confirm	y	confirm.accept
+confirm	z	
+confirm	{	
+confirm	|	
+confirm	}	
+confirm	~	
+no cluster	!	
+no cluster	"	
+no cluster	#	app.searchPrev
+no cluster	$	
+no cluster	%	
+no cluster	&	
+no cluster	'	
+no cluster	(	
+no cluster	)	
+no cluster	*	menu.pin
+no cluster	+	
+no cluster	,	
+no cluster	-	
+no cluster	.	
+no cluster	/	app.filter
+no cluster	0	forwards.freeLocal
+no cluster	1	
+no cluster	2	
+no cluster	3	
+no cluster	4	
+no cluster	5	
+no cluster	6	
+no cluster	7	
+no cluster	8	
+no cluster	9	
+no cluster	:	app.palette
+no cluster	;	
+no cluster	<	
+no cluster	=	
+no cluster	>	
+no cluster	?	app.help
+no cluster	@	
+no cluster	A	
+no cluster	B	
+no cluster	C	ctx.switch
+no cluster	D	res.delete
+no cluster	E	res.events
+no cluster	F	forwards.panel
+no cluster	G	nav.bottom
+no cluster	H	app.unhealthy
+no cluster	I	
+no cluster	J	
+no cluster	K	
+no cluster	L	res.logs
+no cluster	M	mouse.toggle
+no cluster	N	ns.switch
+no cluster	O	
+no cluster	P	res.children
+no cluster	Q	
+no cluster	R	resources.switch
+no cluster	S	sort.column
+no cluster	T	theme.switch
+no cluster	U	app.unhealthyScan
+no cluster	V	logs.select
+no cluster	W	
+no cluster	X	forwards.stopAll
+no cluster	Y	
+no cluster	Z	
+no cluster	[	
+no cluster	\	
+no cluster	]	
+no cluster	^	
+no cluster	_	
+no cluster	`	
+no cluster	a	
+no cluster	alt+a	
+no cluster	alt+b	
+no cluster	alt+c	
+no cluster	alt+d	
+no cluster	alt+e	
+no cluster	alt+f	
+no cluster	alt+g	
+no cluster	alt+h	
+no cluster	alt+i	
+no cluster	alt+j	
+no cluster	alt+k	
+no cluster	alt+l	
+no cluster	alt+m	
+no cluster	alt+n	
+no cluster	alt+o	
+no cluster	alt+p	
+no cluster	alt+q	
+no cluster	alt+r	
+no cluster	alt+s	
+no cluster	alt+t	
+no cluster	alt+u	
+no cluster	alt+v	
+no cluster	alt+w	
+no cluster	alt+x	
+no cluster	alt+y	
+no cluster	alt+z	
+no cluster	b	
+no cluster	backspace	
+no cluster	c	secret.copy
+no cluster	ctrl+a	search.allKinds
+no cluster	ctrl+b	nav.pageUp
+no cluster	ctrl+c	app.quit
+no cluster	ctrl+d	nav.halfPageDown
+no cluster	ctrl+e	
+no cluster	ctrl+f	search.cluster
+no cluster	ctrl+g	
+no cluster	ctrl+h	
+no cluster	ctrl+i	
+no cluster	ctrl+j	
+no cluster	ctrl+k	
+no cluster	ctrl+l	
+no cluster	ctrl+m	
+no cluster	ctrl+n	
+no cluster	ctrl+o	
+no cluster	ctrl+p	logs.previous
+no cluster	ctrl+q	
+no cluster	ctrl+r	logs.regex
+no cluster	ctrl+s	
+no cluster	ctrl+t	
+no cluster	ctrl+u	nav.halfPageUp
+no cluster	ctrl+v	
+no cluster	ctrl+w	search.allNamespaces
+no cluster	ctrl+x	
+no cluster	ctrl+y	
+no cluster	ctrl+z	
+no cluster	d	res.describe
+no cluster	delete	
+no cluster	down	nav.down
+no cluster	e	res.edit
+no cluster	end	nav.bottom
+no cluster	enter	nav.drillIn
+no cluster	esc	nav.back
+no cluster	f	logs.follow
+no cluster	f1	
+no cluster	f10	
+no cluster	f11	
+no cluster	f12	
+no cluster	f2	
+no cluster	f3	
+no cluster	f4	
+no cluster	f5	
+no cluster	f6	
+no cluster	f7	
+no cluster	f8	
+no cluster	f9	
+no cluster	g	
+no cluster	h	nav.left
+no cluster	home	nav.top
+no cluster	i	
+no cluster	insert	
+no cluster	j	nav.down
+no cluster	k	nav.up
+no cluster	l	nav.right
+no cluster	left	nav.left
+no cluster	m	menu.toggle
+no cluster	n	app.searchNext
+no cluster	o	logs.previous
+no cluster	p	forwards.localPort
+no cluster	pgdn	nav.halfPageDown
+no cluster	pgup	nav.halfPageUp
+no cluster	q	app.quit
+no cluster	r	secret.reveal
+no cluster	right	nav.right
+no cluster	s	
+no cluster	space	nav.pageDown
+no cluster	t	logs.timestamps
+no cluster	tab	
+no cluster	u	
+no cluster	up	nav.up
+no cluster	v	logs.select
+no cluster	w	logs.wrap
+no cluster	x	sort.clear
+no cluster	y	logs.yank
+no cluster	z	
+no cluster	{	
+no cluster	|	
+no cluster	}	
+no cluster	~	
+forwards	g g	nav.top
+forwards	g r	res.relations
+help	g g	nav.top
+help	g r	res.relations
+logs	g g	nav.top
+logs	g r	res.relations
+menu	g g	nav.top
+menu	g r	res.relations
+no cluster	g g	nav.top
+no cluster	g r	res.relations
+sort	g g	nav.top
+sort	g r	res.relations
+table	g g	nav.top
+table	g r	res.relations
+unhealthy	g g	nav.top
+unhealthy	g r	res.relations
+viewer	g g	nav.top
+viewer	g r	res.relations

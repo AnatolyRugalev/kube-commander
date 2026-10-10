@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/tui/elide"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
@@ -46,8 +47,13 @@ const helpTruncated = "… (truncated — full list in docs/keybindings.md)"
 // app.help action resolves, and feeds it window-size updates. It holds no shared
 // mutable state (principle 1): every field is owned by the model that embeds it.
 type Model struct {
-	help    bhelp.Model
+	help bhelp.Model
+	km   *keymap.Keymap
+	// path is what holds the keyboard (SetPath); keys is the keymap read there,
+	// and under is read in the path under the overlay — what the overlay lists.
+	path    keybind.Path
 	keys    keymap.HelpKeyMap
+	under   keymap.HelpKeyMap
 	styles  styles.Styles
 	visible bool
 	width   int // full screen width  (the modal is centered within it)
@@ -60,7 +66,21 @@ type Model struct {
 func New(s styles.Styles, km *keymap.Keymap) Model {
 	h := bhelp.New()
 	h.ShowAll = true
-	return Model{help: h, keys: km.HelpMap(), styles: s}
+	m := Model{help: h, km: km, styles: s}
+	m.SetPath(keybind.Path{})
+	return m
+}
+
+// SetPath tells the overlay and the hint what holds the keyboard (D303 pt 7): the
+// hint shows the keys that act there, and the overlay lists what runs on the
+// surface under it — the overlay itself left off the path, since it only closes.
+// The root sets it whenever the path changes; it is read here, never derived.
+func (m *Model) SetPath(p keybind.Path) {
+	m.path = p
+	m.keys = m.km.HelpMap(p)
+	under := p
+	under.Help = false
+	m.under = m.km.HelpMap(under)
 }
 
 // SetStyles repaints the overlay's frame and title through s, replacing the palette
@@ -70,6 +90,10 @@ func New(s styles.Styles, km *keymap.Keymap) Model {
 // package has never themed — the bindings it lays out are unaffected, as are the
 // keymap, the visibility and the recorded size.
 func (m *Model) SetStyles(s styles.Styles) { m.styles = s }
+
+// Keys is the keymap read in the path SetPath was last given: what a surface
+// that writes its own keys (the port-forward panel's footer) reads them from.
+func (m Model) Keys() keymap.HelpKeyMap { return m.keys }
 
 // Visible reports whether the overlay is currently shown.
 func (m Model) Visible() bool { return m.visible }
@@ -148,7 +172,7 @@ func (m Model) View() string {
 	// ellipsis would not fit), so the horizontal clamp bounds the box's width first
 	// and the vertical one its height — each marking its own cut (D220 pt 1).
 	body := lipgloss.JoinVertical(lipgloss.Left, title,
-		elide.Lines(elide.Width(inner.View(m.keys), innerW, marker), ih, marker))
+		elide.Lines(elide.Width(inner.View(m.under), innerW, marker), ih, marker))
 	return m.styles.PaneFocus.Render(body)
 }
 
@@ -158,9 +182,9 @@ func (m Model) ShortHelpView() string {
 	return m.help.ShortHelpView(m.keys.ShortHelp())
 }
 
-// ShortHelpContextView renders the one-line hint for a focus context (menu vs
-// table), so the persistent bottom hint tracks what holds focus (D11 keeps it
-// registry-generated; this component only lays out the bindings it is given).
-func (m Model) ShortHelpContextView(ctx keymap.HelpContext) string {
-	return m.help.ShortHelpView(m.keys.ShortHelpContext(ctx))
+// HintView renders the one-line hint for what holds the keyboard (SetPath), so the
+// persistent bottom hint tracks focus (D11 keeps it registry-generated; this
+// component only lays out the bindings it is given).
+func (m Model) HintView() string {
+	return m.help.ShortHelpView(m.keys.Hint())
 }

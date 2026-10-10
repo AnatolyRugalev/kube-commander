@@ -3,10 +3,11 @@
 
 # kubecom default keybindings
 
-These are the built-in **default** bindings, generated from the action registry
-(the single source of truth for keys, D11). Every action is rebindable via the
-`keys:` section of the config; run `kubecom keys` to print your
-effective map. Vim keys are listed first, fallbacks second (D10).
+These are the built-in **default** bindings, generated from `default.kdl`
+(`kubecom keys default` prints it). Rebind anything in your config's
+`keymap { }` (see [configuration.md](configuration.md#key-bindings)); run
+`kubecom keys` to print what is in force. Vim keys are listed first,
+fallbacks second (D10). A key with a context in parentheses acts only there.
 
 ## nav
 
@@ -18,7 +19,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `nav.right` | `l` / `right` | Focus right pane / scroll right |
 | `nav.drillIn` | `enter` | Open / drill into selection |
 | `nav.back` | `esc` | Go back / up a level |
-| `nav.top` | `gg` / `home` | Jump to top |
+| `nav.top` | `g g` / `home` | Jump to top |
 | `nav.bottom` | `G` / `end` | Jump to bottom |
 | `nav.halfPageDown` | `ctrl+d` / `pgdn` | Scroll half page down |
 | `nav.halfPageUp` | `ctrl+u` / `pgup` | Scroll half page up |
@@ -87,7 +88,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `actions.menu` | `enter` | Act on the selected row |
+| `actions.menu` | `enter` (`focus == 'table'`) | Act on the selected row |
 
 ## res
 
@@ -99,7 +100,7 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 | `res.edit` | `e` | View / edit the selected row's YAML in $EDITOR |
 | `res.delete` | `D` | Delete the selected row |
 | `res.children` | `P` | Show the selected owner's pods |
-| `res.relations` | `gr` | Show what the selected row is related to |
+| `res.relations` | `g r` | Show what the selected row is related to |
 
 ## logs
 
@@ -141,5 +142,5 @@ effective map. Vim keys are listed first, fallbacks second (D10).
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `confirm.accept` | `y` / `enter` | Accept the confirm dialog |
-| `confirm.decline` | `n` / `esc` | Decline the confirm dialog |
+| `confirm.accept` | `y` (`confirm`) / `enter` (`confirm`) | Accept the confirm dialog |
+| `confirm.decline` | `n` (`confirm`) / `esc` (`confirm`) | Decline the confirm dialog |

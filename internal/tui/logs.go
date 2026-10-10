@@ -234,16 +234,17 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 }
 
 // routeLogsFilterKey resolves one keypress while the logs view's live grep is open. The
-// filter field captures text, so the split is by whether the key carries text — the same
-// split the search view makes (D140 pt 1) and the table filter before it: a mapped
-// no-text key (esc/arrows/ctrl+…) is a control Action the view consumes, while anything
-// text-producing or editing (a rune, or an unmapped no-text key like backspace) is
-// filter input. So `f` and `q` and `/` type a character instead of firing their action,
-// and only esc (clear the filter) / ctrl+c (close the view) / the arrows still act. No
-// view matches a raw key for behaviour (D11).
+// filter field captures text, so the split is the field rule (D303 pt 5) — the same
+// split the search view makes (D140 pt 1) and the table filter before it: the path has
+// a field, so a key that types goes to it unless a binding as deep as the field takes
+// it, while a no-text key (esc/arrows/ctrl+…) resolves as anywhere and is a control
+// Action the view consumes. Anything else, a rune or an unmapped no-text key like
+// backspace, is filter input. So `f` and `q` and `/` type a character instead of firing
+// their action, and only esc (clear the filter) / ctrl+c (close the view) / the arrows
+// still act. No view matches a raw key for behaviour (D11).
 //
 // Keys with the filter *closed* are deliberately not routed here: they go through the
-// sequencer like every browse key, so `gg`/`G` work in a log the way they work
+// sequencer like every browse key, so `g g`/`G` work in a log the way they work
 // everywhere else (handleLogsAction is the action end of that path).
 //
 // The one editing key that is not filter input is a backspace on an empty query: it
@@ -252,7 +253,7 @@ func (m Model) handleLogMsg(l logMsg) (tea.Model, tea.Cmd) {
 // because this route is only reached while the filter is open.
 func (m Model) routeLogsFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.Key()
-	if action, mapped := m.keymap.Action(key); mapped && key.Text == "" {
+	if action, _, mapped := m.keymap.Action(key, m.keyPath()); mapped {
 		return m.handleLogsAction(action)
 	}
 	if isEmptyLineBackspace(key, m.logsView.Query()) {

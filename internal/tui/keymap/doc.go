@@ -2,6 +2,8 @@ package keymap
 
 import (
 	"strings"
+
+	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
 // This file renders the committed keybindings reference (docs/keybindings.md)
@@ -19,18 +21,32 @@ const docHeader = `<!-- Code generated from internal/tui/keymap (DefaultKeymap);
 
 # kubecom default keybindings
 
-These are the built-in **default** bindings, generated from the action registry
-(the single source of truth for keys, D11). Every action is rebindable via the
-` + "`keys:`" + ` section of the config; run ` + "`kubecom keys`" + ` to print your
-effective map. Vim keys are listed first, fallbacks second (D10).
+These are the built-in **default** bindings, generated from ` + "`default.kdl`" + `
+(` + "`kubecom keys default`" + ` prints it). Rebind anything in your config's
+` + "`keymap { }`" + ` (see [configuration.md](configuration.md#key-bindings)); run
+` + "`kubecom keys`" + ` to print what is in force. Vim keys are listed first,
+fallbacks second (D10). A key with a context in parentheses acts only there.
 `
 
 // Markdown renders this keymap as the docs/keybindings.md reference: one table
 // per action namespace (the id prefix before the first "."), columns Action /
-// Keys / Description, in registry order. Keys and descriptions come straight from
-// Keys() and Describe(); nothing here restates a literal key. An action with no
-// bound keys renders its Keys cell as an em dash.
+// Keys / Description, in registry order. Keys come straight from the bindings,
+// each with its context when it has one, and descriptions from Describe(); nothing
+// here restates a literal key. An action with no binding renders its Keys cell as
+// an em dash.
 func (k *Keymap) Markdown() string {
+	keys := map[Action][]string{}
+	for _, e := range k.km.Bindings() {
+		b := e.Binding
+		if b.Unbind() || len(b.Args) > 0 {
+			continue
+		}
+		tok := "`" + keybind.FormatKeys(e.Keys) + "`"
+		if c := b.Context(); c != "" {
+			tok += " (`" + strings.ReplaceAll(c, "|", `\|`) + "`)"
+		}
+		keys[Action(b.Action)] = append(keys[Action(b.Action)], tok)
+	}
 	var b strings.Builder
 	b.WriteString(docHeader)
 
@@ -52,7 +68,7 @@ func (k *Keymap) Markdown() string {
 			b.WriteString("| `")
 			b.WriteString(string(a))
 			b.WriteString("` | ")
-			b.WriteString(docKeys(k.Keys(a)))
+			b.WriteString(docKeys(keys[a]))
 			b.WriteString(" | ")
 			b.WriteString(a.Describe())
 			b.WriteString(" |\n")
@@ -61,15 +77,11 @@ func (k *Keymap) Markdown() string {
 	return b.String()
 }
 
-// docKeys renders an action's key tokens for a table cell: each token in
-// backticks, joined by " / " (vim key first). No bound keys → an em dash.
+// docKeys renders an action's key tokens for a table cell, joined by " / " (vim
+// key first). No bound keys → an em dash.
 func docKeys(keys []string) string {
 	if len(keys) == 0 {
 		return "—"
 	}
-	quoted := make([]string, len(keys))
-	for i, tok := range keys {
-		quoted[i] = "`" + tok + "`"
-	}
-	return strings.Join(quoted, " / ")
+	return strings.Join(keys, " / ")
 }

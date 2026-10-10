@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/neuroplastio/kubecom/internal/config"
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/tui/components/forwards"
 	"github.com/neuroplastio/kubecom/internal/tui/components/menu"
@@ -2687,8 +2688,8 @@ func openPodTable(t *testing.T, kind string, opts ...Option) Model {
 }
 
 // actionsKey is the default actions.menu key (`enter`, STORY-06c): on a focused
-// resource table with a row selected, it resolves through the table key context
-// (TableAction) to actions.menu — the `:action ` palette stage.
+// resource table with a row selected, it resolves in `context "focus == 'table'"`
+// to actions.menu — the `:action ` palette stage.
 var actionsKey = tea.Key{Code: tea.KeyEnter}
 
 // openActionStage presses `enter` and asserts it landed on the palette's `:action `
@@ -5963,10 +5964,10 @@ func TestForwardsPanelLists(t *testing.T) {
 // it telling the reader to press a key that no longer acts (D11). It now names the
 // resolved keys, and only the verbs are local (D218 pt 2).
 func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
-	km := keymap.DefaultKeymap()
+	panel := keybind.Path{Table: &keybind.Table{Kind: "Pod"}, Forwards: true}
 	// The defaults render exactly the line the literal used to spell — the point of the
 	// leg is where the keys come from, not what they say today.
-	if got, want := forwards.Footer(km), "enter: stop · X: stop all · esc: close"; got != want {
+	if got, want := forwards.Footer(keymap.DefaultKeymap().HelpMap(panel)), "enter: stop · X: stop all · esc: close"; got != want {
 		t.Fatalf("the default footer = %q, want %q", got, want)
 	}
 
@@ -5974,17 +5975,14 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 	m := openPodTable(t, "Pod")
 	next, _ := m.handleAction(keymap.ActionForwards)
 	m = next.(Model)
-	if view := m.View().Content; !strings.Contains(view, forwards.Footer(m.keymap)) {
+	m.refreshHints() // the tail of Update, which handleAction alone skips
+	if view := m.View().Content; !strings.Contains(view, forwards.Footer(m.help.Keys())) {
 		t.Fatalf("the open panel should render its footer: %q", view)
 	}
 
 	// Rebinding forwards.stopAll moves the footer with it. This is the assertion the
 	// literal footer failed: `X` is gone from the keymap, so naming it would be a lie.
-	rebound, _, err := km.Merge(map[keymap.Action][]string{keymap.ActionStopForwards: {"Z"}})
-	if err != nil {
-		t.Fatalf("rebinding forwards.stopAll: %v", err)
-	}
-	m.keymap = rebound
+	m = useKeymap(m, userKeymap(t, `unbind "X"; bind "Z" "forwards.stopAll"`))
 	view := m.View().Content
 	if !strings.Contains(view, "Z: stop all") {
 		t.Fatalf("a rebound stop-all should read as `Z` in the footer: %q", view)
@@ -5998,23 +5996,14 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 // actions loses that entry rather than reading a verb with no key (the trade
 // portPickerTitle already makes), and that unbinding all three drops the line itself.
 func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
-	km, _, err := keymap.DefaultKeymap().Merge(map[keymap.Action][]string{keymap.ActionStopForwards: {}})
-	if err != nil {
-		t.Fatalf("disabling forwards.stopAll: %v", err)
-	}
-	if got, want := forwards.Footer(km), "enter: stop · esc: close"; got != want {
-		t.Fatalf("a disabled stop-all should drop out: got %q, want %q", got, want)
+	panel := keybind.Path{Table: &keybind.Table{Kind: "Pod"}, Forwards: true}
+	km := userKeymap(t, `unbind "X"`)
+	if got, want := forwards.Footer(km.HelpMap(panel)), "enter: stop · esc: close"; got != want {
+		t.Fatalf("an unbound stop-all should drop out: got %q, want %q", got, want)
 	}
 
-	km, _, err = keymap.DefaultKeymap().Merge(map[keymap.Action][]string{
-		keymap.ActionDrillIn:      {},
-		keymap.ActionStopForwards: {},
-		keymap.ActionBack:         {},
-	})
-	if err != nil {
-		t.Fatalf("disabling all three panel actions: %v", err)
-	}
-	if got := forwards.Footer(km); got != "" {
+	km = userKeymap(t, `unbind "enter"; unbind "X"; unbind "esc"`)
+	if got := forwards.Footer(km.HelpMap(panel)); got != "" {
 		t.Fatalf("with nothing bound the footer should be empty, got %q", got)
 	}
 
@@ -6022,8 +6011,7 @@ func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
 	// styled row under the list.
 	m := openPodTable(t, "Pod")
 	next, _ := m.handleAction(keymap.ActionForwards)
-	m = next.(Model)
-	m.keymap = km
+	m = useKeymap(next.(Model), km)
 	if view := m.View().Content; strings.Contains(view, ": stop") || strings.Contains(view, ": close") {
 		t.Fatalf("an all-disabled panel should render no footer entries: %q", view)
 	}
@@ -6046,6 +6034,7 @@ func panelWithForwards(t *testing.T, w, h, n, sel int) Model {
 	}
 	m.pfPanel.Open()
 	m.pfPanel.SetSel(sel)
+	m.syncHints() // the panel's path, which its footer reads keys in
 	return m
 }
 
@@ -6066,7 +6055,7 @@ func TestForwardsPanelFitsTheCanvas(t *testing.T) {
 		{4, 3}, // bodyHeight 2: border only, so the panel renders nothing at all
 	} {
 		m := panelWithForwards(t, 80, tc.h, tc.forwards, 0)
-		box := m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.keymap)
+		box := m.pfPanel.View(panelEntries(m.forwards), m.width, m.bodyHeight(), m.help.Keys())
 		if got, want := lipgloss.Height(box), m.bodyHeight(); box != "" && got > want {
 			t.Errorf("%d forwards on a %d-row screen: panel is %d rows, the canvas is %d",
 				tc.forwards, tc.h, got, want)
@@ -6081,7 +6070,7 @@ func TestForwardsPanelFitsTheCanvas(t *testing.T) {
 func TestForwardsPanelKeepsItsFooterAndBorder(t *testing.T) {
 	m := panelWithForwards(t, 80, 12, 20, 0)
 	view := frame(m)
-	if !strings.Contains(view, forwards.Footer(m.keymap)) {
+	if !strings.Contains(view, forwards.Footer(m.help.Keys())) {
 		t.Fatalf("the clipped panel lost its footer:\n%s", view)
 	}
 	// The box's bottom border is the last thing a bottom-first clip takes, so its

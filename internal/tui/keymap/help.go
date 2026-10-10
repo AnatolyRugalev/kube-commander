@@ -6,20 +6,22 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+
+	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
-// This file bridges the action registry to bubbles' key.Binding / help.KeyMap so
-// help is generated from the resolved keymap and can never drift from actual
-// bindings (D11). The Binding's display text and keys come straight from Keys()
-// and Describe(); nothing here restates a literal key.
+// This file bridges the keymap to bubbles' key.Binding / help.KeyMap so help is
+// generated from the bindings in force and can never drift from them (D11). Since
+// D303 a key means what it means *somewhere*, so every binding is read in a
+// context path: the keys a hint shows for an action are the ones that run it there.
 
-// Binding builds a bubbles key.Binding for a single action from the keymap's
-// resolved bindings: WithKeys carries the canonical tokens (vim key first),
-// WithHelp carries the display text ("j/up") and the registry description. An
-// action with no bound keys (disabled, or unknown) yields a disabled binding so
-// help renderers skip it via Enabled().
-func (k *Keymap) Binding(a Action) key.Binding {
-	keys := k.Keys(a)
+// Binding builds a bubbles key.Binding for one action from the keys that run it in
+// the context path: WithKeys carries the tokens (vim key first), WithHelp the
+// display text ("j/down") and the registry description. An action nothing runs
+// there yields a disabled binding, so help renderers skip it via Enabled().
+func (k *Keymap) Binding(a Action, p keybind.Path) key.Binding { return binding(a, k.Keys(a, p)) }
+
+func binding(a Action, keys []string) key.Binding {
 	opts := []key.BindingOpt{
 		key.WithKeys(keys...),
 		key.WithHelp(strings.Join(keys, "/"), a.Describe()),
@@ -28,16 +30,6 @@ func (k *Keymap) Binding(a Action) key.Binding {
 		opts = append(opts, key.WithDisabled())
 	}
 	return key.NewBinding(opts...)
-}
-
-// Bindings returns a key.Binding for every registered action, in registry order.
-func (k *Keymap) Bindings() []key.Binding {
-	acts := Actions()
-	out := make([]key.Binding, len(acts))
-	for i, a := range acts {
-		out[i] = k.Binding(a)
-	}
-	return out
 }
 
 // shortHelpActions is the curated one-line status-bar subset (help.KeyMap's
@@ -170,6 +162,47 @@ func HelpContexts() []HelpContext {
 	return out
 }
 
+// HelpContextOf is the hint context for what holds the keyboard: the path's
+// innermost capturing surface, in the order the root routes keys (D143 pt 1:
+// whoever owns input owns the hint). The search mini-app captures every key while
+// it is up; a picker, the prompt and the confirm modal capture everything over the
+// view or pane under them; an open text field takes text from whatever it is on;
+// then the full-screen views, the overlays that capture keys, the sort mode, and
+// the pane with focus.
+func HelpContextOf(p keybind.Path) HelpContext {
+	switch {
+	case p.Search != nil:
+		return HelpSearch
+	case p.Picker != nil && p.Field:
+		return HelpPickerFilter
+	case p.Picker != nil:
+		return HelpPicker
+	case p.Prompt:
+		return HelpPrompt
+	case p.Confirm:
+		return HelpConfirm
+	case p.Logs != nil && p.Field:
+		return HelpLogsFilter
+	case p.Field:
+		return HelpTableFilter
+	case p.Unhealthy:
+		return HelpUnhealthy
+	case p.Logs != nil:
+		return HelpLogs
+	case p.Viewer != nil:
+		return HelpViewer
+	case p.Forwards:
+		return HelpForwards
+	case p.Help:
+		return HelpKeybindings
+	case p.Sort:
+		return HelpSort
+	case p.Table != nil:
+		return HelpTable
+	}
+	return HelpMenu
+}
+
 // contextShortHelpActions is the curated hint subset per focus context. Each set
 // is ordered as shown and rendered enabled-only. Filter/search/sort appear in the
 // table context (they act on a resource table, no-ops on the menu) — since
@@ -251,12 +284,10 @@ func HelpContexts() []HelpContext {
 // The four HINT-02 contexts are the rest of the capturing surfaces, each one the same
 // rule as the pickers: what the surface's own router honours, nothing else.
 //
-// The confirm modal is the one set that cannot be read off the browse registry, because
-// its answers live in the **confirm key context** (D132): `y`/`enter` and `n`/`esc`
-// resolve through ConfirmAction, which is why `n` can mean "decline" here and
-// app.searchNext everywhere else. It needs no special handling all the same — `bindings`
-// is keyed by action regardless of context, so `Binding(ActionConfirmAccept)` renders the
-// user's own accept keys and the hint stays registry-generated (D11). `q` also dismisses
+// The confirm modal's answers are bound in `context "confirm"` (D303), which is why `n`
+// can mean "decline" here and app.searchNext everywhere else. It needs no special
+// handling: the hint reads the keys in the confirm path, so `Binding(ActionConfirmAccept)`
+// renders the user's own accept keys and the hint stays registry-generated (D11). `q` also dismisses
 // (handleModalAction), and is left out for the reason paging is: the decline entry
 // already names the way out, and a two-entry line that reads "y accept · n decline"
 // mirrors the question in the box.
@@ -325,16 +356,34 @@ var contextShortHelpActions = map[HelpContext][]Action{
 	HelpSort:         {ActionLeft, ActionRight, ActionDrillIn, ActionClearSort, ActionBack},
 }
 
-// HelpKeyMap adapts a resolved keymap to bubbles' help.KeyMap interface so a
-// help.Model can render both the short (status-bar) and full (overlay) views
-// straight from the registry.
-type HelpKeyMap struct{ km *Keymap }
+// HelpKeyMap adapts the keymap, in one context path, to bubbles' help.KeyMap
+// interface so a help.Model can render both the short (status-bar) and full
+// (overlay) views straight from the bindings in force there.
+type HelpKeyMap struct {
+	path keybind.Path
+	// keys is what runs each action in the path, with no value, as display tokens:
+	// read once, since a hint or the overlay asks for most of the registry.
+	keys map[Action][]string
+}
 
 // Compile-time check that HelpKeyMap satisfies bubbles' help.KeyMap.
 var _ help.KeyMap = HelpKeyMap{}
 
-// HelpMap returns a help.KeyMap view over this keymap.
-func (k *Keymap) HelpMap() HelpKeyMap { return HelpKeyMap{km: k} }
+// HelpMap returns a help.KeyMap view over this keymap in the context path.
+func (k *Keymap) HelpMap(p keybind.Path) HelpKeyMap {
+	keys := map[Action][]string{}
+	for _, e := range k.km.Effective(p) {
+		if len(e.Binding.Args) == 0 {
+			a := Action(e.Binding.Action)
+			keys[a] = append(keys[a], keybind.FormatKeys(e.Keys))
+		}
+	}
+	return HelpKeyMap{path: p, keys: keys}
+}
+
+// Keys is the key sequences that run a — with no value — in the path, as display
+// tokens in load order (vim key first). Nil when nothing runs it there.
+func (h HelpKeyMap) Keys(a Action) []string { return h.keys[a] }
 
 // ShortHelp returns the curated (focus-agnostic) status-bar bindings, skipping any
 // the user has disabled.
@@ -342,8 +391,13 @@ func (h HelpKeyMap) ShortHelp() []key.Binding {
 	return h.enabled(shortHelpActions)
 }
 
+// Hint is the curated bindings for the path's own hint context (HelpContextOf),
+// with the keys that run each action there: the focus-aware hint the bottom line
+// shows.
+func (h HelpKeyMap) Hint() []key.Binding { return h.ShortHelpContext(HelpContextOf(h.path)) }
+
 // ShortHelpContext returns the curated bindings for a focus context (menu vs
-// table), skipping any the user has disabled — the focus-aware hint the browse
+// table), skipping any nothing runs in the path — the focus-aware hint the browse
 // status bar shows. An unknown context falls back to the focus-agnostic set.
 func (h HelpKeyMap) ShortHelpContext(ctx HelpContext) []key.Binding {
 	actions, ok := contextShortHelpActions[ctx]
@@ -353,26 +407,26 @@ func (h HelpKeyMap) ShortHelpContext(ctx HelpContext) []key.Binding {
 	return h.enabled(actions)
 }
 
-// enabled maps actions to their bindings, dropping any the user disabled (no
-// bound keys), preserving order.
+// enabled maps actions to their bindings, dropping any nothing runs in the path
+// (unbound, or bound only elsewhere), preserving order.
 func (h HelpKeyMap) enabled(actions []Action) []key.Binding {
 	var out []key.Binding
 	for _, a := range actions {
-		if b := h.km.Binding(a); b.Enabled() {
+		if b := binding(a, h.keys[a]); b.Enabled() {
 			out = append(out, b)
 		}
 	}
 	return out
 }
 
-// FullHelp returns every enabled binding grouped into columns by action namespace
-// (the id prefix before the first "."), each column in registry order and the
-// columns in first-seen order. Disabled actions are omitted.
+// FullHelp returns every action something runs in the path, grouped into columns
+// by action namespace (the id prefix before the first "."), each column in
+// registry order and the columns in first-seen order.
 func (h HelpKeyMap) FullHelp() [][]key.Binding {
 	var order []string
 	groups := map[string][]key.Binding{}
 	for _, a := range Actions() {
-		b := h.km.Binding(a)
+		b := binding(a, h.keys[a])
 		if !b.Enabled() {
 			continue
 		}

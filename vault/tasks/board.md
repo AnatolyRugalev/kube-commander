@@ -3,7 +3,7 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KDL-01 landed (config.kdl, its overlay, KDL state); KEYS-02 next, pushed with it._
+_Last updated: 2026-10-10 — KEYS-02 landed (keys resolve in the context path; `kubecom keys` lists, `default`, `check`); KEYS-03 next, pushed with KDL-01 and KEYS-02._
 
 ## In Progress
 
@@ -15,12 +15,7 @@ _(none)_
 
 ### Config & keys in KDL (D302/D303)
 
-_plexos's model: an authored `config.kdl` kubecom never writes, an overlay it does, and a `keymap` of `bind`/`unbind`/`group`/`context "<cel>"` over a focus path. KEYS-01 is additive; KDL-01 and KEYS-02 break `config.yaml` and land together._
-
-- [ ] **KEYS-02** The cutover — the Model builds its path; keys resolve through the context keymap (the sequencer takes the path); `ConfirmAction`, `TableAction`, the flat map and `Merge` go; the user layer is `config.kdl`'s and the overlay's `keymap`; hints, `?` and `docs/keybindings.md` read the live path; `kubecom keys` lists, `keys default`, `keys check`
-      status: in-progress | owner: kubecom | added: 2026-10-10
-      notes: The keylog records the path's innermost node in place of the key mode. The story analyser's `Resolve` takes a path.
-      → knowledge: decisions.md D303
+_plexos's model: an authored `config.kdl` kubecom never writes, an overlay it does, and a `keymap` of `bind`/`unbind`/`group`/`context "<cel>"` over a focus path. KEYS-01 is additive; KDL-01, KEYS-02 and KEYS-03 break `config.yaml` and land together._
 
 - [ ] **KEYS-03** A bind's value runs the argument verb directly (`bind "g p" "resources.switch" "pods"`), with no palette stage
       status: todo | owner: — | added: 2026-10-10

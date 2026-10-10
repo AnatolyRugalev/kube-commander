@@ -130,12 +130,14 @@ func (m Model) searchResources() []kube.Resource {
 // view's focus (SEARCH-05/D235), because the same rune cannot be text and a movement at
 // once:
 //
-//   - On the **query field**, only a mapped key that carries no text (esc/enter/arrows/
-//     ctrl+…) is a control Action; everything text-producing or editing (a rune, or an
-//     unmapped no-text key like backspace) is query input. So `q` types a `q` instead of
-//     quitting, exactly as it does in the table filter.
-//   - On the **result list**, a mapped key is an Action whether or not it carries text,
-//     which is what makes `hjkl`, `g`/`G` and the page chords navigate. An unmapped key
+//   - On the **query field** the path has a field (keyPath), so the keymap's field rule
+//     (D303 pt 5) makes the split: a key that types is query input unless a binding as
+//     deep as the field takes it, and only a mapped key that carries no text (esc/enter/
+//     arrows/ctrl+…) is a control Action; an unmapped no-text key like backspace is
+//     query input too. So `q` types a `q` instead of quitting, exactly as it does in the
+//     table filter.
+//   - On the **result list** there is no field, so a mapped key is an Action whether or
+//     not it carries text, which is what makes `hjkl`, `G` and the page chords navigate. An unmapped key
 //     is dropped rather than typed: the reader committed the query with enter, and a
 //     stray letter silently editing the line one row up — re-running the search and
 //     throwing away the results they are standing on — is the worst outcome available.
@@ -144,9 +146,8 @@ func (m Model) searchResources() []kube.Resource {
 // help overlay and the viewer own quit while they are open, and no view matches a raw key
 // for behaviour (D11).
 func (m Model) routeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.Key()
 	onResults := m.searchView.Focus() == searchview.FocusResults
-	if action, mapped := m.keymap.Action(key); mapped && (key.Text == "" || onResults) {
+	if action, _, mapped := m.keymap.Action(msg.Key(), m.keyPath()); mapped {
 		if action == keymap.ActionQuit {
 			m.closeSearch()
 			return m, nil

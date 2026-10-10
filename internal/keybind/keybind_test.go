@@ -244,6 +244,29 @@ func TestFocusIsTheInnermostNode(t *testing.T) {
 	}
 }
 
+// A path writes its nodes outside in, each with the attributes that are set, and
+// two different paths never write the same.
+func TestPathString(t *testing.T) {
+	p := Path{
+		Cluster: &Cluster{Context: "kind-dev"},
+		Table:   &Table{Resource: "pods", Kind: "Pod", Namespaced: true},
+		Picker:  &Picker{ID: "palette"},
+		Field:   true,
+	}
+	want := `cluster(context="kind-dev") > table(kind="Pod", namespaced, resource="pods") > picker(id="palette") > field`
+	if got := p.String(); got != want {
+		t.Errorf("String() = %s\nwant       %s", got, want)
+	}
+	if got := (Path{}).String(); got != "" {
+		t.Errorf("the empty path writes %q", got)
+	}
+	q := p
+	q.Table = &Table{Resource: "pods", Kind: "Pod", Namespaced: true, Filtered: true}
+	if p.String() == q.String() {
+		t.Error("a filtered table writes as an unfiltered one")
+	}
+}
+
 // A text field keeps its text (D303 pt 5): a key that types goes to the field
 // unless a binding at least as deep as the field takes it; a key that does not
 // type resolves as anywhere.

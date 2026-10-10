@@ -6,10 +6,16 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
+
+// panelKeys is the default keymap read in the open panel's path.
+func panelKeys() keymap.HelpKeyMap {
+	return keymap.DefaultKeymap().HelpMap(keybind.Path{Menu: true, Forwards: true})
+}
 
 func newModel(t *testing.T) Model {
 	t.Helper()
@@ -26,12 +32,12 @@ func sampleEntries() []Entry {
 // TestViewEmpty proves the closed panel renders nothing, and an open panel with no
 // entries shows the empty-state line rather than a bare box.
 func TestViewEmpty(t *testing.T) {
-	if view := newModel(t).View(nil, 80, 24, keymap.DefaultKeymap()); view != "" {
+	if view := newModel(t).View(nil, 80, 24, panelKeys()); view != "" {
 		t.Fatalf("a closed panel should render nothing, got %q", view)
 	}
 	m := newModel(t)
 	m.Open()
-	if view := m.View(nil, 80, 24, keymap.DefaultKeymap()); !strings.Contains(view, "No active port-forwards") {
+	if view := m.View(nil, 80, 24, panelKeys()); !strings.Contains(view, "No active port-forwards") {
 		t.Fatalf("an empty open panel should say so: %q", view)
 	}
 }
@@ -42,7 +48,7 @@ func TestViewListsEntries(t *testing.T) {
 	m := newModel(t)
 	m.Open()
 	m.Clamp(len(sampleEntries()))
-	view := m.View(sampleEntries(), 80, 24, keymap.DefaultKeymap())
+	view := m.View(sampleEntries(), 80, 24, panelKeys())
 	for _, want := range []string{"pod/app-1", "localhost:8080 → 80", "ready", "pod/app-2", "81", "[starting…]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("the panel should list %q: %q", want, view)
@@ -69,7 +75,7 @@ func TestViewBoundsTheBox(t *testing.T) {
 		for i := range entries {
 			entries[i] = Entry{ID: i + 1, Label: "pod/app", Specs: []string{"80"}}
 		}
-		box := m.View(entries, 80, tc.h, keymap.DefaultKeymap())
+		box := m.View(entries, 80, tc.h, panelKeys())
 		if got, want := lipgloss.Height(box), tc.h; box != "" && got > want {
 			t.Errorf("%d entries on a %d-row canvas: panel is %d rows, the canvas is %d", tc.entries, tc.h, got, want)
 		}

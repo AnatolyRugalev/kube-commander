@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
@@ -95,15 +96,18 @@ func TestShortHelpViewAlwaysRenders(t *testing.T) {
 	}
 }
 
-// TestShortHelpContextViewTracksFocus proves the focus-aware hint differs between
-// the menu and table contexts (so the persistent bottom hint updates with focus)
-// and surfaces the context-only descriptions from the registry.
-func TestShortHelpContextViewTracksFocus(t *testing.T) {
+// TestHintViewTracksFocus proves the focus-aware hint differs between the menu and
+// table paths (so the persistent bottom hint updates with focus) and surfaces the
+// context-only descriptions from the registry.
+func TestHintViewTracksFocus(t *testing.T) {
 	m := New(styles.Default(), keymap.DefaultKeymap())
 	m.SetWidth(200) // wide enough that nothing is elided
 
-	menu := m.ShortHelpContextView(keymap.HelpMenu)
-	table := m.ShortHelpContextView(keymap.HelpTable)
+	cluster := &keybind.Cluster{Context: "kind-dev"}
+	m.SetPath(keybind.Path{Cluster: cluster, Menu: true})
+	menu := m.HintView()
+	m.SetPath(keybind.Path{Cluster: cluster, Table: &keybind.Table{Kind: "Pod"}})
+	table := m.HintView()
 	if menu == "" || table == "" {
 		t.Fatal("both focus-context hints should render")
 	}
@@ -115,6 +119,31 @@ func TestShortHelpContextViewTracksFocus(t *testing.T) {
 	}
 	if !strings.Contains(table, keymap.ActionFilter.Describe()) {
 		t.Errorf("table hint should mention filter; got %q", table)
+	}
+}
+
+// The overlay lists what runs on the surface under it: over the confirm modal its
+// answers, over the menu not.
+func TestOverlayListsTheSurfaceUnderIt(t *testing.T) {
+	lists := func(m Model, a keymap.Action) bool {
+		for _, col := range m.under.FullHelp() {
+			for _, b := range col {
+				if b.Help().Desc == a.Describe() {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	m := New(styles.Default(), keymap.DefaultKeymap())
+	cluster := &keybind.Cluster{Context: "kind-dev"}
+	m.SetPath(keybind.Path{Cluster: cluster, Menu: true, Help: true})
+	if lists(m, keymap.ActionConfirmAccept) {
+		t.Error("the overlay over the menu lists the confirm modal's answer")
+	}
+	m.SetPath(keybind.Path{Cluster: cluster, Table: &keybind.Table{}, Confirm: true, Help: true})
+	if !lists(m, keymap.ActionConfirmAccept) {
+		t.Error("the overlay over the confirm modal does not list its answer")
 	}
 }
 

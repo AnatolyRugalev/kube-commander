@@ -50,7 +50,7 @@ func TestMarkdownFromRegistry(t *testing.T) {
 		if !strings.Contains(md, string(a)) || !strings.Contains(md, a.Describe()) {
 			t.Errorf("markdown missing action %q or its description", a)
 		}
-		for _, tok := range km.Keys(a) {
+		for _, tok := range km.KeysAnywhere(a) {
 			if !strings.Contains(md, "`"+tok+"`") {
 				t.Errorf("markdown missing key %q for action %q", tok, a)
 			}

@@ -92,9 +92,9 @@ import (
 // before the list is seen (`:action delete`), and PAL-04 already listed them here — so
 // the key converts like the other four: it opens `:action `, the palette narrowed to
 // the verbs that act on the selected row, one backspace from every other verb (D210).
-// Since STORY-06c the key that does this is **`enter`**, resolved in the resource-table
-// context (TableAction) so the keymap can keep `enter` = nav.drillIn everywhere else
-// (D132's context split); the `:action ` stage itself is unchanged, which is why `enter`
+// Since STORY-06c the key that does this is **`enter`**, bound in default.kdl's
+// `context "focus == 'table'"` so the keymap keeps `enter` = nav.drillIn everywhere
+// else (D132's context split, D303); the `:action ` stage itself is unchanged, which is why `enter`
 // and the typed line render the same frame (TestActionKeyOpensTheSamePaletteStageAsTheLine).
 
 // commandPickerKind is the Kind stamped on the command palette's picker. Every

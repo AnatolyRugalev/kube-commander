@@ -1825,4 +1825,6 @@ stay.
 with is one map lookup.
 **Refs:** supersedes the flat-context half of D11's mechanism (not its rule)
 and D132's side contexts; restates D140 pt 1 as pt 5; D10's vim-first
-defaults stand.
+defaults stand. The flat map's nav-shadow warning (binding an action over a
+navigation key) is retired with it (KEYS-02): a context binding over `j` is
+what the engine is for, and precedence, not a warning, says which key wins.

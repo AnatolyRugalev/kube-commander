@@ -4,79 +4,108 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
+
+	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
-// TestBindingFromDefaults checks a normal action's binding carries the resolved
-// keys, the display text, and the registry description, and is enabled.
+// hintPaths is a path for each hint context: what holds the keyboard when the
+// bottom line shows that context's hint.
+var hintPaths = map[HelpContext]keybind.Path{
+	HelpMenu:         menuPath,
+	HelpTable:        tablePath,
+	HelpSearch:       {Cluster: testCluster, Table: testPods, Search: &keybind.Search{}, Field: true},
+	HelpUnhealthy:    {Cluster: testCluster, Menu: true, Unhealthy: true},
+	HelpLogs:         {Cluster: testCluster, Table: testPods, Logs: &keybind.Logs{Follow: true}},
+	HelpLogsFilter:   {Cluster: testCluster, Table: testPods, Logs: &keybind.Logs{}, Field: true},
+	HelpPickerFilter: {Cluster: testCluster, Table: testPods, Picker: &keybind.Picker{ID: "palette"}, Field: true},
+	HelpPicker:       {Cluster: testCluster, Table: testPods, Picker: &keybind.Picker{ID: "containers"}},
+	HelpConfirm:      confirmPath,
+	HelpPrompt:       {Cluster: testCluster, Table: testPods, Prompt: true, Field: true},
+	HelpKeybindings:  {Cluster: testCluster, Menu: true, Help: true},
+	HelpViewer:       {Cluster: testCluster, Table: testPods, Viewer: &keybind.Viewer{Content: "describe"}},
+	HelpTableFilter:  {Cluster: testCluster, Table: testPods, Field: true},
+	HelpForwards:     {Cluster: testCluster, Table: testPods, Forwards: true},
+	HelpSort:         {Cluster: testCluster, Table: testPods, Sort: true},
+}
+
+// hint is a context's hint in its path, from the default keymap.
+func hint(ctx HelpContext) []key.Binding {
+	return DefaultKeymap().HelpMap(hintPaths[ctx]).ShortHelpContext(ctx)
+}
+
+// TestBindingFromDefaults checks a normal action's binding carries the keys that
+// run it in the path, the display text, and the registry description, and is
+// enabled.
 func TestBindingFromDefaults(t *testing.T) {
-	km := DefaultKeymap()
-	b := km.Binding(ActionTop) // default keys: gg, home
+	b := DefaultKeymap().Binding(ActionTop, menuPath) // default keys: g g, home
 	if !b.Enabled() {
 		t.Fatal("nav.top binding should be enabled")
 	}
-	if got := b.Keys(); len(got) != 2 || got[0] != "gg" || got[1] != "home" {
-		t.Errorf("Binding(nav.top).Keys() = %v; want [gg home]", got)
+	if got := b.Keys(); len(got) != 2 || got[0] != "g g" || got[1] != "home" {
+		t.Errorf("Binding(nav.top).Keys() = %v; want [g g home]", got)
 	}
 	h := b.Help()
-	if h.Key != "gg/home" {
-		t.Errorf("help key = %q; want gg/home", h.Key)
+	if h.Key != "g g/home" {
+		t.Errorf("help key = %q; want g g/home", h.Key)
 	}
 	if h.Desc != ActionTop.Describe() {
 		t.Errorf("help desc = %q; want %q", h.Desc, ActionTop.Describe())
 	}
 }
 
-// TestBindingDisabled checks a disabled (empty) binding surfaces as !Enabled so
-// help renderers skip it.
+// TestBindingDisabled checks an action nothing runs in the path surfaces as
+// !Enabled so help renderers skip it: unbound by the user, bound only in another
+// context, or not an action at all.
 func TestBindingDisabled(t *testing.T) {
-	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionQuit: {}})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
+	km := withUser(t, `unbind "q"; unbind "ctrl+c"`, "")
+	if b := km.Binding(ActionQuit, menuPath); b.Enabled() {
+		t.Error("an unbound action should yield a disabled binding")
 	}
-	if b := km.Binding(ActionQuit); b.Enabled() {
-		t.Error("disabled action should yield a disabled binding")
+	if b := DefaultKeymap().Binding(ActionConfirmAccept, menuPath); b.Enabled() {
+		t.Error("confirm.accept runs only in the confirm modal; the menu's binding should be disabled")
 	}
-	// An unregistered action also yields a disabled binding, never a panic.
-	if b := km.Binding("bogus.nope"); b.Enabled() {
+	if b := DefaultKeymap().Binding("bogus.nope", menuPath); b.Enabled() {
 		t.Error("unknown action should yield a disabled binding")
 	}
 }
 
-// TestBindingsCoversRegistry checks Bindings() returns one binding per action in
-// registry order.
-func TestBindingsCoversRegistry(t *testing.T) {
-	km := DefaultKeymap()
-	bs := km.Bindings()
-	acts := Actions()
-	if len(bs) != len(acts) {
-		t.Fatalf("Bindings() len = %d; want %d", len(bs), len(acts))
-	}
-	for i, a := range acts {
-		if got, want := bs[i].Help().Desc, a.Describe(); got != want {
-			t.Errorf("Bindings()[%d].Desc = %q; want %q", i, got, want)
+// The hint context is the path's innermost capturing surface, and every context
+// has a path that selects it.
+func TestHelpContextOf(t *testing.T) {
+	for _, ctx := range HelpContexts() {
+		p, ok := hintPaths[ctx]
+		if !ok {
+			t.Errorf("%s has no path in hintPaths", ctx)
+			continue
 		}
+		if got := HelpContextOf(p); got != ctx {
+			t.Errorf("HelpContextOf(%s) = %s, want %s", p, got, ctx)
+		}
+	}
+	// A view or pane under an overlay that captures keys does not choose the hint.
+	logsPicker := keybind.Path{Cluster: testCluster, Table: testPods, Logs: &keybind.Logs{}, Picker: &keybind.Picker{ID: "palette"}}
+	if got := HelpContextOf(logsPicker); got != HelpPicker {
+		t.Errorf("a picker over the logs view hints %s, want HelpPicker", got)
+	}
+	if got := HelpContextOf(keybind.Path{}); got != HelpMenu {
+		t.Errorf("the empty path hints %s, want HelpMenu", got)
 	}
 }
 
 // TestHelpMapShortHelp checks ShortHelp returns the curated subset and drops
-// disabled entries.
+// entries nothing runs.
 func TestHelpMapShortHelp(t *testing.T) {
-	short := DefaultKeymap().HelpMap().ShortHelp()
+	short := DefaultKeymap().HelpMap(menuPath).ShortHelp()
 	if len(short) != len(shortHelpActions) {
 		t.Fatalf("ShortHelp len = %d; want %d", len(short), len(shortHelpActions))
 	}
-	// Disabling a short-help action drops it from ShortHelp.
-	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionHelp: {}})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
-	}
-	got := km.HelpMap().ShortHelp()
+	got := withUser(t, `unbind "?"`, "").HelpMap(menuPath).ShortHelp()
 	if len(got) != len(shortHelpActions)-1 {
-		t.Errorf("ShortHelp after disabling app.help len = %d; want %d", len(got), len(shortHelpActions)-1)
+		t.Errorf("ShortHelp after unbinding app.help len = %d; want %d", len(got), len(shortHelpActions)-1)
 	}
 	for _, b := range got {
 		if b.Help().Desc == ActionHelp.Describe() {
-			t.Error("disabled app.help should not appear in ShortHelp")
+			t.Error("unbound app.help should not appear in ShortHelp")
 		}
 	}
 }
@@ -86,8 +115,6 @@ func TestHelpMapShortHelp(t *testing.T) {
 // there, the table context the filter/search/sort set instead — and drop entries
 // the user disabled.
 func TestShortHelpContext(t *testing.T) {
-	hm := DefaultKeymap().HelpMap()
-
 	descs := func(bs []key.Binding) map[string]bool {
 		out := map[string]bool{}
 		for _, b := range bs {
@@ -95,8 +122,8 @@ func TestShortHelpContext(t *testing.T) {
 		}
 		return out
 	}
-	menu := descs(hm.ShortHelpContext(HelpMenu))
-	table := descs(hm.ShortHelpContext(HelpTable))
+	menu := descs(hint(HelpMenu))
+	table := descs(hint(HelpTable))
 
 	if !menu[ActionDrillIn.Describe()] {
 		t.Error("menu context should offer drill-in")
@@ -131,7 +158,7 @@ func TestShortHelpContext(t *testing.T) {
 	// The search context (SEARCH-03b) offers only keys the search view actually
 	// honours: its always-open query field swallows every text-producing key, so the
 	// text-keyed browse actions would be a lie in that hint.
-	search := descs(hm.ShortHelpContext(HelpSearch))
+	search := descs(hint(HelpSearch))
 	if !search[ActionDrillIn.Describe()] || !search[ActionBack.Describe()] {
 		t.Error("search context should offer drill-in and back")
 	}
@@ -158,7 +185,7 @@ func TestShortHelpContext(t *testing.T) {
 	// states. Grep closed, every advertised key acts — including `q`, which closes the
 	// view like any pager. Grep open, the field swallows text keys, so `/` `f` and `q`
 	// drop out and only the no-text keys remain. Neither context offers help (swallowed).
-	logs := descs(hm.ShortHelpContext(HelpLogs))
+	logs := descs(hint(HelpLogs))
 	for _, a := range []Action{ActionDown, ActionUp, ActionFilter, ActionLogsFollow, ActionLogsWrap, ActionBack, ActionQuit} {
 		if !logs[a.Describe()] {
 			t.Errorf("logs context should offer %q — the view honours it with the grep closed", a)
@@ -167,7 +194,7 @@ func TestShortHelpContext(t *testing.T) {
 	if logs[ActionHelp.Describe()] {
 		t.Error("the logs view swallows app.help; the hint must not offer it")
 	}
-	logsFilter := descs(hm.ShortHelpContext(HelpLogsFilter))
+	logsFilter := descs(hint(HelpLogsFilter))
 	if !logsFilter[ActionBack.Describe()] || !logsFilter[ActionDown.Describe()] {
 		t.Error("logs-filter context should offer back (clear the grep) and scrolling")
 	}
@@ -221,7 +248,7 @@ func TestShortHelpContext(t *testing.T) {
 	// a picker opens in navigation mode with its field closed, so the honest set with
 	// the field open (HelpPickerFilter) is the no-text keys the root routes: move,
 	// confirm, cancel — plus `/`, which is what opens the closed field (HelpPicker).
-	pickerFilter := descs(hm.ShortHelpContext(HelpPickerFilter))
+	pickerFilter := descs(hint(HelpPickerFilter))
 	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionBack} {
 		if !pickerFilter[a.Describe()] {
 			t.Errorf("picker-filter context should offer %q — the picker honours it", a)
@@ -232,7 +259,7 @@ func TestShortHelpContext(t *testing.T) {
 			t.Errorf("%q types into an open picker filter, not honoured — it must not be hinted", a)
 		}
 	}
-	pickerClosed := descs(hm.ShortHelpContext(HelpPicker))
+	pickerClosed := descs(hint(HelpPicker))
 	if !pickerClosed[ActionFilter.Describe()] {
 		t.Error("picker context (field closed) should offer the key that opens the field")
 	}
@@ -245,7 +272,7 @@ func TestShortHelpContext(t *testing.T) {
 	// The confirm modal (HINT-02) is the one context whose keys are not browse keys:
 	// they resolve in the confirm key context (D132), and the hint must render *their*
 	// bindings — `y`/`n` — not the browse meanings of those chords.
-	confirm := descs(hm.ShortHelpContext(HelpConfirm))
+	confirm := descs(hint(HelpConfirm))
 	for _, a := range []Action{ActionConfirmAccept, ActionConfirmDecline} {
 		if !confirm[a.Describe()] {
 			t.Errorf("confirm context should offer %q — it is what answers the modal", a)
@@ -256,13 +283,13 @@ func TestShortHelpContext(t *testing.T) {
 			t.Errorf("%q is swallowed by an open confirm modal; the hint must not offer it", a)
 		}
 	}
-	if keys := hm.ShortHelpContext(HelpConfirm)[0].Help().Key; keys != "y/enter" {
+	if keys := hint(HelpConfirm)[0].Help().Key; keys != "y/enter" {
 		t.Errorf("confirm accept should be hinted with its confirm-context keys, got %q", keys)
 	}
 
 	// The prompt modal is the same modal with a text field open, so it keeps the
 	// *browse* control pair and drops the confirm answers: `y`/`n` type there.
-	prompt := descs(hm.ShortHelpContext(HelpPrompt))
+	prompt := descs(hint(HelpPrompt))
 	for _, a := range []Action{ActionDrillIn, ActionBack} {
 		if !prompt[a.Describe()] {
 			t.Errorf("prompt context should offer %q — it carries no text and still acts", a)
@@ -276,7 +303,7 @@ func TestShortHelpContext(t *testing.T) {
 
 	// The keybindings overlay advertises the ways out and nothing else — it swallows
 	// navigation and does not scroll.
-	overlay := descs(hm.ShortHelpContext(HelpKeybindings))
+	overlay := descs(hint(HelpKeybindings))
 	for _, a := range []Action{ActionBack, ActionHelp, ActionQuit} {
 		if !overlay[a.Describe()] {
 			t.Errorf("keybindings-overlay context should offer %q — it closes the overlay", a)
@@ -291,7 +318,7 @@ func TestShortHelpContext(t *testing.T) {
 	// The shared viewer is a pager: scroll plus the two ways to close it. Its
 	// kind-specific gestures stay out — a context names an input state, not content
 	// (D206 pt 3).
-	view := descs(hm.ShortHelpContext(HelpViewer))
+	view := descs(hint(HelpViewer))
 	for _, a := range []Action{ActionDown, ActionUp, ActionBack, ActionQuit} {
 		if !view[a.Describe()] {
 			t.Errorf("viewer context should offer %q — the viewer honours it", a)
@@ -305,7 +332,7 @@ func TestShortHelpContext(t *testing.T) {
 
 	// The browse filter field (HINT-03) is the third text field and takes the same set
 	// as the other two: only the no-text keys survive an open query.
-	tblFilter := descs(hm.ShortHelpContext(HelpTableFilter))
+	tblFilter := descs(hint(HelpTableFilter))
 	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionBack} {
 		if !tblFilter[a.Describe()] {
 			t.Errorf("filter-field context should offer %q — it carries no text and still acts", a)
@@ -319,7 +346,7 @@ func TestShortHelpContext(t *testing.T) {
 
 	// The port-forward panel (HINT-03) is the capturing surface with no text field, so
 	// its set is what its router honours — cursor, stop, stop-all, and the ways out.
-	forwards := descs(hm.ShortHelpContext(HelpForwards))
+	forwards := descs(hint(HelpForwards))
 	for _, a := range []Action{ActionDown, ActionUp, ActionDrillIn, ActionStopForwards, ActionBack, ActionQuit} {
 		if !forwards[a.Describe()] {
 			t.Errorf("forwards-panel context should offer %q — the panel honours it", a)
@@ -331,16 +358,14 @@ func TestShortHelpContext(t *testing.T) {
 		}
 	}
 
-	// Disabling an action drops it from the context subset.
-	km, _, err := DefaultKeymap().Merge(map[Action][]string{ActionNamespace: {}})
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
-	}
-	if descs(km.HelpMap().ShortHelpContext(HelpMenu))[ActionNamespace.Describe()] {
-		t.Error("disabled ns.switch should not appear in the menu context")
+	// Unbinding an action drops it from the context subset.
+	km := withUser(t, `unbind "N"`, "")
+	if descs(km.HelpMap(menuPath).ShortHelpContext(HelpMenu))[ActionNamespace.Describe()] {
+		t.Error("unbound ns.switch should not appear in the menu context")
 	}
 
 	// An unknown context falls back to the focus-agnostic set (never empty).
+	hm := DefaultKeymap().HelpMap(menuPath)
 	if len(hm.ShortHelpContext(HelpContext(99))) != len(hm.ShortHelp()) {
 		t.Error("unknown context should fall back to the focus-agnostic ShortHelp set")
 	}
@@ -353,7 +378,6 @@ func TestShortHelpContext(t *testing.T) {
 // surface where none of them act, and nothing goes red. Enumerating the enum is what makes
 // that impossible; the sets themselves stay curated by hand, which is the point of D143 pt 1.
 func TestEveryHelpContextHasItsOwnHintSet(t *testing.T) {
-	hm := DefaultKeymap().HelpMap()
 	for _, ctx := range HelpContexts() {
 		actions, ok := contextShortHelpActions[ctx]
 		if !ok {
@@ -367,9 +391,9 @@ func TestEveryHelpContextHasItsOwnHintSet(t *testing.T) {
 		}
 		// The set must survive resolution: an action that no default binding names would
 		// be dropped by enabled() and the hint would render shorter than it reads here.
-		if got := len(hm.ShortHelpContext(ctx)); got != len(actions) {
-			t.Errorf("%s resolves to %d bindings from %d actions — one is unbound in the "+
-				"default keymap", ctx, got, len(actions))
+		if got := len(hint(ctx)); got != len(actions) {
+			t.Errorf("%s resolves to %d bindings from %d actions — one runs nothing in its "+
+				"path in the default keymap", ctx, got, len(actions))
 		}
 	}
 	// The other direction: an entry keyed by a context that no longer exists is dead
@@ -392,49 +416,52 @@ func TestEveryHelpContextHasItsOwnHintSet(t *testing.T) {
 	}
 }
 
-// TestHelpMapFullHelp checks FullHelp groups enabled bindings by namespace, in
-// first-seen column order and registry order within a column, dropping disabled.
+// TestHelpMapFullHelp checks FullHelp groups what runs in the path by namespace,
+// in first-seen column order and registry order within a column.
 func TestHelpMapFullHelp(t *testing.T) {
-	full := DefaultKeymap().HelpMap().FullHelp()
-	// Registry has sixteen namespaces: nav.* then app.* then ns.* then resources.*
-	// then ctx.* (M4-04b) then theme.* (M4-12b-2) then mouse.* then sort.* then menu.*
-	// then actions.* then res.* (M3-02) then logs.* (M3-06) then secret.* (M3-08a)
-	// then forwards.* (M3-13b) then search.* (SEARCH-02b) then confirm.* (D132).
-	if len(full) != 16 {
-		t.Fatalf("FullHelp columns = %d; want 16", len(full))
-	}
-	// Total enabled bindings equals the whole registry less the palette-only
-	// actions, which have no default key to show.
-	want := 0
-	for _, a := range Actions() {
-		if !PaletteOnly(a) {
-			want++
+	cols := func(km *Keymap, p keybind.Path) map[string]map[Action]bool {
+		out := map[string]map[Action]bool{}
+		byDesc := map[string]Action{}
+		for _, a := range Actions() {
+			byDesc[a.Describe()] = a
 		}
+		for _, col := range km.HelpMap(p).FullHelp() {
+			a := byDesc[col[0].Help().Desc]
+			out[groupOf(a)] = map[Action]bool{}
+			for _, b := range col {
+				out[groupOf(a)][byDesc[b.Help().Desc]] = true
+			}
+		}
+		return out
 	}
-	total := 0
-	for _, col := range full {
-		total += len(col)
-	}
-	if total != want {
-		t.Errorf("FullHelp total = %d; want %d", total, want)
-	}
-	// First column is the nav group, first entry nav.up in registry order.
+	full := DefaultKeymap().HelpMap(tablePath).FullHelp()
+	// The first column is the nav group, its first entry nav.up in registry order.
 	if got := full[0][0].Help().Desc; got != ActionUp.Describe() {
 		t.Errorf("first full-help entry = %q; want %q", got, ActionUp.Describe())
 	}
-
-	// Disabling every nav.* action collapses the nav column entirely.
-	overrides := map[Action][]string{}
-	for _, a := range Actions() {
-		if groupOf(a) == "nav" {
-			overrides[a] = nil
+	// On the table every action with a key runs except the confirm answers, which
+	// run only in the modal.
+	table := cols(DefaultKeymap(), tablePath)
+	if table["confirm"] != nil {
+		t.Error("the table's overlay lists the confirm modal's answers")
+	}
+	if !table["actions"][ActionActions] {
+		t.Error("the table's overlay should list enter → actions.menu")
+	}
+	if menu := cols(DefaultKeymap(), menuPath); menu["actions"][ActionActions] {
+		t.Error("the menu's overlay lists actions.menu, which only the table's enter runs")
+	}
+	if confirm := cols(DefaultKeymap(), confirmPath); !confirm["confirm"][ActionConfirmAccept] {
+		t.Error("the confirm modal's overlay should list its answers")
+	}
+	// Unbinding every nav.* key collapses the nav column entirely.
+	var unbind string
+	for _, e := range DefaultKeymap().Engine().Bindings() {
+		if groupOf(Action(e.Binding.Action)) == "nav" {
+			unbind += "unbind \"" + keybind.FormatKeys(e.Keys) + "\"\n"
 		}
 	}
-	km, _, err := DefaultKeymap().Merge(overrides)
-	if err != nil {
-		t.Fatalf("Merge: %v", err)
-	}
-	if cols := km.HelpMap().FullHelp(); len(cols) != 15 {
-		t.Errorf("FullHelp after disabling nav.* columns = %d; want 15 (app + ns + resources + ctx + theme + mouse + sort + menu + actions + res + logs + secret + forwards + search + confirm)", len(cols))
+	if c := cols(withUser(t, unbind, ""), tablePath); c["nav"] != nil {
+		t.Errorf("nav column after unbinding nav.*: %v", c["nav"])
 	}
 }

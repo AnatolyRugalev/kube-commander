@@ -27,12 +27,15 @@ func minDepth(first Key, p Path) int {
 }
 
 // Match looks a typed sequence up in the context path.
-func (km *Keymap) Match(keys []Key, p Path) Match {
+func (km *Keymap) Match(keys []Key, p Path) Match { return km.match(keys, p, nil) }
+
+// match is Match with the path's activations, when the caller has them already
+// (nil computes them if a binding needs them).
+func (km *Keymap) match(keys []Key, p Path, acts []map[string]any) Match {
 	if len(keys) == 0 {
 		return Match{}
 	}
 	var m Match
-	var acts []map[string]any
 	floor := minDepth(keys[0], p)
 	best := winner{depth: -1}
 	prefixDepth := -1
@@ -77,7 +80,7 @@ func (km *Keymap) Effective(p Path) []Entry {
 		if b.unbind || b.ctx.depth(acts) < 0 {
 			continue
 		}
-		if m := km.Match(b.keys, p); m.Exact == b.Binding {
+		if m := km.match(b.keys, p, acts); m.Exact == b.Binding {
 			out = append(out, Entry{Key: b.keys[len(b.keys)-1], Keys: b.keys, Label: b.Label, Binding: b.Binding})
 		}
 	}

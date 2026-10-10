@@ -139,7 +139,7 @@ func TestKeyLogIsInertWithoutARecorder(t *testing.T) {
 }
 
 // TestKeyLogRecordsResolvedConfirmAction is STORY-06e on the recorder: the confirm
-// modal resolves its keys in a dedicated context (ConfirmAction, D132), so a
+// modal resolves its keys in its own context (`context "confirm"`, D132/D303), so a
 // handled accept or decline must be written to the trace with the action it ran —
 // not as a blank press the analyzer would read as a dead end. The S02 trace
 // reported `esc 2 modal-confirm` as unresolved when both declines had worked.
