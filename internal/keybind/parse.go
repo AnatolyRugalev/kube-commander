@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	kdl "github.com/calico32/kdl-go"
 	"github.com/neuroplastio/myelin"
@@ -126,25 +125,12 @@ func (p *parser) base(n *kdl.Node, when string) {
 // seq checks a key sequence as written, `<leader>` and all, so a bad key is an
 // error at its line in the document rather than one at the build.
 func (p *parser) seq(n *kdl.Node, s string) bool {
-	fields := strings.FieldsFunc(s, func(r rune) bool { return strings.ContainsRune(" \t\n\f\r", r) })
-	if len(fields) == 0 {
-		p.fail(n, "%s: an empty key sequence", n.Name())
+	if err := myelin.CheckSeq(s); err != nil {
+		p.fail(n, "%s: %v", n.Name(), err)
 		return false
-	}
-	for _, f := range fields {
-		if f == leaderToken {
-			continue
-		}
-		if _, err := myelin.ParseKey(f); err != nil {
-			p.fail(n, "%s: %v", n.Name(), err)
-			return false
-		}
 	}
 	return true
 }
-
-// leaderToken is how a sequence writes the leader alias, which myelin resolves.
-const leaderToken = "<leader>"
 
 func (p *parser) bind(n *kdl.Node, when string) {
 	args, ok := p.strings(n, 2, -1, map[string]kdl.ValueKind{"label": kdl.String})
