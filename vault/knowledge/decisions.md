@@ -1815,6 +1815,18 @@ stay.
    surface × key, written against the old map before the swap, is the proof.
    Moving a key now that a context can free its letter is a later UX
    decision, not part of the port.
+   KEYS-04 then bound in its surface's context every key that does nothing
+   anywhere else — the logs view's nine, the Secret viewer's `r`/`c`, the
+   forwards panel's `X`, the port picker's `p`/`0`, the search's
+   `ctrl+a`/`ctrl+w` — so each still acts where it did and its letter is
+   free everywhere else. Keys that act on the table from the menu too (the
+   row actions, `H`, `S`, `x`, `n`/`#`) stay global: moving them would change
+   what a key does, not only where it is bound. The golden states those
+   fourteen actions as its one allowed difference. An unbind follows the
+   same precedence as a bind, as in plexos, so a contextual default is
+   unbound in its context; a top-level `unbind` that does not reach one is a
+   load warning (`kubecom keys check`, a startup notice). What the freed
+   letters become is the maintainer's call (KEYS-05).
 7. **Hints, the `?` overlay and `docs/keybindings.md` read the live path.**
    The curated hint sets still choose *which* actions to show, and the keys
    come from the bindings that win there. `kubecom keys` lists bindings with

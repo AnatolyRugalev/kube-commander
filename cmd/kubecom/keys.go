@@ -42,6 +42,11 @@ no key runs are listed last: the command palette (:) reaches every one.
 			if err != nil {
 				return err
 			}
+			for _, w := range km.Warnings() {
+				if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "warning:", w); err != nil {
+					return err
+				}
+			}
 			return printKeys(cmd.OutOrStdout(), km)
 		},
 	}
@@ -77,7 +82,8 @@ func newKeysCheckCmd() *cobra.Command {
 		Long: `check reads the keymap in config.kdl and config.overlay.kdl the way kubecom
 does at launch — every key, context and action, and the values given — and
 reports each mistake at its file and line. It exits non-zero when kubecom would
-refuse to start.`,
+refuse to start; a warning (an unbind that does not reach a key the defaults bind
+in a context) is printed and does not fail it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			km, err := loadKeymap(configPath)
@@ -90,7 +96,13 @@ refuse to start.`,
 					user++
 				}
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "keymap ok: %d bindings of yours over the defaults\n", user)
+			out := cmd.OutOrStdout()
+			for _, w := range km.Warnings() {
+				if _, err := fmt.Fprintln(out, "warning:", w); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintf(out, "keymap ok: %d bindings of yours over the defaults\n", user)
 			return err
 		},
 	}

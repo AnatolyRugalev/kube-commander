@@ -334,6 +334,37 @@ func TestUnbind(t *testing.T) {
 	}
 }
 
+// An unbind outside any context does not reach a key a lower layer binds in one —
+// the deeper context wins where it holds — so it is loaded with a warning naming
+// the context to unbind it in.
+func TestShallowUnbindWarns(t *testing.T) {
+	def := load(t, Default, `
+		bind "q" "app.quit"
+		context "forwards" { bind "X" "forwards.stopAll"; }
+	`)
+	user := load(t, User, `
+		unbind "q"
+		unbind "X"
+		context "forwards" { unbind "X"; }
+	`)
+	km := Build(def, user)
+	if err := km.Err(); err != nil {
+		t.Fatalf("a warning refused the keymap: %v", err)
+	}
+	var warns []string
+	for _, p := range km.Problems() {
+		if p.Warning {
+			warns = append(warns, p.Text)
+		}
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], `unbind "X" leaves X → forwards.stopAll in context "forwards"`) {
+		t.Fatalf("warnings = %q", warns)
+	}
+	if exact(km, t, "X", Path{Forwards: true}) != "" {
+		t.Error("the unbind in the forwards context did not take X away there")
+	}
+}
+
 // The leader is an alias the highest layer that names one sets; with none named,
 // a `<leader>` binding is a problem and is left out.
 func TestTheLeaderIsAnAlias(t *testing.T) {

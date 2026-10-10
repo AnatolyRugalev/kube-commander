@@ -68,6 +68,18 @@ func UserDocs(cfg *config.Config) ([]keybind.Doc, error) {
 	return docs, nil
 }
 
+// Warnings is what is wrong with the keymap without refusing it, each at its
+// file:line — an unbind that does not reach a key it names.
+func (k *Keymap) Warnings() []string {
+	var out []string
+	for _, p := range k.km.Problems() {
+		if p.Warning {
+			out = append(out, p.Text)
+		}
+	}
+	return out
+}
+
 // Engine is the keymap's engine, for what lists bindings (`kubecom keys`).
 func (k *Keymap) Engine() *keybind.Keymap { return k.km }
 

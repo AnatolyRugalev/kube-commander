@@ -81,7 +81,6 @@ func TestDefaultResolution(t *testing.T) {
 		{tea.Key{Code: tea.KeySpace}, ActionPageDown},
 		{tea.Key{Code: 'D', Text: "D"}, ActionDelete},
 		{tea.Key{Code: 'd', Text: "d"}, ActionDescribe},
-		{tea.Key{Code: 'V', Text: "V"}, ActionLogsSelect},
 		{tea.Key{Code: tea.KeyHome}, ActionTop},
 	}
 	for _, tt := range tests {
@@ -98,6 +97,47 @@ func TestDefaultResolution(t *testing.T) {
 	for _, k := range []tea.Key{{Code: 'z', Text: "z"}, {Code: 's', Text: "s"}, {Code: 'a', Text: "a"}, {Code: 'g', Text: "g"}} {
 		if a, _, ok := km.Action(k, menuPath); ok {
 			t.Errorf("Action(%+v) = %q, want unbound", k, a)
+		}
+	}
+}
+
+// A key that acts on one surface only is bound there and free everywhere else
+// (KEYS-04).
+func TestSurfaceKeysAreBoundOnTheirSurface(t *testing.T) {
+	km := DefaultKeymap()
+	logs := keybind.Path{Cluster: testCluster, Table: testPods, Logs: &keybind.Logs{}}
+	secret := keybind.Path{Cluster: testCluster, Table: testPods, Viewer: &keybind.Viewer{Content: "secret"}}
+	describe := keybind.Path{Cluster: testCluster, Table: testPods, Viewer: &keybind.Viewer{Content: "describe"}}
+	forwards := keybind.Path{Cluster: testCluster, Table: testPods, Forwards: true}
+	ports := keybind.Path{Cluster: testCluster, Table: testPods, Picker: &keybind.Picker{ID: "ports"}}
+	containers := keybind.Path{Cluster: testCluster, Table: testPods, Picker: &keybind.Picker{ID: "containers"}}
+	search := keybind.Path{Cluster: testCluster, Table: testPods, Search: &keybind.Search{}}
+	key := func(r rune) tea.Key { return tea.Key{Code: r, Text: string(r)} }
+	for _, tc := range []struct {
+		key  tea.Key
+		on   keybind.Path
+		off  []keybind.Path
+		want Action
+	}{
+		{key('f'), logs, []keybind.Path{menuPath, tablePath, describe}, ActionLogsFollow},
+		{key('V'), logs, []keybind.Path{menuPath, tablePath}, ActionLogsSelect},
+		{key('y'), logs, []keybind.Path{menuPath, tablePath}, ActionLogsYank},
+		{tea.Key{Code: 'r', Mod: tea.ModCtrl}, logs, []keybind.Path{menuPath}, ActionLogsRegex},
+		{key('r'), secret, []keybind.Path{menuPath, describe}, ActionRevealSecret},
+		{key('c'), secret, []keybind.Path{tablePath, describe}, ActionCopySecret},
+		{key('X'), forwards, []keybind.Path{menuPath, tablePath}, ActionStopForwards},
+		{key('p'), ports, []keybind.Path{menuPath, tablePath, containers}, ActionLocalPort},
+		{key('0'), ports, []keybind.Path{tablePath, containers}, ActionFreeLocalPort},
+		{tea.Key{Code: 'a', Mod: tea.ModCtrl}, search, []keybind.Path{menuPath, tablePath}, ActionSearchAllKinds},
+		{tea.Key{Code: 'w', Mod: tea.ModCtrl}, search, []keybind.Path{menuPath, tablePath}, ActionSearchAllNamespaces},
+	} {
+		if a, _, _ := km.Action(tc.key, tc.on); a != tc.want {
+			t.Errorf("%s on %s = %q, want %q", KeyOf(tc.key), tc.on, a, tc.want)
+		}
+		for _, p := range tc.off {
+			if a, _, ok := km.Action(tc.key, p); ok {
+				t.Errorf("%s on %s = %q, want it free there", KeyOf(tc.key), p, a)
+			}
 		}
 	}
 }
@@ -142,14 +182,14 @@ func TestConfirmContextResolution(t *testing.T) {
 		{tea.Key{Code: tea.KeyEnter}, confirmPath, ActionConfirmAccept},
 		{tea.Key{Code: 'n', Text: "n"}, confirmPath, ActionConfirmDecline},
 		{tea.Key{Code: tea.KeyEsc}, confirmPath, ActionConfirmDecline},
-		// The confirm keys keep their browse meaning outside the modal, `y`
-		// included: left free when res.yaml was retired (D135/M3-15c), it is
-		// logs.yank since LOGS-SEL-02 — one key, two live actions, told apart by
-		// nothing but the context.
+		// The confirm keys keep their meaning outside the modal, `y` included:
+		// left free when res.yaml was retired (D135/M3-15c), it is logs.yank in
+		// the logs view since LOGS-SEL-02 — one key, two live actions, told apart
+		// by nothing but the context.
 		{tea.Key{Code: 'n', Text: "n"}, menuPath, ActionSearchNext},
 		{tea.Key{Code: tea.KeyEnter}, menuPath, ActionDrillIn},
 		{tea.Key{Code: tea.KeyEsc}, menuPath, ActionBack},
-		{tea.Key{Code: 'y', Text: "y"}, menuPath, ActionLogsYank},
+		{tea.Key{Code: 'y', Text: "y"}, keybind.Path{Cluster: testCluster, Table: testPods, Logs: &keybind.Logs{}}, ActionLogsYank},
 		// Under the modal the rest of the keymap still resolves, so app.quit
 		// dismisses it.
 		{tea.Key{Code: 'q', Text: "q"}, confirmPath, ActionQuit},

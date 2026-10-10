@@ -97,6 +97,16 @@ func runTUI(opts runOptions) error {
 	if err != nil {
 		return err
 	}
+	// A warning loads the keymap and says so once: `kubecom keys check` names each.
+	if warns := km.Warnings(); len(warns) > 0 {
+		for _, w := range warns {
+			slog.Warn("keymap", "warning", w)
+		}
+		if startupErr == nil {
+			e := tui.NewErrorMsg("keymap", fmt.Errorf("%d warning(s) in your keymap: run `kubecom keys check`", len(warns)))
+			startupErr = &e
+		}
+	}
 
 	// Build the live cluster client. Connect resolves the rest.Config (bad/missing
 	// kubeconfig or context surfaces here as KindBadContext) and wires the client-go

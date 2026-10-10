@@ -72,37 +72,56 @@ keymap {
     // `g r`, vim's go-to-references: what is this object related to (D287).
     bind "g r" "res.relations"
 
-    // The logs view's toggles. ctrl+r and ctrl+p are chords so they work while the
-    // grep field is open; o (the other, older instance) is the plain-letter twin of
-    // ctrl+p (D177).
-    bind "f" "logs.follow"
-    bind "ctrl+r" "logs.regex"
-    bind "w" "logs.wrap"
-    bind "t" "logs.timestamps"
-    bind "o" "logs.previous"
-    bind "ctrl+p" "logs.previous"
-    // Visual selection and yank, vim's own keys (D269).
-    bind "v" "logs.select"
-    bind "V" "logs.select"
-    bind "y" "logs.yank"
-
-    bind "r" "secret.reveal"
-    bind "c" "secret.copy"
     bind "F" "forwards.panel"
-    bind "X" "forwards.stopAll"
-    // The port picker's local side: p for a local port, 0 for a free one (D139).
-    bind "p" "forwards.localPort"
-    bind "0" "forwards.freeLocal"
-
-    // Search takes ctrl+f, find, and its widens are chords too, because the
-    // search query field is always open (D140 pt 1): ctrl+a all kinds, ctrl+w
-    // cluster-wide.
+    // Search takes ctrl+f, find (D140).
     bind "ctrl+f" "search.cluster"
-    bind "ctrl+a" "search.allKinds"
-    bind "ctrl+w" "search.allNamespaces"
 
     // `*` stars a kind into this context's menu, or out of it (D201).
     bind "*" "menu.pin"
+
+    // The keys below act on one surface only, so they are bound there and nowhere
+    // else (KEYS-04): outside it the letter is free. Unbinding one takes the same
+    // context — `context "logs" { unbind "f" }`.
+
+    // The logs view's toggles. ctrl+r and ctrl+p are chords so they work while the
+    // grep field is open; o (the other, older instance) is the plain-letter twin of
+    // ctrl+p (D177).
+    context "logs" {
+        bind "f" "logs.follow"
+        bind "ctrl+r" "logs.regex"
+        bind "w" "logs.wrap"
+        bind "t" "logs.timestamps"
+        bind "o" "logs.previous"
+        bind "ctrl+p" "logs.previous"
+        // Visual selection and yank, vim's own keys (D269).
+        bind "v" "logs.select"
+        bind "V" "logs.select"
+        bind "y" "logs.yank"
+    }
+
+    // A Secret's viewer: reveal the values, copy the selected one (M3-08).
+    context "viewer.content == 'secret'" {
+        bind "r" "secret.reveal"
+        bind "c" "secret.copy"
+    }
+
+    // The port-forward panel stops every forward at once.
+    context "forwards" {
+        bind "X" "forwards.stopAll"
+    }
+
+    // The port picker's local side: p for a local port, 0 for a free one (D139).
+    context "picker.id == 'ports'" {
+        bind "p" "forwards.localPort"
+        bind "0" "forwards.freeLocal"
+    }
+
+    // The search's widens are chords, because its query field is always open
+    // (D140 pt 1): ctrl+a all kinds, ctrl+w cluster-wide.
+    context "search" {
+        bind "ctrl+a" "search.allKinds"
+        bind "ctrl+w" "search.allNamespaces"
+    }
 
     // enter on a row of the table — the table itself holding the keys, nothing
     // over it — opens the actions menu (STORY-06c); everywhere else it is

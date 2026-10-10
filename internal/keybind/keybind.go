@@ -215,7 +215,31 @@ func Build(docs ...Doc) *Keymap {
 			order++
 		}
 	}
+	km.warnShallowUnbinds()
 	return km
+}
+
+// warnShallowUnbinds warns of an unbind written outside any context whose keys a
+// lower layer binds inside one: the bound context reaches deeper wherever it holds,
+// so it wins there and the unbind does not take that key away. The fix is to unbind
+// it in that context, which the warning says.
+func (km *Keymap) warnShallowUnbinds() {
+	for _, i := range km.unbinds {
+		u := &km.binds[i]
+		if u.ctx != nil {
+			continue
+		}
+		for j := range km.binds {
+			b := &km.binds[j]
+			if b.unbind || b.ctx == nil || b.layer >= u.layer ||
+				len(b.keys) < len(u.keys) || !slices.Equal(b.keys[:len(u.keys)], u.keys) {
+				continue
+			}
+			km.problems = append(km.problems, Problem{Warning: true, Text: fmt.Sprintf(
+				"%s: unbind %q leaves %s → %s in context %q (%s), which wins there; unbind it in that context",
+				u.src, FormatKeys(u.keys), FormatKeys(b.keys), b.Action, b.ctx, b.src)})
+		}
+	}
 }
 
 // resolve is a sequence's keys with the leader put in; false, and a problem, when

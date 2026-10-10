@@ -106,37 +106,37 @@ fallbacks second (D10). A key with a context in parentheses acts only there.
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `logs.follow` | `f` | Toggle log follow (auto-scroll) in the logs viewer |
-| `logs.regex` | `ctrl+r` | Toggle regex matching for the logs filter |
-| `logs.wrap` | `w` | Toggle line wrapping in the logs viewer |
-| `logs.timestamps` | `t` | Toggle timestamps in the logs viewer |
-| `logs.previous` | `o` / `ctrl+p` | Toggle logs of the previous (crashed) container instance |
-| `logs.select` | `v` / `V` | Select log lines (visual mode) |
-| `logs.yank` | `y` | Copy the selected log lines |
+| `logs.follow` | `f` (`logs`) | Toggle log follow (auto-scroll) in the logs viewer |
+| `logs.regex` | `ctrl+r` (`logs`) | Toggle regex matching for the logs filter |
+| `logs.wrap` | `w` (`logs`) | Toggle line wrapping in the logs viewer |
+| `logs.timestamps` | `t` (`logs`) | Toggle timestamps in the logs viewer |
+| `logs.previous` | `o` (`logs`) / `ctrl+p` (`logs`) | Toggle logs of the previous (crashed) container instance |
+| `logs.select` | `v` (`logs`) / `V` (`logs`) | Select log lines (visual mode) |
+| `logs.yank` | `y` (`logs`) | Copy the selected log lines |
 
 ## secret
 
 | Action | Keys | Description |
 |--------|------|-------------|
-| `secret.reveal` | `r` | Reveal / hide secret values in the secret viewer |
-| `secret.copy` | `c` | Copy the selected secret value to the clipboard |
+| `secret.reveal` | `r` (`viewer.content == 'secret'`) | Reveal / hide secret values in the secret viewer |
+| `secret.copy` | `c` (`viewer.content == 'secret'`) | Copy the selected secret value to the clipboard |
 
 ## forwards
 
 | Action | Keys | Description |
 |--------|------|-------------|
 | `forwards.panel` | `F` | Toggle the port-forward panel |
-| `forwards.stopAll` | `X` | Stop all port-forwards (in the panel) |
-| `forwards.localPort` | `p` | Set the local port for the highlighted port (port picker) |
-| `forwards.freeLocal` | `0` | Forward the highlighted port on a free local port (port picker) |
+| `forwards.stopAll` | `X` (`forwards`) | Stop all port-forwards (in the panel) |
+| `forwards.localPort` | `p` (`picker.id == 'ports'`) | Set the local port for the highlighted port (port picker) |
+| `forwards.freeLocal` | `0` (`picker.id == 'ports'`) | Forward the highlighted port on a free local port (port picker) |
 
 ## search
 
 | Action | Keys | Description |
 |--------|------|-------------|
 | `search.cluster` | `ctrl+f` | Search the cluster across kinds |
-| `search.allKinds` | `ctrl+a` | Toggle searching all kinds (cluster search) |
-| `search.allNamespaces` | `ctrl+w` | Toggle searching all namespaces (cluster search) |
+| `search.allKinds` | `ctrl+a` (`search`) | Toggle searching all kinds (cluster search) |
+| `search.allNamespaces` | `ctrl+w` (`search`) | Toggle searching all namespaces (cluster search) |
 
 ## confirm
 

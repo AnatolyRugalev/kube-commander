@@ -96,6 +96,22 @@ func TestKeysDefaultPrintsDefaultKDL(t *testing.T) {
 	}
 }
 
+// An unbind that does not reach a key the defaults bind in a context is a warning:
+// check prints it and passes, and the listing says it on stderr.
+func TestKeysCheckWarnsOfAShallowUnbind(t *testing.T) {
+	dir := writeConfig(t, "version 1\nkeymap {\n    unbind \"f\"\n}\n")
+	out, _, err := runKeys(t, "check", "--config-dir", dir)
+	if err != nil {
+		t.Fatalf("keys check failed on a warning: %v", err)
+	}
+	if !strings.Contains(out, `config.kdl:3: unbind "f" leaves f → logs.follow in context "logs"`) || !strings.Contains(out, "keymap ok") {
+		t.Fatalf("keys check:\n%s", out)
+	}
+	if _, errOut, err := runKeys(t, "--config-dir", dir); err != nil || !strings.Contains(errOut, "warning:") {
+		t.Fatalf("keys: %v, stderr %q", err, errOut)
+	}
+}
+
 // keys check names every mistake at its line, and passes a keymap kubecom takes.
 func TestKeysCheck(t *testing.T) {
 	ok := writeConfig(t, "version 1\nkeymap {\n    bind \"Q\" \"app.quit\"\n}\n")

@@ -85,6 +85,10 @@ keymap {
 - Keys are written `j`, `G` (or `shift+g`), `ctrl+d`, `alt+x`, `enter`, `esc`,
   `space`, `pgdn`, `f5`; a sequence separates its keys with spaces: `g g`.
 - `unbind "<keys>"` takes keys away; unbinding `g` takes every `g …` with it.
+  An unbind is a binding to nothing, so it wins the way a binding does: a key the
+  defaults bind in a context (`kubecom keys` shows which) is unbound in that
+  context — `context "logs" { unbind "f" }` — and `kubecom keys check` warns of a
+  top-level unbind that does not reach one.
 - `context "<expression>" { … }` binds only where the expression holds.
 - `base "none"` drops the defaults, so every key is yours to bind.
 - `leader "<key>"` names a key `<leader>` stands for in your bindings.

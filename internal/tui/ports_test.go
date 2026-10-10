@@ -207,7 +207,7 @@ func TestPortPickerTitleAdvertisesGestures(t *testing.T) {
 			t.Fatalf("the port picker title %q should advertise %s (%q)", title, a, k)
 		}
 	}
-	unbound := userKeymap(t, `unbind "`+km.Keys(keymap.ActionLocalPort, ports)[0]+`"`)
+	unbound := userKeymap(t, `context "picker.id == 'ports'" { unbind "`+km.Keys(keymap.ActionLocalPort, ports)[0]+`"; }`)
 	if got := portPickerTitle(unbound.HelpMap(ports)); strings.Contains(got, "local") {
 		t.Fatalf("an unbound gesture should drop out of the title, got %q", got)
 	}

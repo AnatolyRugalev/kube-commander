@@ -58,8 +58,29 @@ func TestCheckBinding(t *testing.T) {
 // went: one line per scenario, key and action ("" for nothing), a single key over
 // every bound key, printable ASCII character, named key, ctrl+ and alt+ letter, and
 // every multi-key sequence on the surfaces that fed the sequencer.
+//
+// The one difference allowed is KEYS-04's: an action that acts on one surface only
+// is bound in that surface's context, so off it the old key — which resolved there
+// and did nothing — resolves to nothing. tidied names each such action's surface,
+// written out here rather than read from default.kdl.
 func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 	km := keybind.Build(DefaultDoc())
+	tidied := map[string]string{
+		"logs.follow": "logs", "logs.regex": "logs", "logs.wrap": "logs", "logs.timestamps": "logs",
+		"logs.previous": "logs", "logs.select": "logs", "logs.yank": "logs",
+		"secret.reveal": "viewer.content == 'secret'", "secret.copy": "viewer.content == 'secret'",
+		"forwards.stopAll":   "forwards",
+		"forwards.localPort": "picker.id == 'ports'", "forwards.freeLocal": "picker.id == 'ports'",
+		"search.allKinds": "search", "search.allNamespaces": "search",
+	}
+	surfaces := map[string]*keybind.Context{}
+	for a, src := range tidied {
+		c, err := keybind.CompileContext(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		surfaces[a] = c
+	}
 	cluster := &keybind.Cluster{Context: "kind-dev", Namespace: "default"}
 	pods := &keybind.Table{Resource: "pods", Kind: "Pod", Namespaced: true}
 	paths := map[string]keybind.Path{
@@ -106,8 +127,12 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 		if m.Exact != nil {
 			got = m.Exact.Action
 		}
-		if got != f[2] {
-			t.Errorf("%s: %s resolves to %q, the old keymap to %q", f[0], f[1], got, f[2])
+		want := f[2]
+		if c, ok := surfaces[want]; ok && !c.Holds(path) {
+			want = ""
+		}
+		if got != want {
+			t.Errorf("%s: %s resolves to %q, want %q (the old keymap: %q)", f[0], f[1], got, want, f[2])
 		}
 		if len(keys) > 1 {
 			if m.Prefix {

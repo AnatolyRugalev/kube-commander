@@ -5982,7 +5982,7 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 
 	// Rebinding forwards.stopAll moves the footer with it. This is the assertion the
 	// literal footer failed: `X` is gone from the keymap, so naming it would be a lie.
-	m = useKeymap(m, userKeymap(t, `unbind "X"; bind "Z" "forwards.stopAll"`))
+	m = useKeymap(m, userKeymap(t, `context "forwards" { unbind "X"; bind "Z" "forwards.stopAll"; }`))
 	view := m.View().Content
 	if !strings.Contains(view, "Z: stop all") {
 		t.Fatalf("a rebound stop-all should read as `Z` in the footer: %q", view)
@@ -5997,12 +5997,12 @@ func TestForwardsPanelFooterFollowsTheKeymap(t *testing.T) {
 // portPickerTitle already makes), and that unbinding all three drops the line itself.
 func TestForwardsPanelFooterDropsDisabledKeys(t *testing.T) {
 	panel := keybind.Path{Table: &keybind.Table{Kind: "Pod"}, Forwards: true}
-	km := userKeymap(t, `unbind "X"`)
+	km := userKeymap(t, `context "forwards" { unbind "X"; }`)
 	if got, want := forwards.Footer(km.HelpMap(panel)), "enter: stop · esc: close"; got != want {
 		t.Fatalf("an unbound stop-all should drop out: got %q, want %q", got, want)
 	}
 
-	km = userKeymap(t, `unbind "enter"; unbind "X"; unbind "esc"`)
+	km = userKeymap(t, `unbind "enter"; unbind "esc"; context "forwards" { unbind "X"; }`)
 	if got := forwards.Footer(km.HelpMap(panel)); got != "" {
 		t.Fatalf("with nothing bound the footer should be empty, got %q", got)
 	}

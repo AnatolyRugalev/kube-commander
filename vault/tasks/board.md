@@ -3,7 +3,7 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-03 landed (a bind's value runs its verb); KDL-01, KEYS-02 and KEYS-03 push together after the maintainer hears it breaks config.yaml._
+_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead._
 
 ## In Progress
 
@@ -15,10 +15,11 @@ _(none)_
 
 ### Config & keys in KDL (D302/D303)
 
-_plexos's model: an authored `config.kdl` kubecom never writes, an overlay it does, and a `keymap` of `bind`/`unbind`/`group`/`context "<cel>"` over a focus path. KEYS-01 is additive; KDL-01, KEYS-02 and KEYS-03 break `config.yaml` and land together._
+_plexos's model: an authored `config.kdl` kubecom never writes, an overlay it does, and a `keymap` of `bind`/`unbind`/`group`/`context "<cel>"` over a focus path. KEYS-01 is additive; KDL-01 through KEYS-04 break `config.yaml` and land together._
 
-- [ ] **KEYS-04** Keys that only mean something in one surface move into that surface's context, and the letters that frees are offered back (`p`, `s`, `a`, …) — a remap proposal for the maintainer, not a silent change
-      status: in-progress | owner: kubecom | added: 2026-10-10
+- [ ] **KEYS-05** Give the freed letters to the row actions that have no key, per kind, through bound values (D303 pt 2) — a proposal awaiting the maintainer's pick, not a change to make unasked
+      status: todo | owner: — | added: 2026-10-10
+      notes: Proposed (k9s muscle memory where it has one), each in `context "table.kind == '…'"`: `s` exec shell on Pods and scale on Deployment/ReplicaSet/StatefulSet; `f` port-forward on Pods/Services; `r` rollout restart on Deployment/DaemonSet/StatefulSet (asks first); `c`/`u` cordon/uncordon on Nodes. A kind context sits under the logs view's, so `f` stays follow there. Free outside their surfaces since KEYS-04: `f w t o v V y r c X p 0`, `ctrl+r/p/a/w`; free everywhere: `s a b i u z`. The hint and doc need valued bindings shown (today they list keys bound with no value).
       → knowledge: decisions.md D303 pt 6
 
 ### UX, docs & polish
