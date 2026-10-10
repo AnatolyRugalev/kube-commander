@@ -3,13 +3,16 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead._
+_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) blocked on myelin's M6._
 
 ## In Progress
 
 ## Blocked
 
-_(none)_
+- [ ] **MYELIN-01** Switch the keymap engine to myelin (NEIO-13), the shared CEL context keymap ported from `internal/keybind`
+      status: blocked | owner: — | added: 2026-10-10
+      notes: Blocked on myelin's M3–M6, which port from the top commit of the KDL-01–KEYS-04 push once it lands (tell the `myelin` session that commit). The order is the maintainer's ruling (gov 8b86fe3): (1) myelin M3–M6; (2) kubecom builds against a local myelin through a `replace` or go.work that is never pushed, with the keymap golden (`oldkeys.golden`) and `make check` green — then tell `myelin`; (3) myelin goes public; (4) only then push the switch, since a public kubecom cannot fetch a private module. myelin's session says when M6 is ready.
+      → knowledge: decisions.md D303
 
 ## Backlog
 
