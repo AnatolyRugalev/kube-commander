@@ -490,7 +490,7 @@ func WithVersion(v string) Option {
 // discovery runs (menu.AddExtras) so a later discovered twin dedupes against the
 // extra rather than double-listing it (FB-menu-config-02). Empty/nil adds nothing,
 // leaving the built-in default menu (a context with no menu file). The launcher
-// resolves the file via config.LoadMenuFile(config.MenuPath(ctx)) and passes the
+// reads config.kdl's `menu` entries for the context (config.Menu) and passes the
 // entries here; a missing/malformed file degrades to the default menu upstream.
 func WithMenuExtras(extras []config.MenuResource) Option {
 	return func(m *Model) { m.menuExtras = extras }
@@ -670,7 +670,7 @@ type Model struct {
 
 	// themeByLabel maps each row of the palette's `:theme ` stage back to its theme
 	// name (the resByLabel/ctxByLabel pattern again, D65). themePersister writes a
-	// picked theme back to config.yaml so the next launch opens on it (nil → the
+	// picked theme to config.overlay.kdl so the next launch opens on it (nil → the
 	// choice applies for the session only, M4-12b-2). Neither is cluster- or
 	// context-scoped: a theme is a property of the reader's terminal.
 	//

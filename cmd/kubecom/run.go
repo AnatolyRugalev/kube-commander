@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/kube"
 	"github.com/neuroplastio/kubecom/internal/stderrfd"
 	"github.com/neuroplastio/kubecom/internal/tui"
+	"github.com/neuroplastio/kubecom/internal/tui/keymap"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 	"github.com/neuroplastio/kubecom/internal/version"
 )
@@ -26,7 +28,7 @@ type runOptions struct {
 	context      string // --context: kubeconfig context name ("" = current-context)
 	namespace    string // -n/--namespace: initial watch scope ("" = all namespaces)
 	namespaceSet bool   // whether -n was passed explicitly (vs. its "" default)
-	configPath   string // --config: kubecom config file ("" = user config dir)
+	configDir    string // --config-dir: holds config.kdl and its overlay ("" = config.Dir)
 	keyLog       string // --keylog: keystroke trace path ("" = off; $KUBECOM_KEYLOG)
 }
 
@@ -62,35 +64,30 @@ func runTUI(opts runOptions) error {
 	}
 	defer func() { _ = logFile.Close() }()
 
-	// Resolve the effective keymap (defaults + config overrides), mirroring
-	// `kubecom keys`. Merge warnings go to the log, not stderr (the TUI owns it).
-	path := opts.configPath
-	if path == "" {
-		p, err := config.Path()
-		if err != nil {
-			return err
-		}
-		path = p
-	}
-
-	// One-shot legacy-config migration (M2-12b): before loading the config, if no
-	// new-format config exists yet at path and a legacy ~/.kubecom.yaml is present,
-	// migrate it — write a fresh config once (a present config then suppresses
-	// re-migration) and carry the "what to redo by hand" notes into a startup toast.
-	// Degrades to no migration and never blocks launch (principle 3, D92).
-	startupErr := maybeMigrate(path)
-
-	cfg, err := config.LoadFile(path)
+	dir, err := configDir(opts.configDir)
 	if err != nil {
 		return err
 	}
-	km, warnings, err := cfg.Keymap()
+
+	// One-shot legacy-config migration (M2-12b): before loading the config, if
+	// neither config file exists yet and a legacy ~/.kubecom.yaml is present, carry
+	// its theme into the overlay once (a present file then suppresses re-migration)
+	// and the "what to redo by hand" notes into a startup toast. Degrades to no
+	// migration and never blocks launch (principle 3, D92, D302 pt 4).
+	startupErr := maybeMigrate(dir)
+	// A YAML config an older kubecom read and this one does not (D302 pt 3) says so
+	// once per launch until config.kdl exists, rather than silently not applying.
+	if startupErr == nil {
+		startupErr = retiredNotice(dir)
+	}
+
+	// A config.kdl kubecom cannot read fails the launch with its file:line, as a
+	// malformed config.yaml once did: running on defaults would hide the mistake.
+	cfg, err := config.Load(dir)
 	if err != nil {
 		return err
 	}
-	for _, w := range warnings {
-		slog.Warn("keymap merge", "warning", w)
-	}
+	km := keymap.DefaultKeymap()
 
 	// Build the live cluster client. Connect resolves the rest.Config (bad/missing
 	// kubeconfig or context surfaces here as KindBadContext) and wires the client-go
@@ -115,26 +112,16 @@ func runTUI(opts runOptions) error {
 		Kubeconfig: opts.kubeconfig,
 		Context:    opts.context,
 	})
-	menuExtras, menuErr := loadMenuExtras(ctxName)
-	if menuErr != nil {
-		slog.Warn("menu config", "context", ctxName, "error", menuErr)
-		// The shell surfaces a single startup toast; a first-start migration report
-		// (rare, and the more notable event) wins that slot. The menu error is always
-		// logged above, so it is never lost even when it does not take the toast.
-		if startupErr == nil {
-			e := tui.NewErrorMsg("menu config", menuErr)
-			startupErr = &e
-		}
-	}
+	menuExtras := cfg.Menu(ctxName)
 
 	// Resolve the configured theme (M4-12a). An unknown name never fails the launch:
 	// it degrades to the built-in default palette and reports itself, like every
 	// other config fault on this path (principle 3). Last in the startup-toast
 	// precedence chain — a migration report and a fallen-back menu are both larger
 	// events than a mistyped palette name, which is visible on screen anyway.
-	theme, themeErr := resolveTheme(cfg.Theme)
+	theme, themeErr := resolveTheme(cfg.Theme())
 	if themeErr != nil {
-		slog.Warn("theme", "configured", cfg.Theme, "error", themeErr)
+		slog.Warn("theme", "configured", cfg.Theme(), "error", themeErr)
 		if startupErr == nil {
 			e := tui.NewErrorMsg("theme", themeErr)
 			startupErr = &e
@@ -224,7 +211,7 @@ func runTUI(opts runOptions) error {
 		tui.WithCluster(clusterFor(clients)),
 		tui.WithClusterConnector(contextConnector{kubeconfig: opts.kubeconfig}),
 		tui.WithContextLister(contextLister{kubeconfig: opts.kubeconfig}),
-		tui.WithContextStateLoader(contextStateLoader{}),
+		tui.WithContextStateLoader(contextStateLoader{dir: dir}),
 		// The credential-plugin diagnosis (AUTH-04b). It goes in here rather than in the
 		// cluster bundle because it asks about the *kubeconfig*, not about a connected
 		// client: it is handed the context to look up at call time, so it keeps working
@@ -251,9 +238,9 @@ func runTUI(opts runOptions) error {
 		// of the two it may take back out (D202).
 		tui.WithPinnedResources(state.PinnedResources),
 		tui.WithTheme(theme),
-		// The write side of the same field: a theme picked in the UI is written back
-		// to this config file, so the next launch resolves it above (M4-12b-2).
-		tui.WithThemePersister(&configThemePersister{path: path}),
+		// The write side of the same setting: a theme picked in the UI is written to
+		// the overlay, so the next launch resolves it above (M4-12b-2, D302).
+		tui.WithThemePersister(&configThemePersister{dir: dir}),
 		tui.WithStartupError(startupErr),
 		// The editor resolved (and logged) above — per-process, so it is wired here
 		// beside the other per-launch state rather than inside the cluster bundle.
@@ -357,9 +344,10 @@ func (c contextLister) Contexts() ([]kube.ContextInfo, error) {
 // the context name it is handed, through the same loadMenuExtras/loadState helpers
 // the launch path uses, so launch and switch can never resolve a context
 // differently. Unlike contextConnector/contextLister it is not bound to
-// --kubeconfig — neither file is inside the kubeconfig; both are kubecom's own,
-// keyed by context name in kubecom's config/state dirs.
-type contextStateLoader struct{}
+// --kubeconfig — neither file is inside the kubeconfig; both are kubecom's own:
+// config.kdl in dir (re-read on every switch, so an edit made while kubecom runs
+// applies to the next context visited) and the state file keyed by context name.
+type contextStateLoader struct{ dir string }
 
 // LoadContextState resolves the named context's menu extras, last-used namespace
 // and namespace persister. It never fails (the interface has no error): a missing
@@ -373,8 +361,8 @@ type contextStateLoader struct{}
 // Unlike the launch path there is no -n flag to honour: the flag names the scope for
 // the run kubecom was started with, not for every context visited afterwards, so a
 // switch always lands on the new context's recorded namespace (D163).
-func (contextStateLoader) LoadContextState(name string) tui.ContextState {
-	extras, err := loadMenuExtras(name)
+func (l contextStateLoader) LoadContextState(name string) tui.ContextState {
+	extras, err := loadMenuExtras(l.dir, name)
 	if err != nil {
 		slog.Warn("menu config", "context", name, "error", err)
 		extras = nil // degrade to the built-in default menu, as launch does.
@@ -403,50 +391,48 @@ func (contextStateLoader) LoadContextState(name string) tui.ContextState {
 	return st
 }
 
-// loadMenuExtras resolves the per-context menu file for the active context and
-// returns its extra resource entries (D83). It degrades rather than blocks launch
-// (principle 3): an unresolved context (blank name) or a missing file yields no
-// extras and no error (the built-in default menu); only a malformed/unreadable
-// file returns an error, which the caller turns into a startup toast + log warning
-// while still launching on the default menu.
-func loadMenuExtras(context string) ([]config.MenuResource, error) {
-	if strings.TrimSpace(context) == "" {
-		return nil, nil // no resolved context → no per-context menu file.
+// configDir is the directory holding config.kdl and its overlay: the --config-dir
+// flag's, else the user config dir's kubecom/ (D20).
+func configDir(flag string) (string, error) {
+	if flag != "" {
+		return flag, nil
 	}
-	path, err := config.MenuPath(context)
+	return config.Dir()
+}
+
+// loadMenuExtras reads config.kdl in dir again and returns the `menu` entries it
+// adds for context (D302 pt 2): the entries for every context, then the context's
+// own. A config that no longer reads — edited into an error while kubecom ran —
+// returns the error, which the switch logs while degrading to the built-in menu
+// (principle 3).
+func loadMenuExtras(dir, context string) ([]config.MenuResource, error) {
+	cfg, err := config.Load(dir)
 	if err != nil {
 		return nil, err
 	}
-	mc, err := config.LoadMenuFile(path) // a missing file returns the zero config, no error.
-	if err != nil {
-		return nil, err
-	}
-	return mc.Resources, nil
+	return cfg.Menu(context), nil
 }
 
 // maybeMigrate runs the one-shot legacy-config migration on first start (M2-12b).
-// When no new-format config exists yet at configPath and a legacy ~/.kubecom.yaml
-// is present, it parses that file (config.Migrate), writes a fresh new-format
-// config once, and returns the migration notes as a transient startup toast so the
-// user learns what could not be carried over automatically (D92). A present config
-// makes migration a no-op, so it runs at most once per config file (one-shot).
+// When neither config.kdl nor its overlay exists in dir and a legacy
+// ~/.kubecom.yaml is present, it parses that file (config.Migrate), writes the
+// carried-over theme to the overlay, and returns the migration notes as a transient
+// startup toast so the user learns what could not be carried over automatically
+// (D92, D302 pt 4). Writing the overlay — even with nothing to carry, a file of
+// `version 1` — is what makes it one-shot.
 //
 // It degrades rather than blocks (principle 3): a present config, an absent legacy
 // file, or a malformed/unreadable legacy file all yield no migration and no toast,
-// logging a warning where a fault was swallowed. It never returns an error —
-// migration must never keep kubecom from launching. A malformed/unreadable legacy
-// file writes no config (so a later start migrates a fixed file); a failed write of
-// the new config likewise leaves migration to re-run next start.
-func maybeMigrate(configPath string) *tui.ErrorMsg {
-	// A present new-format config means migration already ran (or the user authored
-	// one): never overwrite it. os.Stat rather than config.LoadFile, which maps a
-	// missing file to the zero config and so hides the present/absent distinction
-	// this one-shot turns on.
-	if _, err := os.Stat(configPath); err == nil {
-		return nil // config exists → one-shot already satisfied.
-	} else if !errors.Is(err, os.ErrNotExist) {
-		slog.Warn("migration: stat config", "path", configPath, "error", err)
-		return nil // cannot tell if it exists → do not risk clobbering it.
+// logging a warning where a fault was swallowed. It never returns an error.
+func maybeMigrate(dir string) *tui.ErrorMsg {
+	for _, name := range []string{config.AuthoredName, config.OverlayName} {
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			return nil // a config exists → one-shot already satisfied.
+		} else if !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("migration: stat config", "path", p, "error", err)
+			return nil // cannot tell if it exists → do not risk clobbering it.
+		}
 	}
 
 	legacyPath, err := config.LegacyPath()
@@ -464,25 +450,63 @@ func maybeMigrate(configPath string) *tui.ErrorMsg {
 	}
 	defer func() { _ = f.Close() }()
 
-	cfg, notes, err := config.Migrate(f)
+	theme, notes, err := config.Migrate(f)
 	if err != nil {
-		// Unparseable legacy YAML: no migration and no config written, so a later
+		// Unparseable legacy YAML: no migration and nothing written, so a later
 		// start migrates a fixed file. Never blocks (D92).
 		slog.Warn("migration: parsing legacy config", "path", legacyPath, "error", err)
 		return nil
 	}
-	if err := cfg.SaveFile(configPath); err != nil {
-		// Could not persist the migrated config; skip the toast and let migration
-		// re-run on the next start rather than reporting a migration that did not stick.
-		slog.Warn("migration: writing new config", "path", configPath, "error", err)
+	if err := writeMigrated(dir, theme); err != nil {
+		// Could not persist; skip the toast and let migration re-run on the next
+		// start rather than reporting a migration that did not stick.
+		slog.Warn("migration: writing the overlay", "dir", dir, "error", err)
 		return nil
 	}
-	slog.Info("migrated legacy config", "from", legacyPath, "to", configPath, "notes", len(notes))
+	slog.Info("migrated legacy config", "from", legacyPath, "to", filepath.Join(dir, config.OverlayName), "notes", len(notes))
 	if len(notes) == 0 {
 		return nil // migrated (e.g. an empty legacy file) with nothing to report.
 	}
 	e := tui.NewErrorMsg("migrated ~/.kubecom.yaml", errors.New(strings.Join(notes, " ")))
 	return &e
+}
+
+// writeMigrated writes the migration's result to the overlay: the theme when one
+// carried over, else an overlay of `version 1` alone, which marks the migration
+// done.
+func writeMigrated(dir, theme string) error {
+	if theme != "" {
+		cfg, err := config.Load(dir)
+		if err != nil {
+			return err
+		}
+		return cfg.Set("theme", theme)
+	}
+	return config.WriteEmptyOverlay(dir)
+}
+
+// retiredNotice is the start-up notice for a YAML config this kubecom no longer
+// reads (D302 pt 3), while config.kdl does not exist: nil when there is none, or
+// once config.kdl is written.
+func retiredNotice(dir string) *tui.ErrorMsg {
+	if _, err := os.Stat(filepath.Join(dir, config.AuthoredName)); err == nil {
+		return nil
+	}
+	retired := config.Retired(dir)
+	if len(retired) == 0 {
+		return nil
+	}
+	slog.Warn("retired config", "files", retired)
+	e := tui.NewErrorMsg("config", fmt.Errorf("%s %s no longer read: kubecom reads %s (see docs/configuration.md)",
+		strings.Join(retired, " and "), pluralVerb(len(retired)), filepath.Join(dir, config.AuthoredName)))
+	return &e
+}
+
+func pluralVerb(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
 }
 
 // resolveTheme turns the config's `theme:` name into the palette the shell renders
@@ -616,32 +640,25 @@ func (p *statePersister) PersistUnpin(r config.MenuResource) error {
 }
 
 // configThemePersister is the launcher's theme-persistence seam (tui.ThemePersister):
-// it records a theme picked in the UI as the `theme:` field of the user's config, so
-// the next launch resolves it through resolveTheme (M4-12b-2). It is bound to the
-// resolved config path at construction, so the tui package stays storage-agnostic —
-// the same shape statePersister has for the namespace.
+// it records a theme picked in the UI as the overlay's `theme`, so the next launch
+// resolves it through resolveTheme (M4-12b-2). It is bound to the config directory,
+// so the tui package stays storage-agnostic — the same shape statePersister has for
+// the namespace.
 type configThemePersister struct {
-	path string
+	dir string
 }
 
-// PersistTheme rewrites the config with theme: <name>, keeping every other setting.
+// PersistTheme writes theme "<name>" to config.overlay.kdl, keeping the rest of the
+// overlay as it is and never touching config.kdl (D302 pt 1).
 //
-// It **re-reads the file** rather than holding the config loaded at startup, for two
-// reasons: SaveFile marshals the whole struct, so anything not in the value written is
-// deleted — a stale in-memory copy would silently revert an edit made since launch,
-// and a fresh &config.Config{Theme: name} would delete the user's `keys:` section
-// outright. A load failure (the file became unparseable while kubecom ran) aborts the
-// write instead of overwriting it with defaults: losing a theme choice is recoverable,
-// losing a hand-written keymap is not.
-//
-// What no save can preserve is the file's *comments and formatting* — sigs.k8s.io/yaml
-// marshals a struct, not a document — so a hand-edited config comes back canonicalized.
-// That is documented in the README beside the picker.
+// It **re-reads the files** rather than holding the config loaded at startup, so an
+// overlay another kubecom wrote since this one started is kept, not reverted. A
+// config.kdl that no longer reads aborts the write: the error says which line, and
+// losing a theme choice is recoverable.
 func (p *configThemePersister) PersistTheme(name string) error {
-	cfg, err := config.LoadFile(p.path)
+	cfg, err := config.Load(p.dir)
 	if err != nil {
 		return fmt.Errorf("reading config before writing the theme: %w", err)
 	}
-	cfg.Theme = name
-	return cfg.SaveFile(p.path)
+	return cfg.Set("theme", name)
 }

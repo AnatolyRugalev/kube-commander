@@ -19,7 +19,7 @@ import (
 // (PinPersister — the statePersister/configThemePersister shape), and the row lands
 // in the live menu through the same insertion the launch path folds pins in with
 // (menu.AddPinned, AddExtras's twin), so a pinned row and a hand-written
-// menus/<context>.yaml row render through one code path and dedupe by GVR against
+// authored `menu` row render through one code path and dedupe by GVR against
 // seed, extras and discovery alike.
 //
 // CRD-PIN-03 made the same action and key the *unpin* too — `menu.pin` was named as
@@ -90,7 +90,7 @@ func (m Model) pinTarget() (kube.Resource, bool) {
 // Which of the three things happens is decided by *where the kind already is*, in
 // this order:
 //
-//  1. in m.menuExtras — a hand-written entry in `menus/<context>.yaml`. Declined
+//  1. in m.menuExtras — a hand-written `menu` entry in config.kdl. Declined
 //     with a notice naming the file: the authored entry wins over a pin (D193 pt 3),
 //     so pinning it would record a line that can never render, and unpinning it would
 //     have `*` silently disagree with a file the user wrote by hand. Editing that

@@ -331,7 +331,7 @@ func TestUnpinWriteFailureSurfacesAnErrorAndKeepsTheRowGone(t *testing.T) {
 }
 
 // TestPinIsANoOpForAnAuthoredEntry: a kind the user hand-wrote into
-// menus/<context>.yaml is already in the menu on their terms, and the authored entry
+// an authored `menu` entry is already in the menu on their terms, and the authored entry
 // wins over a pin (D193 pt 3) — so pinning it would record a line that can never
 // render, and unpinning it would have `*` silently disagree with a file written by
 // hand. Both directions decline, and the notice says where the entry actually is.
@@ -606,7 +606,7 @@ func TestPalettePinVerbUnpinsAPinnedKind(t *testing.T) {
 
 // TestPalettePinVerbDeclinesAnAuthoredEntry: the refusal is the toggle's, not the
 // key's, so it reaches the palette for free — and it must, because a `:pin ` that
-// quietly recorded a line `menus/<context>.yaml` outranks would be a lie told on a
+// quietly recorded a line an authored `menu` outranks would be a lie told on a
 // second surface (D204 pt 2).
 func TestPalettePinVerbDeclinesAnAuthoredEntry(t *testing.T) {
 	fp := &fakePinPersister{}

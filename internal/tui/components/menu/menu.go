@@ -4,7 +4,7 @@
 // Kubernetes-Dashboard scopes (Cluster / Workloads / Config / Network / Storage /
 // Access Control, plus Custom Resources) with non-selectable section headers the
 // cursor skips over (D77). The Custom Resources section lists only the CRDs the user
-// asked for — a menus/<context>.yaml entry or a pin — since discovery finds hundreds
+// asked for — an authored `menu` entry or a pin — since discovery finds hundreds
 // on an operator-heavy cluster; the rest stay in the kind inventory (Items(), and so
 // the picker, cluster search and pane memory) and reappear in the pane under an
 // explicit `/` query, with a trailing row reporting how many are held back (D288). Between the cluster-scoped section
@@ -148,7 +148,7 @@ type Item struct {
 	// matched to a discovered twin, or one it appended. A pinned row that is also
 	// discovered survives its unpin as a plain discovered row (CRD-PIN-03).
 	Discovered bool
-	// Authored marks a row a hand-written menus/<context>.yaml entry put there
+	// Authored marks a row a hand-written `menu` entry in config.kdl put there
 	// (AddExtras). Like Pinned it is provenance, not display — but it is the other
 	// half of the answer to "did the user ask for this row?", which is what decides
 	// whether a Custom Resources row is listed at all (STORY-06l/D288).
@@ -156,7 +156,7 @@ type Item struct {
 }
 
 // hiddenByDefault reports whether the row is a custom resource the user has not
-// asked for: a Custom Resources row that neither a menus/<context>.yaml entry nor a
+// asked for: a Custom Resources row that neither an authored `menu` entry nor a
 // pin accounts for. Discovery finds hundreds of these on an operator-heavy cluster
 // and listing them all is what made the pane a thing to scroll past rather than read
 // (STORY-06l/D288), so the pane leaves them out until a pin opts one in. They stay in

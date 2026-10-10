@@ -1720,6 +1720,8 @@ whole, so one person's two tools read one grammar.
      `config.kdl` key by key. A write changes one node and keeps the rest.
    - `state/<context>.kdl` — per-context runtime state (D90 stands: kubecom
      rewrites it freely).
+   `--config-dir` replaces `--config`: the unit is the directory, because
+   the overlay sits beside `config.kdl`.
 2. **The grammar is plexos's:** a key is a dotted path through nodes
    (`theme "monokai"`); a value is a node with one argument; a group has
    children; a list is `-` items carrying properties. Two **documents** are

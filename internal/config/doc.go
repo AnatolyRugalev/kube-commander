@@ -1,14 +1,18 @@
-// Package config defines kubecom's plain-YAML user configuration and resolves it
-// against the built-in defaults. It wires the `keys:` section (M2-01c) —
-// action→bindings overrides merged onto the vim-first keymap (D10/D11) — via
-// Config.Keymap, and the per-context resource-menu customization (MenuConfig, a
-// separate file per kubeconfig context; see menu.go) that lets a user surface
-// CRDs and other resource types the built-in menu doesn't seed (feedback
-// 2026-07-21-02). Both loaders reject unknown fields so a typo surfaces as an
-// error rather than a silent no-op. The one-shot migration from the legacy
-// ~/.kubecom.yaml (D6) is provided by Migrate (see migrate.go): it recognises the
-// old protobuf-yaml file, carries the `currentTheme` selection onto `theme:` where
-// v1 still ships that palette (M5-04), and reports the rest — the menu, and any
-// hand-authored theme palette — as content with no automatic home in v1. The
-// launcher wiring that runs it on first start is cmd/kubecom's maybeMigrate.
+// Package config reads kubecom's configuration: an authored KDL file with a
+// kubecom-written overlay merged on top, and per-context runtime state (D302).
+//
+// Three files live in the config directory (Dir), each starting `version 1`:
+//
+//   - config.kdl is the person's. kubecom reads it and never writes it, so its
+//     comments, order and layout are theirs.
+//   - config.overlay.kdl is kubecom's: every Set writes through to it at once (the
+//     theme picker), and it is read merged on top of config.kdl key by key.
+//   - state/<context>.kdl is per-context runtime state (State): the last
+//     namespace, kind, sort and drill-in, and the pinned kinds (D90).
+//
+// A setting is a node with one value (`theme "monokai"`); a dotted key is a path
+// through nodes. Two top-level nodes are documents, handed to their readers whole:
+// `keymap { … }` (the key bindings, D303), which the overlay may hold too, and
+// `menu ["<context>"] { resource … }` (extra kinds for a context's menu, Menu).
+// The one-shot migration from the 2020 ~/.kubecom.yaml (D6) is Migrate.
 package config

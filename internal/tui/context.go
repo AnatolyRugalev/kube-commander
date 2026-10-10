@@ -52,7 +52,7 @@ func WithClusterConnector(c ClusterConnector) Option {
 // of a context kubecom has never recorded anything for: the built-in default menu,
 // all namespaces, no persistence.
 type ContextState struct {
-	// MenuExtras are the context's `menus/<context>.yaml` additions (D83), folded
+	// MenuExtras are the context's config.kdl `menu` additions (D83, D302), folded
 	// into the rebuilt seed menu exactly as WithMenuExtras folds them in at launch.
 	MenuExtras []config.MenuResource
 	// Pinned are the kinds pinned on this context (State.PinnedResources, D193),
@@ -102,7 +102,7 @@ type ContextState struct {
 
 // ContextStateLoader resolves ContextState for a kubeconfig context (M4-05). It is
 // the seam that keeps the tui package context- and storage-agnostic: the launcher
-// alone knows where `menus/<context>.yaml` and the per-context state file live, so
+// alone knows where config.kdl and the per-context state file live, so
 // it alone can re-resolve them, exactly as it resolves them once at launch.
 //
 // Like ClusterConnector it is per-app state rather than a Cluster seam — it reads

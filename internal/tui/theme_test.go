@@ -336,7 +336,7 @@ func stripANSI(s string) string {
 
 // fakeThemePersister is a hermetic ThemePersister: it records the names it was asked
 // to write and can be made to fail. The real one (cmd/kubecom's configThemePersister)
-// rewrites config.yaml, so the seam is what keeps the write-back testable without
+// writes config.overlay.kdl, so the seam is what keeps the write-back testable without
 // touching the user's config (D18).
 type fakeThemePersister struct {
 	names []string

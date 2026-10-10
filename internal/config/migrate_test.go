@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -13,12 +12,12 @@ import (
 )
 
 func TestMigrateEmptyYieldsZeroConfigNoNotes(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader(""))
+	theme, notes, err := Migrate(strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("Migrate(empty): %v", err)
 	}
-	if cfg == nil || len(cfg.Keys) != 0 {
-		t.Errorf("cfg = %+v, want zero config", cfg)
+	if theme != "" {
+		t.Errorf("theme = %q, want none", theme)
 	}
 	if len(notes) != 0 {
 		t.Errorf("notes = %v, want none", notes)
@@ -26,12 +25,12 @@ func TestMigrateEmptyYieldsZeroConfigNoNotes(t *testing.T) {
 }
 
 func TestMigrateWhitespaceOnlyYieldsZeroConfig(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader("   \n\t\n"))
+	theme, notes, err := Migrate(strings.NewReader("   \n\t\n"))
 	if err != nil {
 		t.Fatalf("Migrate(whitespace): %v", err)
 	}
-	if cfg == nil || len(cfg.Keys) != 0 {
-		t.Errorf("cfg = %+v, want zero config", cfg)
+	if theme != "" {
+		t.Errorf("theme = %q, want none", theme)
 	}
 	if len(notes) != 0 {
 		t.Errorf("notes = %v, want none", notes)
@@ -44,18 +43,18 @@ func TestMigrateMenuReportsResources(t *testing.T) {
 		"  - namespaced: true\n    group: apps\n    kind: Deployment\n    title: Deployments\n" +
 		"  - kind: Node\n" + // no title → falls back to kind
 		"  - namespaced: true\n    kind: Service\n    title: Services\n"
-	cfg, notes, err := Migrate(strings.NewReader(legacy))
+	theme, notes, err := Migrate(strings.NewReader(legacy))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if len(cfg.Keys) != 0 {
-		t.Errorf("cfg carries no legacy fields; Keys = %v", cfg.Keys)
+	if theme != "" {
+		t.Errorf("a menu carried a theme: %q", theme)
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes = %v, want exactly the menu note", notes)
 	}
 	note := notes[0]
-	for _, want := range []string{"3 legacy menu resources", "Deployments", "Node", "Services", "per-context menu"} {
+	for _, want := range []string{"3 legacy menu resources", "Deployments", "Node", "Services", "`menu` entries in config.kdl"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("menu note %q missing %q", note, want)
 		}
@@ -73,15 +72,15 @@ func TestMigrateSingleMenuResourceIsSingular(t *testing.T) {
 }
 
 // TestMigrateCurrentThemeCarriedOnto proves the headline of M5-04: a 2020 user whose
-// currentTheme names a palette v1 still ships keeps it, on the new `theme:` field,
+// currentTheme names a palette v1 still ships keeps it, as the `theme` setting,
 // and is told so — the note must no longer claim the choice was dropped.
 func TestMigrateCurrentThemeCarriedOnto(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader("currentTheme: monokai\n"))
+	theme, notes, err := Migrate(strings.NewReader("currentTheme: monokai\n"))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if cfg.Theme != "monokai" {
-		t.Errorf("Theme = %q, want %q", cfg.Theme, "monokai")
+	if theme != "monokai" {
+		t.Errorf("Theme = %q, want %q", theme, "monokai")
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes = %v, want exactly the theme note", notes)
@@ -99,12 +98,12 @@ func TestMigrateCurrentThemeCarriedOnto(t *testing.T) {
 // TestMigrateCurrentThemeIsLenientOnCaseAndSpace pins the styles.ByName contract
 // through the migration path: the legacy value is hand-editable YAML.
 func TestMigrateCurrentThemeIsLenientOnCaseAndSpace(t *testing.T) {
-	cfg, _, err := Migrate(strings.NewReader("currentTheme: \"  MonoKai \"\n"))
+	theme, _, err := Migrate(strings.NewReader("currentTheme: \"  MonoKai \"\n"))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if cfg.Theme != "monokai" {
-		t.Errorf("Theme = %q, want %q (lenient on case/space)", cfg.Theme, "monokai")
+	if theme != "monokai" {
+		t.Errorf("Theme = %q, want %q (lenient on case/space)", theme, "monokai")
 	}
 }
 
@@ -112,12 +111,12 @@ func TestMigrateCurrentThemeIsLenientOnCaseAndSpace(t *testing.T) {
 // rename: the 2020 build's built-in was named `solarized` and v1 named the same
 // (dark) palette `solarized-dark`, so a plain ByName lookup would miss it.
 func TestMigrateLegacySolarizedAliasesToSolarizedDark(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader("currentTheme: solarized\n"))
+	theme, notes, err := Migrate(strings.NewReader("currentTheme: solarized\n"))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if cfg.Theme != "solarized-dark" {
-		t.Errorf("Theme = %q, want %q", cfg.Theme, "solarized-dark")
+	if theme != "solarized-dark" {
+		t.Errorf("Theme = %q, want %q", theme, "solarized-dark")
 	}
 	if len(notes) != 1 || !strings.Contains(notes[0], "solarized-dark") {
 		t.Fatalf("notes = %v, want the note naming the v1 theme", notes)
@@ -129,12 +128,12 @@ func TestMigrateLegacySolarizedAliasesToSolarizedDark(t *testing.T) {
 // name what does exist rather than guessing the closest palette (D169 pt 2).
 func TestMigrateUnportedLegacyThemeNamesTheBuiltins(t *testing.T) {
 	for _, name := range []string{"base16", "paraiso", "twilight"} {
-		cfg, notes, err := Migrate(strings.NewReader("currentTheme: " + name + "\n"))
+		theme, notes, err := Migrate(strings.NewReader("currentTheme: " + name + "\n"))
 		if err != nil {
 			t.Fatalf("Migrate(%s): %v", name, err)
 		}
-		if cfg.Theme != "" {
-			t.Errorf("Theme = %q for unported %q, want unset (the default)", cfg.Theme, name)
+		if theme != "" {
+			t.Errorf("Theme = %q for unported %q, want unset (the default)", theme, name)
 		}
 		if len(notes) != 1 {
 			t.Fatalf("notes = %v for %q, want exactly the theme note", notes, name)
@@ -156,15 +155,12 @@ func TestMigrateCustomPaletteReportedButNotMigrated(t *testing.T) {
 	legacy := "currentTheme: dark\n" +
 		"themes:\n  - name: dark\n    colors:\n      - name: bg\n        rgb: 002b36\n" +
 		"    styles:\n      - name: statusBar\n        bg: bg\n        fg: fg\n        attrs: [BOLD]\n"
-	cfg, notes, err := Migrate(strings.NewReader(legacy))
+	theme, notes, err := Migrate(strings.NewReader(legacy))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if len(cfg.Keys) != 0 {
-		t.Errorf("Keys = %v, want empty", cfg.Keys)
-	}
-	if cfg.Theme != "" {
-		t.Errorf("Theme = %q, want unset — `dark` is not a v1 built-in", cfg.Theme)
+	if theme != "" {
+		t.Errorf("Theme = %q, want unset — `dark` is not a v1 built-in", theme)
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes = %v, want exactly the theme note", notes)
@@ -181,12 +177,12 @@ func TestMigrateCustomPaletteReportedButNotMigrated(t *testing.T) {
 // selecting it means the *name* survives and the colors do not.
 func TestMigrateCarriedThemeStillReportsCustomPalettes(t *testing.T) {
 	legacy := "currentTheme: monokai\nthemes:\n  - name: monokai\n    colors:\n      - name: bg\n        xterm: 16\n"
-	cfg, notes, err := Migrate(strings.NewReader(legacy))
+	theme, notes, err := Migrate(strings.NewReader(legacy))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if cfg.Theme != "monokai" {
-		t.Errorf("Theme = %q, want %q", cfg.Theme, "monokai")
+	if theme != "monokai" {
+		t.Errorf("Theme = %q, want %q", theme, "monokai")
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes = %v, want exactly the theme note", notes)
@@ -200,12 +196,12 @@ func TestMigrateCarriedThemeStillReportsCustomPalettes(t *testing.T) {
 // `currentTheme`: the 2020 build defaulted that to base16, which v1 has no port of,
 // so the honest outcome is v1's own default plus a note about the definitions.
 func TestMigratePalettesWithoutSelectionReportsDefinitions(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader("themes:\n  - name: a\n  - name: b\n"))
+	theme, notes, err := Migrate(strings.NewReader("themes:\n  - name: a\n  - name: b\n"))
 	if err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	if cfg.Theme != "" {
-		t.Errorf("Theme = %q, want unset", cfg.Theme)
+	if theme != "" {
+		t.Errorf("Theme = %q, want unset", theme)
 	}
 	if len(notes) != 1 {
 		t.Fatalf("notes = %v, want exactly the theme note", notes)
@@ -394,15 +390,12 @@ func collectKeys(v interface{}, into map[string]bool) {
 // `solarized`, so this also exercises the D179 alias against a real file rather than
 // a one-line string.
 func TestMigrateSchemaFixtureCarriesThemeAndReportsMenu(t *testing.T) {
-	cfg, notes, err := Migrate(strings.NewReader(legacyFixture(t)))
+	theme, notes, err := Migrate(strings.NewReader(legacyFixture(t)))
 	if err != nil {
 		t.Fatalf("Migrate(fixture): %v", err)
 	}
-	if cfg.Theme != "solarized-dark" {
-		t.Errorf("Theme = %q, want %q", cfg.Theme, "solarized-dark")
-	}
-	if len(cfg.Keys) != 0 {
-		t.Errorf("Keys = %v, want empty — the legacy format had no keybindings", cfg.Keys)
+	if theme != "solarized-dark" {
+		t.Errorf("Theme = %q, want %q", theme, "solarized-dark")
 	}
 	if len(notes) != 2 {
 		t.Fatalf("notes = %v, want two (menu + theme)", notes)
@@ -451,8 +444,8 @@ func TestMigrateSchemaFixtureIgnoresThePaletteTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migrate(fixture without palettes): %v", err)
 	}
-	if !reflect.DeepEqual(withPalette, withoutPalette) {
-		t.Errorf("palette tree changed the migrated config: %+v vs %+v", *withPalette, *withoutPalette)
+	if withPalette != withoutPalette {
+		t.Errorf("palette tree changed the migrated theme: %q vs %q", withPalette, withoutPalette)
 	}
 	if len(notesFull) != len(notesStripped) {
 		t.Fatalf("notes count differs: %v vs %v", notesFull, notesStripped)
@@ -485,12 +478,12 @@ func TestMigrateSchemaFixtureThemeMapping(t *testing.T) {
 		if src == full && tc.legacy != "solarized" {
 			t.Fatalf("could not substitute currentTheme for %q — the fixture's shape moved", tc.legacy)
 		}
-		cfg, notes, err := Migrate(strings.NewReader(src))
+		theme, notes, err := Migrate(strings.NewReader(src))
 		if err != nil {
 			t.Fatalf("Migrate(%s): %v", tc.legacy, err)
 		}
-		if cfg.Theme != tc.want {
-			t.Errorf("currentTheme %q → Theme %q, want %q", tc.legacy, cfg.Theme, tc.want)
+		if theme != tc.want {
+			t.Errorf("currentTheme %q → Theme %q, want %q", tc.legacy, theme, tc.want)
 		}
 		if len(notes) != 2 {
 			t.Fatalf("notes for %q = %v, want two", tc.legacy, notes)

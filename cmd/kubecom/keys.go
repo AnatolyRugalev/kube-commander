@@ -28,27 +28,18 @@ after merging your config's keys: section onto the vim-first defaults, plus any
 warnings from that merge. Disabled actions are shown as "(disabled)".`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			path := configPath
-			if path == "" {
-				p, err := config.Path()
-				if err != nil {
-					return err
-				}
-				path = p
-			}
-			cfg, err := config.LoadFile(path)
+			dir, err := configDir(configPath)
 			if err != nil {
 				return err
 			}
-			km, warnings, err := cfg.Keymap()
-			if err != nil {
+			if _, err := config.Load(dir); err != nil {
 				return err
 			}
-			return printKeys(cmd.OutOrStdout(), cmd.ErrOrStderr(), km, warnings)
+			return printKeys(cmd.OutOrStdout(), cmd.ErrOrStderr(), keymap.DefaultKeymap(), nil)
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", "",
-		"config file to resolve (default: user config dir /kubecom/config.yaml)")
+	cmd.Flags().StringVar(&configPath, "config-dir", "",
+		"directory holding config.kdl (default: user config dir /kubecom)")
 	cmd.AddCommand(newKeysAnalyzeCmd())
 	return cmd
 }
@@ -76,22 +67,14 @@ but never finished. Run it on a trace walked against the story cluster:
     kubecom keys analyze ~/traces/s02.jsonl`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := configPath
-			if path == "" {
-				p, err := config.Path()
-				if err != nil {
-					return err
-				}
-				path = p
-			}
-			cfg, err := config.LoadFile(path)
+			dir, err := configDir(configPath)
 			if err != nil {
 				return err
 			}
-			km, _, err := cfg.Keymap()
-			if err != nil {
+			if _, err := config.Load(dir); err != nil {
 				return err
 			}
+			km := keymap.DefaultKeymap()
 			records, err := keylog.Read(args[0])
 			if err != nil {
 				return err
@@ -100,8 +83,8 @@ but never finished. Run it on a trace walked against the story cluster:
 			return printAnalyze(cmd.OutOrStdout(), args[0], rep)
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", "",
-		"config file to resolve sequences against (default: user config dir /kubecom/config.yaml)")
+	cmd.Flags().StringVar(&configPath, "config-dir", "",
+		"directory holding config.kdl to resolve sequences against (default: user config dir /kubecom)")
 	return cmd
 }
 

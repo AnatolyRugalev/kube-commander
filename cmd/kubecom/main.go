@@ -59,8 +59,8 @@ kubeconfig, context, and namespace are selectable with the flags below. The
 		"kubeconfig context to use (default: the file's current-context)")
 	f.StringVarP(&opts.namespace, "namespace", "n", "",
 		"namespace to scope the initial view to (default: all namespaces)")
-	f.StringVar(&opts.configPath, "config", "",
-		"kubecom config file to load (default: user config dir /kubecom/config.yaml)")
+	f.StringVar(&opts.configDir, "config-dir", "",
+		"directory holding config.kdl and config.overlay.kdl (default: user config dir /kubecom)")
 	f.StringVar(&opts.keyLog, "keylog", "",
 		"append a JSONL trace of every keypress and the action it resolved to (default: off)")
 	root.AddCommand(newVersionCmd())

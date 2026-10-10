@@ -70,9 +70,9 @@ func (m *Model) applyStyles(s styles.Styles) {
 //
 // It takes a *name*, not a Theme: the config carries the name and the launcher
 // resolves it (D170 pt 1), so a palette never crosses this boundary. Implementations
-// are called off the update loop (they read and rewrite a file) and must preserve the
-// rest of the config — the whole struct is marshalled on save, so a write that does
-// not load first deletes the user's `keys:` section.
+// are called off the update loop (they read and write a file) and must preserve the
+// rest of the config: the launcher's writes the overlay only, never config.kdl, and
+// reads it first so another write is not reverted (D302).
 //
 // A model built without one (the default, and every hermetic test) is
 // persistence-inert: a picked theme applies for the session but is not remembered.

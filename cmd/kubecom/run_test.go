@@ -10,85 +10,90 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
-// writeMenuFile points the user config dir at a temp dir and writes body to the
-// per-context menu file for context, returning its path. It uses config.MenuPath
-// so the test exercises the real path resolution the launcher uses.
-func writeMenuFile(t *testing.T, context, body string) {
+// writeConfig points the user config dir at a temp dir and writes body as its
+// config.kdl, returning the kubecom config dir the launcher resolves.
+func writeConfig(t *testing.T, body string) string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	path, err := config.MenuPath(context)
+	dir, err := config.Dir()
 	if err != nil {
-		t.Fatalf("MenuPath(%q): %v", context, err)
+		t.Fatalf("config.Dir: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir menus dir: %v", err)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatalf("write menu file: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, config.AuthoredName), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config.kdl: %v", err)
 	}
+	return dir
 }
 
-// TestLoadMenuExtrasBlankContext proves an unresolved context yields no extras and
-// no error — the launcher must not block when it cannot name a context (principle 3).
-func TestLoadMenuExtrasBlankContext(t *testing.T) {
-	extras, err := loadMenuExtras("  ")
-	if err != nil {
-		t.Fatalf("blank context should not error, got %v", err)
-	}
-	if extras != nil {
-		t.Fatalf("blank context should yield no extras, got %v", extras)
-	}
-}
-
-// TestLoadMenuExtrasMissingFile proves a context with no menu file degrades to the
+// TestLoadMenuExtrasMissingConfig proves a context with no config degrades to the
 // default menu: no extras, no error (the common case).
-func TestLoadMenuExtrasMissingFile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	extras, err := loadMenuExtras("no-such-context")
+func TestLoadMenuExtrasMissingConfig(t *testing.T) {
+	extras, err := loadMenuExtras(t.TempDir(), "no-such-context")
 	if err != nil {
-		t.Fatalf("missing menu file should not error, got %v", err)
+		t.Fatalf("a missing config should not error, got %v", err)
 	}
 	if len(extras) != 0 {
-		t.Fatalf("missing menu file should yield no extras, got %v", extras)
+		t.Fatalf("a missing config should yield no extras, got %v", extras)
 	}
 }
 
-// TestLoadMenuExtrasReadsFile proves a valid per-context menu file's entries are
-// returned to the launcher (which feeds them to the menu via WithMenuExtras).
-func TestLoadMenuExtrasReadsFile(t *testing.T) {
-	const ctx = "prod"
-	writeMenuFile(t, ctx, `resources:
-  - group: cert-manager.io
-    version: v1
-    resource: certificates
-    kind: Certificate
-    namespaced: true
+// TestLoadMenuExtrasReadsTheContextsMenu proves config.kdl's `menu` entries for the
+// context — those for every context first — reach the launcher (which feeds them to
+// the menu via WithMenuExtras).
+func TestLoadMenuExtrasReadsTheContextsMenu(t *testing.T) {
+	dir := writeConfig(t, `version 1
+menu "prod" {
+    resource "certificates" group="cert-manager.io" version="v1" kind="Certificate" namespaced=#true
+}
+menu "dev" {
+    resource "widgets" group="example.com" version="v1"
+}
 `)
-	extras, err := loadMenuExtras(ctx)
+	extras, err := loadMenuExtras(dir, "prod")
 	if err != nil {
-		t.Fatalf("valid menu file should load, got %v", err)
+		t.Fatalf("a valid config should load, got %v", err)
 	}
-	if len(extras) != 1 {
-		t.Fatalf("expected 1 extra resource, got %d", len(extras))
-	}
-	got := extras[0]
 	want := config.MenuResource{
 		Group: "cert-manager.io", Version: "v1", Resource: "certificates",
 		Kind: "Certificate", Namespaced: true,
 	}
-	if got != want {
-		t.Fatalf("extra = %+v, want %+v", got, want)
+	if len(extras) != 1 || extras[0] != want {
+		t.Fatalf("extras = %+v, want [%+v]", extras, want)
 	}
 }
 
-// TestLoadMenuExtrasMalformedFile proves a malformed/unreadable menu file returns
-// an error (the launcher turns it into a startup toast) rather than silently
-// dropping — but never a fatal launch failure (the caller degrades to the default
-// menu). Here an unknown field trips the strict decoder.
-func TestLoadMenuExtrasMalformedFile(t *testing.T) {
-	writeMenuFile(t, "broken", "resources:\n  - bogusField: nope\n")
-	if _, err := loadMenuExtras("broken"); err == nil {
-		t.Fatal("a malformed menu file should return an error to surface as a toast")
+// TestLoadMenuExtrasMalformedConfig proves a config edited into an error returns it
+// (the switch logs it and degrades to the default menu) rather than silently
+// dropping the entries.
+func TestLoadMenuExtrasMalformedConfig(t *testing.T) {
+	dir := writeConfig(t, "version 1\nmenu { resource \"certificates\"; }\n")
+	if _, err := loadMenuExtras(dir, "prod"); err == nil || !strings.Contains(err.Error(), "version is required") {
+		t.Fatalf("a malformed config should return its error, got %v", err)
+	}
+}
+
+// TestRetiredNoticeNamesTheYAML proves a config.yaml this kubecom no longer reads
+// says so at start (D302 pt 3) until config.kdl exists.
+func TestRetiredNoticeNamesTheYAML(t *testing.T) {
+	dir := t.TempDir()
+	if n := retiredNotice(dir); n != nil {
+		t.Fatalf("no YAML, yet a notice: %+v", n)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("theme: monokai\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	n := retiredNotice(dir)
+	if n == nil || !strings.Contains(n.Message(), "config.yaml is no longer read") || !strings.Contains(n.Message(), "config.kdl") {
+		t.Fatalf("notice = %+v", n)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.AuthoredName), []byte("version 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if n := retiredNotice(dir); n != nil {
+		t.Fatalf("config.kdl exists, yet a notice: %+v", n)
 	}
 }
 
@@ -127,12 +132,12 @@ func writeLegacyConfig(t *testing.T, body string) {
 // performs no migration and writes no config: nothing to migrate is the common case.
 func TestMaybeMigrateNoLegacyFile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // an empty home: no legacy file present.
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	if toast := maybeMigrate(cfgPath); toast != nil {
+	dir := t.TempDir()
+	if toast := maybeMigrate(dir); toast != nil {
 		t.Fatalf("no legacy file should migrate nothing, got toast %+v", toast)
 	}
-	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
-		t.Fatalf("no legacy file should write no config; stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); !os.IsNotExist(err) {
+		t.Fatalf("no legacy file should write no overlay; stat err = %v", err)
 	}
 }
 
@@ -141,19 +146,16 @@ func TestMaybeMigrateNoLegacyFile(t *testing.T) {
 // is not overwritten, even though a legacy file exists.
 func TestMaybeMigrateExistingConfigSuppresses(t *testing.T) {
 	writeLegacyConfig(t, "menu:\n  - kind: Certificate\n")
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("keys:\n  app.quit: [x]\n"), 0o600); err != nil {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, config.AuthoredName)
+	if err := os.WriteFile(cfgPath, []byte("version 1\ntheme \"monokai\"\n"), 0o600); err != nil {
 		t.Fatalf("seed existing config: %v", err)
 	}
-	if toast := maybeMigrate(cfgPath); toast != nil {
+	if toast := maybeMigrate(dir); toast != nil {
 		t.Fatalf("existing config should suppress migration, got toast %+v", toast)
 	}
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if !strings.Contains(string(data), "app.quit") {
-		t.Fatalf("existing config must not be overwritten, got %q", string(data))
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); !os.IsNotExist(err) {
+		t.Fatalf("an existing config.kdl must suppress the overlay write; stat err = %v", err)
 	}
 }
 
@@ -162,16 +164,16 @@ func TestMaybeMigrateExistingConfigSuppresses(t *testing.T) {
 // the notes are surfaced as a startup toast.
 func TestMaybeMigrateReportsNotes(t *testing.T) {
 	writeLegacyConfig(t, "menu:\n  - kind: Certificate\ncurrentTheme: dark\n")
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	toast := maybeMigrate(cfgPath)
+	dir := t.TempDir()
+	toast := maybeMigrate(dir)
 	if toast == nil {
 		t.Fatal("a legacy file with menu/theme content should surface migration notes")
 	}
 	if msg := toast.Message(); !strings.Contains(msg, "menu") || !strings.Contains(msg, "theme") {
 		t.Fatalf("toast should report the un-migratable menu and theme, got %q", msg)
 	}
-	if _, err := os.Stat(cfgPath); err != nil {
-		t.Fatalf("migration should write the new config once, stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); err != nil {
+		t.Fatalf("migration should write the overlay once, stat err = %v", err)
 	}
 }
 
@@ -182,31 +184,27 @@ func TestMaybeMigrateReportsNotes(t *testing.T) {
 // this fails if either the alias or the write-back regresses.
 func TestMaybeMigrateCarriesThemeIntoTheWrittenConfig(t *testing.T) {
 	writeLegacyConfig(t, "currentTheme: solarized\n")
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	toast := maybeMigrate(cfgPath)
+	dir := t.TempDir()
+	toast := maybeMigrate(dir)
 	if toast == nil {
 		t.Fatal("a carried-over theme should still be reported so the user knows")
 	}
 	if msg := toast.Message(); !strings.Contains(msg, "solarized-dark") {
 		t.Errorf("toast %q should name the v1 theme the choice became", msg)
 	}
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read migrated config: %v", err)
-	}
-	if !strings.Contains(string(data), "theme: solarized-dark") {
-		t.Fatalf("migrated config must persist the theme, got %q", string(data))
+	if _, err := os.Stat(filepath.Join(dir, config.AuthoredName)); !os.IsNotExist(err) {
+		t.Fatalf("migration must not write config.kdl, the person's file; stat err = %v", err)
 	}
 	// And the persisted name must resolve on the launcher's own path, not just look
-	// right in YAML: a value the config writes but resolveTheme rejects would
+	// right in the file: a value the overlay holds but resolveTheme rejects would
 	// silently launch on the default and warn.
-	cfg, err := config.LoadFile(cfgPath)
+	cfg, err := config.Load(dir)
 	if err != nil {
-		t.Fatalf("LoadFile(migrated): %v", err)
+		t.Fatalf("Load(migrated): %v", err)
 	}
-	theme, err := resolveTheme(cfg.Theme)
+	theme, err := resolveTheme(cfg.Theme())
 	if err != nil {
-		t.Fatalf("resolveTheme(%q) after migration: %v", cfg.Theme, err)
+		t.Fatalf("resolveTheme(%q) after migration: %v", cfg.Theme(), err)
 	}
 	if theme.Name != "solarized-dark" {
 		t.Errorf("resolved theme = %q, want %q", theme.Name, "solarized-dark")
@@ -228,9 +226,9 @@ func TestMaybeMigrateOverTheSchemaDerivedLegacyFile(t *testing.T) {
 		t.Fatalf("read legacy fixture: %v", err)
 	}
 	writeLegacyConfig(t, string(fixture))
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	dir := t.TempDir()
 
-	toast := maybeMigrate(cfgPath)
+	toast := maybeMigrate(dir)
 	if toast == nil {
 		t.Fatal("a real legacy file with a menu and a theme must report what it could not carry")
 	}
@@ -241,13 +239,13 @@ func TestMaybeMigrateOverTheSchemaDerivedLegacyFile(t *testing.T) {
 		}
 	}
 
-	cfg, err := config.LoadFile(cfgPath)
+	cfg, err := config.Load(dir)
 	if err != nil {
-		t.Fatalf("LoadFile(migrated): %v", err)
+		t.Fatalf("Load(migrated): %v", err)
 	}
-	theme, err := resolveTheme(cfg.Theme)
+	theme, err := resolveTheme(cfg.Theme())
 	if err != nil {
-		t.Fatalf("resolveTheme(%q) after migrating a real legacy file: %v", cfg.Theme, err)
+		t.Fatalf("resolveTheme(%q) after migrating a real legacy file: %v", cfg.Theme(), err)
 	}
 	if theme.Name != "solarized-dark" {
 		t.Errorf("resolved theme = %q, want %q — the 2020 `solarized` selection", theme.Name, "solarized-dark")
@@ -259,12 +257,15 @@ func TestMaybeMigrateOverTheSchemaDerivedLegacyFile(t *testing.T) {
 // nothing to report.
 func TestMaybeMigrateEmptyLegacyNoNotes(t *testing.T) {
 	writeLegacyConfig(t, "")
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	if toast := maybeMigrate(cfgPath); toast != nil {
+	dir := t.TempDir()
+	if toast := maybeMigrate(dir); toast != nil {
 		t.Fatalf("an empty legacy file has nothing to report, got toast %+v", toast)
 	}
-	if _, err := os.Stat(cfgPath); err != nil {
-		t.Fatalf("migration should still write the new config to be one-shot, stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); err != nil {
+		t.Fatalf("migration should still write the overlay to be one-shot, stat err = %v", err)
+	}
+	if toast := maybeMigrate(dir); toast != nil {
+		t.Fatalf("a second start migrated again: %+v", toast)
 	}
 }
 
@@ -273,12 +274,12 @@ func TestMaybeMigrateEmptyLegacyNoNotes(t *testing.T) {
 // — it never blocks launch (D92).
 func TestMaybeMigrateMalformedLegacyDegrades(t *testing.T) {
 	writeLegacyConfig(t, "menu: [oops\n")
-	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	if toast := maybeMigrate(cfgPath); toast != nil {
+	dir := t.TempDir()
+	if toast := maybeMigrate(dir); toast != nil {
 		t.Fatalf("a malformed legacy file should not surface a toast, got %+v", toast)
 	}
-	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
-		t.Fatalf("a malformed legacy file must write no config; stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); !os.IsNotExist(err) {
+		t.Fatalf("a malformed legacy file must write no overlay; stat err = %v", err)
 	}
 }
 
@@ -387,7 +388,7 @@ func TestLoadStateMissingFile(t *testing.T) {
 // context (the restore path).
 func TestLoadStateReadsFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	writeStateFile(t, "prod", "lastNamespace: kube-system\n")
+	writeStateFile(t, "prod", "version 1\nnamespace \"kube-system\"\n")
 	state, path := loadState("prod")
 	if state.LastNamespace != "kube-system" {
 		t.Fatalf("loaded LastNamespace = %q, want kube-system", state.LastNamespace)
@@ -547,9 +548,9 @@ func TestPersistResourceCarriesTheDrillOwner(t *testing.T) {
 // restore would fire against the wrong cluster.
 func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	writeStateFile(t, "prod", "lastNamespace: apps\nlastResource:\n  group: example.com\n  version: v1\n  resource: widgets\n  kind: Widget\n")
+	writeStateFile(t, "prod", "version 1\nnamespace \"apps\"\nresource \"widgets\" group=\"example.com\" version=\"v1\" kind=\"Widget\"\n")
 
-	st := contextStateLoader{}.LoadContextState("prod")
+	st := contextStateLoader{dir: t.TempDir()}.LoadContextState("prod")
 	if st.LastResource == nil || st.LastResource.Resource != "widgets" {
 		t.Fatalf("LastResource = %+v, want the widgets entry", st.LastResource)
 	}
@@ -558,7 +559,7 @@ func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
 	}
 
 	// A context with no state file arms nothing and still leaves the writer usable.
-	st = contextStateLoader{}.LoadContextState("staging")
+	st = contextStateLoader{dir: t.TempDir()}.LoadContextState("staging")
 	if st.LastResource != nil {
 		t.Errorf("LastResource for an unrecorded context = %+v, want nil", st.LastResource)
 	}
@@ -570,9 +571,10 @@ func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
 // that was actually scoped to an owner.
 func TestLoadContextStateCarriesTheRememberedDrillOwner(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	writeStateFile(t, "prod", "lastNamespace: apps\nlastResource:\n  version: v1\n  resource: pods\n  kind: Pod\nlastDrillOwner:\n  resource:\n    group: apps\n    version: v1\n    resource: deployments\n    kind: Deployment\n  namespace: apps\n  name: web\n")
+	writeStateFile(t, "prod", "version 1\nnamespace \"apps\"\nresource \"pods\" version=\"v1\" kind=\"Pod\"\n"+
+		"drill-owner \"deployments\" group=\"apps\" version=\"v1\" kind=\"Deployment\" namespace=\"apps\" name=\"web\"\n")
 
-	st := contextStateLoader{}.LoadContextState("prod")
+	st := contextStateLoader{dir: t.TempDir()}.LoadContextState("prod")
 	if st.LastDrillOwner == nil || st.LastDrillOwner.Name != "web" {
 		t.Fatalf("LastDrillOwner = %+v, want the apps/web owner", st.LastDrillOwner)
 	}
@@ -584,75 +586,65 @@ func TestLoadContextStateCarriesTheRememberedDrillOwner(t *testing.T) {
 	}
 }
 
-// TestPersistThemeKeepsTheRestOfTheConfig is the leg's real risk (M4-12b-2): SaveFile
-// marshals the whole struct, so a write-back that does not load the file first deletes
-// everything else in it — a user's entire `keys:` section for the sake of one theme
-// name. The write must be load-modify-save.
-func TestPersistThemeKeepsTheRestOfTheConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("keys:\n  app.quit: [x]\ntheme: monokai\n"), 0o600); err != nil {
+// TestPersistThemeWritesTheOverlayOnly: a theme picked in the UI goes to the overlay
+// and never to config.kdl, which is the person's (D302 pt 1) — the old YAML
+// write-back reformatted their file and dropped its comments.
+func TestPersistThemeWritesTheOverlayOnly(t *testing.T) {
+	dir := t.TempDir()
+	authored := "version 1\n// my setup\ntheme \"monokai\"\nkeymap {\n    bind \"x\" \"app.quit\"\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, config.AuthoredName), []byte(authored), 0o600); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	p := &configThemePersister{path: path}
+	p := &configThemePersister{dir: dir}
 	if err := p.PersistTheme("solarized-dark"); err != nil {
 		t.Fatalf("PersistTheme: %v", err)
 	}
-	cfg, err := config.LoadFile(path)
+	if got, _ := os.ReadFile(filepath.Join(dir, config.AuthoredName)); string(got) != authored {
+		t.Errorf("config.kdl was rewritten:\n%s", got)
+	}
+	cfg, err := config.Load(dir)
 	if err != nil {
 		t.Fatalf("re-read config: %v", err)
 	}
-	if cfg.Theme != "solarized-dark" {
-		t.Errorf("theme = %q, want solarized-dark", cfg.Theme)
-	}
-	if got := cfg.Keys["app.quit"]; len(got) != 1 || got[0] != "x" {
-		t.Errorf("the write-back dropped the user's keys section: %v", cfg.Keys)
+	if cfg.Theme() != "solarized-dark" {
+		t.Errorf("theme = %q, want solarized-dark", cfg.Theme())
 	}
 }
 
-// TestPersistThemeCreatesAMissingConfig: the common case is a user with no config file
-// at all (kubecom runs entirely on defaults), so the first theme pick has to *create*
-// it rather than fail — LoadFile treats a missing file as the zero config and SaveFile
-// creates the directory.
+// TestPersistThemeCreatesAMissingConfig: the common case is a user with no config at
+// all (kubecom runs entirely on defaults), so the first theme pick has to *create*
+// the overlay rather than fail.
 func TestPersistThemeCreatesAMissingConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sub", "config.yaml")
-	p := &configThemePersister{path: path}
+	dir := filepath.Join(t.TempDir(), "sub")
+	p := &configThemePersister{dir: dir}
 	if err := p.PersistTheme("monokai"); err != nil {
 		t.Fatalf("PersistTheme: %v", err)
 	}
-	cfg, err := config.LoadFile(path)
+	cfg, err := config.Load(dir)
 	if err != nil {
 		t.Fatalf("re-read config: %v", err)
 	}
-	if cfg.Theme != "monokai" {
-		t.Errorf("theme = %q, want monokai", cfg.Theme)
-	}
 	// It round-trips through resolveTheme, which is the whole point of writing it.
-	theme, err := resolveTheme(cfg.Theme)
+	theme, err := resolveTheme(cfg.Theme())
 	if err != nil || theme.Name != "monokai" {
 		t.Errorf("resolveTheme(persisted) = %q, %v; want monokai, nil", theme.Name, err)
 	}
 }
 
-// TestPersistThemeRefusesToClobberAnUnparseableConfig: if the file became invalid
-// while kubecom was running, writing would replace it with defaults — losing a
-// hand-written keymap to save a color choice. The write fails instead; the shell
-// toasts it and keeps the theme for the session (principle 3).
-func TestPersistThemeRefusesToClobberAnUnparseableConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	body := "keys: [oops\n"
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+// TestPersistThemeRefusesAnUnreadableConfig: if config.kdl became invalid while
+// kubecom was running, the write fails and says where; the shell toasts it and keeps
+// the theme for the session (principle 3).
+func TestPersistThemeRefusesAnUnreadableConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, config.AuthoredName), []byte("version 1\ncolour \"red\"\n"), 0o600); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	p := &configThemePersister{path: path}
-	if err := p.PersistTheme("monokai"); err == nil {
-		t.Error("an unparseable config should fail the write rather than be overwritten")
+	p := &configThemePersister{dir: dir}
+	if err := p.PersistTheme("monokai"); err == nil || !strings.Contains(err.Error(), "colour is not a setting") {
+		t.Errorf("an unreadable config should fail the write with its reason, got %v", err)
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if string(data) != body {
-		t.Errorf("the config was rewritten: %q", string(data))
+	if _, err := os.Stat(filepath.Join(dir, config.OverlayName)); !os.IsNotExist(err) {
+		t.Errorf("an overlay was written beside an unreadable config; stat err = %v", err)
 	}
 }
 
@@ -663,20 +655,16 @@ func TestPersistThemeRefusesToClobberAnUnparseableConfig(t *testing.T) {
 // silently miss if only launch carried it.
 func TestLoadContextStateCarriesBothListsForTheSwitchedContext(t *testing.T) {
 	const ctx = "staging"
-	writeMenuFile(t, ctx, `resources:
-  - group: cert-manager.io
-    version: v1
-    resource: certificates
+	dir := writeConfig(t, `version 1
+menu "staging" {
+    resource "certificates" group="cert-manager.io" version="v1"
+}
 `)
-	writeStateFile(t, ctx, `lastNamespace: apps
-pinnedResources:
-  - group: hub.traefik.io
-    version: v1alpha1
-    resource: aigateways
-    kind: AIGateway
-    namespaced: true
+	writeStateFile(t, ctx, `version 1
+namespace "apps"
+pin "aigateways" group="hub.traefik.io" version="v1alpha1" kind="AIGateway" namespaced=#true
 `)
-	st := contextStateLoader{}.LoadContextState(ctx)
+	st := contextStateLoader{dir: dir}.LoadContextState(ctx)
 	if st.Namespace != "apps" {
 		t.Errorf("Namespace = %q, want apps", st.Namespace)
 	}

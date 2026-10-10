@@ -554,20 +554,23 @@ this is here for context only — do not resurrect the workflow steps on its str
 - **teatest** for TUI model tests.
 
 ## Config
-- Plain typed struct → YAML at **`os.UserConfigDir()/kubecom/config.yaml`**
-  (D20) — `~/.config/kubecom/config.yaml` on Linux. Not under `~/.kube/`.
-  Migration shim reads the legacy protobuf-yaml file once.
-- Includes a **`keys:`** section (`action id → [keys]`) merged onto the default
-  keymap — the single source of key bindings. No key literal lives in view code
-  (see [D11](decisions.md#d11--fully-configurable-keybindings-zero-hard-coded-keys)
-  and [`keybindings.md`](keybindings.md)).
+- **KDL** (D302), plexos's model, read with `calico32/kdl-go` (KDL v2): an
+  authored **`config.kdl`** in `os.UserConfigDir()/kubecom` (D20) that kubecom
+  never writes, a **`config.overlay.kdl`** beside it that kubecom writes (the theme
+  picker) and reads on top, and **`state/<context>.kdl`** for per-context runtime
+  state (D90). Not under `~/.kube/`. A migration shim reads the 2020
+  protobuf-yaml file once and writes its theme to the overlay.
+- Settings are a registry (`config.Settings`, just `theme` today); an unknown key
+  is a load error at its line. Two documents are handed over whole: `keymap { }`
+  and `menu ["<context>"] { resource … }`.
 
 ## Keymap / input
-- **Action registry**: named `Action` ids; a default keymap (one data table)
-  expressing the vim-first scheme; `merge(default, config.Keys)` at load with
-  validation (unknown-action, collision, nav-shadow warning).
-- Views resolve `tea.KeyMsg → Action` via the keymap and switch on `Action`;
-  `bubbles/key.Binding`s and the help/keybindings doc are generated from it.
+- **Action registry** (`internal/tui/keymap`): named `Action` ids; views switch on
+  them, never on keys (D11).
+- **Bindings are a context keymap** (D303, `internal/keybind`, plexos's engine):
+  `default.kdl` (embedded) then the user's `keymap` documents, each `bind`,
+  `unbind`, `group` and `context "<cel>" { }` over the focus path; deepest context,
+  then layer, then line; a text field keeps its text keys.
 
 ## TUI rendering (lipgloss v2)
 - **Bordered `Style.Width`/`Height` include the border.** A `styles.Pane`/`PaneFocus`

@@ -82,7 +82,7 @@ const (
 	ActionContext Action = "ctx.switch"
 	// ActionTheme opens the color-theme switcher (M4-12b-2): a modal picker over the
 	// built-in palettes whose pick repaints the running shell (Model.applyStyles,
-	// D171) and is written back to config.yaml so the next launch opens on it. It is
+	// D171) and is written to config.overlay.kdl so the next launch opens on it. It is
 	// app-global like ctx.switch and ns.switch, and — unlike them — never inert: the
 	// themes it offers are compiled in, so it needs no cluster and no seam. Only the
 	// write-back needs one, and a missing persister costs the choice its persistence,
@@ -261,7 +261,7 @@ const (
 	// way to undo it is never a text editor. It reads the kind from the surface that
 	// has one — the highlighted menu row, or the kind the table is browsing — and is
 	// inert where neither names a kind, or with no pin persister wired. Only a kind
-	// *this* gesture pinned toggles off: a hand-written `menus/<context>.yaml` entry
+	// *this* gesture pinned toggles off: a hand-written `menu` entry in config.kdl
 	// declines with a notice naming the file (D193 pt 3). It is `menu.pin` rather
 	// than a `pin.*` id of its own because what it changes is the menu, and because
 	// the `?` overlay renders one column per action namespace — a namespace holding a

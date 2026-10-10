@@ -199,7 +199,7 @@ var paletteArgVerbs = map[keymap.Action]string{
 // Since PAL-08 each item also carries the action's **id** as its Name, drawn in a
 // column before the description (D237): "Switch namespace" alone never said what the
 // command was called, and the id is the name kubecom already uses for it everywhere
-// else — in `config.yaml`'s `keys:` map, in `docs/keybindings.md`, and in the `?`
+// else — in config.kdl's `keymap` bindings, in `docs/keybindings.md`, and in the `?`
 // overlay's own grouping. It is unique by construction, so it also gives the reader a
 // way to type at a verb precisely (`ns` finds ns.switch) that a description cannot.
 func paletteVerbItems() ([]picker.Item, map[string]keymap.Action) {

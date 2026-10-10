@@ -71,7 +71,7 @@ cluster-side component, no `kubectl`.
 
 ## What you can do
 
-Every key below is a default — all rebindable under `keys:` in the config. The
+Every key below is a default — all rebindable in the config's `keymap`, per context. The
 full list is generated in [`docs/keybindings.md`](docs/keybindings.md); `?` opens
 the help overlay, and `:` opens the command palette, which lists every app-wide
 verb and every action on the selected row.
@@ -161,17 +161,23 @@ once. Every error also lands in full in `~/.cache/kubecom/kubecom.log`.
 ## Configure
 
 kubecom needs no configuration. When you want some, it reads
-`~/.config/kubecom/config.yaml`:
+`~/.config/kubecom/config.kdl`, and never writes it:
 
-```yaml
-theme: catppuccin-mocha
-keys:
-  nav.down: ["j", "down"]
-  nav.up:   ["k", "up"]
+```kdl
+version 1
+theme "catppuccin-mocha"
+
+keymap {
+    bind "g p" "resources.switch" "pods"
+    context "cluster.context.startsWith('prod-')" {
+        unbind "D"  // no delete key on production
+    }
+}
 ```
 
-[`docs/configuration.md`](docs/configuration.md) covers the config file, themes,
-per-context menus, pinned kinds, and how much it remembers.
+[`docs/configuration.md`](docs/configuration.md) covers the config file, key
+bindings and their contexts, themes, per-context menus, pinned kinds, and how much
+it remembers.
 [`docs/keybindings.md`](docs/keybindings.md) is the generated key reference.
 
 ## Update

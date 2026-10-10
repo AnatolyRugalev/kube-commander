@@ -34,7 +34,7 @@ import (
 // show (so scrolling back has somewhere to go, and a grep over what just happened has a
 // corpus), and small enough that the open is bounded work regardless of the container's
 // age. It is deliberately not user-configurable yet — kubecom's config carries only
-// `keys:` today, and a knob nobody has asked to turn is not worth a config section.
+// a theme and key bindings today, and a knob nobody has asked to turn is not worth a config section.
 const defaultLogTail int64 = 1000
 
 // logRequest is everything one logs open is made of: the object whose logs are shown,

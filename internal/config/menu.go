@@ -1,181 +1,171 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 
-	"sigs.k8s.io/yaml"
+	kdl "github.com/calico32/kdl-go"
 )
 
-// MenuConfig is the per-context resource-menu customization: a dynamic set of
-// resource types to surface in the browse menu for one kubeconfig context
-// (feedback 2026-07-21-02). It lives in its **own per-context file**, separate
-// from the main config.yaml, because different clusters expose different CRDs —
-// keying the menu on the context keeps each cluster's menu relevant. A context
-// with no file falls back to the built-in default (seed + discovery) menu, so the
-// zero value is a valid config that adds nothing.
-//
-// This is the config layer only: it defines the schema, resolves the per-context
-// path, and loads/validates the file. Mapping entries into menu rows and merging
-// them with the seed/discovery set is a separate slice (config stays free of the
-// kube/menu packages so it has no import cycle and stays trivially testable).
-type MenuConfig struct {
-	// Resources are extra resource types to add to the menu beyond the built-in
-	// seed + discovery set. The primary use is naming CRDs the seed doesn't know
-	// (e.g. cert-manager Certificates, an Argo Rollout) so they appear in the menu
-	// for this context. Order is preserved; a merge slice decides placement.
-	Resources []MenuResource `json:"resources,omitempty"`
-}
-
-// MenuResource is one resource-type entry in a per-context menu file — the CRD
-// entry format. It names a Kubernetes kind by group/version/resource so the kube
-// layer can list/watch it generically, plus optional display hints. Example:
-//
-//	resources:
-//	  - group: cert-manager.io
-//	    version: v1
-//	    resource: certificates
-//	    kind: Certificate
-//	    namespaced: true
-//	    section: Custom Resources
+// MenuResource is one resource kind in a menu: the kind named by
+// group/version/resource so the kube layer can list and watch it generically,
+// plus optional display hints. It is the shape of a `menu` document's entries, of
+// a pin and of the kind the state file remembers (D193/D240).
 type MenuResource struct {
-	// Group is the API group ("" / omitted for the core group).
-	Group string `json:"group,omitempty"`
-	// Version is the API version (e.g. v1, v1beta1). Required.
-	Version string `json:"version"`
-	// Resource is the plural resource name used by the API (e.g. certificates).
-	// Required — it is what the dynamic client addresses.
-	Resource string `json:"resource"`
-	// Kind is the display/type kind (e.g. Certificate). Optional; when empty a
-	// merge slice derives a title from Resource.
-	Kind string `json:"kind,omitempty"`
-	// Namespaced marks the resource namespaced (vs cluster-scoped). Optional;
-	// defaults to false (cluster-scoped) so an omitted value is explicit.
-	Namespaced bool `json:"namespaced,omitempty"`
-	// Section is the menu group heading to place the entry under. Optional; a
-	// merge slice defaults it to the Custom Resources bucket.
-	Section string `json:"section,omitempty"`
-	// Title overrides the rendered row label. Optional; defaults to Kind.
-	Title string `json:"title,omitempty"`
+	// Group is the API group ("" for the core group).
+	Group string
+	// Version is the API version (v1, v1beta1). Required.
+	Version string
+	// Resource is the plural resource name the API uses (certificates). Required —
+	// it is what the dynamic client addresses.
+	Resource string
+	// Kind is the display/type kind (Certificate). Optional; a menu derives a title
+	// from Resource when it is empty.
+	Kind string
+	// Namespaced marks the resource namespaced; false is cluster-scoped.
+	Namespaced bool
+	// Section is the menu heading to place the entry under. Optional; the Custom
+	// Resources bucket by default.
+	Section string
+	// Title overrides the row's label. Optional; Kind by default.
+	Title string
 }
 
-// MenuDir returns the directory holding the per-context menu files:
-// os.UserConfigDir()/kubecom/menus — a subdirectory of the same kubecom config
-// dir as Path() (D20), kept as its own folder so the per-context files don't
-// clutter the top-level config dir.
-func MenuDir() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("config: locating user config dir: %w", err)
-	}
-	return filepath.Join(dir, "kubecom", "menus"), nil
-}
+// A resource is written as one node whose argument is the plural and whose
+// properties are the rest, in the authored menu and in the state file alike:
+//
+//	resource "certificates" group="cert-manager.io" version="v1" kind="Certificate" namespaced=#true
+var resourceProps = []string{"group", "version", "kind", "namespaced", "section", "title"}
 
-// MenuPath returns the menu-config file path for a kubeconfig context:
-// MenuDir()/<sanitized-context>.yaml. The context name is sanitized into a safe
-// single path segment (see menuFileName) — kubeconfig context names are arbitrary
-// strings that may contain path separators or other characters unsafe in a
-// filename. An empty context is an error: a per-context file cannot be resolved
-// without a context.
-func MenuPath(context string) (string, error) {
-	if strings.TrimSpace(context) == "" {
-		return "", errors.New("config: empty context; cannot resolve a per-context menu file")
+// readResource reads a resource node. extra names further string properties the
+// node may carry (a drill owner's namespace and name), returned by name.
+func readResource(n *kdl.Node, extra ...string) (MenuResource, map[string]string, error) {
+	var r MenuResource
+	fail := func(format string, args ...any) (MenuResource, map[string]string, error) {
+		return MenuResource{}, nil, fmt.Errorf("config: %s: %s: %s", n.Location(), n.Name(), fmt.Sprintf(format, args...))
 	}
-	dir, err := MenuDir()
-	if err != nil {
-		return "", err
+	if len(n.Arguments()) != 1 || n.Arg(0).Kind() != kdl.String {
+		return fail("takes the plural resource name (%s \"certificates\" …)", n.Name())
 	}
-	return filepath.Join(dir, menuFileName(context)), nil
-}
-
-// menuFileName maps a kubeconfig context name to a safe single-segment filename
-// ending in .yaml. Every character outside [A-Za-z0-9._-] is replaced with '_'
-// so path separators (GKE-style names, arbitrary user names) and other unsafe
-// characters can never escape MenuDir() or split the path. This is intentionally
-// lossy — two contexts differing only in sanitized characters collide onto one
-// file — which is the conservative tradeoff (safety over perfect fidelity) for
-// the rare arbitrary-character context; the common cases (k3d-foo, gke_p_z_c,
-// arn:aws:... becomes arn_aws_...) stay readable.
-func menuFileName(context string) string {
-	var b strings.Builder
-	b.Grow(len(context) + len(".yaml"))
-	for _, r := range context {
+	if len(n.Children().Nodes) > 0 {
+		return fail("takes no block")
+	}
+	r.Resource = n.Arg(0).String()
+	extras := map[string]string{}
+	for name, v := range n.Properties() {
 		switch {
-		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9',
-			r == '.', r == '_', r == '-':
-			b.WriteRune(r)
+		case name == "namespaced":
+			if v.Kind() != kdl.Bool {
+				return fail("namespaced is #true or #false")
+			}
+			r.Namespaced = v.Bool()
+			continue
+		case !slices.Contains(resourceProps, name) && !slices.Contains(extra, name):
+			return fail("has no property %q (%s)", name, strings.Join(append(slices.Clone(resourceProps), extra...), ", "))
+		case v.Kind() != kdl.String:
+			return fail("%s is a string", name)
+		}
+		switch s := v.String(); name {
+		case "group":
+			r.Group = s
+		case "version":
+			r.Version = s
+		case "kind":
+			r.Kind = s
+		case "section":
+			r.Section = s
+		case "title":
+			r.Title = s
 		default:
-			b.WriteRune('_')
+			extras[name] = s
 		}
 	}
-	b.WriteString(".yaml")
-	return b.String()
+	switch {
+	case strings.TrimSpace(r.Resource) == "":
+		return fail("the resource name is required")
+	case strings.TrimSpace(r.Version) == "":
+		return fail("version is required")
+	}
+	return r, extras, nil
 }
 
-// LoadMenu decodes a MenuConfig from r. Unknown fields are rejected (a typo fails
-// loudly instead of silently doing nothing), and every entry is validated
-// (version + resource required) so a malformed menu file surfaces an error rather
-// than a half-built row. Mirrors Load for the main config.
-func LoadMenu(r io.Reader) (*MenuConfig, error) {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("config: reading menu: %w", err)
-	}
-	return parseMenu(data)
-}
-
-// LoadMenuFile reads the per-context menu file at path. A missing file is not an
-// error: it returns the zero MenuConfig, since a context with no menu file falls
-// back to the default menu (principle 3 — a missing customization degrades to the
-// built-in, never blocks).
-func LoadMenuFile(path string) (*MenuConfig, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return &MenuConfig{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("config: reading menu %s: %w", path, err)
-	}
-	return parseMenu(data)
-}
-
-func parseMenu(data []byte) (*MenuConfig, error) {
-	var m MenuConfig
-	if len(data) > 0 {
-		if err := yaml.UnmarshalStrict(data, &m); err != nil {
-			return nil, fmt.Errorf("config: parsing menu YAML: %w", err)
+// resourceNode writes r as a node named name, empty hints left out.
+func resourceNode(name string, r MenuResource) *kdl.Node {
+	n := kdl.NewNode(name, kdl.NewString(r.Resource))
+	for _, p := range []struct{ key, value string }{{"group", r.Group}, {"version", r.Version}, {"kind", r.Kind}} {
+		if p.value != "" {
+			n.AddProperty(p.key, kdl.NewString(p.value))
 		}
 	}
-	if err := m.validate(); err != nil {
-		return nil, err
+	if r.Namespaced {
+		n.AddProperty("namespaced", kdl.NewBool(true))
 	}
-	return &m, nil
-}
-
-// validate rejects entries the kube layer could not address: version and resource
-// are the minimum needed to list/watch generically, so a missing one is a hard
-// error (loud, like UnmarshalStrict on an unknown field).
-func (m *MenuConfig) validate() error {
-	return validateMenuResources("menu resources", m.Resources)
-}
-
-// validateMenuResources is the shared check for every list of MenuResource,
-// wherever it was decoded from — the authored menus/<context>.yaml (MenuConfig) or
-// the pins kubecom records in the per-context state file (State.PinnedResources,
-// D193). field names the offending list in the error so the message says which file
-// to look at.
-func validateMenuResources(field string, rs []MenuResource) error {
-	for i, r := range rs {
-		if strings.TrimSpace(r.Version) == "" {
-			return fmt.Errorf("config: %s[%d]: version is required", field, i)
-		}
-		if strings.TrimSpace(r.Resource) == "" {
-			return fmt.Errorf("config: %s[%d]: resource is required", field, i)
+	for _, p := range []struct{ key, value string }{{"section", r.Section}, {"title", r.Title}} {
+		if p.value != "" {
+			n.AddProperty(p.key, kdl.NewString(p.value))
 		}
 	}
-	return nil
+	return n
+}
+
+// menu is one `menu` document, read: the context it is for ("" with all set: every
+// context) and its entries.
+type menu struct {
+	context   string
+	all       bool
+	resources []MenuResource
+}
+
+// readMenus reads the authored file's `menu` documents: `menu { … }` for every
+// context, `menu "<context>" { … }` for one, each a list of `resource` nodes.
+func (c *Config) readMenus() ([]menu, error) {
+	out := make([]menu, 0, len(c.menus))
+	for _, n := range c.menus {
+		var m menu
+		switch args := n.Arguments(); {
+		case len(n.Properties()) > 0 || len(args) > 1 || (len(args) == 1 && args[0].Kind() != kdl.String):
+			return nil, fmt.Errorf("config: %s: menu takes a context name, or none for every context, and a block", n.Location())
+		case len(args) == 1:
+			m.context = args[0].String()
+		default:
+			m.all = true
+		}
+		for _, rn := range n.Children().Nodes {
+			if rn.Name() != "resource" {
+				return nil, fmt.Errorf("config: %s: a menu holds `resource` nodes, not %q", rn.Location(), rn.Name())
+			}
+			r, _, err := readResource(rn)
+			if err != nil {
+				return nil, err
+			}
+			m.resources = append(m.resources, r)
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// Menu is the extra resource kinds the authored file adds to context's menu: the
+// entries of every `menu` with no context, then those of `menu "<context>"`, each
+// in file order. Load has already read them, so this cannot fail.
+func (c *Config) Menu(context string) []MenuResource {
+	menus, _ := c.readMenus()
+	var all, own []MenuResource
+	for _, m := range menus {
+		switch {
+		case m.all:
+			all = append(all, m.resources...)
+		case m.context == context:
+			own = append(own, m.resources...)
+		}
+	}
+	return append(all, own...)
+}
+
+// sameGVR reports whether two menu entries address the same API resource — the
+// identity the menu itself dedupes on (menu.AddExtras keys off the GVR), so pins
+// agree with it rather than treating two spellings of one kind as two rows.
+func sameGVR(a, b MenuResource) bool {
+	return a.Group == b.Group && a.Version == b.Version && a.Resource == b.Resource
 }

@@ -20,8 +20,8 @@ func runKeys(t *testing.T, args ...string) (string, string, error) {
 }
 
 func TestKeysDefaults(t *testing.T) {
-	// A missing config file resolves to the vim-first defaults.
-	out, errOut, err := runKeys(t, "--config", filepath.Join(t.TempDir(), "none.yaml"))
+	// A missing config resolves to the vim-first defaults.
+	out, errOut, err := runKeys(t, "--config-dir", t.TempDir())
 	if err != nil {
 		t.Fatalf("keys: %v", err)
 	}
@@ -33,35 +33,13 @@ func TestKeysDefaults(t *testing.T) {
 	}
 }
 
-func TestKeysOverrideAndWarning(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	// nav.down moved off j; app.help binds nav key j → resolves, with a warning.
-	if err := os.WriteFile(path, []byte("keys:\n  nav.down: [down]\n  app.help: [j]\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	out, errOut, err := runKeys(t, "--config", path)
-	if err != nil {
-		t.Fatalf("keys: %v", err)
-	}
-	// nav.down now resolves to just "down" (j was moved to app.help), so the
-	// default "j, down" must be gone.
-	if !strings.Contains(out, "app.help") || strings.Contains(out, "j, down") {
-		t.Errorf("output missing overridden bindings:\n%s", out)
-	}
-	if !strings.Contains(errOut, "navigation key") {
-		t.Errorf("stderr = %q, want a nav-shadow warning", errOut)
-	}
-}
-
 func TestKeysInvalidConfigFails(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("keys:\n  bogus.action: [x]\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.kdl"), []byte("version 1\nkeys \"x\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runKeys(t, "--config", path); err == nil {
-		t.Fatal("keys(unknown action): expected error, got nil")
+	if _, _, err := runKeys(t, "--config-dir", dir); err == nil || !strings.Contains(err.Error(), "config.kdl:2:1") {
+		t.Fatalf("keys(an unreadable config): %v, want its file:line", err)
 	}
 }
 

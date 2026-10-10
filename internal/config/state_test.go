@@ -1,387 +1,152 @@
 package config
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestLoadStateEmptyIsZero(t *testing.T) {
-	s, err := LoadState(strings.NewReader(""))
+var (
+	deploys = MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment", Namespaced: true}
+	certs   = MenuResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates", Kind: "Certificate",
+		Namespaced: true, Section: "TLS"}
+	nodes = MenuResource{Version: "v1", Resource: "nodes", Kind: "Node"}
+)
+
+func statePath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "state", "prod.kdl")
+}
+
+func TestLoadStateFileMissingIsZero(t *testing.T) {
+	s, err := LoadStateFile(statePath(t))
+	if err != nil || !reflect.DeepEqual(*s, State{}) {
+		t.Fatalf("missing state = %+v, %v", s, err)
+	}
+}
+
+// Every field survives a write and a read, and the file is the documented shape.
+func TestStateRoundTrips(t *testing.T) {
+	path := statePath(t)
+	want := State{
+		LastNamespace:     "kube-system",
+		PinnedResources:   []MenuResource{certs, nodes},
+		LastResource:      &deploys,
+		LastSortColumn:    "AGE",
+		LastSortAscending: true,
+		LastDrillOwner:    &DrillOwner{Resource: deploys, Namespace: "web", Name: "api"},
+	}
+	if err := want.SaveFile(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadStateFile(path)
 	if err != nil {
-		t.Fatalf("LoadState(empty): %v", err)
+		t.Fatal(err)
 	}
-	if s.LastNamespace != "" {
-		t.Errorf("LastNamespace = %q, want empty", s.LastNamespace)
+	if !reflect.DeepEqual(*got, want) {
+		t.Fatalf("round trip:\n got %+v\nwant %+v", *got, want)
 	}
-}
-
-func TestLoadStateReads(t *testing.T) {
-	s, err := LoadState(strings.NewReader("lastNamespace: kube-system\n"))
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
+	src, _ := os.ReadFile(path)
+	for _, line := range []string{
+		"version 1",
+		`namespace kube-system`,
+		`resource deployments group=apps version=v1 kind=Deployment namespaced=#true`,
+		`drill-owner deployments group=apps version=v1 kind=Deployment namespaced=#true namespace=web name=api`,
+		`sort AGE ascending=#true`,
+		`pin certificates group=cert-manager.io version=v1 kind=Certificate namespaced=#true section=TLS`,
+		`pin nodes version=v1 kind=Node`,
+	} {
+		if !strings.Contains(string(src), line) {
+			t.Errorf("the file has no line %q:\n%s", line, src)
+		}
 	}
-	if s.LastNamespace != "kube-system" {
-		t.Errorf("LastNamespace = %q, want kube-system", s.LastNamespace)
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("state mode = %v, %v", fi.Mode().Perm(), err)
 	}
-}
-
-func TestLoadStateRejectsUnknownField(t *testing.T) {
-	_, err := LoadState(strings.NewReader("bogus: true\n"))
-	if err == nil {
-		t.Fatal("LoadState(unknown field): expected error, got nil")
-	}
-}
-
-func TestLoadStateFileMissingReturnsZero(t *testing.T) {
-	s, err := LoadStateFile(filepath.Join(t.TempDir(), "nope.yaml"))
-	if err != nil {
-		t.Fatalf("LoadStateFile(missing): %v", err)
-	}
-	if s == nil || s.LastNamespace != "" {
-		t.Errorf("LoadStateFile(missing) = %+v, want zero state", s)
+	if entries, _ := os.ReadDir(filepath.Dir(path)); len(entries) != 1 {
+		t.Fatalf("a temp file was left behind: %v", entries)
 	}
 }
 
-func TestStateDir(t *testing.T) {
-	d, err := StateDir()
-	if err != nil {
-		t.Fatalf("StateDir: %v", err)
+// The zero state is `version 1` alone and reads back as zero.
+func TestStateZeroRoundTrips(t *testing.T) {
+	path := statePath(t)
+	if err := (&State{}).SaveFile(path); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.HasSuffix(filepath.ToSlash(d), "kubecom/state") {
-		t.Errorf("StateDir = %q, want it to end with kubecom/state", d)
+	if src, _ := os.ReadFile(path); string(src) != "version 1\n" {
+		t.Fatalf("zero state = %q", src)
+	}
+	if got, err := LoadStateFile(path); err != nil || !reflect.DeepEqual(*got, State{}) {
+		t.Fatalf("zero state read back as %+v, %v", got, err)
 	}
 }
 
-func TestStatePathSanitizesContext(t *testing.T) {
+// A state file kubecom could not have written is an error at its line, which the
+// launcher degrades to the zero state.
+func TestStateErrors(t *testing.T) {
+	for src, want := range map[string]string{
+		"lastNamespace \"x\"\n": `"lastNamespace" is not a state node`,
+		"namespace 3\n":         "namespace takes one string",
+		"pin \"certificates\" group=\"cert-manager.io\"\n":          "pin: version is required",
+		"resource \"\" version=\"v1\"\n":                            "resource: the resource name is required",
+		"drill-owner \"deployments\" version=\"v1\"\n":              "drill-owner: name is required",
+		"drill-owner \"d\" version=\"v1\" name=\"a\" owner=\"x\"\n": `has no property "owner"`,
+		"sort \"AGE\" descending=#true\n":                           `sort has no property "descending"`,
+	} {
+		path := statePath(t)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("version 1\n"+src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadStateFile(path); err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), ":2:") {
+			t.Errorf("%q: %v, want %q at line 2", src, err, want)
+		}
+	}
+}
+
+func TestStateDirAndPath(t *testing.T) {
 	dir, err := StateDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases := map[string]string{
-		"k3d-dev":                      "k3d-dev.yaml",
-		"gke_proj_zone_cluster":        "gke_proj_zone_cluster.yaml",
-		"arn:aws:eks:eu:1:cluster/foo": "arn_aws_eks_eu_1_cluster_foo.yaml",
-		"has spaces":                   "has_spaces.yaml",
-		"../escape":                    ".._escape.yaml",
+	base, _ := Dir()
+	if dir != filepath.Join(base, "state") {
+		t.Fatalf("StateDir() = %q", dir)
 	}
-	for ctx, wantName := range cases {
+	for ctx, want := range map[string]string{
+		"kind-dev":                   "kind-dev.kdl",
+		"gke_proj_zone/cluster":      "gke_proj_zone_cluster.kdl",
+		"arn:aws:eks:eu:1:cluster/x": "arn_aws_eks_eu_1_cluster_x.kdl",
+		"../../etc/passwd":           ".._.._etc_passwd.kdl",
+	} {
 		p, err := StatePath(ctx)
-		if err != nil {
-			t.Fatalf("StatePath(%q): %v", ctx, err)
-		}
-		if got := filepath.Base(p); got != wantName {
-			t.Errorf("StatePath(%q) base = %q, want %q", ctx, got, wantName)
-		}
-		// The resolved path must stay inside StateDir — a context name can never
-		// escape via path separators.
-		if filepath.Dir(p) != dir {
-			t.Errorf("StatePath(%q) dir = %q, want %q (escaped StateDir)", ctx, filepath.Dir(p), dir)
+		if err != nil || p != filepath.Join(dir, want) {
+			t.Errorf("StatePath(%q) = %q, %v; want %s", ctx, p, err, want)
 		}
 	}
-}
-
-func TestStatePathEmptyContextErrors(t *testing.T) {
-	if _, err := StatePath("   "); err == nil {
-		t.Fatal("StatePath(empty): expected error, got nil")
+	if _, err := StatePath("  "); err == nil {
+		t.Error("an empty context resolved a state path")
 	}
 }
 
-func TestStateSaveRoundTrips(t *testing.T) {
-	orig := &State{LastNamespace: "default"}
-	var buf bytes.Buffer
-	if err := orig.Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
+// Pin is idempotent by GVR; Unpin removes by GVR.
+func TestPinAndUnpin(t *testing.T) {
+	var s State
+	if !s.Pin(certs) || s.Pin(MenuResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates", Title: "other"}) {
+		t.Fatal("a second pin of the same GVR was added")
 	}
-	got, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState(saved): %v", err)
+	if !s.Pin(nodes) || len(s.PinnedResources) != 2 {
+		t.Fatalf("pins = %+v", s.PinnedResources)
 	}
-	if got.LastNamespace != orig.LastNamespace {
-		t.Errorf("round-trip LastNamespace = %q, want %q", got.LastNamespace, orig.LastNamespace)
+	if s.Unpin("apps", "v1", "deployments") {
+		t.Fatal("unpinned a kind that was not pinned")
 	}
-}
-
-func TestStateSaveEmptyRoundTripsToZero(t *testing.T) {
-	var buf bytes.Buffer
-	if err := (&State{}).Save(&buf); err != nil {
-		t.Fatalf("Save(empty): %v", err)
-	}
-	got, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState(empty saved): %v", err)
-	}
-	if got.LastNamespace != "" {
-		t.Errorf("round-trip empty LastNamespace = %q, want empty", got.LastNamespace)
-	}
-}
-
-func TestStateSaveFileCreatesParentAndRoundTrips(t *testing.T) {
-	// A parent dir that does not yet exist must be created (0o700).
-	dir := filepath.Join(t.TempDir(), "state")
-	path := filepath.Join(dir, "ctx.yaml")
-	orig := &State{LastNamespace: "kube-system"}
-	if err := orig.SaveFile(path); err != nil {
-		t.Fatalf("SaveFile: %v", err)
-	}
-	got, err := LoadStateFile(path)
-	if err != nil {
-		t.Fatalf("LoadStateFile(saved): %v", err)
-	}
-	if got.LastNamespace != orig.LastNamespace {
-		t.Errorf("round-trip LastNamespace = %q, want %q", got.LastNamespace, orig.LastNamespace)
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("state file perm = %o, want 600", perm)
-	}
-}
-
-func TestStateSaveFileReplacesAtomicallyWithoutLeftoverTemp(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "ctx.yaml")
-	if err := os.WriteFile(path, []byte("lastNamespace: old\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := (&State{LastNamespace: "new"}).SaveFile(path); err != nil {
-		t.Fatalf("SaveFile(overwrite): %v", err)
-	}
-	got, err := LoadStateFile(path)
-	if err != nil {
-		t.Fatalf("LoadStateFile: %v", err)
-	}
-	if got.LastNamespace != "new" {
-		t.Errorf("overwritten LastNamespace = %q, want new", got.LastNamespace)
-	}
-	// The atomic temp file must be gone — only ctx.yaml should remain.
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 || entries[0].Name() != "ctx.yaml" {
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Errorf("dir entries = %v, want only [ctx.yaml]", names)
-	}
-}
-
-// TestStatePinnedResourcesRoundTrip proves a pinned kind survives Save → Load with
-// every field intact — the property CRD-PIN-02's write gesture depends on, since a
-// pin that lost its Namespaced flag would list a namespaced CRD cluster-wide.
-func TestStatePinnedResourcesRoundTrip(t *testing.T) {
-	in := &State{
-		LastNamespace: "kube-system",
-		PinnedResources: []MenuResource{{
-			Group: "hub.traefik.io", Version: "v1alpha1", Resource: "aigateways",
-			Kind: "AIGateway", Namespaced: true,
-		}},
-	}
-	var buf bytes.Buffer
-	if err := in.Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	out, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
-	}
-	if len(out.PinnedResources) != 1 || out.PinnedResources[0] != in.PinnedResources[0] {
-		t.Fatalf("PinnedResources = %+v, want %+v", out.PinnedResources, in.PinnedResources)
-	}
-	if out.LastNamespace != "kube-system" {
-		t.Errorf("LastNamespace = %q, want kube-system", out.LastNamespace)
-	}
-}
-
-// TestStateNoPinsStaysEmpty proves the new field is omitted entirely when nothing is
-// pinned, so an existing state file gains no key until the user pins something.
-func TestStateNoPinsStaysEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	if err := (&State{}).Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if strings.Contains(buf.String(), "pinnedResources") {
-		t.Errorf("empty state emitted %q, want no pinnedResources key", buf.String())
-	}
-}
-
-// TestLoadStateRejectsUnaddressablePin proves a pin the kube layer could not address
-// (no resource) fails the load exactly as the same entry in the authored menu file
-// does — one validation for both files.
-func TestLoadStateRejectsUnaddressablePin(t *testing.T) {
-	_, err := LoadState(strings.NewReader("pinnedResources:\n  - version: v1\n"))
-	if err == nil {
-		t.Fatal("a pin with no resource should fail the load")
-	}
-	if !strings.Contains(err.Error(), "resource is required") {
-		t.Errorf("error = %v, want it to name the missing field", err)
-	}
-}
-
-// TestStatePinIsIdempotentByGVR proves pinning the same kind twice adds one row and
-// reports the second as a no-op — the menu dedupes on the GVR, so the store must too.
-func TestStatePinIsIdempotentByGVR(t *testing.T) {
-	s := &State{}
-	r := MenuResource{Group: "g", Version: "v1", Resource: "widgets", Kind: "Widget"}
-	if !s.Pin(r) {
-		t.Fatal("first Pin should report a change")
-	}
-	// Same GVR, different display hints: still the same resource, still one row.
-	if s.Pin(MenuResource{Group: "g", Version: "v1", Resource: "widgets", Title: "Other"}) {
-		t.Error("re-pinning the same GVR should report no change")
-	}
-	if len(s.PinnedResources) != 1 || s.PinnedResources[0] != r {
-		t.Fatalf("PinnedResources = %+v, want the first entry only", s.PinnedResources)
-	}
-	// A different version is a different resource to the API, so it is a new pin.
-	if !s.Pin(MenuResource{Group: "g", Version: "v1beta1", Resource: "widgets"}) {
-		t.Error("a different version should pin as its own entry")
-	}
-	if len(s.PinnedResources) != 2 {
-		t.Fatalf("PinnedResources = %+v, want 2 entries", s.PinnedResources)
-	}
-}
-
-// TestStateUnpin proves the removal half: an unpinned GVR goes away, the others keep
-// their order, and unpinning something that was never pinned reports no change (so
-// the caller writes no file).
-func TestStateUnpin(t *testing.T) {
-	s := &State{PinnedResources: []MenuResource{
-		{Group: "g", Version: "v1", Resource: "widgets"},
-		{Group: "h", Version: "v1", Resource: "gadgets"},
-		{Version: "v1", Resource: "configmaps"},
-	}}
-	if !s.Unpin("h", "v1", "gadgets") {
-		t.Fatal("Unpin of a pinned GVR should report a change")
-	}
-	if len(s.PinnedResources) != 2 ||
-		s.PinnedResources[0].Resource != "widgets" || s.PinnedResources[1].Resource != "configmaps" {
-		t.Fatalf("PinnedResources = %+v, want widgets then configmaps", s.PinnedResources)
-	}
-	if s.Unpin("h", "v1", "gadgets") {
-		t.Error("Unpin of an absent GVR should report no change")
-	}
-	if !s.Unpin("", "v1", "configmaps") {
-		t.Error("the core group ('') must be unpinnable, not treated as a wildcard")
-	}
-}
-
-// TestStateLastResourceRoundTrips proves the remembered kind survives Save → Load with
-// every field intact (CTX-MEM-02/D240). Namespaced matters for the same reason it does
-// on a pin: a restore that lost it would list a namespaced CRD cluster-wide.
-func TestStateLastResourceRoundTrips(t *testing.T) {
-	in := &State{
-		LastNamespace: "kube-system",
-		LastResource: &MenuResource{
-			Group: "external-secrets.io", Version: "v1beta1", Resource: "externalsecrets",
-			Kind: "ExternalSecret", Namespaced: true,
-		},
-	}
-	var buf bytes.Buffer
-	if err := in.Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	out, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
-	}
-	if out.LastResource == nil || *out.LastResource != *in.LastResource {
-		t.Fatalf("LastResource = %+v, want %+v", out.LastResource, in.LastResource)
-	}
-	if out.LastNamespace != "kube-system" {
-		t.Errorf("LastNamespace = %q, want kube-system", out.LastNamespace)
-	}
-}
-
-// TestStateNoLastResourceStaysEmpty is why the field is a pointer: a zero struct is not
-// omitted by omitempty, so a value type would add a `lastResource: {version: ""}` stanza
-// to every existing state file and then fail its own validation on the next read.
-func TestStateNoLastResourceStaysEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	if err := (&State{}).Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if strings.Contains(buf.String(), "lastResource") {
-		t.Errorf("empty state emitted %q, want no lastResource key", buf.String())
-	}
-	got, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
-	}
-	if got.LastResource != nil {
-		t.Errorf("LastResource = %+v, want nil", got.LastResource)
-	}
-}
-
-// TestStateLastResourceIsValidated: the remembered kind is addressed by the kube layer
-// exactly as a pin is, so an entry the layer could not address is rejected at the same
-// gate rather than reaching a watch. The launcher degrades the whole file to the zero
-// state, which costs the restore and never the launch.
-func TestStateLastResourceIsValidated(t *testing.T) {
-	if _, err := LoadState(strings.NewReader("lastResource:\n  kind: Widget\n")); err == nil {
-		t.Fatal("a lastResource with no version/resource should be rejected")
-	}
-}
-
-// TestStateLastDrillOwnerRoundTrips proves the drill-in address survives Save → Load
-// with every field intact (CTX-MEM-04/D240 pt 6) — the owner kind, its namespace and
-// its name — so a restore can re-resolve the scope rather than land on the plain list.
-func TestStateLastDrillOwnerRoundTrips(t *testing.T) {
-	in := &State{
-		LastResource: &MenuResource{Version: "v1", Resource: "pods", Kind: "Pod", Namespaced: true},
-		LastDrillOwner: &DrillOwner{
-			Resource:  MenuResource{Group: "apps", Version: "v1", Resource: "deployments", Kind: "Deployment"},
-			Namespace: "default",
-			Name:      "web",
-		},
-	}
-	var buf bytes.Buffer
-	if err := in.Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	out, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
-	}
-	if out.LastDrillOwner == nil || *out.LastDrillOwner != *in.LastDrillOwner {
-		t.Fatalf("LastDrillOwner = %+v, want %+v", out.LastDrillOwner, in.LastDrillOwner)
-	}
-	if out.LastResource == nil || *out.LastResource != *in.LastResource {
-		t.Fatalf("LastResource = %+v, want %+v", out.LastResource, in.LastResource)
-	}
-}
-
-// TestStateNoLastDrillOwnerStaysEmpty is the pointer-field reason applied to the drill
-// owner: a context that never left a drill-in must not emit a `lastDrillOwner: {}` stanza
-// that would fail its own validation on the next read.
-func TestStateNoLastDrillOwnerStaysEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	if err := (&State{}).Save(&buf); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if strings.Contains(buf.String(), "lastDrillOwner") {
-		t.Errorf("empty state emitted %q, want no lastDrillOwner key", buf.String())
-	}
-	got, err := LoadState(&buf)
-	if err != nil {
-		t.Fatalf("LoadState: %v", err)
-	}
-	if got.LastDrillOwner != nil {
-		t.Errorf("LastDrillOwner = %+v, want nil", got.LastDrillOwner)
-	}
-}
-
-// TestStateLastDrillOwnerIsValidated: the drill-in owner's kind is addressed by the kube
-// layer exactly as the remembered kind is, so a broken address is rejected at the same
-// gate rather than failing a re-resolve later.
-func TestStateLastDrillOwnerIsValidated(t *testing.T) {
-	if _, err := LoadState(strings.NewReader("lastDrillOwner:\n  name: web\n  resource:\n    kind: Deployment\n")); err == nil {
-		t.Fatal("a lastDrillOwner with no version/resource should be rejected")
+	if !s.Unpin("cert-manager.io", "v1", "certificates") || !reflect.DeepEqual(s.PinnedResources, []MenuResource{nodes}) {
+		t.Fatalf("after unpin: %+v", s.PinnedResources)
 	}
 }

@@ -1438,7 +1438,7 @@ func TestPinningAListedCRDOptsItIn(t *testing.T) {
 	}
 }
 
-// TestAnAuthoredEntryIsNeverHeldBack keeps the menus/<context>.yaml file authoritative
+// TestAnAuthoredEntryIsNeverHeldBack keeps the authored `menu` entries authoritative
 // (D193 pt 3): a kind the user wrote down by hand is listed whether or not discovery
 // also reports it, and no pin is needed to keep it.
 func TestAnAuthoredEntryIsNeverHeldBack(t *testing.T) {

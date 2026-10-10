@@ -56,59 +56,64 @@ func LegacyPath() (string, error) {
 }
 
 // Migrate reads a legacy ~/.kubecom.yaml (the 2020 kube-commander protobuf-yaml
-// config) from r and produces the equivalent new-format Config plus human-readable
-// notes describing anything that could not be carried over automatically.
+// config) from r and returns the theme to carry over ("" for none) plus
+// human-readable notes describing anything that could not be carried over
+// automatically. The caller writes the theme to the overlay (D302 pt 4).
 //
 // The legacy config held only two user-authored things — a custom resource `menu`
 // and color `themes`/`currentTheme`. The menu cannot be carried over; the theme
-// *selection* can, and is (the legacy format had no keybindings, the other thing
-// the new Config models):
+// *selection* can, and is (the legacy format had no keybindings):
 //
-//   - Menu entries named a kind by group + kind only; the v1 per-context menu
-//     (MenuResource) addresses resources by group/version/resource, which the old
-//     format never stored and only live discovery can resolve. They are reported,
-//     not auto-written — the user re-adds them in a per-context menu file.
-//   - `currentTheme` is mapped onto Config.Theme when it names a palette v1 still
-//     ships (M5-04): v1 has three built-in themes, a `theme:` field and a picker
-//     (D169/D170/D172), so a 2020 `monokai` user keeps monokai. A name with no v1
-//     port is reported with the names that do exist. Hand-authored palettes under
-//     `themes:` are never migrated — v1 themes are built-in, and a named selection
-//     is not a custom palette.
+//   - Menu entries named a kind by group + kind only; a v1 `menu` entry addresses
+//     resources by group/version/resource, which the old format never stored and
+//     only live discovery can resolve. They are reported, not auto-written — the
+//     user re-adds them as `menu` entries in config.kdl.
+//   - `currentTheme` is carried over when it names a palette v1 still ships
+//     (M5-04): v1 has three built-in themes and a picker (D169/D170/D172), so a 2020
+//     `monokai` user keeps monokai. A name with no v1 port is reported with the
+//     names that do exist. Hand-authored palettes under `themes:` are never
+//     migrated — v1 themes are built-in, and a named selection is not a custom
+//     palette.
 //
-// Migration's other value is recognising the legacy file (so the wiring can write a
-// fresh new-format config once and not re-run) and telling the user what to redo by
-// hand. Parsing is lenient — leftover theme detail is ignored, not rejected — so a
-// legacy file never blocks start; only unparseable YAML errors. Empty input yields
-// the zero Config and no notes.
-func Migrate(r io.Reader) (*Config, []string, error) {
+// Parsing is lenient — leftover theme detail is ignored, not rejected — so a legacy
+// file never blocks start; only unparseable YAML errors. Empty input yields no
+// theme and no notes.
+func Migrate(r io.Reader) (string, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, nil, fmt.Errorf("config: reading legacy config: %w", err)
+		return "", nil, fmt.Errorf("config: reading legacy config: %w", err)
 	}
 	var lc legacyConfig
 	if len(strings.TrimSpace(string(data))) > 0 {
 		// Lenient (non-strict) on purpose: the old file carries theme fields we do
 		// not model, and unknown/leftover detail must be ignored, not rejected.
 		if err := yaml.Unmarshal(data, &lc); err != nil {
-			return nil, nil, fmt.Errorf("config: parsing legacy config: %w", err)
+			return "", nil, fmt.Errorf("config: parsing legacy config: %w", err)
 		}
 	}
-
-	// The zero Config is a valid config that runs on defaults; anything the legacy
-	// file *can* set is set on it below. Returning it (rather than nil) is
-	// intentional: the wiring writes it to establish the new-format file so
-	// migration is one-shot.
-	cfg := &Config{}
 	var notes []string
 	if n := legacyMenuNote(&lc); n != "" {
 		notes = append(notes, n)
 	}
 	theme, themeNote := migrateTheme(&lc)
-	cfg.Theme = theme
 	if themeNote != "" {
 		notes = append(notes, themeNote)
 	}
-	return cfg, notes, nil
+	return theme, notes, nil
+}
+
+// Retired lists the YAML an older kubecom read in dir that this one does not
+// (D302 pt 3): config.yaml and the menus/ directory. The launcher names them in a
+// start-up notice while config.kdl does not exist yet, so a config that stopped
+// applying says so instead of silently doing nothing.
+func Retired(dir string) []string {
+	var out []string
+	for _, name := range []string{"config.yaml", "menus"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			out = append(out, filepath.Join(dir, name))
+		}
+	}
+	return out
 }
 
 // legacyMenuNote reports the legacy `menu` entries, which cannot be migrated
@@ -125,7 +130,7 @@ func legacyMenuNote(lc *legacyConfig) string {
 	return fmt.Sprintf(
 		"%d legacy menu %s (%s) %s not migrated automatically: the old config "+
 			"stored no API version/resource, which the per-context menu now requires. "+
-			"Re-add them in a per-context menu file (see docs/configuration.md: Per-context menu).",
+			"Re-add them as `menu` entries in config.kdl (see docs/configuration.md: Per-context menu).",
 		n, plural(n, "resource", "resources"), strings.Join(names, ", "),
 		plural(n, "was", "were"))
 }
@@ -150,8 +155,8 @@ var legacyThemeAliases = map[string]string{
 const themePaletteCaveat = " Legacy theme palettes (`themes:` colors/styles) were " +
 	"not migrated: v1's themes are built-in, and a named selection is not a custom palette."
 
-// migrateTheme carries the legacy `currentTheme` selection onto the new `theme:`
-// field, returning the resolved built-in name (empty = leave the field unset, i.e.
+// migrateTheme carries the legacy `currentTheme` selection onto the `theme`
+// setting, returning the resolved built-in name (empty = leave the field unset, i.e.
 // the default theme) and a note describing what happened. Resolution is
 // styles.ByName — lenient about case and surrounding space, never fuzzy (D169 pt 2)
 // — after one enumerated legacy-rename lookup (legacyThemeAliases).
@@ -172,7 +177,7 @@ func migrateTheme(lc *legacyConfig) (string, string) {
 		}
 		return "", fmt.Sprintf(
 			"%d legacy theme %s %s not migrated: v1 selects one of its built-in themes "+
-				"(%s) with `theme:` in the new config.",
+				"(%s) with `theme` in config.kdl.",
 			len(lc.Themes), plural(len(lc.Themes), "definition", "definitions"),
 			plural(len(lc.Themes), "was", "were"),
 			strings.Join(styles.ThemeNames(), ", "))
@@ -186,11 +191,11 @@ func migrateTheme(lc *legacyConfig) (string, string) {
 	if !ok {
 		return "", fmt.Sprintf(
 			"legacy theme %q has no built-in equivalent in kubecom v1: the built-in "+
-				"themes are %s. Set `theme:` in the new config to pick one.%s",
+				"themes are %s. Set `theme` in config.kdl to pick one.%s",
 			current, strings.Join(styles.ThemeNames(), ", "), caveat)
 	}
 	return t.Name, fmt.Sprintf(
-		"legacy theme %q was carried over as `theme: %s` in the new config.%s",
+		"legacy theme %q was carried over as `theme %q` in config.overlay.kdl.%s",
 		current, t.Name, caveat)
 }
 
