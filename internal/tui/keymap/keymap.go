@@ -2,8 +2,8 @@
 // (D11). Every user-triggerable behaviour is a named Action, and views resolve a
 // live keypress to an Action instead of matching raw keys. Which keys run which
 // action, and where, is a context keymap (D303): default.kdl as the default layer,
-// the user's `keymap` documents on top, resolved by internal/keybind over the
-// focus path the shell builds (Keymap). Help overlays and the generated
+// the user's `keymap` documents on top, read by internal/keybind and resolved by
+// myelin over the focus path the shell builds (Keymap). Help overlays and the generated
 // keybindings doc are built from the same keymap, so they cannot drift.
 package keymap
 

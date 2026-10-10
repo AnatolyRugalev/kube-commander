@@ -1846,3 +1846,39 @@ and D132's side contexts; restates D140 pt 1 as pt 5; D10's vim-first
 defaults stand. The flat map's nav-shadow warning (binding an action over a
 navigation key) is retired with it (KEYS-02): a context binding over `j` is
 what the engine is for, and precedence, not a warning, says which key wins.
+
+### D304 — The keymap engine is myelin, the shared key-binding library (2026-10-10, MYELIN-01)
+
+gov NEIO-13 moves the context keymap into **myelin**
+(`github.com/neuroplastio/myelin`), one engine for every neuroplastio
+program, and myelin's M3–M6 port D303's engine from this repository. kubecom
+switches to it; D303's model (contexts, precedence, the field rule, values)
+stands, and myelin's tests replay `oldkeys.golden` too.
+
+1. **kubecom keeps what is its own.** myelin reads no files, so
+   `internal/keybind` is the KDL reader (`keymap { … }` → `myelin.Doc`, every
+   mistake at its `file:line`) and the path: `keybind.Path` is still the
+   typed path the Model builds, declared once to myelin (`Schema()`) and
+   handed over as `Steps()`. The action registry and its check
+   (`CheckBinding`, D303 pt 2) are `Build`'s check. Matching, the sequencer,
+   hints (`Effective`, `KeysFor`) and the shallow-unbind warning are
+   myelin's.
+2. **Keys are myelin's spelling, strictly** (its D7, the maintainer's
+   call): one spelling per key, and any other is a load error that names
+   it — `shift+g` is `G`, `alt+ctrl+x` is `ctrl+alt+x`, `ESC` is `esc`.
+   `ctrl+shift+d` is a key of its own, no longer folded into `ctrl+d`.
+   Live keys come through `myelintea` as HOTTY names, so a HOTTY front end
+   gives the keymap the same keys the terminal does.
+3. **Time is a value.** myelin's sequencer reads no clock: a key is fed with
+   the time it was handled, and the timeout tick carries the time it fired.
+   A key that breaks a pending sequence is fed again on its own, as before
+   (myelin leaves that to the program). `--keylog` traces write keys in the
+   keymap's spelling, not Bubble Tea's.
+4. **Landing order (the maintainer's ruling, gov 8b86fe3):** kubecom builds
+   against myelin locally first, myelin goes public, and only then is the
+   switch pushed — a public kubecom cannot fetch a private module.
+   `go.mod` requires myelin's pushed commit; nothing is replaced.
+**Cost:** +0.46 MB stripped (myelin, its msgpack codec, hotty-go's key
+names); Bubble Tea 2.0.2 → 2.0.8, `myelintea`'s floor.
+**Refs:** supersedes D303 pt 8 (ported, not imported) and pt 1's key
+spelling; myelin's reference is its `docs/keymaps.md`.

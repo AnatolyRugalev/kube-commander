@@ -19,7 +19,7 @@ git. It is not restated here.
 | K8s access | **In-process client-go**; shell out **only** where real interactivity requires it (exec shell, `$EDITOR`) |
 | Resource listing | **Server-side Table** printing via the dynamic client (`Accept: as=Table`) — kubectl-identical columns for any resource incl. CRDs |
 | Config | **KDL** (D302): an authored `config.kdl` kubecom never writes, a `config.overlay.kdl` it does, `state/<context>.kdl`; one-shot migration from the old `~/.kubecom.yaml` |
-| Keys | **A context-bound keymap** (D303): `bind`/`unbind`/`context "<cel>"` over the focus path, plexos's precedence |
+| Keys | **A context-bound keymap** (D303): `bind`/`unbind`/`context "<cel>"` over the focus path, resolved by **myelin**, the shared key-binding library (D304) |
 | Platforms | **Linux + macOS**; Windows via WSL2 |
 | Release | **engram channels** (`pkg.neuroplast.io/kubecom/{dev,stable}`) + a thin **launcher**; goreleaser retired (D292) |
 | Version identity | CalVer — `YY.MM.DD` stable, `YY.MM.DD-dev.<sha7>` dev; `Commit` is the identity |

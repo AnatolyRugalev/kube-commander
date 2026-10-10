@@ -132,19 +132,19 @@ func TestSurfaceKeysAreBoundOnTheirSurface(t *testing.T) {
 		{tea.Key{Code: 'w', Mod: tea.ModCtrl}, search, []keybind.Path{menuPath, tablePath}, ActionSearchAllNamespaces},
 	} {
 		if a, _, _ := km.Action(tc.key, tc.on); a != tc.want {
-			t.Errorf("%s on %s = %q, want %q", KeyOf(tc.key), tc.on, a, tc.want)
+			t.Errorf("%s on %s = %q, want %q", KeyName(tc.key), tc.on, a, tc.want)
 		}
 		for _, p := range tc.off {
 			if a, _, ok := km.Action(tc.key, p); ok {
-				t.Errorf("%s on %s = %q, want it free there", KeyOf(tc.key), p, a)
+				t.Errorf("%s on %s = %q, want it free there", KeyName(tc.key), p, a)
 			}
 		}
 	}
 }
 
-// KeyOf reads a live keypress the way the keymap writes keys: shift folds into a
-// printable character, ctrl folds case, a named key keeps its shift.
-func TestKeyOf(t *testing.T) {
+// KeyName writes a live keypress the way the keymap writes keys (myelin's
+// spelling): shift folds into a printable character, a named key keeps its shift.
+func TestKeyName(t *testing.T) {
 	for _, tc := range []struct {
 		key  tea.Key
 		want string
@@ -154,7 +154,8 @@ func TestKeyOf(t *testing.T) {
 		{tea.Key{Code: 'D', Text: "D"}, "D"},
 		{tea.Key{Code: '?', Text: "?"}, "?"},
 		{tea.Key{Code: 'd', Mod: tea.ModCtrl}, "ctrl+d"},
-		{tea.Key{Code: 'D', Mod: tea.ModCtrl | tea.ModShift}, "ctrl+d"},
+		// ctrl+shift on a letter is a key of its own, not ctrl's (myelin's D5).
+		{tea.Key{Code: 'D', Mod: tea.ModCtrl | tea.ModShift}, "ctrl+shift+d"},
 		{tea.Key{Code: 'b', Mod: tea.ModAlt}, "alt+b"},
 		{tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}, "shift+tab"},
 		{tea.Key{Code: tea.KeyEnter}, "enter"},
@@ -162,8 +163,8 @@ func TestKeyOf(t *testing.T) {
 		{tea.Key{Code: tea.KeyPgUp}, "pgup"},
 		{tea.Key{Code: tea.KeyF5}, "f5"},
 	} {
-		if got := KeyOf(tc.key).String(); got != tc.want {
-			t.Errorf("KeyOf(%+v) = %s, want %s", tc.key, got, tc.want)
+		if got := KeyName(tc.key); got != tc.want {
+			t.Errorf("KeyName(%+v) = %s, want %s", tc.key, got, tc.want)
 		}
 	}
 }

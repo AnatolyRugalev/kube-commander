@@ -5,19 +5,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/neuroplastio/myelin"
+
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
 // default.kdl loads, and every binding names a registered action with a value
 // only where one is taken.
 func TestDefaultKDLLoads(t *testing.T) {
-	km := keybind.Build(DefaultDoc())
-	if err := km.Err(); err != nil {
-		t.Fatal(err)
+	km, problems := keybind.Env().Build([]myelin.Doc{DefaultDoc()}, check)
+	if km == nil || len(problems) > 0 {
+		t.Fatalf("default.kdl: %+v", problems)
 	}
 	bound := map[Action]bool{}
-	for _, e := range km.Bindings() {
-		bound[Action(e.Binding.Action)] = true
+	for _, b := range km.All() {
+		bound[Action(b.Action)] = true
 	}
 	for _, a := range Actions() {
 		if !bound[a] && !PaletteOnly(a) {
@@ -64,7 +66,7 @@ func TestCheckBinding(t *testing.T) {
 // and did nothing — resolves to nothing. tidied names each such action's surface,
 // written out here rather than read from default.kdl.
 func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
-	km := keybind.Build(DefaultDoc())
+	km := DefaultKeymap().Engine()
 	tidied := map[string]string{
 		"logs.follow": "logs", "logs.regex": "logs", "logs.wrap": "logs", "logs.timestamps": "logs",
 		"logs.previous": "logs", "logs.select": "logs", "logs.yank": "logs",
@@ -73,9 +75,9 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 		"forwards.localPort": "picker.id == 'ports'", "forwards.freeLocal": "picker.id == 'ports'",
 		"search.allKinds": "search", "search.allNamespaces": "search",
 	}
-	surfaces := map[string]*keybind.Context{}
+	surfaces := map[string]*myelin.Context{}
 	for a, src := range tidied {
-		c, err := keybind.CompileContext(src)
+		c, err := keybind.Env().Compile(src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,18 +119,18 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 		if !ok {
 			t.Fatalf("golden scenario %q has no path", f[0])
 		}
-		keys, err := keybind.ParseKeys(f[1])
+		keys, err := myelin.ParseSeq(f[1])
 		if err != nil {
 			t.Fatalf("%s: %v", f[1], err)
 		}
 		lines++
-		m := km.Match(keys, path)
+		m := km.Match(keys, path.Steps())
 		var got string
 		if m.Exact != nil {
 			got = m.Exact.Action
 		}
 		want := f[2]
-		if c, ok := surfaces[want]; ok && !c.Holds(path) {
+		if c, ok := surfaces[want]; ok && !c.Holds(path.Steps()) {
 			want = ""
 		}
 		if got != want {
@@ -138,8 +140,8 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 			if m.Prefix {
 				t.Errorf("%s: %s is a prefix of a longer binding", f[0], f[1])
 			}
-			if !km.Match(keys[:1], path).Prefix {
-				t.Errorf("%s: %s does not start a sequence", f[0], keybind.FormatKeys(keys[:1]))
+			if !km.Match(keys[:1], path.Steps()).Prefix {
+				t.Errorf("%s: %s does not start a sequence", f[0], myelin.FormatKey(keys[0]))
 			}
 		}
 	}

@@ -111,7 +111,7 @@ func (m Model) recordKey(msg tea.KeyPressMsg, mode keyMode, action keymap.Action
 		// two keys is the measurement ("where did they stop and think?"), so it must
 		// not include however long a writer took to get to the record.
 		Time:    time.Now(),
-		Key:     msg.String(),
+		Key:     keymap.KeyName(msg.Key()),
 		Mode:    string(mode),
 		Action:  string(action),
 		Text:    textModes[mode],

@@ -1223,8 +1223,12 @@ func NewWithKeymap(km *keymap.Keymap, opts ...Option) Model {
 }
 
 // seqTimeoutMsg fires SequenceTimeout after a pending multi-key prefix (D48). Its
-// gen must match the model's current seqGen or the tick is stale and ignored.
-type seqTimeoutMsg struct{ gen int }
+// gen must match the model's current seqGen or the tick is stale and ignored; at is
+// when it fired, the now the sequencer expires the prefix at.
+type seqTimeoutMsg struct {
+	gen int
+	at  time.Time
+}
 
 // watchMsg wraps one message from a watch pump with the generation of the watch
 // it belongs to. The model tags every pump this way so a message from a watch
@@ -1360,7 +1364,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// actions menu (`context "focus == 'table'"`, STORY-06c) and drills in
 		// everywhere else. Recorded before it is handled, so the press that quit (or
 		// wedged) the session is in the trace that has to explain it.
-		switch r := m.seq.Input(msg.Key(), path); r.Kind {
+		switch r := m.seq.Input(msg.Key(), path, time.Now()); r.Kind {
 		case keymap.ResultAction:
 			m.recordKey(msg, keyModeBrowse, r.Action, r.Kind)
 			return m.handleBound(r.Action, r.Args)
@@ -1387,7 +1391,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // superseded by a newer pending; ignore.
 		}
 		// The prefix resolves in the path it was typed in (the Sequencer keeps it).
-		if r := m.seq.Timeout(); r.Kind == keymap.ResultAction {
+		if r := m.seq.Timeout(msg.at); r.Kind == keymap.ResultAction {
 			return m.handleBound(r.Action, r.Args)
 		}
 		return m, nil
@@ -4285,8 +4289,8 @@ func menuPaneWidth(total int) int {
 // scheduleTimeout arms the sequence-timeout tick for the current generation.
 func (m Model) scheduleTimeout() tea.Cmd {
 	gen := m.seqGen
-	return tea.Tick(keymap.SequenceTimeout, func(time.Time) tea.Msg {
-		return seqTimeoutMsg{gen: gen}
+	return tea.Tick(keymap.SequenceTimeout, func(at time.Time) tea.Msg {
+		return seqTimeoutMsg{gen: gen, at: at}
 	})
 }
 

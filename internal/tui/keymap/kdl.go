@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/neuroplastio/myelin"
+
 	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
@@ -26,12 +28,12 @@ func DefaultSource() []byte { return defaultSource }
 
 // DefaultDoc is the default keymap as the default layer. default.kdl is embedded
 // and tested, so an error in it is a broken build, not a user's mistake.
-func DefaultDoc() keybind.Doc { return defaultDoc() }
+func DefaultDoc() myelin.Doc { return defaultDoc() }
 
-var defaultDoc = sync.OnceValue(func() keybind.Doc {
+var defaultDoc = sync.OnceValue(func() myelin.Doc {
 	d, err := keybind.ParseFile(defaultFile, defaultSource, keybind.Default)
 	if err == nil {
-		err = d.Check(CheckBinding)
+		err = checkDoc(d)
 	}
 	if err != nil {
 		panic(fmt.Sprintf("keymap: %v", err))

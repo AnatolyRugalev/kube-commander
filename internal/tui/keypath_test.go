@@ -14,9 +14,6 @@ import (
 func userKeymap(t *testing.T, src string) *keymap.Keymap {
 	t.Helper()
 	doc, err := keybind.ParseFile("config.kdl", []byte("version 1\nkeymap {\n"+src+"\n}\n"), keybind.User)
-	if err == nil {
-		err = doc.Check(keymap.CheckBinding)
-	}
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,13 +1,16 @@
 package keybind
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/neuroplastio/myelin"
 )
 
-func load(t *testing.T, layer Layer, src string) Doc {
+// These tests read kubecom's KDL into myelin and match on kubecom's paths: they
+// hold kubecom to what its docs promise (D303), whichever engine runs it.
+
+func load(t *testing.T, layer, src string) myelin.Doc {
 	t.Helper()
 	d, err := ParseFile("test.kdl", []byte("keymap {\n"+src+"\n}\n"), layer)
 	if err != nil {
@@ -16,67 +19,59 @@ func load(t *testing.T, layer Layer, src string) Doc {
 	return d
 }
 
-func keys(t *testing.T, s string) []Key {
+// build builds documents with no registry check, failing the test on an error.
+func build(t *testing.T, docs ...myelin.Doc) *myelin.Keymap {
 	t.Helper()
-	ks, err := ParseKeys(s)
+	km, problems := Env().Build(docs, nil)
+	if km == nil {
+		t.Fatalf("the keymap was refused: %+v", problems)
+	}
+	return km
+}
+
+func keys(t *testing.T, s string) []myelin.Key {
+	t.Helper()
+	ks, err := myelin.ParseSeq(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ks
 }
 
-func exact(km *Keymap, t *testing.T, seq string, p Path) string {
+func exact(km *myelin.Keymap, t *testing.T, seq string, p Path) string {
 	t.Helper()
-	m := km.Match(keys(t, seq), p)
+	m := km.Match(keys(t, seq), p.Steps())
 	if m.Exact == nil {
 		return ""
 	}
 	return m.Exact.Action
 }
 
-func TestKeysRoundTrip(t *testing.T) {
-	for in, want := range map[string]string{
-		"ctrl+d": "ctrl+d", "ctrl+D": "ctrl+d", "G": "G", "shift+g": "G", "shift+tab": "shift+tab",
-		"left": "left", "ESC": "esc", "Enter": "enter", "space": "space", " ": "space", "+": "+",
-		"ctrl++": "ctrl++", "alt+]": "alt+]", "ctrl+alt+x": "alt+ctrl+x", "alt+H": "alt+H", "#": "#",
-		"pgdn": "pgdn", "f12": "f12", "×": "×",
-	} {
-		k, err := ParseKey(in)
-		if err != nil {
-			t.Errorf("%q: %v", in, err)
-			continue
-		}
-		if got := k.String(); got != want {
-			t.Errorf("%q writes as %q, want %q", in, got, want)
-		}
-		back, err := ParseKey(k.String())
-		if err != nil || back != k {
-			t.Errorf("%q does not read back: %+v, %v", k, back, err)
-		}
-	}
-	for bad, why := range map[string]string{
-		"": "not a key", "ctrl+": "not a key", "ctrl+bb": "not a key", "ctrl+x+y": "modifiers", "f13": "separated by spaces",
-		"gg": "separated by spaces", "escape": "separated by spaces", "shift+1": "write the character",
-		"ctrl+shift+d": "terminals send", "<lead>": "not a key",
-	} {
-		if _, err := ParseKey(bad); err == nil || !strings.Contains(err.Error(), why) {
-			t.Errorf("%q: %v, want an error saying %q", bad, err, why)
-		}
-	}
-	seq, err := parseSeq("<leader> g  shift+tab")
-	if err != nil || seq.String() != "<leader> g shift+tab" {
-		t.Fatalf("a sequence round-trips as %q, %v", seq, err)
+// The schema is myelin's to accept: every node and attribute a context reads.
+func TestSchemaIsAccepted(t *testing.T) {
+	if _, err := myelin.NewEnv(Schema()); err != nil {
+		t.Fatal(err)
 	}
 }
 
-// Text is what the field rule asks: does the key type something.
-func TestTextKeys(t *testing.T) {
-	for k, want := range map[string]bool{
-		"j": true, "G": true, "space": true, "#": true, "×": true,
-		"ctrl+a": false, "alt+x": false, "enter": false, "esc": false, "up": false, "shift+tab": false,
+// A key is written one way, myelin's (its D7): any other spelling is an error at
+// its line that names the one to write.
+func TestKeysHaveOneSpelling(t *testing.T) {
+	for _, ok := range []string{"ctrl+d", "G", "shift+tab", "esc", "pgdn", "space", "#", "ctrl+alt+x", "f12", "g g", "<leader> n"} {
+		if _, err := ParseFile("test.kdl", []byte("keymap {\nbind \""+ok+"\" \"x\"\n}\n"), User); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
+	}
+	for bad, want := range map[string]string{
+		"shift+g":    `test.kdl:2: bind: "shift+g": write G`,
+		"alt+ctrl+x": `test.kdl:2: bind: "alt+ctrl+x": write ctrl+alt+x`,
+		"ESC":        `test.kdl:2: bind: "ESC": write esc`,
+		"gg":         "separated by spaces",
+		"ctrl+":      `test.kdl:2: bind: "ctrl+"`,
 	} {
-		if got := keys(t, k)[0].Text(); got != want {
-			t.Errorf("%s: Text() = %v, want %v", k, got, want)
+		_, err := ParseFile("test.kdl", []byte("keymap {\nbind \""+bad+"\" \"x\"\n}\n"), User)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want %q", bad, err, want)
 		}
 	}
 }
@@ -93,7 +88,7 @@ func TestContextsCompileOrFailAtLoad(t *testing.T) {
 		`viewer.content == 'secret'`,
 		`search.all_kinds && table.unhealthy_only`,
 	} {
-		if _, err := CompileContext(ok); err != nil {
+		if _, err := Env().Compile(ok); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}
 	}
@@ -104,9 +99,13 @@ func TestContextsCompileOrFailAtLoad(t *testing.T) {
 		`table.kind`:              "not a boolean",
 		`table.kind == 'x' &&`:    "a syntax error",
 	} {
-		if _, err := CompileContext(src); err == nil {
+		if _, err := Env().Compile(src); err == nil {
 			t.Errorf("%s compiled; it is %s", src, why)
 		}
+	}
+	_, err := Env().Compile(`tabel`)
+	if err == nil || !strings.Contains(err.Error(), "(a context reads focus, cluster, menu, table") {
+		t.Errorf("an unknown name does not list the vocabulary: %v", err)
 	}
 }
 
@@ -119,7 +118,6 @@ func TestDepthIsHowFarTheContextReaches(t *testing.T) {
 		Table:   &Table{Resource: "pods", Kind: "Pod", Namespaced: true},
 		Logs:    &Logs{Follow: true},
 	}
-	acts := path.activations()
 	for src, want := range map[string]int{
 		`cluster.context == 'prod-eu'`:  1,
 		`table.kind == 'Pod'`:           2,
@@ -131,16 +129,16 @@ func TestDepthIsHowFarTheContextReaches(t *testing.T) {
 		`viewer.content == 'secret'`:    -1, // no viewer: absent, does not hold
 		`!(viewer.content == 'secret')`: -1, // and its negation does not either
 	} {
-		c, err := CompileContext(src)
+		c, err := Env().Compile(src)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := c.depth(acts); got != want {
+		if got := c.Depth(path.Steps()); got != want {
 			t.Errorf("%s: depth %d, want %d", src, got, want)
 		}
 	}
-	var none *Context
-	if none.depth(acts) != 0 {
+	var none *myelin.Context
+	if none.Depth(path.Steps()) != 0 {
 		t.Error("no context is not depth 0")
 	}
 	if path.Innermost() != "logs" || (Path{}).Innermost() != "" {
@@ -160,7 +158,7 @@ func TestPrecedence(t *testing.T) {
 	user := load(t, User, `
 		bind "a" "user.shallow"
 	`)
-	km := Build(def, user)
+	km := build(t, def, user)
 	inLogs := Path{Table: &Table{}, Logs: &Logs{}}
 	inTable := Path{Table: &Table{}}
 	for _, tc := range []struct {
@@ -181,20 +179,20 @@ func TestPrecedence(t *testing.T) {
 // An exact match that is also a prefix waits: Match says both, and the caller runs
 // the exact one only when the wait times out.
 func TestExactAndPrefix(t *testing.T) {
-	km := Build(load(t, Default, `
+	km := build(t, load(t, Default, `
 		bind "g" "go.short"
 		bind "g g" "nav.top"
 		context "logs" { bind "g x" "go.logs" }
 	`))
-	m := km.Match(keys(t, "g"), Path{})
+	m := km.Match(keys(t, "g"), nil)
 	if m.Exact == nil || m.Exact.Action != "go.short" || !m.Prefix {
 		t.Fatalf("g: %+v", m)
 	}
-	if m := km.Match(keys(t, "g g"), Path{}); m.Exact == nil || m.Prefix {
+	if m := km.Match(keys(t, "g g"), nil); m.Exact == nil || m.Prefix {
 		t.Fatalf("g g: %+v", m)
 	}
 	// A continuation whose context does not hold is no prefix.
-	if m := km.Match(keys(t, "g x"), Path{}); m.Exact != nil || m.Prefix {
+	if m := km.Match(keys(t, "g x"), nil); m.Exact != nil || m.Prefix {
 		t.Fatalf("g x outside the logs: %+v", m)
 	}
 	if !km.Starts(keys(t, "g")[0]) || km.Starts(keys(t, "x")[0]) {
@@ -205,11 +203,11 @@ func TestExactAndPrefix(t *testing.T) {
 // A shallower continuation does not hold a deeper exact binding up: `enter` on
 // the table's own keys runs at once though `enter …` sequences exist everywhere.
 func TestAShallowerPrefixDoesNotWait(t *testing.T) {
-	km := Build(load(t, Default, `
+	km := build(t, load(t, Default, `
 		bind "enter x" "long"
 		context "focus == 'table'" { bind "enter" "actions.menu" }
 	`))
-	m := km.Match(keys(t, "enter"), Path{Table: &Table{}})
+	m := km.Match(keys(t, "enter"), Path{Table: &Table{}}.Steps())
 	if m.Exact == nil || m.Exact.Action != "actions.menu" || m.Prefix {
 		t.Fatalf("enter: %+v", m)
 	}
@@ -218,7 +216,7 @@ func TestAShallowerPrefixDoesNotWait(t *testing.T) {
 // focus is the innermost node: a binding in `focus == 'table'` is the table's own
 // and does not reach an overlay opened over it, while one in `table` does.
 func TestFocusIsTheInnermostNode(t *testing.T) {
-	km := Build(load(t, Default, `
+	km := build(t, load(t, Default, `
 		bind "enter" "nav.drillIn"
 		context "focus == 'table'" { bind "enter" "actions.menu" }
 		context "table" { bind "x" "table.anywhere" }
@@ -271,7 +269,7 @@ func TestPathString(t *testing.T) {
 // unless a binding at least as deep as the field takes it; a key that does not
 // type resolves as anywhere.
 func TestFieldsKeepTheirText(t *testing.T) {
-	km := Build(load(t, Default, `
+	km := build(t, load(t, Default, `
 		bind "j" "nav.down"
 		bind "down" "nav.down"
 		bind "g g" "nav.top"
@@ -292,7 +290,7 @@ func TestFieldsKeepTheirText(t *testing.T) {
 			t.Errorf("%s in a field: %q, want %q", tc.seq, got, tc.want)
 		}
 	}
-	if m := km.Match(keys(t, "g"), field); m.Prefix {
+	if m := km.Match(keys(t, "g"), field.Steps()); m.Prefix {
 		t.Error("g still starts a sequence in a field")
 	}
 	noField := Path{Table: &Table{}, Picker: &Picker{ID: "palette"}}
@@ -300,8 +298,8 @@ func TestFieldsKeepTheirText(t *testing.T) {
 		t.Error("with the field closed the text keys do not resolve")
 	}
 	var next []string
-	for _, e := range km.Next(nil, field) {
-		next = append(next, e.Key.String())
+	for _, it := range km.Menu(nil, field.Steps(), nil).Items {
+		next = append(next, myelin.FormatKey(it.Key))
 	}
 	if got := strings.Join(next, " "); got != "down ctrl+a y" {
 		t.Errorf("next in a field = %s", got)
@@ -320,13 +318,13 @@ func TestUnbind(t *testing.T) {
 		context "cluster.context.startsWith('prod-')" { unbind "D" }
 		unbind "g"
 	`)
-	km := Build(def, user)
+	km := build(t, def, user)
 	prod := Path{Cluster: &Cluster{Context: "prod-eu"}, Table: &Table{}}
 	dev := Path{Cluster: &Cluster{Context: "kind"}, Table: &Table{}}
 	if exact(km, t, "D", prod) != "" || exact(km, t, "D", dev) != "res.delete" {
 		t.Error("the prod-only unbind did not hold where, and only where, it says")
 	}
-	if m := km.Match(keys(t, "g"), dev); m.Prefix || m.Exact != nil {
+	if m := km.Match(keys(t, "g"), dev.Steps()); m.Prefix || m.Exact != nil {
 		t.Errorf("g is still a prefix: %+v", m)
 	}
 	if exact(km, t, "g g", dev) != "" {
@@ -347,18 +345,13 @@ func TestShallowUnbindWarns(t *testing.T) {
 		unbind "X"
 		context "forwards" { unbind "X"; }
 	`)
-	km := Build(def, user)
-	if err := km.Err(); err != nil {
-		t.Fatalf("a warning refused the keymap: %v", err)
+	km, problems := Env().Build([]myelin.Doc{def, user}, nil)
+	if km == nil {
+		t.Fatalf("a warning refused the keymap: %+v", problems)
 	}
-	var warns []string
-	for _, p := range km.Problems() {
-		if p.Warning {
-			warns = append(warns, p.Text)
-		}
-	}
-	if len(warns) != 1 || !strings.Contains(warns[0], `unbind "X" leaves X → forwards.stopAll in context "forwards"`) {
-		t.Fatalf("warnings = %q", warns)
+	if len(problems) != 1 || !problems[0].Warning || problems[0].Source != "test.kdl:4" ||
+		!strings.Contains(problems[0].Text, `unbind "X" leaves X → forwards.stopAll in context "forwards"`) {
+		t.Fatalf("problems = %+v", problems)
 	}
 	if exact(km, t, "X", Path{Forwards: true}) != "" {
 		t.Error("the unbind in the forwards context did not take X away there")
@@ -366,37 +359,34 @@ func TestShallowUnbindWarns(t *testing.T) {
 }
 
 // The leader is an alias the highest layer that names one sets; with none named,
-// a `<leader>` binding is a problem and is left out.
+// a `<leader>` binding refuses the keymap.
 func TestTheLeaderIsAnAlias(t *testing.T) {
 	def := load(t, Default, `bind "<leader> n" "ns.switch"`)
-	km := Build(def, load(t, User, `leader "space"`))
-	if l, ok := km.Leader(); !ok || l.String() != "space" {
+	km := build(t, def, load(t, User, `leader "space"`))
+	if l, ok := km.Leader(); !ok || myelin.FormatKey(l) != "space" {
 		t.Fatalf("leader = %v, %v", l, ok)
 	}
 	if exact(km, t, "space n", Path{}) != "ns.switch" {
 		t.Fatal("<leader> n did not follow the leader to space")
 	}
-	km = Build(def)
-	if km.Err() == nil || !strings.Contains(km.Err().Error(), "test.kdl:2: <leader> n names <leader>") {
-		t.Fatalf("no leader: %v", km.Err())
-	}
-	if len(km.Bindings()) != 0 {
-		t.Fatal("the leaderless binding was kept")
+	km, problems := Env().Build([]myelin.Doc{def}, nil)
+	if km != nil || len(problems) != 1 || problems[0].Source != "test.kdl:2" || !strings.Contains(problems[0].Text, "names <leader>") {
+		t.Fatalf("no leader: %v, %+v", km, problems)
 	}
 }
 
 // base "none" leaves the defaults out.
 func TestBaseNone(t *testing.T) {
-	km := Build(load(t, Default, `bind "j" "nav.down"`), load(t, User, `base "none"`+"\n"+`bind "x" "app.quit"`))
+	km := build(t, load(t, Default, `bind "j" "nav.down"`), load(t, User, `base "none"`+"\n"+`bind "x" "app.quit"`))
 	if exact(km, t, "j", Path{}) != "" || exact(km, t, "x", Path{}) != "app.quit" {
 		t.Fatal("base none kept the defaults")
 	}
 }
 
-// Next lists one entry per following key, in the order the keymap first binds it;
+// A menu lists one item per following key, in the order the keymap first binds it;
 // a key with longer bindings behind it is a group with its label.
-func TestNextIsTheHint(t *testing.T) {
-	km := Build(load(t, Default, `
+func TestMenuIsTheHint(t *testing.T) {
+	km := build(t, load(t, Default, `
 		group "g" "+goto"
 		bind "g g" "nav.top"
 		bind "g r" "res.relations" label="relations"
@@ -404,42 +394,42 @@ func TestNextIsTheHint(t *testing.T) {
 		context "logs" { bind "g l" "logs.only" }
 	`))
 	var got []string
-	for _, e := range km.Next(nil, Path{}) {
-		if e.Group {
-			got = append(got, e.Key.String()+"="+e.Label)
+	for _, it := range km.Menu(nil, nil, nil).Items {
+		if it.Group {
+			got = append(got, myelin.FormatKey(it.Key)+"="+it.Label)
 		} else {
-			got = append(got, e.Key.String()+"="+e.Binding.Action)
+			got = append(got, myelin.FormatKey(it.Key)+"="+it.Binding.Action)
 		}
 	}
 	if s := strings.Join(got, " "); s != "g=+goto G=nav.bottom" {
-		t.Fatalf("next = %s", s)
+		t.Fatalf("menu = %s", s)
 	}
 	got = nil
-	for _, e := range km.Next(keys(t, "g"), Path{}) {
-		got = append(got, e.Key.String()+"="+e.Label)
+	for _, it := range km.Menu(keys(t, "g"), nil, nil).Items {
+		got = append(got, myelin.FormatKey(it.Key)+"="+it.Label)
 	}
 	if s := strings.Join(got, " "); s != "g= r=relations" {
-		t.Fatalf("next after g = %s", s)
+		t.Fatalf("menu after g = %s", s)
 	}
 }
 
 // KeysFor is what a hint shows for an action in a context: the sequences that win
 // there.
 func TestKeysFor(t *testing.T) {
-	km := Build(load(t, Default, `
+	km := build(t, load(t, Default, `
 		bind "k" "nav.up"
 		bind "up" "nav.up"
 		bind "g p" "resources.switch" "pods"
 		bind "R" "resources.switch"
 	`), load(t, User, `unbind "up"`))
 	var got []string
-	for _, ks := range km.KeysFor("nav.up", nil, Path{}) {
-		got = append(got, FormatKeys(ks))
+	for _, ks := range km.KeysFor("nav.up", nil, nil) {
+		got = append(got, myelin.FormatSeq(ks))
 	}
 	if s := strings.Join(got, ","); s != "k" {
 		t.Fatalf("nav.up = %s", s)
 	}
-	if ks := km.KeysFor("resources.switch", []string{"pods"}, Path{}); len(ks) != 1 || FormatKeys(ks[0]) != "g p" {
+	if ks := km.KeysFor("resources.switch", []string{"pods"}, nil); len(ks) != 1 || myelin.FormatSeq(ks[0]) != "g p" {
 		t.Fatalf("resources.switch pods = %v", ks)
 	}
 }
@@ -448,7 +438,7 @@ func TestKeysFor(t *testing.T) {
 func TestParseErrorsNameTheLine(t *testing.T) {
 	for src, want := range map[string]string{
 		`bind "q"`:                          `test.kdl:3: bind takes at least 2 arguments`,
-		`bind "ctrl+" "x"`:                  `test.kdl:3: bind: "ctrl+" is not a key`,
+		`bind "ctrl+" "x"`:                  `test.kdl:3: bind: "ctrl+"`,
 		`bind "gg" "nav.top"`:               "separated by spaces: `g g`",
 		`bind "a" "x" colour="red"`:         `test.kdl:3: bind has no property "colour"`,
 		`bind "a" "x" label=#true`:          `test.kdl:3: bind's label is the wrong kind of value`,
@@ -456,8 +446,10 @@ func TestParseErrorsNameTheLine(t *testing.T) {
 		`context "table.kindd == 1" { }`:    `test.kdl:3: context "table.kindd == 1"`,
 		`context "logs" { leader "space" }`: `test.kdl:3: leader cannot be inside a context`,
 		`leader "space" "tab"`:              `test.kdl:3: leader takes one argument`,
+		`leader "Space"`:                    `test.kdl:3: leader: "Space": write space`,
 		`base "vim"`:                        `test.kdl:3: base is "kubecom" (the defaults) or "none"`,
 		`bind "a" "x" { y }`:                `test.kdl:3: bind takes no block`,
+		`unbind ""`:                         `test.kdl:3: unbind: an empty key sequence`,
 	} {
 		_, err := ParseFile("test.kdl", []byte("version 1\nkeymap {\n"+src+"\n}\n"), User)
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -472,11 +464,11 @@ func TestParseErrorsNameTheLine(t *testing.T) {
 // Nested contexts are both: the inner block holds only where the outer one does.
 func TestNestedContextsJoin(t *testing.T) {
 	d := load(t, User, `context "picker" { context "field" { bind "ctrl+x" "inner" label="L" } }`)
-	b := d.binds[0]
-	if b.Context() != "(picker) && (field)" || b.Label != "L" || b.Args != nil || b.Source() != "test.kdl:2" {
-		t.Fatalf("%+v at %s", b, b.Source())
+	b := d.Binds[0]
+	if b.When != "(picker) && (field)" || b.Label != "L" || b.Args != nil || b.Source != "test.kdl:2" {
+		t.Fatalf("%+v", b)
 	}
-	km := Build(d)
+	km := build(t, d)
 	if exact(km, t, "ctrl+x", Path{Picker: &Picker{}}) != "" {
 		t.Fatal("the inner block held outside its outer context")
 	}
@@ -485,34 +477,11 @@ func TestNestedContextsJoin(t *testing.T) {
 	}
 }
 
-// Check is the registry's say over a document: every failure at its line.
-func TestCheck(t *testing.T) {
-	d := load(t, User, `
-		bind "a" "nav.down"
-		bind "b" "nope"
-		bind "c" "nav.down" "1"
-		unbind "d"
-	`)
-	err := d.Check(func(action string, args []string) error {
-		switch {
-		case action != "nav.down":
-			return fmt.Errorf("%q is not an action", action)
-		case len(args) > 0:
-			return errors.New("nav.down takes no value")
-		}
-		return nil
-	})
-	if err == nil || !strings.Contains(err.Error(), `test.kdl:4: "nope" is not an action`) ||
-		!strings.Contains(err.Error(), "test.kdl:5: nav.down takes no value") {
-		t.Fatalf("check: %v", err)
-	}
-}
-
 // The cost of a context: compiling one (at load) and matching a key against a
-// binding that has one (per keystroke).
+// binding that has one (per keystroke), the path built as the model builds it.
 func BenchmarkCompileContext(b *testing.B) {
 	for b.Loop() {
-		if _, err := CompileContext(`table.kind == 'Pod' && !confirm`); err != nil {
+		if _, err := Env().Compile(`table.kind == 'Pod' && !confirm`); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -525,11 +494,11 @@ func BenchmarkMatchInAContext(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	km := Build(d)
+	km, _ := Env().Build([]myelin.Doc{d}, nil)
 	p := Path{Cluster: &Cluster{Context: "kind"}, Table: &Table{Kind: "Pod"}}
-	k, _ := ParseKeys("L")
+	k, _ := myelin.ParseSeq("L")
 	for b.Loop() {
-		if km.Match(k, p).Exact == nil {
+		if km.Match(k, p.Steps()).Exact == nil {
 			b.Fatal("no match")
 		}
 	}

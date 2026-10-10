@@ -7,16 +7,20 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	kdl "github.com/calico32/kdl-go"
+	"github.com/neuroplastio/myelin"
+	"github.com/neuroplastio/myelin/myelintea"
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
 
 // Keymap is the keymap in force: default.kdl, then the user's `keymap` documents,
-// resolved by the context engine (D303). It is immutable; the live input state (a
-// sequence in flight) is the Sequencer's.
+// resolved by myelin (D303). It is immutable; the live input state (a sequence in
+// flight) is the Sequencer's.
 type Keymap struct {
-	km *keybind.Keymap
+	km *myelin.Keymap
+	// warnings are what is wrong with the keymap without refusing it.
+	warnings []string
 }
 
 // DefaultKeymap is the defaults alone. default.kdl is embedded and tested, so it
@@ -24,26 +28,45 @@ type Keymap struct {
 func DefaultKeymap() *Keymap { return defaultKeymap() }
 
 var defaultKeymap = sync.OnceValue(func() *Keymap {
-	return &Keymap{km: keybind.Build(DefaultDoc())}
+	km, err := New()
+	if err != nil {
+		panic(fmt.Sprintf("keymap: %v", err))
+	}
+	return km
 })
 
-// New builds the keymap from the defaults and the user's documents, in order. A
-// keymap with an error — a `<leader>` with no leader named — is refused whole:
-// the error names the file and line.
-func New(user ...keybind.Doc) (*Keymap, error) {
-	km := keybind.Build(append([]keybind.Doc{DefaultDoc()}, user...)...)
-	if err := km.Err(); err != nil {
-		return nil, err
+// New builds the keymap from the defaults and the user's documents, in order, each
+// binding checked against the registry (CheckBinding). A keymap with an error — a
+// binding the registry refuses, a context that does not compile, a `<leader>`
+// with no leader named — is refused whole, every error at its file:line.
+func New(user ...myelin.Doc) (*Keymap, error) {
+	docs := append([]myelin.Doc{DefaultDoc()}, user...)
+	km, problems := keybind.Env().Build(docs, check)
+	var errs []error
+	var warnings []string
+	for _, p := range problems {
+		text := p.Source + ": " + p.Text
+		if p.Warning {
+			warnings = append(warnings, text)
+		} else {
+			errs = append(errs, errors.New(text))
+		}
 	}
-	return &Keymap{km: km}, nil
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return &Keymap{km: km, warnings: warnings}, nil
 }
+
+// check is the registry's check of a binding as myelin builds it.
+func check(b myelin.Binding) error { return CheckBinding(b.Action, b.Args) }
 
 // UserDocs is the user's keymap from a loaded config: config.kdl's `keymap`, then
 // the overlay's — in that order, so a binding kubecom wrote beats the file's line
 // for the same keys. Every binding is checked against the registry (CheckBinding).
 // Any error in either refuses both: a keymap is used whole or not at all.
-func UserDocs(cfg *config.Config) ([]keybind.Doc, error) {
-	var docs []keybind.Doc
+func UserDocs(cfg *config.Config) ([]myelin.Doc, error) {
+	var docs []myelin.Doc
 	var errs []error
 	for _, f := range []struct {
 		name string
@@ -56,7 +79,7 @@ func UserDocs(cfg *config.Config) ([]keybind.Doc, error) {
 		// A document that fails to parse is still checked as far as it was read, so
 		// one run of `kubecom keys check` names every mistake it can.
 		d, err := keybind.Parse(f.name, nodes, keybind.User)
-		if err := errors.Join(err, d.Check(CheckBinding)); err != nil {
+		if err := errors.Join(err, checkDoc(d)); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -68,20 +91,28 @@ func UserDocs(cfg *config.Config) ([]keybind.Doc, error) {
 	return docs, nil
 }
 
-// Warnings is what is wrong with the keymap without refusing it, each at its
-// file:line — an unbind that does not reach a key it names.
-func (k *Keymap) Warnings() []string {
-	var out []string
-	for _, p := range k.km.Problems() {
-		if p.Warning {
-			out = append(out, p.Text)
+// checkDoc is the registry's check of every binding in a document, each failure at
+// its file:line.
+func checkDoc(d myelin.Doc) error {
+	var errs []error
+	for _, b := range d.Binds {
+		if b.Unbind {
+			continue
+		}
+		if err := CheckBinding(b.Action, b.Args); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", b.Source, err))
 		}
 	}
-	return out
+	return errors.Join(errs...)
 }
 
-// Engine is the keymap's engine, for what lists bindings (`kubecom keys`).
-func (k *Keymap) Engine() *keybind.Keymap { return k.km }
+// Warnings is what is wrong with the keymap without refusing it, each at its
+// file:line — an unbind that does not reach a key it names.
+func (k *Keymap) Warnings() []string { return k.warnings }
+
+// Engine is the keymap as myelin built it, for what lists bindings (`kubecom
+// keys`).
+func (k *Keymap) Engine() *myelin.Keymap { return k.km }
 
 // Match is what a typed sequence finds in a context: the action it runs (none
 // when Action is ""), the values the binding gives it, and whether a longer
@@ -93,8 +124,8 @@ type Match struct {
 }
 
 // Match looks a typed sequence up in the context path.
-func (k *Keymap) Match(keys []keybind.Key, p keybind.Path) Match {
-	m := k.km.Match(keys, p)
+func (k *Keymap) Match(keys []myelin.Key, p keybind.Path) Match {
+	m := k.km.Match(keys, p.Steps())
 	out := Match{Prefix: m.Prefix}
 	if m.Exact != nil {
 		out.Action, out.Args = Action(m.Exact.Action), m.Exact.Args
@@ -106,18 +137,23 @@ func (k *Keymap) Match(keys []keybind.Key, p keybind.Path) Match {
 // surface that never buffers a sequence (a picker, a modal, a text field) does with
 // it. ok is false when the key runs nothing there.
 func (k *Keymap) Action(key tea.Key, p keybind.Path) (Action, []string, bool) {
-	m := k.Match([]keybind.Key{KeyOf(key)}, p)
+	mk, ok := myelintea.Key(key)
+	if !ok {
+		return "", nil, false
+	}
+	m := k.Match([]myelin.Key{mk}, p)
 	return m.Action, m.Args, m.Action != ""
 }
 
 // Resolve reports the action a whole run of key tokens runs in the context path,
-// ok false when it runs none. Tokens are the `--keylog` trace notation (`j`,
-// `ctrl+s`, `g`); the trace analyser asks it whether a run of keys the walker
-// pressed formed a complete binding. A token that cannot be read matches nothing.
+// ok false when it runs none. Tokens are the `--keylog` trace notation, the
+// keymap's own (KeyName); the trace analyser asks it whether a run of keys the
+// walker pressed formed a complete binding. A token that cannot be read matches
+// nothing.
 func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
-	keys := make([]keybind.Key, 0, len(tokens))
+	keys := make([]myelin.Key, 0, len(tokens))
 	for _, tok := range tokens {
-		key, err := keybind.ParseKey(tok)
+		key, err := myelin.ParseKey(tok)
 		if err != nil {
 			return "", false
 		}
@@ -132,8 +168,8 @@ func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
 // Nil when nothing runs it there.
 func (k *Keymap) Keys(a Action, p keybind.Path) []string {
 	var out []string
-	for _, ks := range k.km.KeysFor(string(a), nil, p) {
-		out = append(out, keybind.FormatKeys(ks))
+	for _, ks := range k.km.KeysFor(string(a), nil, p.Steps()) {
+		out = append(out, myelin.FormatSeq(ks))
 	}
 	return out
 }
@@ -143,42 +179,20 @@ func (k *Keymap) Keys(a Action, p keybind.Path) []string {
 // a check over every surface reads.
 func (k *Keymap) KeysAnywhere(a Action) []string {
 	var out []string
-	for _, e := range k.km.Bindings() {
-		if b := e.Binding; !b.Unbind() && b.Action == string(a) && len(b.Args) == 0 {
-			out = append(out, keybind.FormatKeys(e.Keys))
+	for _, b := range k.km.All() {
+		if !b.Unbind && b.Action == string(a) && len(b.Args) == 0 {
+			out = append(out, myelin.FormatSeq(b.Seq))
 		}
 	}
 	return out
 }
 
-// KeyOf is a live keypress as the keymap compares it. Shift folds into the
-// character for a printable key (the terminal reports `G`, or `g` plus shift), and
-// ctrl folds case (`ctrl+D` is `ctrl+d`); a named key keeps its shift (shift+tab).
-func KeyOf(k tea.Key) keybind.Key {
-	ctrl := k.Mod&tea.ModCtrl != 0
-	alt := k.Mod&tea.ModAlt != 0
-	if name, ok := namedCodes[k.Code]; ok {
-		return keybind.Key{Ctrl: ctrl, Alt: alt, Shift: k.Mod&tea.ModShift != 0, Name: name}
+// KeyName is a live keypress in the keymap's spelling (`j`, `ctrl+d`, `shift+tab`,
+// `G`), what a `--keylog` trace records; a key the keymap has no name for is
+// written as Bubble Tea writes it.
+func KeyName(k tea.Key) string {
+	if mk, ok := myelintea.Key(k); ok {
+		return myelin.FormatKey(mk)
 	}
-	r := k.Code
-	if !ctrl {
-		if k.ShiftedCode != 0 {
-			r = k.ShiftedCode
-		} else if t := []rune(k.Text); len(t) == 1 {
-			r = t[0]
-		}
-	} else if r >= 'A' && r <= 'Z' {
-		r += 'a' - 'A'
-	}
-	return keybind.Key{Ctrl: ctrl, Alt: alt, Name: string(r)}
-}
-
-// namedCodes are the tea key codes the keymap writes by name.
-var namedCodes = map[rune]string{
-	tea.KeyUp: "up", tea.KeyDown: "down", tea.KeyLeft: "left", tea.KeyRight: "right",
-	tea.KeyEnter: "enter", tea.KeyEsc: "esc", tea.KeyTab: "tab", tea.KeySpace: "space",
-	tea.KeyHome: "home", tea.KeyEnd: "end", tea.KeyPgUp: "pgup", tea.KeyPgDown: "pgdn",
-	tea.KeyBackspace: "backspace", tea.KeyDelete: "delete", tea.KeyInsert: "insert",
-	tea.KeyF1: "f1", tea.KeyF2: "f2", tea.KeyF3: "f3", tea.KeyF4: "f4", tea.KeyF5: "f5", tea.KeyF6: "f6",
-	tea.KeyF7: "f7", tea.KeyF8: "f8", tea.KeyF9: "f9", tea.KeyF10: "f10", tea.KeyF11: "f11", tea.KeyF12: "f12",
+	return k.String()
 }

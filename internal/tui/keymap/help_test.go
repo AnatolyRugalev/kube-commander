@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
+	"github.com/neuroplastio/myelin"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
@@ -456,9 +457,9 @@ func TestHelpMapFullHelp(t *testing.T) {
 	}
 	// Unbinding every nav.* key collapses the nav column entirely.
 	var unbind string
-	for _, e := range DefaultKeymap().Engine().Bindings() {
-		if groupOf(Action(e.Binding.Action)) == "nav" {
-			unbind += "unbind \"" + keybind.FormatKeys(e.Keys) + "\"\n"
+	for _, b := range DefaultKeymap().Engine().All() {
+		if groupOf(Action(b.Action)) == "nav" {
+			unbind += "unbind \"" + myelin.FormatSeq(b.Seq) + "\"\n"
 		}
 	}
 	if c := cols(withUser(t, unbind, ""), tablePath); c["nav"] != nil {

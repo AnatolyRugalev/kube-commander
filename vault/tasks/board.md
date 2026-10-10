@@ -3,16 +3,16 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) blocked on myelin's M6._
+_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) green locally, its push blocked on myelin going public._
 
 ## In Progress
 
 ## Blocked
 
-- [ ] **MYELIN-01** Switch the keymap engine to myelin (NEIO-13), the shared CEL context keymap ported from `internal/keybind`
-      status: blocked | owner: — | added: 2026-10-10
-      notes: Blocked on myelin's M3–M6, which port from the top commit of the KDL-01–KEYS-04 push once it lands (tell the `myelin` session that commit). The order is the maintainer's ruling (gov 8b86fe3): (1) myelin M3–M6; (2) kubecom builds against a local myelin through a `replace` or go.work that is never pushed, with the keymap golden (`oldkeys.golden`) and `make check` green — then tell `myelin`; (3) myelin goes public; (4) only then push the switch, since a public kubecom cannot fetch a private module. myelin's session says when M6 is ready.
-      → knowledge: decisions.md D303
+- [ ] **MYELIN-01** Push the switch of the keymap engine to myelin (NEIO-13)
+      status: blocked | owner: kubecom | added: 2026-10-10
+      notes: Steps 1–2 of the maintainer's order (gov 8b86fe3) are done: the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring myelin 00e70d1, with the golden and `make check` green against it both through a local go.work and without one. Blocked on (3) myelin going public (myelin's PUBLIC-01; the `myelin` session says when) and on the KDL-01–KEYS-04 push. Then (4): bump the requirement to myelin's public commit if it moved, `make check`, push.
+      → knowledge: decisions.md D304
 
 ## Backlog
 

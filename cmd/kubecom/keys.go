@@ -12,6 +12,7 @@ import (
 	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/keylog"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
+	"github.com/neuroplastio/myelin"
 	"github.com/spf13/cobra"
 )
 
@@ -91,8 +92,8 @@ in a context) is printed and does not fail it.`,
 				return err
 			}
 			user := 0
-			for _, e := range km.Engine().Bindings() {
-				if e.Binding.Layer() == keybind.User {
+			for _, b := range km.Engine().All() {
+				if b.Layer == keybind.User {
 					user++
 				}
 			}
@@ -280,17 +281,16 @@ func (r kmResolver) Resolve(tokens ...string) (string, bool) {
 func printKeys(out io.Writer, km *keymap.Keymap) error {
 	rows := [][4]string{{"KEYS", "ACTION", "CONTEXT", "FROM"}}
 	bound := map[keymap.Action]bool{}
-	for _, e := range km.Engine().Bindings() {
-		b := e.Binding
+	for _, b := range km.Engine().All() {
 		action := "(unbind)"
-		if !b.Unbind() {
+		if !b.Unbind {
 			action = b.Action
 			for _, v := range b.Args {
 				action += " " + strconv.Quote(v)
 			}
 			bound[keymap.Action(b.Action)] = true
 		}
-		rows = append(rows, [4]string{keybind.FormatKeys(e.Keys), action, b.Context(), filepath.Base(b.Source())})
+		rows = append(rows, [4]string{myelin.FormatSeq(b.Seq), action, b.When, filepath.Base(b.Source)})
 	}
 	var widths [3]int
 	for _, r := range rows {

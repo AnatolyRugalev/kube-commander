@@ -3,7 +3,7 @@ package keymap
 import (
 	"strings"
 
-	"github.com/neuroplastio/kubecom/internal/keybind"
+	"github.com/neuroplastio/myelin"
 )
 
 // This file renders the committed keybindings reference (docs/keybindings.md)
@@ -36,13 +36,12 @@ fallbacks second (D10). A key with a context in parentheses acts only there.
 // an em dash.
 func (k *Keymap) Markdown() string {
 	keys := map[Action][]string{}
-	for _, e := range k.km.Bindings() {
-		b := e.Binding
-		if b.Unbind() || len(b.Args) > 0 {
+	for _, b := range k.km.All() {
+		if b.Unbind || len(b.Args) > 0 {
 			continue
 		}
-		tok := "`" + keybind.FormatKeys(e.Keys) + "`"
-		if c := b.Context(); c != "" {
+		tok := "`" + myelin.FormatSeq(b.Seq) + "`"
+		if c := b.When; c != "" {
 			tok += " (`" + strings.ReplaceAll(c, "|", `\|`) + "`)"
 		}
 		keys[Action(b.Action)] = append(keys[Action(b.Action)], tok)
