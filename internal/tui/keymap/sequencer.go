@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/neuroplastio/myelin"
-	"github.com/neuroplastio/myelin/myelintea"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
@@ -66,8 +65,8 @@ func (s *Sequencer) Reset() { s.st = myelin.Pending{} }
 // reachable; the short form then fires on Timeout. A key that fits no binding
 // abandons any buffered prefix and is fed again on its own (myelin leaves that to
 // the program).
-func (s *Sequencer) Input(key tea.Key, p keybind.Path, now time.Time) Result {
-	k, ok := myelintea.Key(key)
+func (s *Sequencer) Input(press tea.Key, p keybind.Path, now time.Time) Result {
+	k, ok := keyOf(press)
 	if !ok {
 		s.Reset()
 		return Result{Kind: ResultNone}

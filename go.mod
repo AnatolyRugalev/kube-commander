@@ -11,8 +11,9 @@ require (
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260713092006-0d683c34c74b
 	github.com/neuroplastio/engram v0.0.0-20261004143221-248ec260b8de
 	github.com/neuroplastio/engram/enlaunch v0.0.0-20261004143221-248ec260b8de
-	github.com/neuroplastio/myelin v0.0.0-20261010224921-09c3d6158a59
-	github.com/neuroplastio/myelin/myelintea v0.0.0-20261010224921-09c3d6158a59
+	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010165506-8fff1c2c74dd
+	github.com/neuroplastio/myelin v0.0.0-20261010233127-2ebaa0ebd991
+	github.com/neuroplastio/myelin/key v0.0.0-20261010232718-57904833fca8
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.31.0
 	k8s.io/api v0.31.4
@@ -77,7 +78,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/neuroplastio/hotty-go v0.0.0-20261010165506-8fff1c2c74dd // indirect
-	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010165506-8fff1c2c74dd // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

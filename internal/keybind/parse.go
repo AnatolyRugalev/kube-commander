@@ -7,6 +7,7 @@ import (
 
 	kdl "github.com/calico32/kdl-go"
 	"github.com/neuroplastio/myelin"
+	"github.com/neuroplastio/myelin/key"
 )
 
 // ParseFile reads a whole KDL file holding a `keymap` document — the shape of
@@ -96,7 +97,7 @@ func (p *parser) leader(n *kdl.Node, when string) {
 		p.fail(n, "leader cannot be inside a context")
 		return
 	}
-	if _, err := myelin.ParseKey(s[0]); err != nil {
+	if _, err := key.Parse(s[0]); err != nil {
 		p.fail(n, "leader: %v", err)
 		return
 	}

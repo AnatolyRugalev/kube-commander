@@ -7,8 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	kdl "github.com/calico32/kdl-go"
+	"github.com/neuroplastio/hotty-go/hottytea"
 	"github.com/neuroplastio/myelin"
-	"github.com/neuroplastio/myelin/myelintea"
+	"github.com/neuroplastio/myelin/key"
 
 	"github.com/neuroplastio/kubecom/internal/config"
 	"github.com/neuroplastio/kubecom/internal/keybind"
@@ -124,7 +125,7 @@ type Match struct {
 }
 
 // Match looks a typed sequence up in the context path.
-func (k *Keymap) Match(keys []myelin.Key, p keybind.Path) Match {
+func (k *Keymap) Match(keys []key.Key, p keybind.Path) Match {
 	m := k.km.Match(keys, p.Steps())
 	out := Match{Prefix: m.Prefix}
 	if m.Exact != nil {
@@ -136,12 +137,12 @@ func (k *Keymap) Match(keys []myelin.Key, p keybind.Path) Match {
 // Action resolves one live keypress, on its own, in the context path: what a
 // surface that never buffers a sequence (a picker, a modal, a text field) does with
 // it. ok is false when the key runs nothing there.
-func (k *Keymap) Action(key tea.Key, p keybind.Path) (Action, []string, bool) {
-	mk, ok := myelintea.Key(key)
+func (k *Keymap) Action(press tea.Key, p keybind.Path) (Action, []string, bool) {
+	mk, ok := keyOf(press)
 	if !ok {
 		return "", nil, false
 	}
-	m := k.Match([]myelin.Key{mk}, p)
+	m := k.Match([]key.Key{mk}, p)
 	return m.Action, m.Args, m.Action != ""
 }
 
@@ -151,13 +152,13 @@ func (k *Keymap) Action(key tea.Key, p keybind.Path) (Action, []string, bool) {
 // walker pressed formed a complete binding. A token that cannot be read matches
 // nothing.
 func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
-	keys := make([]myelin.Key, 0, len(tokens))
+	keys := make([]key.Key, 0, len(tokens))
 	for _, tok := range tokens {
-		key, err := myelin.ParseKey(tok)
+		mk, err := key.Parse(tok)
 		if err != nil {
 			return "", false
 		}
-		keys = append(keys, key)
+		keys = append(keys, mk)
 	}
 	m := k.Match(keys, p)
 	return m.Action, m.Action != ""
@@ -169,7 +170,7 @@ func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
 func (k *Keymap) Keys(a Action, p keybind.Path) []string {
 	var out []string
 	for _, ks := range k.km.KeysFor(string(a), nil, p.Steps()) {
-		out = append(out, myelin.FormatSeq(ks))
+		out = append(out, key.FormatSeq(ks))
 	}
 	return out
 }
@@ -181,7 +182,7 @@ func (k *Keymap) KeysAnywhere(a Action) []string {
 	var out []string
 	for _, b := range k.km.All() {
 		if !b.Unbind && b.Action == string(a) && len(b.Args) == 0 {
-			out = append(out, myelin.FormatSeq(b.Seq))
+			out = append(out, key.FormatSeq(b.Seq))
 		}
 	}
 	return out
@@ -191,8 +192,19 @@ func (k *Keymap) KeysAnywhere(a Action) []string {
 // `G`), what a `--keylog` trace records; a key the keymap has no name for is
 // written as Bubble Tea writes it.
 func KeyName(k tea.Key) string {
-	if mk, ok := myelintea.Key(k); ok {
-		return myelin.FormatKey(mk)
+	if mk, ok := keyOf(k); ok {
+		return key.Format(mk)
 	}
 	return k.String()
+}
+
+// keyOf is a live keypress as the keymap compares it: its HOTTY name (hottytea),
+// so it is the key a HOTTY host or the terminal's bytes give for the same
+// keystroke. ok is false for a key with no name there.
+func keyOf(k tea.Key) (key.Key, bool) {
+	name := hottytea.KeyName(k)
+	if name == "" {
+		return "", false
+	}
+	return key.ParseHotty(name)
 }

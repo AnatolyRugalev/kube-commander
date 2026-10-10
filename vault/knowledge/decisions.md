@@ -1867,8 +1867,9 @@ stands, and myelin's tests replay `oldkeys.golden` too.
    call): one spelling per key, and any other is a load error that names
    it — `shift+g` is `G`, `alt+ctrl+x` is `ctrl+alt+x`, `ESC` is `esc`.
    `ctrl+shift+d` is a key of its own, no longer folded into `ctrl+d`.
-   Live keys come through `myelintea` as HOTTY names, so a HOTTY front end
-   gives the keymap the same keys the terminal does.
+   Keys are myelin's `key` module; a live key is its HOTTY name
+   (hotty-go's `hottytea`), so a HOTTY front end gives the keymap the same
+   keys the terminal does.
 3. **Time is a value.** myelin's sequencer reads no clock: a key is fed with
    the time it was handled, and the timeout tick carries the time it fired.
    A key that breaks a pending sequence is fed again on its own, as before
@@ -1879,6 +1880,6 @@ stands, and myelin's tests replay `oldkeys.golden` too.
    switch pushed — a public kubecom cannot fetch a private module.
    `go.mod` requires myelin's pushed commit; nothing is replaced.
 **Cost:** +0.46 MB stripped (myelin, its msgpack codec, hotty-go's key
-names); Bubble Tea 2.0.2 → 2.0.8, `myelintea`'s floor.
+names); Bubble Tea 2.0.2 → 2.0.8, `hottytea`'s floor.
 **Refs:** supersedes D303 pt 8 (ported, not imported) and pt 1's key
 spelling; myelin's reference is its `docs/keymaps.md`.

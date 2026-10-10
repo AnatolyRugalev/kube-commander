@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/neuroplastio/myelin"
+	"github.com/neuroplastio/myelin/key"
 )
 
 // These tests read kubecom's KDL into myelin and match on kubecom's paths: they
@@ -29,9 +30,9 @@ func build(t *testing.T, docs ...myelin.Doc) *myelin.Keymap {
 	return km
 }
 
-func keys(t *testing.T, s string) []myelin.Key {
+func keys(t *testing.T, s string) []key.Key {
 	t.Helper()
-	ks, err := myelin.ParseSeq(s)
+	ks, err := key.ParseSeq(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +300,7 @@ func TestFieldsKeepTheirText(t *testing.T) {
 	}
 	var next []string
 	for _, it := range km.Menu(nil, field.Steps(), nil).Items {
-		next = append(next, myelin.FormatKey(it.Key))
+		next = append(next, key.Format(it.Key))
 	}
 	if got := strings.Join(next, " "); got != "down ctrl+a y" {
 		t.Errorf("next in a field = %s", got)
@@ -363,7 +364,7 @@ func TestShallowUnbindWarns(t *testing.T) {
 func TestTheLeaderIsAnAlias(t *testing.T) {
 	def := load(t, Default, `bind "<leader> n" "ns.switch"`)
 	km := build(t, def, load(t, User, `leader "space"`))
-	if l, ok := km.Leader(); !ok || myelin.FormatKey(l) != "space" {
+	if l, ok := km.Leader(); !ok || key.Format(l) != "space" {
 		t.Fatalf("leader = %v, %v", l, ok)
 	}
 	if exact(km, t, "space n", Path{}) != "ns.switch" {
@@ -396,9 +397,9 @@ func TestMenuIsTheHint(t *testing.T) {
 	var got []string
 	for _, it := range km.Menu(nil, nil, nil).Items {
 		if it.Group {
-			got = append(got, myelin.FormatKey(it.Key)+"="+it.Label)
+			got = append(got, key.Format(it.Key)+"="+it.Label)
 		} else {
-			got = append(got, myelin.FormatKey(it.Key)+"="+it.Binding.Action)
+			got = append(got, key.Format(it.Key)+"="+it.Binding.Action)
 		}
 	}
 	if s := strings.Join(got, " "); s != "g=+goto G=nav.bottom" {
@@ -406,7 +407,7 @@ func TestMenuIsTheHint(t *testing.T) {
 	}
 	got = nil
 	for _, it := range km.Menu(keys(t, "g"), nil, nil).Items {
-		got = append(got, myelin.FormatKey(it.Key)+"="+it.Label)
+		got = append(got, key.Format(it.Key)+"="+it.Label)
 	}
 	if s := strings.Join(got, " "); s != "g= r=relations" {
 		t.Fatalf("menu after g = %s", s)
@@ -424,12 +425,12 @@ func TestKeysFor(t *testing.T) {
 	`), load(t, User, `unbind "up"`))
 	var got []string
 	for _, ks := range km.KeysFor("nav.up", nil, nil) {
-		got = append(got, myelin.FormatSeq(ks))
+		got = append(got, key.FormatSeq(ks))
 	}
 	if s := strings.Join(got, ","); s != "k" {
 		t.Fatalf("nav.up = %s", s)
 	}
-	if ks := km.KeysFor("resources.switch", []string{"pods"}, nil); len(ks) != 1 || myelin.FormatSeq(ks[0]) != "g p" {
+	if ks := km.KeysFor("resources.switch", []string{"pods"}, nil); len(ks) != 1 || key.FormatSeq(ks[0]) != "g p" {
 		t.Fatalf("resources.switch pods = %v", ks)
 	}
 }
@@ -496,7 +497,7 @@ func BenchmarkMatchInAContext(b *testing.B) {
 	}
 	km, _ := Env().Build([]myelin.Doc{d}, nil)
 	p := Path{Cluster: &Cluster{Context: "kind"}, Table: &Table{Kind: "Pod"}}
-	k, _ := myelin.ParseSeq("L")
+	k, _ := key.ParseSeq("L")
 	for b.Loop() {
 		if km.Match(k, p.Steps()).Exact == nil {
 			b.Fatal("no match")
