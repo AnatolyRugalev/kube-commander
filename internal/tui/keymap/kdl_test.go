@@ -41,6 +41,8 @@ func TestCheckBinding(t *testing.T) {
 		{"nav.dwn", nil, `"nav.dwn" is not an action`},
 		{"nav.down", []string{"1"}, "nav.down takes no value"},
 		{"ns.switch", []string{"a", "b"}, "ns.switch takes one value, not 2"},
+		{"theme.switch", []string{"nord"}, ""},
+		{"theme.switch", []string{"nrod"}, `"nrod" is not a theme`},
 	} {
 		err := CheckBinding(tc.action, tc.args)
 		if (tc.want == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tc.want)) {

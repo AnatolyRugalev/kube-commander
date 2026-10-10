@@ -3,7 +3,7 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-02 landed (keys resolve in the context path; `kubecom keys` lists, `default`, `check`); KEYS-03 next, pushed with KDL-01 and KEYS-02._
+_Last updated: 2026-10-10 — KEYS-03 landed (a bind's value runs its verb); KDL-01, KEYS-02 and KEYS-03 push together after the maintainer hears it breaks config.yaml._
 
 ## In Progress
 
@@ -16,10 +16,6 @@ _(none)_
 ### Config & keys in KDL (D302/D303)
 
 _plexos's model: an authored `config.kdl` kubecom never writes, an overlay it does, and a `keymap` of `bind`/`unbind`/`group`/`context "<cel>"` over a focus path. KEYS-01 is additive; KDL-01, KEYS-02 and KEYS-03 break `config.yaml` and land together._
-
-- [ ] **KEYS-03** A bind's value runs the argument verb directly (`bind "g p" "resources.switch" "pods"`), with no palette stage
-      status: todo | owner: — | added: 2026-10-10
-      → knowledge: decisions.md D303 pt 2
 
 - [ ] **KEYS-04** Keys that only mean something in one surface move into that surface's context, and the letters that frees are offered back (`p`, `s`, `a`, …) — a remap proposal for the maintainer, not a silent change
       status: in-progress | owner: kubecom | added: 2026-10-10

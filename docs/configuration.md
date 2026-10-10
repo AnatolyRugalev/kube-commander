@@ -70,9 +70,18 @@ keymap {
 
 - `bind "<keys>" "<action>" ["<value>"]` binds keys to an action; the action ids
   are the ones `keybindings.md` and the `:` palette show. A value is for the
-  verbs that take one (`ns.switch`, `resources.switch`, `ctx.switch`,
-  `theme.switch`, `menu.pin`, `actions.menu`): without one the key opens the
-  palette on that verb, with one it runs it.
+  verbs that take one: without one the key opens the palette on that verb, with
+  one it runs it, wherever the key without a value would open the palette.
+
+  | Verb | Value |
+  |------|-------|
+  | `resources.switch`, `menu.pin` | a kind as `:resource` finds it: `Pod`, `pods`, `po`, or `certificates.cert-manager.io` |
+  | `ns.switch` | a namespace; `""` is all namespaces |
+  | `ctx.switch` | a kubeconfig context |
+  | `theme.switch` | a theme name (checked when the keymap loads) |
+  | `actions.menu` | a row action, as `:action` lists it (`Describe`) or by id (`describe`) |
+
+  A value that names nothing there says so on the status line.
 - Keys are written `j`, `G` (or `shift+g`), `ctrl+d`, `alt+x`, `enter`, `esc`,
   `space`, `pgdn`, `f5`; a sequence separates its keys with spaces: `g g`.
 - `unbind "<keys>"` takes keys away; unbinding `g` takes every `g …` with it.

@@ -1769,7 +1769,13 @@ stay.
    opens the palette stage as the key does today. Only the palette's
    argument verbs (`ns.switch`, `resources.switch`, `ctx.switch`,
    `theme.switch`, `menu.pin`, `actions.menu`) take one, and a value on
-   any other action is a load error.
+   any other action is a load error. The value runs exactly where the key
+   without one would open the stage (KEYS-03: the opener runs it instead),
+   so a surface that swallows `R` swallows `g p` too; it names what the
+   stage would list (a kind by Kind, plural, short name or
+   `<plural>.<group>`; `""` for all namespaces; a row action by title or
+   id), a value that names nothing there says so on the status line, and a
+   theme name — the one value known without a cluster — is checked at load.
 3. **The context is the path of what holds the keyboard**, outermost first.
    Each node is a boolean, and its attributes are qualified names under it.
    An attribute of a node that is not on the path is absent, and a misspelt

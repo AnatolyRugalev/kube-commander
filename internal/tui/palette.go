@@ -402,6 +402,12 @@ func (m Model) openPalette() (tea.Model, tea.Cmd) {
 // enterPaletteArg decides that before anything is shown (D197), so a shortcut never
 // opens an empty palette that implies the verb was available.
 func (m Model) openPaletteArg(a keymap.Action) (tea.Model, tea.Cmd) {
+	// A key whose binding gives the value runs the verb with it here instead (D303
+	// pt 2, handleBound): this is where the stage would open, so this is where the
+	// value applies.
+	if v, ok := m.takeBindValue(); ok {
+		return m.runArgument(a, v)
+	}
 	next, load, entered := m.enterPaletteArg(a)
 	if !entered {
 		return m, nil

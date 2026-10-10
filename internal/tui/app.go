@@ -601,6 +601,11 @@ type Model struct {
 	table   table.Model
 	status  statusbar.Model
 	hintbar hintbar.Model
+	// bindValue is the value the binding being handled gives its argument verb
+	// (D303 pt 2). handleBound sets it for one handleAction call and the verb's
+	// opener takes it (takeBindValue); it is nil at every other time.
+	bindValue *string
+
 	// hintPath is the context path the hintbar was last rendered for, written out
 	// (keybind.Path.String). It is the memo refreshHints compares against at the
 	// tail of every Update (HINT-01/D206), so a message that does not move what
@@ -1358,7 +1363,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch r := m.seq.Input(msg.Key(), path); r.Kind {
 		case keymap.ResultAction:
 			m.recordKey(msg, keyModeBrowse, r.Action, r.Kind)
-			return m.handleAction(r.Action)
+			return m.handleBound(r.Action, r.Args)
 		case keymap.ResultPending:
 			m.recordKey(msg, keyModeBrowse, "", r.Kind)
 			// Hold the prefix; schedule a timeout so a lone `g` still fires its
@@ -1383,7 +1388,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// The prefix resolves in the path it was typed in (the Sequencer keeps it).
 		if r := m.seq.Timeout(); r.Kind == keymap.ResultAction {
-			return m.handleAction(r.Action)
+			return m.handleBound(r.Action, r.Args)
 		}
 		return m, nil
 
@@ -4455,6 +4460,11 @@ func (m Model) handleAction(a keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionUnhealthyScan:
 		return m.openUnhealthy()
 	case keymap.ActionPin:
+		// With a value the binding names the kind (D303 pt 2); without one it is the
+		// kind under the cursor.
+		if v, ok := m.takeBindValue(); ok {
+			return m.runArgument(a, v)
+		}
 		return m.pinResource()
 	case keymap.ActionDescribe, keymap.ActionEvents, keymap.ActionLogs,
 		keymap.ActionEdit, keymap.ActionDelete, keymap.ActionChildren,

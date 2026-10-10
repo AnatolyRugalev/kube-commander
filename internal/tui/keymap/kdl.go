@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
+	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
 // This file is the action registry's side of the context keymap (D303): the
@@ -64,6 +65,11 @@ func CheckBinding(action string, args []string) error {
 		return fmt.Errorf("%s takes no value", action)
 	case len(args) > 1:
 		return fmt.Errorf("%s takes one value, not %d", action, len(args))
+	case a == ActionTheme && len(args) == 1:
+		// The one value that is known before a cluster is: a theme is built in.
+		if _, ok := styles.ByName(args[0]); !ok {
+			return fmt.Errorf("%q is not a theme (configuration.md#themes lists them)", args[0])
+		}
 	}
 	return nil
 }
