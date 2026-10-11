@@ -11,7 +11,7 @@ _Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their s
 
 - [ ] **MYELIN-01** Push the switch of the keymap engine to myelin (NEIO-13)
       status: blocked | owner: kubecom | added: 2026-10-10
-      notes: Steps 1–3 of the maintainer's order (gov 8b86fe3) are done: myelin is public, and the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring public myelin 5e57c47 and myelinkey 0036c3f (D15), green with no workspace and verified against the public checksum database. Blocked only on the maintainer's go-ahead for the KDL-01–KEYS-04 push, which breaks existing setups; the switch goes with it.
+      notes: Steps 1–3 of the maintainer's order (gov 8b86fe3) are done: myelin is public, and the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring public myelin 0360493 and myelinkey d2e0f76 (D15, D16), green with no workspace and verified against the public checksum database. Blocked only on the maintainer's go-ahead for the KDL-01–KEYS-04 push, which breaks existing setups; the switch goes with it.
       → knowledge: decisions.md D304
 
 ## Backlog

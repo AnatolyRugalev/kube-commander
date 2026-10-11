@@ -70,6 +70,7 @@ func TestKeySpellings(t *testing.T) {
 		{"shift+tab", "Shift+Tab"},
 		{"space", "space"},
 		{"#", "#"},
+		{"shift", "Shift"}, // a modifier tapped alone is a key (myelin's D16)
 	} {
 		want, err := ParseSeq(same[0])
 		if err != nil {
@@ -91,7 +92,6 @@ func TestKeySpellings(t *testing.T) {
 		"gg":     "separated by spaces",
 		"ctrl+":  `test.kdl:2: bind: "ctrl+": no key after the last +`,
 		"meta+x": "write super+",
-		"ctrl":   "is a modifier",
 	} {
 		_, err := ParseFile("test.kdl", []byte("keymap {\nbind \""+bad+"\" \"x\"\n}\n"), User)
 		if err == nil || !strings.Contains(err.Error(), want) {

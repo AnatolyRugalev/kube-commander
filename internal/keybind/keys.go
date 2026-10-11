@@ -47,13 +47,13 @@ var shortNames = map[string]string{
 // the keys vim users type (`esc`, `pgdn`, `up`), and otherwise myelin's own
 // spelling (`ctrl+d`, `shift+tab`, `ctrl+shift+d`). KeyOptions read it back.
 func Display(k myelinkey.Key) string {
-	mods, value, char := myelinkey.Split(k)
-	if char && mods == myelinkey.Shift {
+	mods, value, kind := myelinkey.Split(k)
+	if kind == myelinkey.Character && mods == myelinkey.Shift {
 		if up := strings.ToUpper(value); utf8.RuneCountInString(up) == 1 && isCapital(up) {
 			return up
 		}
 	}
-	if short, ok := shortNames[value]; ok && !char {
+	if short, ok := shortNames[value]; ok && kind == myelinkey.Physical {
 		return strings.TrimSuffix(string(k), value) + short
 	}
 	return string(k)
