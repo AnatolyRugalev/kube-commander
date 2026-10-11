@@ -3,7 +3,7 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) green locally, its push blocked on myelin going public._
+_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) green on public myelin, pushed with them._
 
 ## In Progress
 
@@ -11,7 +11,7 @@ _Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their s
 
 - [ ] **MYELIN-01** Push the switch of the keymap engine to myelin (NEIO-13)
       status: blocked | owner: kubecom | added: 2026-10-10
-      notes: Steps 1–2 of the maintainer's order (gov 8b86fe3) are done: the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring myelin e5a8dea and its `myelinkey` module (D15), with the golden and `make check` green against it both through a local go.work and without one. Blocked on (3) myelin going public (myelin's PUBLIC-01; the `myelin` session says when) and on the KDL-01–KEYS-04 push. Then (4): bump the requirement to myelin's public commit if it moved, `make check`, push.
+      notes: Steps 1–3 of the maintainer's order (gov 8b86fe3) are done: myelin is public, and the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring public myelin 5e57c47 and myelinkey 0036c3f (D15), green with no workspace and verified against the public checksum database. Blocked only on the maintainer's go-ahead for the KDL-01–KEYS-04 push, which breaks existing setups; the switch goes with it.
       → knowledge: decisions.md D304
 
 ## Backlog
