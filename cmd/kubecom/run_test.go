@@ -10,11 +10,21 @@ import (
 	"github.com/neuroplastio/kubecom/internal/tui/styles"
 )
 
+// isolateConfig points the user config dir at a temp dir for the test: HOME as
+// well as XDG_CONFIG_HOME, since macOS's config dir is under HOME and ignores
+// XDG_CONFIG_HOME. Without it a test reads, or writes, the machine's own.
+func isolateConfig(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+}
+
 // writeConfig points the user config dir at a temp dir and writes body as its
 // config.kdl, returning the kubecom config dir the launcher resolves.
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	dir, err := config.Dir()
 	if err != nil {
 		t.Fatalf("config.Dir: %v", err)
@@ -374,7 +384,7 @@ func TestLoadStateBlankContext(t *testing.T) {
 // TestLoadStateMissingFile proves a context kubecom has never saved state for starts
 // on defaults (zero state) but still reports a path to persist future changes to.
 func TestLoadStateMissingFile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	state, path := loadState("fresh-context")
 	if state == nil || state.LastNamespace != "" {
 		t.Fatalf("missing state file should yield the zero State, got %+v", state)
@@ -387,7 +397,7 @@ func TestLoadStateMissingFile(t *testing.T) {
 // TestLoadStateReadsFile proves a saved last-namespace is loaded back for the
 // context (the restore path).
 func TestLoadStateReadsFile(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	writeStateFile(t, "prod", "version 1\nnamespace \"kube-system\"\n")
 	state, path := loadState("prod")
 	if state.LastNamespace != "kube-system" {
@@ -401,7 +411,7 @@ func TestLoadStateReadsFile(t *testing.T) {
 // TestStatePersisterRoundTrip proves the launcher's persister seam writes a picked
 // namespace to the state file so the next loadState restores it.
 func TestStatePersisterRoundTrip(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	state, path := loadState("prod")
 	p := &statePersister{path: path, state: state}
 	if err := p.PersistNamespace("monitoring"); err != nil {
@@ -419,7 +429,7 @@ func TestStatePersisterRoundTrip(t *testing.T) {
 // fresh State would drop the namespace the same launch recorded — and vice versa.
 // A second pin of the same GVR writes nothing (State.Pin's dedupe, D193 pt 5).
 func TestPersistPinRoundTripsAndKeepsTheNamespace(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	state, path := loadState("prod")
 	p := &statePersister{path: path, state: state}
 	if err := p.PersistNamespace("monitoring"); err != nil {
@@ -467,7 +477,7 @@ func TestPersistPinRoundTripsAndKeepsTheNamespace(t *testing.T) {
 // session recorded — SaveFile marshals the whole struct, and this is the file's third
 // chance to lose the other two fields.
 func TestPersistResourceRoundTripsAndKeepsTheRestOfTheState(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	state, path := loadState("prod")
 	p := &statePersister{path: path, state: state}
 	if err := p.PersistNamespace("monitoring"); err != nil {
@@ -511,7 +521,7 @@ func TestPersistResourceRoundTripsAndKeepsTheRestOfTheState(t *testing.T) {
 // a drill-in's pane is a child kind *and* an owner, and PersistResource stores both in
 // one file state so the restore can re-enter the scope. A plain table clears the owner.
 func TestPersistResourceCarriesTheDrillOwner(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	state, path := loadState("prod")
 	p := &statePersister{path: path, state: state}
 
@@ -547,7 +557,7 @@ func TestPersistResourceCarriesTheDrillOwner(t *testing.T) {
 // and the namespace but leave the departed context's remembered kind armed, and the
 // restore would fire against the wrong cluster.
 func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	writeStateFile(t, "prod", "version 1\nnamespace \"apps\"\nresource \"widgets\" group=\"example.com\" version=\"v1\" kind=\"Widget\"\n")
 
 	st := contextStateLoader{dir: t.TempDir()}.LoadContextState("prod")
@@ -570,7 +580,7 @@ func TestLoadContextStateCarriesTheRememberedKind(t *testing.T) {
 // switch back must arm both halves or it would land on the plain child list of a pane
 // that was actually scoped to an owner.
 func TestLoadContextStateCarriesTheRememberedDrillOwner(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfig(t)
 	writeStateFile(t, "prod", "version 1\nnamespace \"apps\"\nresource \"pods\" version=\"v1\" kind=\"Pod\"\n"+
 		"drill-owner \"deployments\" group=\"apps\" version=\"v1\" kind=\"Deployment\" namespace=\"apps\" name=\"web\"\n")
 

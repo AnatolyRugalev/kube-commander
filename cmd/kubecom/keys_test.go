@@ -138,6 +138,7 @@ keymap {
 
 func runKeysAnalyze(t *testing.T, trace string) (string, error) {
 	t.Helper()
+	isolateConfig(t)
 	path := filepath.Join(t.TempDir(), "trace.jsonl")
 	if err := os.WriteFile(path, []byte(trace), 0o600); err != nil {
 		t.Fatal(err)
