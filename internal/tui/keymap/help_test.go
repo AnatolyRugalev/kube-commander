@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
-	myelinkey "github.com/neuroplastio/myelin/key"
+	"github.com/neuroplastio/myelin/myelinkey"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )

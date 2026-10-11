@@ -1867,7 +1867,7 @@ stands, and myelin's tests replay `oldkeys.golden` too.
    call): one spelling per key, and any other is a load error that names
    it — `shift+g` is `G`, `alt+ctrl+x` is `ctrl+alt+x`, `ESC` is `esc`.
    `ctrl+shift+d` is a key of its own, no longer folded into `ctrl+d`.
-   Keys are myelin's `key` module; a live key is its HOTTY name
+   Keys are myelin's `myelinkey` module; a live key is its HOTTY name
    (hotty-go's `hottytea`), so a HOTTY front end gives the keymap the same
    keys the terminal does.
 3. **Time is a value.** myelin's sequencer reads no clock: a key is fed with

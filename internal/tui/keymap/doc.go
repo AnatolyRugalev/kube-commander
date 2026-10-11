@@ -3,7 +3,7 @@ package keymap
 import (
 	"strings"
 
-	"github.com/neuroplastio/myelin/key"
+	"github.com/neuroplastio/myelin/myelinkey"
 )
 
 // This file renders the committed keybindings reference (docs/keybindings.md)
@@ -40,7 +40,7 @@ func (k *Keymap) Markdown() string {
 		if b.Unbind || len(b.Args) > 0 {
 			continue
 		}
-		tok := "`" + key.FormatSeq(b.Seq) + "`"
+		tok := "`" + myelinkey.FormatSeq(b.Seq) + "`"
 		if c := b.When; c != "" {
 			tok += " (`" + strings.ReplaceAll(c, "|", `\|`) + "`)"
 		}

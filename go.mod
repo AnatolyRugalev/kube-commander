@@ -12,8 +12,8 @@ require (
 	github.com/neuroplastio/engram v0.0.0-20261004143221-248ec260b8de
 	github.com/neuroplastio/engram/enlaunch v0.0.0-20261004143221-248ec260b8de
 	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010165506-8fff1c2c74dd
-	github.com/neuroplastio/myelin v0.0.0-20261010233127-2ebaa0ebd991
-	github.com/neuroplastio/myelin/key v0.0.0-20261010232718-57904833fca8
+	github.com/neuroplastio/myelin v0.0.0-20261011093028-1be8805e9c72
+	github.com/neuroplastio/myelin/myelinkey v0.0.0-20261011092849-2f34a939f3ea
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.31.0
 	k8s.io/api v0.31.4
