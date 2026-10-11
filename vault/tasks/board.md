@@ -3,16 +3,13 @@
 Live board for kubecom. See [`README.md`](README.md) for workflow and the item
 template. Status: `todo` · `in-progress` · `blocked` · `done`.
 
-_Last updated: 2026-10-10 — KEYS-04 landed (surface-only keys bound on their surface); KEYS-05 (what the freed letters become) waits on the maintainer; KDL-01 through KEYS-04 push together on the maintainer's go-ahead; MYELIN-01 (the switch to myelin) green on public myelin, pushed with them._
+_Last updated: 2026-10-11 — KDL-01 through KEYS-04 and MYELIN-01 landed: config in KDL, a context keymap on myelin v0.1.0-next.1 (D302–D304); KEYS-05 (what the freed letters become) waits on the maintainer._
 
 ## In Progress
 
 ## Blocked
 
-- [ ] **MYELIN-01** Push the switch of the keymap engine to myelin (NEIO-13)
-      status: blocked | owner: kubecom | added: 2026-10-10
-      notes: Steps 1–3 of the maintainer's order (gov 8b86fe3) are done: myelin is public, and the switch is the local branch `myelin-switch`, built on the KDL-01–KEYS-04 commits, its `go.mod` requiring public myelin 0360493 and myelinkey d2e0f76 (D15, D16), green with no workspace and verified against the public checksum database. Blocked only on the maintainer's go-ahead for the KDL-01–KEYS-04 push, which breaks existing setups; the switch goes with it.
-      → knowledge: decisions.md D304
+_(none)_
 
 ## Backlog
 
