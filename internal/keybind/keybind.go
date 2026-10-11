@@ -52,7 +52,12 @@ const SequenceTimeout = 500 * time.Millisecond
 // Schema is kubecom's path and layers, declared to myelin: every node of nodeTypes
 // with its attributes, field the node that takes text.
 func Schema() myelin.Schema {
-	s := myelin.Schema{Layers: []string{Default, User}, Timeout: SequenceTimeout}
+	s := myelin.Schema{
+		Layers:          []string{Default, User},
+		StrictKeys:      KeyOptions.Strict,
+		ShiftedCapitals: KeyOptions.ShiftedCapitals,
+		Timeout:         SequenceTimeout,
+	}
 	for _, n := range nodeTypes {
 		s.Nodes = append(s.Nodes, myelin.NodeType{Name: n.name, Attrs: n.attrs, Text: n.name == "field"})
 	}

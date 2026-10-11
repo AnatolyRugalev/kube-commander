@@ -188,10 +188,10 @@ github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010165506-8fff1c2c74dd h1:
 github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010165506-8fff1c2c74dd/go.mod h1:tW5w10NaVEWLYYb8H+SX7Cl/IEBmGXsx/LXrBLNUIeQ=
 github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010155830-c8e0cc1d3198 h1:KX1msjMlayV815zSbJjKe+5q0bjkJU0hwGVtHt1kUms=
 github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010155830-c8e0cc1d3198/go.mod h1:ro1PcORirDkHegLZvCVg++PQGWskRPU0pJ5c4CWA7iI=
-github.com/neuroplastio/myelin v0.0.0-20261011093028-1be8805e9c72 h1:aZb/zyGLf9jp361oF+ScV8QrMq7wWzZn1TFWJnN15i0=
-github.com/neuroplastio/myelin v0.0.0-20261011093028-1be8805e9c72/go.mod h1:BWzG3HUHJuqzqsk5oALrxiiD0c9BarVeJ/X8pSGVdMw=
-github.com/neuroplastio/myelin/myelinkey v0.0.0-20261011092849-2f34a939f3ea h1:iTJjZfUX8SOJ7QO7ILOlB1iBH/P2az3t0ZEVDsDayts=
-github.com/neuroplastio/myelin/myelinkey v0.0.0-20261011092849-2f34a939f3ea/go.mod h1:lnIMTPFSwjs8dsx9R8zsPNGaRnlzS4rScUY4exrjLus=
+github.com/neuroplastio/myelin v0.0.0-20261011104119-e5a8dea31834 h1:yyR9Oq7MlqYoHNzBlQFaLphdwcr9PthCr+yZLaWLqdk=
+github.com/neuroplastio/myelin v0.0.0-20261011104119-e5a8dea31834/go.mod h1:v62zyb9I+zEOcnk2HrdNeNjiYGKkYgDz8ew3ethEF4E=
+github.com/neuroplastio/myelin/myelinkey v0.0.0-20261011103422-0036c3fd18ac h1:bBbypIfykCS2fSXaotI3BEG2z9Cxuj1knI77ViYKC7U=
+github.com/neuroplastio/myelin/myelinkey v0.0.0-20261011103422-0036c3fd18ac/go.mod h1:lnIMTPFSwjs8dsx9R8zsPNGaRnlzS4rScUY4exrjLus=
 github.com/onsi/ginkgo/v2 v2.19.0 h1:9Cnnf7UHo57Hy3k6/m5k3dRfGTMXGvxhHFvkDTCTpvA=
 github.com/onsi/ginkgo/v2 v2.19.0/go.mod h1:rlwLi9PilAFJ8jCg9UE1QP6VBpd6/xj3SRC0d6TU0To=
 github.com/onsi/gomega v1.33.1 h1:dsYjIxxSR755MDmKVsaFQTE22ChNBcuuTWgkUDSubOk=

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/neuroplastio/myelin"
-	"github.com/neuroplastio/myelin/myelinkey"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
@@ -120,7 +119,7 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 		if !ok {
 			t.Fatalf("golden scenario %q has no path", f[0])
 		}
-		keys, err := myelinkey.ParseSeq(f[1])
+		keys, err := keybind.ParseSeq(f[1])
 		if err != nil {
 			t.Fatalf("%s: %v", f[1], err)
 		}
@@ -142,7 +141,7 @@ func TestDefaultKDLKeepsTheOldKeys(t *testing.T) {
 				t.Errorf("%s: %s is a prefix of a longer binding", f[0], f[1])
 			}
 			if !km.Match(keys[:1], path.Steps()).Prefix {
-				t.Errorf("%s: %s does not start a sequence", f[0], myelinkey.Format(keys[0]))
+				t.Errorf("%s: %s does not start a sequence", f[0], keybind.Display(keys[0]))
 			}
 		}
 	}

@@ -32,7 +32,7 @@ func build(t *testing.T, docs ...myelin.Doc) *myelin.Keymap {
 
 func keys(t *testing.T, s string) []myelinkey.Key {
 	t.Helper()
-	ks, err := myelinkey.ParseSeq(s)
+	ks, err := ParseSeq(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,20 +55,43 @@ func TestSchemaIsAccepted(t *testing.T) {
 	}
 }
 
-// A key is written one way, myelin's (its D7): any other spelling is an error at
-// its line that names the one to write.
-func TestKeysHaveOneSpelling(t *testing.T) {
-	for _, ok := range []string{"ctrl+d", "G", "shift+tab", "esc", "pgdn", "space", "#", "ctrl+alt+x", "f12", "g g", "<leader> n"} {
-		if _, err := ParseFile("test.kdl", []byte("keymap {\nbind \""+ok+"\" \"x\"\n}\n"), User); err != nil {
-			t.Errorf("%s: %v", ok, err)
+// Keys are read as Ghostty reads them (myelin's D15): any modifier order and
+// case, a short name or the full one, and a capital is Shift with its letter
+// (KeyOptions). Display writes each the way default.kdl does, and reads back.
+func TestKeySpellings(t *testing.T) {
+	for _, same := range [][]string{
+		{"G", "shift+g", "Shift+G", "shift+G"},
+		{"g", "g"},
+		{"ctrl+alt+x", "alt+ctrl+x", "Ctrl+Alt+x", "control+alt+x"},
+		{"ctrl+shift+d", "ctrl+D", "shift+ctrl+d"},
+		{"esc", "escape", "ESC", "Escape"},
+		{"pgdn", "page_down", "PageDown"},
+		{"up", "arrow_up", "ArrowUp"},
+		{"shift+tab", "Shift+Tab"},
+		{"space", "space"},
+		{"#", "#"},
+	} {
+		want, err := ParseSeq(same[0])
+		if err != nil {
+			t.Fatalf("%s: %v", same[0], err)
+		}
+		if got := DisplaySeq(want); got != same[0] {
+			t.Errorf("%s displays as %s", same[0], got)
+		}
+		for _, s := range same[1:] {
+			if got, err := ParseSeq(s); err != nil || DisplaySeq(got) != same[0] {
+				t.Errorf("%s reads as %v (%v), want %s", s, got, err, same[0])
+			}
 		}
 	}
+	if g, _ := ParseSeq("g"); DisplaySeq(g) == "G" {
+		t.Error("g and G are one key")
+	}
 	for bad, want := range map[string]string{
-		"shift+g":    `test.kdl:2: bind: "shift+g": write G`,
-		"alt+ctrl+x": `test.kdl:2: bind: "alt+ctrl+x": write ctrl+alt+x`,
-		"ESC":        `test.kdl:2: bind: "ESC": write esc`,
-		"gg":         "separated by spaces",
-		"ctrl+":      `test.kdl:2: bind: "ctrl+"`,
+		"gg":     "separated by spaces",
+		"ctrl+":  `test.kdl:2: bind: "ctrl+": no key after the last +`,
+		"meta+x": "write super+",
+		"ctrl":   "is a modifier",
 	} {
 		_, err := ParseFile("test.kdl", []byte("keymap {\nbind \""+bad+"\" \"x\"\n}\n"), User)
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -300,7 +323,7 @@ func TestFieldsKeepTheirText(t *testing.T) {
 	}
 	var next []string
 	for _, it := range km.Menu(nil, field.Steps(), nil).Items {
-		next = append(next, myelinkey.Format(it.Key))
+		next = append(next, Display(it.Key))
 	}
 	if got := strings.Join(next, " "); got != "down ctrl+a y" {
 		t.Errorf("next in a field = %s", got)
@@ -351,7 +374,7 @@ func TestShallowUnbindWarns(t *testing.T) {
 		t.Fatalf("a warning refused the keymap: %+v", problems)
 	}
 	if len(problems) != 1 || !problems[0].Warning || problems[0].Source != "test.kdl:4" ||
-		!strings.Contains(problems[0].Text, `unbind "X" leaves X → forwards.stopAll in context "forwards"`) {
+		!strings.Contains(problems[0].Text, `leaves shift+x → forwards.stopAll in context "forwards"`) {
 		t.Fatalf("problems = %+v", problems)
 	}
 	if exact(km, t, "X", Path{Forwards: true}) != "" {
@@ -364,14 +387,14 @@ func TestShallowUnbindWarns(t *testing.T) {
 func TestTheLeaderIsAnAlias(t *testing.T) {
 	def := load(t, Default, `bind "<leader> n" "ns.switch"`)
 	km := build(t, def, load(t, User, `leader "space"`))
-	if l, ok := km.Leader(); !ok || myelinkey.Format(l) != "space" {
+	if l, ok := km.Alias("leader"); !ok || DisplaySeq(l) != "space" {
 		t.Fatalf("leader = %v, %v", l, ok)
 	}
 	if exact(km, t, "space n", Path{}) != "ns.switch" {
 		t.Fatal("<leader> n did not follow the leader to space")
 	}
 	km, problems := Env().Build([]myelin.Doc{def}, nil)
-	if km != nil || len(problems) != 1 || problems[0].Source != "test.kdl:2" || !strings.Contains(problems[0].Text, "names <leader>") {
+	if km != nil || len(problems) != 1 || problems[0].Source != "test.kdl:2" || !strings.Contains(problems[0].Text, "no alias <leader>") {
 		t.Fatalf("no leader: %v, %+v", km, problems)
 	}
 }
@@ -397,9 +420,9 @@ func TestMenuIsTheHint(t *testing.T) {
 	var got []string
 	for _, it := range km.Menu(nil, nil, nil).Items {
 		if it.Group {
-			got = append(got, myelinkey.Format(it.Key)+"="+it.Label)
+			got = append(got, Display(it.Key)+"="+it.Label)
 		} else {
-			got = append(got, myelinkey.Format(it.Key)+"="+it.Binding.Action)
+			got = append(got, Display(it.Key)+"="+it.Binding.Action)
 		}
 	}
 	if s := strings.Join(got, " "); s != "g=+goto G=nav.bottom" {
@@ -407,7 +430,7 @@ func TestMenuIsTheHint(t *testing.T) {
 	}
 	got = nil
 	for _, it := range km.Menu(keys(t, "g"), nil, nil).Items {
-		got = append(got, myelinkey.Format(it.Key)+"="+it.Label)
+		got = append(got, Display(it.Key)+"="+it.Label)
 	}
 	if s := strings.Join(got, " "); s != "g= r=relations" {
 		t.Fatalf("menu after g = %s", s)
@@ -425,12 +448,12 @@ func TestKeysFor(t *testing.T) {
 	`), load(t, User, `unbind "up"`))
 	var got []string
 	for _, ks := range km.KeysFor("nav.up", nil, nil) {
-		got = append(got, myelinkey.FormatSeq(ks))
+		got = append(got, DisplaySeq(ks))
 	}
 	if s := strings.Join(got, ","); s != "k" {
 		t.Fatalf("nav.up = %s", s)
 	}
-	if ks := km.KeysFor("resources.switch", []string{"pods"}, nil); len(ks) != 1 || myelinkey.FormatSeq(ks[0]) != "g p" {
+	if ks := km.KeysFor("resources.switch", []string{"pods"}, nil); len(ks) != 1 || DisplaySeq(ks[0]) != "g p" {
 		t.Fatalf("resources.switch pods = %v", ks)
 	}
 }
@@ -447,7 +470,7 @@ func TestParseErrorsNameTheLine(t *testing.T) {
 		`context "table.kindd == 1" { }`:    `test.kdl:3: context "table.kindd == 1"`,
 		`context "logs" { leader "space" }`: `test.kdl:3: leader cannot be inside a context`,
 		`leader "space" "tab"`:              `test.kdl:3: leader takes one argument`,
-		`leader "Space"`:                    `test.kdl:3: leader: "Space": write space`,
+		`leader "ctrl+"`:                    `test.kdl:3: leader: "ctrl+": no key after the last +`,
 		`base "vim"`:                        `test.kdl:3: base is "kubecom" (the defaults) or "none"`,
 		`bind "a" "x" { y }`:                `test.kdl:3: bind takes no block`,
 		`unbind ""`:                         `test.kdl:3: unbind: an empty key sequence`,
@@ -497,7 +520,7 @@ func BenchmarkMatchInAContext(b *testing.B) {
 	}
 	km, _ := Env().Build([]myelin.Doc{d}, nil)
 	p := Path{Cluster: &Cluster{Context: "kind"}, Table: &Table{Kind: "Pod"}}
-	k, _ := myelinkey.ParseSeq("L")
+	k, _ := ParseSeq("L")
 	for b.Loop() {
 		if km.Match(k, p.Steps()).Exact == nil {
 			b.Fatal("no match")

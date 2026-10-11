@@ -6,7 +6,6 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	"github.com/neuroplastio/myelin/myelinkey"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
@@ -376,7 +375,7 @@ func (k *Keymap) HelpMap(p keybind.Path) HelpKeyMap {
 	for _, b := range k.km.Effective(p.Steps()) {
 		if len(b.Args) == 0 {
 			a := Action(b.Action)
-			keys[a] = append(keys[a], myelinkey.FormatSeq(b.Seq))
+			keys[a] = append(keys[a], keybind.DisplaySeq(b.Seq))
 		}
 	}
 	return HelpKeyMap{path: p, keys: keys}

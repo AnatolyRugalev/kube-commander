@@ -154,11 +154,11 @@ func (k *Keymap) Action(press tea.Key, p keybind.Path) (Action, []string, bool) 
 func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
 	keys := make([]myelinkey.Key, 0, len(tokens))
 	for _, tok := range tokens {
-		mk, err := myelinkey.Parse(tok)
-		if err != nil {
+		ks, err := keybind.ParseSeq(tok)
+		if err != nil || len(ks) != 1 {
 			return "", false
 		}
-		keys = append(keys, mk)
+		keys = append(keys, ks[0])
 	}
 	m := k.Match(keys, p)
 	return m.Action, m.Action != ""
@@ -170,7 +170,7 @@ func (k *Keymap) Resolve(p keybind.Path, tokens ...string) (Action, bool) {
 func (k *Keymap) Keys(a Action, p keybind.Path) []string {
 	var out []string
 	for _, ks := range k.km.KeysFor(string(a), nil, p.Steps()) {
-		out = append(out, myelinkey.FormatSeq(ks))
+		out = append(out, keybind.DisplaySeq(ks))
 	}
 	return out
 }
@@ -182,7 +182,7 @@ func (k *Keymap) KeysAnywhere(a Action) []string {
 	var out []string
 	for _, b := range k.km.All() {
 		if !b.Unbind && b.Action == string(a) && len(b.Args) == 0 {
-			out = append(out, myelinkey.FormatSeq(b.Seq))
+			out = append(out, keybind.DisplaySeq(b.Seq))
 		}
 	}
 	return out
@@ -193,7 +193,7 @@ func (k *Keymap) KeysAnywhere(a Action) []string {
 // written as Bubble Tea writes it.
 func KeyName(k tea.Key) string {
 	if mk, ok := keyOf(k); ok {
-		return myelinkey.Format(mk)
+		return keybind.Display(mk)
 	}
 	return k.String()
 }

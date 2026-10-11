@@ -12,7 +12,6 @@ import (
 	"github.com/neuroplastio/kubecom/internal/keybind"
 	"github.com/neuroplastio/kubecom/internal/keylog"
 	"github.com/neuroplastio/kubecom/internal/tui/keymap"
-	"github.com/neuroplastio/myelin/myelinkey"
 	"github.com/spf13/cobra"
 )
 
@@ -290,7 +289,7 @@ func printKeys(out io.Writer, km *keymap.Keymap) error {
 			}
 			bound[keymap.Action(b.Action)] = true
 		}
-		rows = append(rows, [4]string{myelinkey.FormatSeq(b.Seq), action, b.When, filepath.Base(b.Source)})
+		rows = append(rows, [4]string{keybind.DisplaySeq(b.Seq), action, b.When, filepath.Base(b.Source)})
 	}
 	var widths [3]int
 	for _, r := range rows {

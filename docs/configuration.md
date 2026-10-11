@@ -82,11 +82,12 @@ keymap {
   | `actions.menu` | a row action, as `:action` lists it (`Describe`) or by id (`describe`) |
 
   A value that names nothing there says so on the status line.
-- Keys are written one way: `j`, `G`, `ctrl+d`, `alt+x`, `ctrl+alt+x`,
-  `shift+tab`, `enter`, `esc`, `space`, `pgdn`, `f5`; a sequence separates its keys
-  with spaces: `g g`. A capital is its letter (`G`, not `shift+g`) and modifiers go
-  in the order ctrl, alt, meta, shift; any other spelling is an error that names
-  the one to write.
+- Keys are written `j`, `G`, `ctrl+d`, `alt+x`, `shift+tab`, `enter`, `esc`,
+  `space`, `pgdn`, `up`, `f5`; a sequence separates its keys with spaces: `g g`.
+  They are read as [Ghostty](https://ghostty.org) reads them, so modifiers come in
+  any order and case and a key may take its full name (`escape`, `page_down`,
+  `arrow_up`). A capital is Shift with its letter, as in vim: `G` is `shift+g`,
+  and `ctrl+D` is `ctrl+shift+d`, not `ctrl+d`.
 - `unbind "<keys>"` takes keys away; unbinding `g` takes every `g …` with it.
   An unbind is a binding to nothing, so it wins the way a binding does: a key the
   defaults bind in a context (`kubecom keys` shows which) is unbound in that

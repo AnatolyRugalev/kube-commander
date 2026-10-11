@@ -97,11 +97,12 @@ func (p *parser) leader(n *kdl.Node, when string) {
 		p.fail(n, "leader cannot be inside a context")
 		return
 	}
-	if _, err := myelinkey.Parse(s[0]); err != nil {
+	if _, err := myelinkey.ParseWith(s[0], KeyOptions); err != nil {
 		p.fail(n, "leader: %v", err)
 		return
 	}
-	p.doc.Leader, p.doc.Source = s[0], p.source(n)
+	// `<leader>` is myelin's alias of that name.
+	p.doc.Aliases, p.doc.Source = map[string]string{"leader": s[0]}, p.source(n)
 }
 
 // base says which defaults the keymap starts from: "kubecom", the defaults (as
@@ -126,7 +127,7 @@ func (p *parser) base(n *kdl.Node, when string) {
 // seq checks a key sequence as written, `<leader>` and all, so a bad key is an
 // error at its line in the document rather than one at the build.
 func (p *parser) seq(n *kdl.Node, s string) bool {
-	if err := myelin.CheckSeq(s); err != nil {
+	if err := Env().CheckSeq(s); err != nil {
 		p.fail(n, "%s: %v", n.Name(), err)
 		return false
 	}

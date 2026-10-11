@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
-	"github.com/neuroplastio/myelin/myelinkey"
 
 	"github.com/neuroplastio/kubecom/internal/keybind"
 )
@@ -459,7 +458,7 @@ func TestHelpMapFullHelp(t *testing.T) {
 	var unbind string
 	for _, b := range DefaultKeymap().Engine().All() {
 		if groupOf(Action(b.Action)) == "nav" {
-			unbind += "unbind \"" + myelinkey.FormatSeq(b.Seq) + "\"\n"
+			unbind += "unbind \"" + keybind.DisplaySeq(b.Seq) + "\"\n"
 		}
 	}
 	if c := cols(withUser(t, unbind, ""), tablePath); c["nav"] != nil {

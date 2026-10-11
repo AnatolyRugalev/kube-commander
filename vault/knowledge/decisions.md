@@ -1863,13 +1863,17 @@ stands, and myelin's tests replay `oldkeys.golden` too.
    (`CheckBinding`, D303 pt 2) are `Build`'s check. Matching, the sequencer,
    hints (`Effective`, `KeysFor`) and the shallow-unbind warning are
    myelin's.
-2. **Keys are myelin's spelling, strictly** (its D7, the maintainer's
-   call): one spelling per key, and any other is a load error that names
-   it — `shift+g` is `G`, `alt+ctrl+x` is `ctrl+alt+x`, `ESC` is `esc`.
+2. **Keys are myelin's, read as Ghostty reads them** (its D15, the
+   maintainer's call): any modifier order and case, `esc` or `escape`,
+   `pgdn` or `page_down`. kubecom's schema sets `ShiftedCapitals`, so a
+   capital is Shift with its letter as in vim (`G` is `shift+g`), and
    `ctrl+shift+d` is a key of its own, no longer folded into `ctrl+d`.
-   Keys are myelin's `myelinkey` module; a live key is its HOTTY name
-   (hotty-go's `hottytea`), so a HOTTY front end gives the keymap the same
-   keys the terminal does.
+   **kubecom shows keys as default.kdl writes them** (`keybind.Display`):
+   `G`, `esc`, `pgdn`, `up`, not myelin's canonical `shift+g`, `escape`,
+   `page_down`, `arrow_up` — hints, the `?` overlay, keybindings.md,
+   `kubecom keys` and `--keylog` traces alike. A live key is its HOTTY name
+   (hotty-go's `hottytea`) read by `myelinkey`, so a HOTTY front end gives
+   the keymap the same keys the terminal does.
 3. **Time is a value.** myelin's sequencer reads no clock: a key is fed with
    the time it was handled, and the timeout tick carries the time it fired.
    A key that breaks a pending sequence is fed again on its own, as before
