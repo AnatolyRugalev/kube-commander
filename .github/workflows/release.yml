@@ -237,12 +237,16 @@ jobs:
       # pinned key. Three attempts, 10 s then 30 s apart, so a transient CDN
       # error does not fail a release; a build that really does not verify fails
       # all three.
+      # --local dist: the signed manifest against the files just built, and the
+      # CDN's HEAD and first and last 64 KiB of each against the same files. Not
+      # --fetch, which downloads every artifact back through the CDN (about 50 GB
+      # in the first half of October 2026, against a 100 GB monthly plan).
       - name: Verify what was published
         run: |
           printf '%s\n' "$ENGRAM_SIGNERS" > allowed_signers
           for attempt in 1 2 3; do
             if bin/engram verify --url "$PKG_URL" --project kubecom --channel "$CHANNEL" \
-              --signers allowed_signers --commit "$(git rev-parse HEAD)" --fetch; then
+              --signers allowed_signers --commit "$(git rev-parse HEAD)" --local dist; then
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
